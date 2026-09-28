@@ -162,7 +162,10 @@ def test_cqc_is_invariant_under_rotation_of_the_real_degenerate_pairs_and_srss_i
         )
         cqc_spread = max(cqc_spread, _max_rel_diff(combine(rotated, "CQC"), cqc_ref))
         srss_spread = max(srss_spread, _max_rel_diff(combine(rotated, "SRSS"), srss_ref))
-    assert cqc_spread < 1e-10, f"CQC moved by {cqc_spread:.3e} (relative) across rotations"
+    # 1e-7 on every platform: macOS CI measured 9.221e-09. The platform LAPACK
+    # leaves the pair near-degenerate, not exactly equal, so rho is slightly
+    # below 1. SRSS moves by more than 1e-2, five orders of separation.
+    assert cqc_spread < 1e-7, f"CQC moved by {cqc_spread:.3e} (relative) across rotations"
     assert srss_spread > 1e-2, f"SRSS only moved by {srss_spread:.3e} (relative)"
 
 
