@@ -86,6 +86,10 @@ _TABLE_FILTER = "Spectrum tables (*.txt *.csv *.dat);;All files (*)"
 _RECORD_PENS = ("#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2")
 
 
+_FORMS_MIN_WIDTH = 240
+"""Narrowest the forms column gets; below its content width it scrolls sideways."""
+
+
 class GroundMotionsDialog(FittedDialog):
     """Catalog of the project's ground-motion records."""
 
@@ -141,7 +145,12 @@ class GroundMotionsDialog(FittedDialog):
         self._dt.setValue(0.01)
         self._dt.setToolTip("Sampling interval for a bare value list (single-column import).")
         controls.addWidget(self._dt)
+        controls.addStretch(1)
+        root.addLayout(controls)
 
+        # Two rows so the dialog fits a narrow screen: importing above, the
+        # selected record's units and actions below.
+        controls = QHBoxLayout()
         controls.addWidget(QLabel("Units:"))
         self._units = QComboBox()
         for key, label in UNIT_CHOICES:
@@ -190,8 +199,9 @@ class GroundMotionsDialog(FittedDialog):
         self._spectrum_plot.setLabel("left", axis_label("Sa, 5 % damping", "g"))
         add_legend(self._spectrum_plot, offset=(-10, 10))
 
-        # Left: the target, scale and generated-input forms, scrolling on a short
-        # screen. Right: the record table and both plots, resizable against each other.
+        # Left: the target, scale and generated-input forms, scrolling on a short or
+        # narrow screen. Right: the record table and both plots, resizable against
+        # each other.
         forms = QWidget()
         forms_layout = QVBoxLayout(forms)
         forms_layout.setContentsMargins(0, 0, 0, 0)
@@ -199,7 +209,8 @@ class GroundMotionsDialog(FittedDialog):
         forms_layout.addWidget(self._build_scale_group())
         forms_layout.addWidget(self._build_generated_group())
         forms_layout.addStretch(1)
-        self._forms_scroll = scroll_area(forms, vertical_only=True)
+        self._forms_scroll = scroll_area(forms)
+        self._forms_scroll.setMinimumWidth(_FORMS_MIN_WIDTH)
 
         views = QSplitter(Qt.Orientation.Vertical)
         views.addWidget(self._table)
