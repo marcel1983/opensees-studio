@@ -10,7 +10,8 @@ import pytest
 pytest.importorskip("PySide6")
 pytest.importorskip("openseespy.opensees")
 
-from PySide6.QtCore import QProcess
+from PySide6.QtCore import QProcess, QTimer
+from PySide6.QtWidgets import QApplication
 
 from opensees_studio.services import load_project
 from opensees_studio.services.results import StaticResults, TransientResults
@@ -92,6 +93,48 @@ def test_hard_exit_in_the_child_leaves_the_window_alive_with_a_report(
     assert "stderr (last 40 lines)" in box.detailedText()
     assert [n.model_dump() for n in window._vm.project.nodes] == nodes_before
     assert window._vm.run_snapshot_path.is_file()  # kept for recovery
+    box.close()
+
+
+@pytest.mark.gui
+def test_failure_box_opens_in_front_of_the_run_dialog(qtbot, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """The report of a process failure is a child of the open Run dialog and the
+    active window, not hidden behind the modal dialog on the main window."""
+    monkeypatch.setenv("OPENSEES_STUDIO_CLI_HARD_EXIT_AFTER", "2")
+    path = _copy_example("ex1a_canti2d", tmp_path)
+    window = MainWindow()
+    qtbot.addWidget(window)
+    window.show()
+    assert window.open_project(path)
+    seen: dict[str, object] = {}
+
+    def drive_the_dialog() -> None:
+        dlg = window._run_dialog
+        seen["dialog"] = dlg
+        index = dlg._case_combo.findData(3)
+        dlg._case_combo.setCurrentIndex(index)
+        failed: list[str] = []
+        window._runner.failed.connect(failed.append)
+        dlg._run_btn.click()
+        qtbot.waitUntil(lambda: bool(failed), timeout=60000)
+        box = window._analysis_error_box
+        qtbot.waitUntil(lambda: QApplication.activeWindow() is box, timeout=5000)
+        seen["parent"] = box.parent()
+        seen["active"] = QApplication.activeWindow()
+        seen["box"] = box
+        seen["visible"] = box.isVisible()
+        dlg.reject()
+
+    QTimer.singleShot(0, drive_the_dialog)
+    window._on_run_analysis()
+
+    box = seen["box"]
+    assert seen["parent"] is seen["dialog"]
+    assert seen["active"] is box
+    assert seen["visible"]
+    # Closing the Run dialog leaves the unread report open on the main window.
+    assert box.parent() is window
+    assert box.isVisible()
     box.close()
 
 

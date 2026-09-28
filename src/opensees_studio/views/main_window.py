@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QToolBar,
     QTreeWidget,
     QTreeWidgetItem,
+    QWidget,
 )
 
 from opensees_studio import __version__
@@ -131,6 +132,7 @@ class MainWindow(QMainWindow):
         self._runner = AnalysisRunner(self)
         self._latest_results: object = None  # last analysis output (any kind)
         self._analysis_error_box: QMessageBox | None = None  # last failure report
+        self._run_dialog: RunAnalysisDialog | None = None  # open while a Run dialog is shown
         self._post_dock = None  # the active post-processing dock
         self._diagram_renderer: DiagramRenderer | None = None  # built lazily once canvas exists
         self._show_node_labels = False
@@ -1437,7 +1439,23 @@ class MainWindow(QMainWindow):
             )
             return
         dlg = RunAnalysisDialog(self._vm, self._runner, self)
-        dlg.exec()
+        self._run_dialog = dlg
+        try:
+            dlg.exec()
+        finally:
+            self._run_dialog = None
+            box = self._analysis_error_box
+            if box is not None and box.parent() is dlg:
+                # Keep an unread failure report alive after the Run dialog closes.
+                box.setParent(self, box.windowFlags())
+                box.show()
+
+    def _failure_parent(self) -> QWidget:
+        """The dialog that started the run while it is open, else the main window."""
+        dlg = self._run_dialog
+        if dlg is not None and dlg.isVisible():
+            return dlg
+        return self
 
     def _on_analysis_finished(self, results) -> None:  # type: ignore[no-untyped-def]
         self._latest_results = results
@@ -1457,7 +1475,8 @@ class MainWindow(QMainWindow):
         headline = "Analysis failed."
         if code is not None:
             headline = f"Analysis process exited with code {code}."
-        box = QMessageBox(self)
+        # A child of the modal Run dialog, so it is not blocked and opens in front of it.
+        box = QMessageBox(self._failure_parent())
         box.setIcon(QMessageBox.Icon.Critical)
         box.setWindowTitle("Analysis failed")
         box.setText(headline)
@@ -1471,6 +1490,8 @@ class MainWindow(QMainWindow):
         box.setModal(False)
         self._analysis_error_box = box
         box.show()
+        box.raise_()
+        box.activateWindow()
         self._log(headline)
 
     def _on_display_options(self) -> None:
