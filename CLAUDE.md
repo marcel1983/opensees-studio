@@ -162,15 +162,17 @@ pytest tests/integration -v    # real openseespy runs (slow)
   It runs without any `QT_QPA_PLATFORM` setting; a test that needs `qtbot`
   (and with it a QApplication) belongs in `tests/gui/`.
 - `tests/gui/` — `qtbot` fixture, `@pytest.mark.gui`.
-  Run it one process per test file (227 tests in 41 files as of
-  2026-09-24, about 105 s):
+  Run it in one pytest process: `pytest tests/gui` (255 tests in 45 files
+  as of 2026-09-28, about 50 s on Windows). CI does the same in its `gui`
+  job. Check the exit code, not only the pass count: any non-zero code (for
+  example `0xC0000374` after all tests pass) is a teardown bug.
+  `tests/gui/conftest.py` closes plotters and top-level widgets at session
+  end. Fallback for diagnosing a crash: run one process per test file, which
+  names the failing file (about 185 s on Windows):
   `Get-ChildItem tests\gui\test_*.py | ForEach-Object { python -m pytest $_.FullName }`.
-  A single `pytest tests/gui` process segfaults around test 73 because VTK
-  render windows accumulate (see `reports/STATUS_2026-09-12.md`). Check the
-  exit code of every process, not only the pass count: every file exits 0
-  since 2026-09-23, so any non-zero code (for example `0xC0000374` after all
-  tests pass) is a new teardown bug. `tests/gui/conftest.py` closes plotters
-  and top-level widgets at session end.
+  The single process used to segfault around test 73 because VTK render
+  windows accumulated (see `reports/STATUS_2026-09-12.md`); since the
+  2026-09-23 teardown fixes it passes.
 - `tests/integration/` — real `openseespy` runs that exercise full
   model → solve → results pipelines on the bundled examples, including the
   analysis CLI as a subprocess (`test_analysis_cli.py`) and the
