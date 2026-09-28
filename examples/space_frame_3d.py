@@ -56,7 +56,9 @@ def _earthquake_pulse(n_steps: int, dt: float) -> list[float]:
     for i in range(n_steps):
         t = i * dt
         amp = math.exp(-2.0 * math.pi * f0 * zeta * t)
-        out.append(amp * math.sin(2.0 * math.pi * f0 * t))
+        # sin/cos/exp are not correctly rounded, so their last digit differs between
+        # platforms (MSVC CRT vs glibc); rounding to 6 decimals keeps the file identical.
+        out.append(round(amp * math.sin(2.0 * math.pi * f0 * t), 6))
     return out
 
 

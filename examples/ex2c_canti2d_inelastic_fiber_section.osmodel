@@ -155,6 +155,7 @@
       "fibres": []
     }
   ],
+  "friction_models": [],
   "elements": [
     {
       "id": 1,

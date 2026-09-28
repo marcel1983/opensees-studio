@@ -52,7 +52,11 @@ def _sine_pulse_factors() -> list[float]:
     """One half-cycle sine over the first 0.5s, then zero for the rest of 2s."""
     n_pulse = 50  # 0.5 s @ 100 Hz
     n_total = 200
-    return [math.sin(math.pi * i / n_pulse) if i < n_pulse else 0.0 for i in range(n_total)]
+    # sin/cos/exp are not correctly rounded, so their last digit differs between
+    # platforms (MSVC CRT vs glibc); rounding to 6 decimals keeps the file identical.
+    return [
+        round(math.sin(math.pi * i / n_pulse), 6) if i < n_pulse else 0.0 for i in range(n_total)
+    ]
 
 
 def build_portal_frame() -> Project:

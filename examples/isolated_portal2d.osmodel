@@ -231,6 +231,7 @@
       "shape": null
     }
   ],
+  "friction_models": [],
   "elements": [
     {
       "id": 1,
@@ -278,11 +279,6 @@
         1,
         5
       ],
-      "k_init": 450.0,
-      "qd": 100.0,
-      "alpha1": 0.1,
-      "alpha2": 0.0,
-      "mu": 2.0,
       "p_material_id": 1,
       "mz_material_id": 2,
       "t_material_id": null,
@@ -291,6 +287,11 @@
       "shear_dist": 0.5,
       "do_rayleigh": false,
       "mass": 0.0,
+      "k_init": 450.0,
+      "qd": 100.0,
+      "alpha1": 0.1,
+      "alpha2": 0.0,
+      "mu": 2.0,
       "type": "ElastomericBearingPlasticity"
     },
     {
@@ -300,11 +301,6 @@
         2,
         6
       ],
-      "k_init": 450.0,
-      "qd": 100.0,
-      "alpha1": 0.1,
-      "alpha2": 0.0,
-      "mu": 2.0,
       "p_material_id": 1,
       "mz_material_id": 2,
       "t_material_id": null,
@@ -313,6 +309,11 @@
       "shear_dist": 0.5,
       "do_rayleigh": false,
       "mass": 0.0,
+      "k_init": 450.0,
+      "qd": 100.0,
+      "alpha1": 0.1,
+      "alpha2": 0.0,
+      "mu": 2.0,
       "type": "ElastomericBearingPlasticity"
     }
   ],

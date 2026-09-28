@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "meta": {
     "name": "Concrete04 Cantilever",
     "description": "Single RC column cantilever using Concrete04 (Popovics) fiber section. Demonstrates the Concrete04 material end-to-end: schema → model → runner → results.",
@@ -155,6 +155,7 @@
       "fibres": []
     }
   ],
+  "friction_models": [],
   "elements": [
     {
       "id": 1,
@@ -229,6 +230,8 @@
     }
   ],
   "spectra": [],
+  "ground_motions": [],
+  "target_spectra": [],
   "analyses": [
     {
       "id": 1,

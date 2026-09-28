@@ -102,6 +102,7 @@
       "shape": null
     }
   ],
+  "friction_models": [],
   "elements": [
     {
       "id": 1,

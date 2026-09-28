@@ -77,7 +77,9 @@ def _synthetic_ground_motion() -> list[float]:
             env = 1.0
         else:
             env = math.exp(-(t - 2.0) / 0.8)
-        out.append(peak * env * math.sin(2.0 * math.pi * freq * t))
+        # sin/cos/exp are not correctly rounded, so their last digit differs between
+        # platforms (MSVC CRT vs glibc); rounding to 6 decimals keeps the file identical.
+        out.append(round(peak * env * math.sin(2.0 * math.pi * freq * t), 6))
     return out
 
 

@@ -102,6 +102,7 @@
       "shape": null
     }
   ],
+  "friction_models": [],
   "elements": [
     {
       "id": 1,
@@ -134,7 +135,8 @@
       "times": null,
       "record_id": 1,
       "file_path": "A10000.txt",
-      "use_last": false
+      "use_last": false,
+      "generator": null
     }
   ],
   "load_patterns": [
@@ -185,6 +187,7 @@
       "total_duration": 39.945
     }
   ],
+  "target_spectra": [],
   "analyses": [
     {
       "id": 1,

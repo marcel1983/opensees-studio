@@ -87,7 +87,9 @@ def sine_accel_values(
 
     omega = 2.0 * PI / period
     n_points = int(round(duration / dt)) + 1
-    return [amplitude * math.sin(omega * i * dt) for i in range(n_points)]
+    # sin/cos/exp are not correctly rounded, so their last digit differs between
+    # platforms (MSVC CRT vs glibc); rounding to 6 decimals keeps the file identical.
+    return [round(amplitude * math.sin(omega * i * dt), 6) for i in range(n_points)]
 
 
 def sine_velocity_values(
@@ -100,7 +102,9 @@ def sine_velocity_values(
 
     omega = 2.0 * PI / period
     n_points = int(round(duration / dt)) + 1
-    return [-(amplitude / omega) * math.cos(omega * i * dt) for i in range(n_points)]
+    # sin/cos/exp are not correctly rounded, so their last digit differs between
+    # platforms (MSVC CRT vs glibc); rounding to 6 decimals keeps the file identical.
+    return [round(-(amplitude / omega) * math.cos(omega * i * dt), 6) for i in range(n_points)]
 
 
 @dataclass(frozen=True)

@@ -32,7 +32,7 @@ def eq_result(tmp_path_factory):  # type: ignore[no-untyped-def]
 
 @pytest.mark.xfail(
     strict=True,
-    reason="solver two-state cycle at step 193, t = 1.93 s; see roadmap box",
+    reason="solver stops at step 99, t = 0.99 s (193 before the input rounding); see roadmap box",
 )
 def test_rc_frame_earthquake_covers_the_record(eq_result) -> None:  # type: ignore[no-untyped-def]
     """The run covers at least 90 percent of the 4-second record."""

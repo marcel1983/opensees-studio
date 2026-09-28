@@ -74,9 +74,11 @@ def build_basic_truss() -> Project:
     x4, y4 = 72.0, 96.0
 
     # Areas in in² — converted to m².
-    a1 = 10.0 * IN_TO_M**2
-    a2 = 5.0 * IN_TO_M**2
-    a3 = 5.0 * IN_TO_M**2
+    # IN_TO_M * IN_TO_M, not IN_TO_M**2: a product is exact IEEE rounding on every
+    # platform, pow() comes from the C library.
+    a1 = 10.0 * (IN_TO_M * IN_TO_M)
+    a2 = 5.0 * (IN_TO_M * IN_TO_M)
+    a3 = 5.0 * (IN_TO_M * IN_TO_M)
 
     # Loads in kips — converted to N.
     fx = 100.0 * KIP_TO_N
