@@ -444,7 +444,7 @@ Status legend: ✅ done · 🟡 partial · ⬜ planned · ✂️ deferred / out-
   | ex3_canti2d_inelastic_section | 0.00182 | 0.701343 |
   | ex3_canti2d_inelastic_fiber_section | 0.00105 | 0.402587 |
   No example needed an xfail.
-- ⬜ Windows verification of GM-1, GM-2, GM-3, GM-2b, ISO-1, ISO-2,
+- ✅ Windows verification of GM-1, GM-2, GM-3, GM-2b, ISO-1, ISO-2,
   process isolation and modal determinism (cloud-built).
   All eight phases were built and tested in a Linux cloud container
   (offscreen Qt), so the Windows dev machine has to confirm them before
@@ -579,6 +579,24 @@ Status legend: ✅ done · 🟡 partial · ⬜ planned · ✂️ deferred / out-
      call: running it in a fresh process" before case 4, exit 0, and
      `out\manifest.json` must list both cases with solver genBandArpack.
   28. Merge `cc/modal-det` into `develop` after everything is green.
+  Closed 2026-09-28 on branch `verify/windows`, merged into `develop`:
+  manual checks passed by the owner (R1 to R7 at 125 percent scale).
+  Windows numbers: unit 558 passed, integration 136 passed and 1 xfailed,
+  tools 31 passed and 14 skipped (no gidopensees checkout), GUI per-file
+  254 tests in 44 files in 199.6 s with every exit code 0, GUI single
+  process 254 tests in 49.6 s with exit code 0 (no VTK crash). The real
+  OpenSees crash (bearing without `-orient`) reports exit code -1 with
+  OpenSees' own message in the failure details, and the failure dialog
+  opens in front of the run dialog. Six dialogs (bearing, Transient, Modal
+  and ResponseSpectrum case forms, Ground Motions, Fiber Section Editor)
+  now fit the screen and scroll, with warnings and refusals in a line
+  outside the scrolling part. Plot axes show real values without SI prefix
+  multipliers, and the solver-speed banner stays out of the GUI run log.
+- ⬜ Adopt the single-process GUI run as the default (49.6 s vs 199.6 s
+  per-file on Windows); keep per-file as fallback.
+- ⬜ File > Save As does not rebase relative record paths (resolve against
+  the old project directory, store relative to the new one or absolute on
+  another drive; test a record-backed project saved to a sibling folder).
 - ⬜ IDA (Incremental Dynamic Analysis) batch runner
 - 🟡 Fiber-section editor — exists for rectangular / circular sections;
   confined / unconfined visual presets pending
