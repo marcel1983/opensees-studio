@@ -592,11 +592,15 @@ Status legend: ✅ done · 🟡 partial · ⬜ planned · ✂️ deferred / out-
   now fit the screen and scroll, with warnings and refusals in a line
   outside the scrolling part. Plot axes show real values without SI prefix
   multipliers, and the solver-speed banner stays out of the GUI run log.
-- ⬜ Adopt the single-process GUI run as the default (49.6 s vs 199.6 s
-  per-file on Windows); keep per-file as fallback.
-- ⬜ File > Save As does not rebase relative record paths (resolve against
+- ✅ Adopt the single-process GUI run as the default (49.6 s vs 199.6 s
+  per-file on Windows); keep per-file as fallback. Closed 2026-09-28
+  (`064f743`): CLAUDE.md and a new CI `gui` job run `pytest tests/gui` in one
+  process, 255 tests in about 50 s against about 185 s per-file on Windows.
+- ✅ File > Save As does not rebase relative record paths (resolve against
   the old project directory, store relative to the new one or absolute on
   another drive; test a record-backed project saved to a sibling folder).
+  Closed 2026-09-28 (`1180164`): `save_project(previous_path=...)` rebases
+  every catalog path, a missing record stays missing, 10 new tests.
 - ⬜ IDA (Incremental Dynamic Analysis) batch runner
 - 🟡 Fiber-section editor — exists for rectangular / circular sections;
   confined / unconfined visual presets pending
@@ -615,6 +619,9 @@ Status legend: ✅ done · 🟡 partial · ⬜ planned · ✂️ deferred / out-
   differences in the derived values the example scripts compute). Options:
   round derived values in the scripts, or a tolerance-aware example
   round-trip check, so regeneration is diff-clean on both platforms.
+  Closed 2026-09-28 (`dd67bf7`): the noise came from sin, cos and exp in 6
+  scripts that synthesize time series, now rounded to 6 decimals there; all
+  29 examples are at schema 2 and a unit test regenerates the committed bytes.
 - ✅ GUI interpreter-exit teardown crash (`0xC0000374`): closed 2026-09-23.
   Root cause: `ProjectCommand` held a strong reference to its view model, which
   owns the `QUndoStack` that owns the command, so every dropped view model was
@@ -683,6 +690,10 @@ Status legend: ✅ done · 🟡 partial · ⬜ planned · ✂️ deferred / out-
   1e-8 / 50). The step-count assertion in
   `tests/integration/test_rc_frame_earthquake.py` is `xfail(strict=True)` until
   this is fixed.
+  - Since the input record was rounded to 6 decimals (2026-09-28, `dd67bf7`,
+    at most 5e-7 g of change) the run stops at step 99 (t = 0.99 s, 98 of 400
+    steps), the step the fallback chain used to pass. The cycle data below is
+    for the unrounded record.
   - Cycle data at step 193 (`NormDispIncr`): plain Newton reaches an increment
     of 6.64e-6 at iteration 3 and stays frozen there for all 50 iterations,
     while the residual norm alternates 0.664 / 0.657 and never decays. Every
