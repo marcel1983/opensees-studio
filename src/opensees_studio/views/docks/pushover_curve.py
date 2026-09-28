@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 
 from opensees_studio.core import UnitSystem, labels_for
 from opensees_studio.services.results import PushoverResults
+from opensees_studio.views.plot_style import axis_label, readable_plot
 
 if TYPE_CHECKING:
     pass
@@ -142,8 +143,8 @@ class PushoverCurveView(QWidget):
         else:
             yield_txt = ""
 
-        self._plot.setLabel("bottom", f"{x_title} ({x_unit})")
-        self._plot.setLabel("left", f"{y_title} ({y_unit})")
+        self._plot.setLabel("bottom", axis_label(x_title, x_unit))
+        self._plot.setLabel("left", axis_label(y_title, y_unit))
         peak_idx = int(np.argmax(np.abs(y)))
         effort_noun = "M" if rotational else "V"
         x_noun = "κ" if rotational else "d"
@@ -162,11 +163,9 @@ class PushoverCurveView(QWidget):
         root.addWidget(self._info)
 
         pg.setConfigOptions(antialias=True)
-        self._plot = pg.PlotWidget()
-        self._plot.setBackground("#1e1e1e")
+        self._plot = readable_plot()
         self._plot.setLabel("left", "Base shear")
         self._plot.setLabel("bottom", "Displacement")
-        self._plot.showGrid(x=True, y=True, alpha=0.3)
         root.addWidget(self._plot, 1)
 
         btn_row = QHBoxLayout()

@@ -33,6 +33,7 @@ from opensees_studio.viewmodels.material_tester_vm import (
     PROTOCOL_LABELS,
     MaterialTesterViewModel,
 )
+from opensees_studio.views.plot_style import axis_label, readable_plot
 from opensees_studio.views.screen_fit import FittedDialog
 
 
@@ -125,9 +126,7 @@ class MaterialTesterDialog(FittedDialog):
         root.addLayout(left, 0)
 
         pg.setConfigOptions(antialias=True)
-        self._plot = pg.PlotWidget()
-        self._plot.setBackground("#1e1e1e")
-        self._plot.showGrid(x=True, y=True, alpha=0.3)
+        self._plot = readable_plot()
         # Stress and strain differ by orders of magnitude: scale axes independently.
         self._plot.getPlotItem().getViewBox().setAspectLocked(False)
         self._update_axis_labels()
@@ -158,7 +157,7 @@ class MaterialTesterDialog(FittedDialog):
     def _update_axis_labels(self) -> None:
         unit = self._tester.stress_unit()
         self._plot.setLabel("bottom", "Strain")
-        self._plot.setLabel("left", f"Stress [{unit}]" if unit else "Stress")
+        self._plot.setLabel("left", axis_label("Stress", unit or None))
 
     def _push_inputs(self) -> str | None:
         """Copy widget values into the view model; return a parse error, if any."""

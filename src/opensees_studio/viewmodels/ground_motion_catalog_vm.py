@@ -91,6 +91,12 @@ GENERATED_UNIT_CHOICES: list[tuple[GroundMotionAccelUnits, str]] = [
     ("project", "Project units"),
 ]
 
+
+def accel_axis_units(units: str) -> str | None:
+    """Units for an acceleration axis label, ``None`` when the record's units are unknown."""
+    return {"g": "g", "project": "project units"}.get(units)
+
+
 #: Periods for the spectrum plot: the default grid without T = 0 (log axis).
 PLOT_PERIODS = default_periods()[1:]
 

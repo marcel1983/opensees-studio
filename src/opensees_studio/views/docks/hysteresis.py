@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
 )
 
 from opensees_studio.services.results import TransientResults
+from opensees_studio.views.plot_style import readable_plot
 
 # Y-axis source kinds the user can pick.
 _Y_KINDS = [
@@ -156,11 +157,9 @@ class HysteresisView(QWidget):
         root.addWidget(self._info)
 
         pg.setConfigOptions(antialias=True)
-        self._plot = pg.PlotWidget()
-        self._plot.setBackground("#1e1e1e")
+        self._plot = readable_plot()
         self._plot.setLabel("left", "Y")
         self._plot.setLabel("bottom", "X")
-        self._plot.showGrid(x=True, y=True, alpha=0.3)
         root.addWidget(self._plot, 1)
 
         self._on_y_kind_changed(0)

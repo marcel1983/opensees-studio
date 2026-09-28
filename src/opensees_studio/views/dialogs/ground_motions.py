@@ -72,8 +72,10 @@ from opensees_studio.viewmodels.ground_motion_catalog_vm import (
     UNIT_CHOICES,
     GroundMotionCatalogViewModel,
     ScalingPreview,
+    accel_axis_units,
 )
 from opensees_studio.views.dialogs.generate_excitation import GenerateExcitationDialog
+from opensees_studio.views.plot_style import TARGET_PEN, add_legend, axis_label, readable_plot
 from opensees_studio.views.screen_fit import FittedDialog, MessageArea, scroll_area
 
 _COLUMNS = ("Name", "dt [s]", "npts", "PGA", "D5-95 [s]", "Units", "Status")
@@ -178,19 +180,15 @@ class GroundMotionsDialog(FittedDialog):
         self._table.itemSelectionChanged.connect(self._on_selection_changed)
 
         pg.setConfigOptions(antialias=True)
-        self._plot = pg.PlotWidget()
-        self._plot.setBackground("#1e1e1e")
-        self._plot.showGrid(x=True, y=True, alpha=0.3)
-        self._plot.setLabel("bottom", "Time [s]")
+        self._plot = readable_plot()
+        self._plot.setLabel("bottom", axis_label("Time", "s"))
         self._plot.setLabel("left", "Acceleration")
 
-        self._spectrum_plot = pg.PlotWidget()
-        self._spectrum_plot.setBackground("#1e1e1e")
-        self._spectrum_plot.showGrid(x=True, y=True, alpha=0.3)
+        self._spectrum_plot = readable_plot()
         self._spectrum_plot.setLogMode(x=True, y=False)
-        self._spectrum_plot.setLabel("bottom", "Period [s]")
-        self._spectrum_plot.setLabel("left", "Sa [g], 5 % damping")
-        self._spectrum_plot.addLegend(offset=(-10, 10))
+        self._spectrum_plot.setLabel("bottom", axis_label("Period", "s"))
+        self._spectrum_plot.setLabel("left", axis_label("Sa, 5 % damping", "g"))
+        add_legend(self._spectrum_plot, offset=(-10, 10))
 
         # Left: the target, scale and generated-input forms, scrolling on a short
         # screen. Right: the record table and both plots, resizable against each other.
@@ -583,7 +581,7 @@ class GroundMotionsDialog(FittedDialog):
             self._target_curve = self._spectrum_plot.plot(
                 PLOT_PERIODS[defined],
                 target_sa[defined],
-                pen=pg.mkPen("#ffffff", width=2, style=Qt.PenStyle.DashLine),
+                pen=pg.mkPen(TARGET_PEN, width=2, style=Qt.PenStyle.DashLine),
                 name="Target",
             )
         self._spectrum_plot.enableAutoRange()
@@ -611,6 +609,7 @@ class GroundMotionsDialog(FittedDialog):
             )
             return
         times = [i * rec.dt for i in range(len(values))]
+        self._plot.setLabel("left", axis_label("Acceleration", accel_axis_units(rec.accel_units)))
         self._curve = self._plot.plot(times, values, pen=pg.mkPen("#1f77b4", width=1))
         self._plot.enableAutoRange()
 

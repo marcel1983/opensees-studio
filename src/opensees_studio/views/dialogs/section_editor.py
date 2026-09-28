@@ -41,6 +41,7 @@ from opensees_studio.services.section_properties import (
     compute_section_props,
     expand_fibres,
 )
+from opensees_studio.views.plot_style import axis_label, readable_plot
 from opensees_studio.views.screen_fit import FittedDialog, scroll_area
 
 _PATCH_COLORS = [
@@ -208,12 +209,10 @@ class FiberSectionEditor(FittedDialog):
         right = QWidget()
         right_layout = QVBoxLayout(right)
         pg.setConfigOptions(antialias=True)
-        self._preview = pg.PlotWidget()
-        self._preview.setBackground("#1e1e1e")
+        self._preview = readable_plot()
         self._preview.setAspectLocked(True)
-        self._preview.setLabel("bottom", "y (m)")
-        self._preview.setLabel("left", "z (m)")
-        self._preview.showGrid(x=True, y=True, alpha=0.3)
+        self._preview.setLabel("bottom", axis_label("y", "m"))
+        self._preview.setLabel("left", axis_label("z", "m"))
         right_layout.addWidget(self._preview, 1)
 
         self._props_label = QLabel("")

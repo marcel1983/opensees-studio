@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 )
 
 from opensees_studio.services.results import TransientResults
+from opensees_studio.views.plot_style import add_legend, axis_label, readable_plot
 
 # A small palette that reads well on dark + light themes.
 _COLORS = [
@@ -119,12 +120,10 @@ class TimeHistoryView(QWidget):
 
         # pyqtgraph setup. Use a white-on-dark theme that matches Claude.
         pg.setConfigOptions(antialias=True)
-        self._plot = pg.PlotWidget()
-        self._plot.setBackground("#1e1e1e")
+        self._plot = readable_plot()
         self._plot.setLabel("left", "Displacement")
-        self._plot.setLabel("bottom", "Time", units="s")
-        self._plot.showGrid(x=True, y=True, alpha=0.3)
-        self._plot.addLegend(offset=(8, 8))
+        self._plot.setLabel("bottom", axis_label("Time", "s"))
+        add_legend(self._plot)
         root.addWidget(self._plot, 1)
 
         self._trace_list = QListWidget()

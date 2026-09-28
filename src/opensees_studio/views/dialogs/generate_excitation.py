@@ -37,7 +37,9 @@ from opensees_studio.viewmodels.ground_motion_catalog_vm import (
     GENERATOR_CHOICES,
     PLOT_PERIODS,
     GroundMotionCatalogViewModel,
+    accel_axis_units,
 )
+from opensees_studio.views.plot_style import TARGET_PEN, add_legend, axis_label, readable_plot
 from opensees_studio.views.screen_fit import FittedDialog, MessageArea, scroll_area
 
 _CUSTOM_PRESET = "Custom"
@@ -156,19 +158,15 @@ class GenerateExcitationDialog(FittedDialog):
 
         plots = QVBoxLayout()
         pg.setConfigOptions(antialias=True)
-        self._trace_plot = pg.PlotWidget()
-        self._trace_plot.setBackground("#1e1e1e")
-        self._trace_plot.showGrid(x=True, y=True, alpha=0.3)
-        self._trace_plot.setLabel("bottom", "Time [s]")
+        self._trace_plot = readable_plot()
+        self._trace_plot.setLabel("bottom", axis_label("Time", "s"))
         self._trace_plot.setLabel("left", "Acceleration")
         plots.addWidget(self._trace_plot, 1)
-        self._spectrum_plot = pg.PlotWidget()
-        self._spectrum_plot.setBackground("#1e1e1e")
-        self._spectrum_plot.showGrid(x=True, y=True, alpha=0.3)
+        self._spectrum_plot = readable_plot()
         self._spectrum_plot.setLogMode(x=True, y=False)
-        self._spectrum_plot.setLabel("bottom", "Period [s]")
-        self._spectrum_plot.setLabel("left", "Sa [g], 5 % damping")
-        self._spectrum_plot.addLegend(offset=(-10, 10))
+        self._spectrum_plot.setLabel("bottom", axis_label("Period", "s"))
+        self._spectrum_plot.setLabel("left", axis_label("Sa, 5 % damping", "g"))
+        add_legend(self._spectrum_plot, offset=(-10, 10))
         plots.addWidget(self._spectrum_plot, 1)
         root.addLayout(plots, 1)
 
@@ -317,6 +315,9 @@ class GenerateExcitationDialog(FittedDialog):
             self._buttons.button(QDialogButtonBox.StandardButton.Ok).setEnabled(False)
             return
         times = [i * dt for i in range(accel.size)]
+        self._trace_plot.setLabel(
+            "left", axis_label("Acceleration", accel_axis_units(descriptor["units"]))
+        )
         self._trace_curve = self._trace_plot.plot(times, accel, pen=pg.mkPen("#1f77b4", width=1))
         self._trace_plot.enableAutoRange()
         self._spectrum_curve = self._spectrum_plot.plot(
@@ -330,7 +331,7 @@ class GenerateExcitationDialog(FittedDialog):
             self._target_curve = self._spectrum_plot.plot(
                 PLOT_PERIODS[defined],
                 target_sa[defined],
-                pen=pg.mkPen("#ffffff", width=2, style=Qt.PenStyle.DashLine),
+                pen=pg.mkPen(TARGET_PEN, width=2, style=Qt.PenStyle.DashLine),
                 name="Target",
             )
         self._spectrum_plot.enableAutoRange()

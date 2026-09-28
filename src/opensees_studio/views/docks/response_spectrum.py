@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 
 from opensees_studio.core import ResponseSpectrum
 from opensees_studio.services.results import ResponseSpectrumResults
+from opensees_studio.views.plot_style import add_legend, axis_label, readable_plot
 
 
 class ResponseSpectrumView(QWidget):
@@ -140,12 +141,10 @@ class ResponseSpectrumView(QWidget):
         root.addWidget(splitter, 1)
 
         pg.setConfigOptions(antialias=True)
-        self._plot = pg.PlotWidget()
-        self._plot.setBackground("#1e1e1e")
+        self._plot = readable_plot()
         self._plot.setLabel("left", "Sa")
-        self._plot.setLabel("bottom", "Period", units="s")
-        self._plot.showGrid(x=True, y=True, alpha=0.3)
-        self._plot.addLegend(offset=(8, 8))
+        self._plot.setLabel("bottom", axis_label("Period", "s"))
+        add_legend(self._plot)
         splitter.addWidget(self._plot)
 
         self._table = QTableWidget(0, 7)
