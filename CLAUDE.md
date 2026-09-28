@@ -31,8 +31,9 @@ architecture document.
   `<stem>.run-snapshot.osmodel` next to the project file (for a never-saved
   project `untitled.run-snapshot.osmodel` in the app data directory,
   override with `OPENSEES_STUDIO_DATA_DIR`), then starts
-  `python -m opensees_studio.run --project <snapshot> --cases <id> --out <dir>`
-  with `QProcess` (`sys.executable`). The CLI (`opensees_studio/run.py`) prints
+  `python -u -m opensees_studio.run --project <snapshot> --cases <id> --out <dir>`
+  with `QProcess` (`sys.executable`, unbuffered so the stderr of a hard exit
+  is not lost). The CLI (`opensees_studio/run.py`) prints
   one JSON object per stdout line (`log`, `progress`, `case_started`,
   `case_finished`, `error`), flushed per line; fd 1 is redirected to stderr
   first, so OpenSees native output never touches the protocol. Exit codes:
@@ -45,7 +46,11 @@ architecture document.
   or close removes it. `OPENSEES_STUDIO_IN_PROCESS=1` runs the previous
   threaded in-process worker (debugging, no cancel).
   `OPENSEES_STUDIO_CLI_HARD_EXIT_AFTER=N` is a test-only hook that makes the
-  CLI hard-exit with 255 after N progress lines. The Material Tester still
+  CLI hard-exit with 255 after N progress lines.
+  `OPENSEES_STUDIO_TEST_SKIP_BEARING_ORIENT=1` is a test-only hook that leaves
+  `-orient` off bearings, so OpenSees itself hard-exits on a zero-length
+  bearing. Solver-speed banners (the fullGenLapack "VERY SLOW" line) are kept
+  out of the run log and stay in the stderr capture. The Material Tester still
   calls OpenSees in the GUI process.
 
 The dependency direction is strict and one-way: `views → viewmodels →

@@ -76,6 +76,7 @@ class _Protocol:
             self.progress_lines += 1
             if self._hard_exit_after is not None and self.progress_lines >= self._hard_exit_after:
                 self._stream.flush()
+                sys.stderr.flush()
                 os._exit(255)
 
     def log(self, message: str) -> None:
@@ -175,6 +176,7 @@ def _run_in_fresh_process(
     """
     cmd = [
         sys.executable,
+        "-u",
         "-m",
         "opensees_studio.run",
         "--project",
@@ -304,5 +306,13 @@ def main(argv: list[str] | None = None) -> int:
     return EXIT_OK
 
 
+def _main_flushing() -> int:
+    """``main`` with stderr flushed on every exit the CLI controls."""
+    try:
+        return main()
+    finally:
+        sys.stderr.flush()
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(_main_flushing())

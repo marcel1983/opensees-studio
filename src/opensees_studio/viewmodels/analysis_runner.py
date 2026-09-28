@@ -23,7 +23,7 @@ import traceback
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QObject, QProcess, QThread, QTimer, Signal
+from PySide6.QtCore import QObject, QProcess, QProcessEnvironment, QThread, QTimer, Signal
 
 from opensees_studio.core import Project
 from opensees_studio.services import write_run_snapshot
@@ -35,6 +35,16 @@ IN_PROCESS_ENV = "OPENSEES_STUDIO_IN_PROCESS"
 
 STDERR_TAIL_LINES = 40
 KILL_AFTER_TERMINATE_MS = 1500
+NO_STDERR_PLACEHOLDER = "(no stderr output was captured)"
+
+SOLVER_BANNERS = ("eigen solver is VERY SLOW",)
+"""Informational OpenSees lines about solver speed. They never reach the run log; they
+stay in the raw stderr capture, which the failure report shows only when a run fails."""
+
+
+def is_solver_banner(line: str) -> bool:
+    """True for an OpenSees solver-speed banner line."""
+    return any(marker in line for marker in SOLVER_BANNERS)
 
 
 def in_process_mode() -> bool:
@@ -123,7 +133,7 @@ class AnalysisRunner(QObject):
 
         self._thread.started.connect(self._worker.run)
         self._worker.started.connect(self._on_started)
-        self._worker.log.connect(self.log.emit)
+        self._worker.log.connect(self._emit_log)
         self._worker.finished.connect(self._on_finished)
         self._worker.failed.connect(self._on_failed)
 
@@ -151,8 +161,13 @@ class AnalysisRunner(QObject):
 
         process = QProcess(self)
         process.setProgram(sys.executable)
+        # Unbuffered child: whatever it wrote before a hard exit reaches the pipe.
+        env = QProcessEnvironment.systemEnvironment()
+        env.insert("PYTHONUNBUFFERED", "1")
+        process.setProcessEnvironment(env)
         process.setArguments(
             [
+                "-u",
                 "-m",
                 "opensees_studio.run",
                 "--project",
@@ -203,11 +218,11 @@ class AnalysisRunner(QObject):
         try:
             payload = json.loads(line)
         except json.JSONDecodeError:
-            self.log.emit(line)
+            self._emit_log(line)
             return
         kind = payload.get("type")
         if kind == "log":
-            self.log.emit(str(payload.get("message", "")))
+            self._emit_log(str(payload.get("message", "")))
         elif kind == "progress":
             self.progress.emit(int(payload.get("step", 0)), int(payload.get("total", 0)))
         elif kind == "case_started":
@@ -220,6 +235,10 @@ class AnalysisRunner(QObject):
                 "traceback": str(payload.get("traceback", "")),
             }
             self.log.emit(f"Error: {self._last_error['message']}")
+
+    def _emit_log(self, message: str) -> None:
+        if not is_solver_banner(message):
+            self.log.emit(message)
 
     def _stderr_tail(self) -> str:
         lines = self._stderr.splitlines()
@@ -279,7 +298,7 @@ class AnalysisRunner(QObject):
                 "No error line was reported: the process died (hard exit inside OpenSees)."
             )
         parts.append(f"--- stderr (last {STDERR_TAIL_LINES} lines) ---")
-        parts.append(tail if tail else "(empty)")
+        parts.append(tail if tail.strip() else NO_STDERR_PLACEHOLDER)
         last_error = self._last_error["message"] if self._last_error is not None else ""
         self.processFailed.emit(self.last_exit_code, last_error, tail)
         self._on_failed("\n".join(parts))

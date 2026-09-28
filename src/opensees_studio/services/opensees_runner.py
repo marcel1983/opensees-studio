@@ -110,6 +110,10 @@ from opensees_studio.services.results import (
 # far above any hand-authored model id and is collision-checked at emission.
 _IMPOSED_VEL_TS_OFFSET = 900_000
 
+SKIP_BEARING_ORIENT_ENV = "OPENSEES_STUDIO_TEST_SKIP_BEARING_ORIENT"
+"""Tests only: ``1`` leaves ``-orient`` off bearings, so OpenSees itself hard-exits on a
+zero-length bearing (a real solver crash for the crash-reporting tests)."""
+
 
 # ─────────────────────── DOF-index helper ───────────────────────
 def _dof_indices(ndm: int, ndf: int) -> tuple[int, ...]:
@@ -591,7 +595,8 @@ class OpenSeesRunner:
             ]
         else:
             args += ["-P", el.p_material_id, "-Mz", el.mz_material_id]
-        args += ["-orient", *self._bearing_orient(el)]
+        if os.environ.get(SKIP_BEARING_ORIENT_ENV, "").strip() != "1":
+            args += ["-orient", *self._bearing_orient(el)]
         if el.shear_dist != 0.5:
             args += ["-shearDist", el.shear_dist]
         if el.do_rayleigh:

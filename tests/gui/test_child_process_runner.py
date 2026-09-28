@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
 
@@ -14,9 +15,10 @@ from PySide6.QtCore import QProcess, QTimer
 from PySide6.QtWidgets import QApplication
 
 from opensees_studio.services import load_project
+from opensees_studio.services.opensees_runner import SKIP_BEARING_ORIENT_ENV
 from opensees_studio.services.results import StaticResults, TransientResults
 from opensees_studio.viewmodels import AnalysisRunner
-from opensees_studio.viewmodels.analysis_runner import IN_PROCESS_ENV
+from opensees_studio.viewmodels.analysis_runner import IN_PROCESS_ENV, NO_STDERR_PLACEHOLDER
 from opensees_studio.views.main_window import MainWindow
 
 EXAMPLES = Path(__file__).resolve().parents[2] / "examples"
@@ -26,6 +28,7 @@ EXAMPLES = Path(__file__).resolve().parents[2] / "examples"
 def _child_process_mode(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.delenv(IN_PROCESS_ENV, raising=False)
     monkeypatch.delenv("OPENSEES_STUDIO_CLI_HARD_EXIT_AFTER", raising=False)
+    monkeypatch.delenv(SKIP_BEARING_ORIENT_ENV, raising=False)
 
 
 def _copy_example(name: str, tmp_path: Path) -> Path:
@@ -84,6 +87,10 @@ def test_hard_exit_in_the_child_leaves_the_window_alive_with_a_report(
     assert "exited with code 255" in report
     assert "No error line was reported" in report
     assert "stderr (last 40 lines)" in report
+    # Unbuffered child: what OpenSees printed before the exit (the mode-1 damping
+    # eigen call's solver-speed banner) is in the failure details, not lost.
+    assert "VERY SLOW" in report
+    assert NO_STDERR_PLACEHOLDER not in report
     assert window._runner.last_exit_code == 255
     assert window.isVisible()
     assert not window._runner.is_running
@@ -91,8 +98,34 @@ def test_hard_exit_in_the_child_leaves_the_window_alive_with_a_report(
     assert box is not None and box.isVisible()
     assert "255" in box.text()
     assert "stderr (last 40 lines)" in box.detailedText()
+    assert "VERY SLOW" in box.detailedText()
     assert [n.model_dump() for n in window._vm.project.nodes] == nodes_before
     assert window._vm.run_snapshot_path.is_file()  # kept for recovery
+    box.close()
+
+
+@pytest.mark.gui
+def test_hard_exit_without_stderr_output_shows_the_placeholder(
+    qtbot, tmp_path, monkeypatch
+) -> None:  # type: ignore[no-untyped-def]
+    """Without mode-1 damping the case makes no eigen call and the hook exits before
+    anything reaches stderr: the details say so instead of showing an empty area."""
+    monkeypatch.setenv("OPENSEES_STUDIO_CLI_HARD_EXIT_AFTER", "2")
+    path = _copy_example("ex1a_canti2d", tmp_path)
+    window = MainWindow()
+    qtbot.addWidget(window)
+    window.show()
+    assert window.open_project(path)
+    case = next(c for c in window._vm.project.analyses if c.id == 3)
+    quiet = case.model_copy(update={"rayleigh_mode1_damping": None})
+
+    with qtbot.waitSignal(window._runner.failed, timeout=60000) as blocker:
+        window._runner.run(window._vm.project, quiet, project_path=path)
+
+    assert window._runner.last_exit_code == 255
+    assert blocker.args[0].rstrip().endswith(NO_STDERR_PLACEHOLDER)
+    box = window._analysis_error_box
+    assert NO_STDERR_PLACEHOLDER in box.detailedText()
     box.close()
 
 
@@ -136,6 +169,62 @@ def test_failure_box_opens_in_front_of_the_run_dialog(qtbot, tmp_path, monkeypat
     assert box.parent() is window
     assert box.isVisible()
     box.close()
+
+
+@pytest.mark.gui
+def test_real_opensees_crash_shows_its_own_message_in_front(qtbot, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """OpenSees itself terminates on a bearing without -orient (test hook): the failure
+    report opens in front of the Run dialog with OpenSees' orientation message."""
+    monkeypatch.setenv(SKIP_BEARING_ORIENT_ENV, "1")
+    path = _copy_example("isolated_portal2d", tmp_path)
+    window = MainWindow()
+    qtbot.addWidget(window)
+    window.show()
+    assert window.open_project(path)
+    seen: dict[str, object] = {}
+
+    def drive_the_dialog() -> None:
+        dlg = window._run_dialog
+        dlg._case_combo.setCurrentIndex(dlg._case_combo.findData(1))
+        failed: list[str] = []
+        window._runner.failed.connect(failed.append)
+        dlg._run_btn.click()
+        qtbot.waitUntil(lambda: bool(failed), timeout=60000)
+        box = window._analysis_error_box
+        seen.update(dialog=dlg, parent=box.parent(), details=box.detailedText(), report=failed[0])
+        dlg.reject()
+
+    QTimer.singleShot(0, drive_the_dialog)
+    window._on_run_analysis()
+
+    assert seen["parent"] is seen["dialog"]
+    assert window._runner.last_exit_code not in (0, 2, 3)
+    assert "No error line was reported" in seen["report"]
+    assert "orientation" in seen["details"]
+    assert NO_STDERR_PLACEHOLDER not in seen["details"]
+    window._analysis_error_box.close()
+
+
+@pytest.mark.gui
+def test_solver_speed_banner_stays_out_of_the_run_log(qtbot, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """Modal-6 of space_frame_3d runs fullGenLapack, whose VERY SLOW banner OpenSees
+    prints: it is kept in the raw stderr capture and never reaches the log."""
+    path = _copy_example("space_frame_3d", tmp_path)
+    project = load_project(path)
+    case = next(c for c in project.analyses if c.name == "Modal-6")
+    runner = AnalysisRunner()
+    logs: list[str] = []
+    runner.log.connect(logs.append)
+    with qtbot.waitSignal(runner.finished, timeout=60000):
+        runner.run(project, case, project_path=path)
+    assert any("fullGenLapack" in line for line in logs)
+    assert not any("VERY SLOW" in line for line in logs)
+    assert "VERY SLOW" in runner._stderr  # raw capture keeps it
+    # the same line arriving on the protocol stream is dropped as well
+    banner = "WARNING - the 'fullGenLapack' eigen solver is VERY SLOW. Consider using the default."
+    runner._handle_line(banner)
+    runner._handle_line(json.dumps({"type": "log", "message": banner}))
+    assert not any("VERY SLOW" in line for line in logs)
 
 
 @pytest.mark.gui

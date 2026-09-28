@@ -101,7 +101,7 @@ def test_transient_under_a_non_ascii_directory_has_full_results(tmp_path) -> Non
         "nodes_disp.out",
         "nodes_vel.out",
     ]
-    assert _stages() == before, "the staging directory is removed after the run"
+    assert not _stages() - before, "the staging directory is removed after the run"
 
 
 def test_cli_child_under_a_non_ascii_directory_has_full_results(tmp_path) -> None:  # type: ignore[no-untyped-def]
@@ -133,7 +133,7 @@ def test_missing_recorder_output_fails_the_case_with_the_file_named(tmp_path) ->
         runner.run(project.analyses[0], results_dir=tmp_path / FOLDER / "results")
     assert f"after {N_STEPS} committed step(s)" in str(exc.value)
     assert not (tmp_path / FOLDER / "results" / "case_1.h5").exists()
-    assert _stages() == before, "the staging directory is removed after a failure too"
+    assert not _stages() - before, "the staging directory is removed after a failure too"
 
 
 def test_missing_recorder_output_is_cli_exit_2_with_an_error_line(tmp_path) -> None:  # type: ignore[no-untyped-def]
