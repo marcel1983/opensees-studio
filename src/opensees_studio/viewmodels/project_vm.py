@@ -97,7 +97,9 @@ class ProjectViewModel(QObject):
         if target is None:
             raise ValueError("No path provided and no current path.")
         previous = self._path
-        out = save_project(self._project, target, on_notice=self.noticePosted.emit)
+        out = save_project(
+            self._project, target, on_notice=self.noticePosted.emit, previous_path=previous
+        )
         self._path = out
         self._undo_stack.setClean()
         self._set_dirty(False)

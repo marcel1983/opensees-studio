@@ -121,6 +121,33 @@ def record_path_to_posix(path: str) -> str:
     return path.replace("\\", "/")
 
 
+def rebase_record_path(
+    source_path: str,
+    old_dir: str | Path,
+    new_dir: str | Path,
+    *,
+    pathmod: Any = os.path,
+) -> str:
+    """``source_path`` (relative to ``old_dir``) re-expressed for ``new_dir``.
+
+    The path is resolved against the old project directory and stored
+    relative to the new one, or absolute when no relative form exists
+    (another drive on Windows, where ``relpath`` raises). An absolute
+    ``source_path`` is kept as its target. The file need not exist, so a
+    missing record is rebased too and a later relink still works.
+    Always forward slashes. ``pathmod`` is the path flavour (``ntpath``
+    or ``posixpath``), injectable so either rule can be tested anywhere.
+    """
+    old_dir = pathmod.abspath(str(old_dir))
+    new_dir = pathmod.abspath(str(new_dir))
+    target = pathmod.normpath(pathmod.join(old_dir, source_path.replace("/", pathmod.sep)))
+    try:
+        rebased = pathmod.relpath(target, new_dir)
+    except ValueError:
+        rebased = target
+    return record_path_to_posix(rebased)
+
+
 # ──────────────────────────── hashing ────────────────────────────
 def content_hash_of_bytes(raw: bytes) -> str:
     """sha256 hex digest of ``raw`` after CRLF → LF normalisation."""

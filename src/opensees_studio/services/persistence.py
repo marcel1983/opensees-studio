@@ -52,6 +52,7 @@ from opensees_studio.core.ground_motion import (
     content_hash_of_file,
     detect_format,
     read_record,
+    rebase_record_path,
     record_path_to_posix,
     sanitize_record_filename,
 )
@@ -354,10 +355,41 @@ def _reanchor_absolute_paths(project: Project, target: Path, notice: Notice | No
         )
 
 
+def _same_directory(a: Path, b: Path) -> bool:
+    return os.path.normcase(a.resolve()) == os.path.normcase(b.resolve())
+
+
+def _rebase_record_paths(
+    project: Project, previous: Path, target: Path, notice: Notice | None
+) -> None:
+    """Re-express relative ``source_path`` entries for a new project directory.
+
+    Save As into another folder: each path is resolved against the folder
+    of ``previous`` and stored relative to the folder of ``target`` (or
+    absolute on another drive). ``pending_sidecar`` entries are skipped,
+    their file is written next to ``target`` anyway. Status and content
+    hash are untouched, so a missing record stays missing and can still
+    be relinked. Saving into the same folder changes nothing.
+    """
+    if _same_directory(previous.parent, target.parent):
+        return
+    rebased: list[str] = []
+    for rec in project.ground_motions:
+        if rec.status == "pending_sidecar":
+            continue
+        new_path = rebase_record_path(rec.source_path, previous.parent, target.parent)
+        if new_path != rec.source_path:
+            rec.source_path = new_path
+            rebased.append(rec.name or str(rec.id))
+    if rebased and notice is not None:
+        notice(f"Ground-motion paths rebased to the folder of {target.name}: {', '.join(rebased)}")
+
+
 def save_project(
     project: Project,
     path: str | Path,
     on_notice: Notice | None = None,
+    previous_path: str | Path | None = None,
 ) -> Path:
     """Serialize ``project`` to disk as indented JSON.
 
@@ -365,6 +397,10 @@ def save_project(
         project: The project to save.
         path: Destination path. The ``.osmodel`` suffix is appended if missing.
         on_notice: Optional sink for one-line messages (sidecar writes).
+        previous_path: The file the project was opened from or last saved
+            to. When it lives in another folder than ``path`` (Save As),
+            relative record paths are rebased to the new folder. ``None``
+            for a never-saved project.
 
     Returns:
         The resolved path actually written.
@@ -374,10 +410,21 @@ def save_project(
         target = target.with_suffix(PROJECT_FILE_SUFFIX)
     target.parent.mkdir(parents=True, exist_ok=True)
 
-    _reanchor_absolute_paths(project, target, on_notice)
-    _write_pending_sidecars(project, target, on_notice)
-
-    target.write_text(_project_json(project), encoding="utf-8")
+    # The catalog is edited in place below; restore it if the save fails,
+    # so the in-memory paths keep matching the file the project came from.
+    before = [
+        (rec, rec.source_path, rec.content_hash, rec.status) for rec in project.ground_motions
+    ]
+    try:
+        if previous_path is not None:
+            _rebase_record_paths(project, Path(previous_path), target, on_notice)
+        _reanchor_absolute_paths(project, target, on_notice)
+        _write_pending_sidecars(project, target, on_notice)
+        target.write_text(_project_json(project), encoding="utf-8")
+    except BaseException:
+        for rec, source_path, content_hash, status in before:
+            rec.source_path, rec.content_hash, rec.status = source_path, content_hash, status
+        raise
     return target
 
 
