@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import (
     QComboBox,
-    QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
@@ -22,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from opensees_studio.core import Project, UniformExcitationPattern
+from opensees_studio.views.screen_fit import FittedDialog
 
 _DIRECTION_CHOICES: list[tuple[int, str]] = [
     (1, "1 — X (horizontal)"),
@@ -33,7 +33,7 @@ _DIRECTION_CHOICES: list[tuple[int, str]] = [
 ]
 
 
-class UniformExcitationDialog(QDialog):
+class UniformExcitationDialog(FittedDialog):
     """Pick direction + accel series for a UniformExcitation pattern."""
 
     def __init__(

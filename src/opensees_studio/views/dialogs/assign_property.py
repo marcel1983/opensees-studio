@@ -4,15 +4,16 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import (
     QComboBox,
-    QDialog,
     QDialogButtonBox,
     QLabel,
     QVBoxLayout,
     QWidget,
 )
 
+from opensees_studio.views.screen_fit import FittedDialog
 
-class AssignSectionDialog(QDialog):
+
+class AssignSectionDialog(FittedDialog):
     def __init__(self, sections: list, n_elements: int, parent: QWidget | None = None) -> None:  # type: ignore[type-arg]
         super().__init__(parent)
         self.setWindowTitle("Assign Section")
@@ -47,7 +48,7 @@ class AssignSectionDialog(QDialog):
         return int(self._combo.currentData())
 
 
-class AssignMaterialDialog(QDialog):
+class AssignMaterialDialog(FittedDialog):
     def __init__(self, materials: list, n_elements: int, parent: QWidget | None = None) -> None:  # type: ignore[type-arg]
         super().__init__(parent)
         self.setWindowTitle("Assign Material")

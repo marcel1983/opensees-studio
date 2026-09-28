@@ -7,7 +7,6 @@ beams, set offset = (0, 0, story_height), n_copies = number_of_floors.
 from __future__ import annotations
 
 from PySide6.QtWidgets import (
-    QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
@@ -17,8 +16,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from opensees_studio.views.screen_fit import FittedDialog
 
-class ReplicateDialog(QDialog):
+
+class ReplicateDialog(FittedDialog):
     """Dialog for offset (dx, dy, dz) and number of copies."""
 
     def __init__(self, n_nodes: int, n_elements: int, parent: QWidget | None = None) -> None:

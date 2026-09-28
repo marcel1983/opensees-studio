@@ -7,7 +7,6 @@ from typing import Any
 
 from PySide6.QtWidgets import (
     QComboBox,
-    QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
@@ -22,9 +21,10 @@ from PySide6.QtWidgets import (
 )
 
 from opensees_studio.viewmodels import AnalysisRunner, ProjectViewModel
+from opensees_studio.views.screen_fit import FittedDialog
 
 
-class RunAnalysisDialog(QDialog):
+class RunAnalysisDialog(FittedDialog):
     """Modal dialog: select a case, hit Run, watch the log."""
 
     def __init__(

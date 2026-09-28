@@ -12,7 +12,6 @@ import contextlib
 
 from PySide6.QtWidgets import (
     QCheckBox,
-    QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
@@ -21,8 +20,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from opensees_studio.views.screen_fit import FittedDialog
 
-class AssignMassesDialog(QDialog):
+
+class AssignMassesDialog(FittedDialog):
     """Modal dialog: enter translational + rotational mass components."""
 
     def __init__(

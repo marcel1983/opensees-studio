@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import (
     QCheckBox,
-    QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
@@ -22,6 +21,7 @@ from PySide6.QtWidgets import (
 
 from opensees_studio.core import Node
 from opensees_studio.core.geometry import GridSystem
+from opensees_studio.views.screen_fit import FittedDialog
 
 
 def _snap(value: float, lines: list[float]) -> float:
@@ -31,7 +31,7 @@ def _snap(value: float, lines: list[float]) -> float:
     return min(lines, key=lambda c: abs(c - value))
 
 
-class AddNodeDialog(QDialog):
+class AddNodeDialog(FittedDialog):
     """Create one :class:`Node` at (x, y, z) optionally snapped to grid."""
 
     def __init__(

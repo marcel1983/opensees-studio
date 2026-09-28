@@ -5,7 +5,6 @@ from __future__ import annotations
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
-    QDialog,
     QDialogButtonBox,
     QFormLayout,
     QLabel,
@@ -14,9 +13,10 @@ from PySide6.QtWidgets import (
 )
 
 from opensees_studio.core import EqualDOFConstraint
+from opensees_studio.views.screen_fit import FittedDialog
 
 
-class AssignEqualDOFDialog(QDialog):
+class AssignEqualDOFDialog(FittedDialog):
     """Choose retained/constrained node and constrained DOFs."""
 
     def __init__(

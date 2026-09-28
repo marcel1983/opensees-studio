@@ -20,13 +20,11 @@ import pyqtgraph as pg
 from PySide6.QtCore import QLocale, Qt
 from PySide6.QtWidgets import (
     QComboBox,
-    QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
-    QLabel,
     QLineEdit,
     QSpinBox,
     QVBoxLayout,
@@ -40,11 +38,12 @@ from opensees_studio.viewmodels.ground_motion_catalog_vm import (
     PLOT_PERIODS,
     GroundMotionCatalogViewModel,
 )
+from opensees_studio.views.screen_fit import FittedDialog, MessageArea, scroll_area
 
 _CUSTOM_PRESET = "Custom"
 
 
-class GenerateExcitationDialog(QDialog):
+class GenerateExcitationDialog(FittedDialog):
     """Sine / sine-beat generator with live trace and spectrum preview."""
 
     def __init__(
@@ -83,6 +82,10 @@ class GenerateExcitationDialog(QDialog):
     def _build_ui(self) -> None:
         root = QHBoxLayout(self)
         left = QVBoxLayout()
+        # The parameters scroll on a short screen; the info line and OK stay put.
+        params = QWidget()
+        params_layout = QVBoxLayout(params)
+        params_layout.setContentsMargins(0, 0, 0, 0)
         form = QFormLayout()
         self._name = QLineEdit()
         self._name.setPlaceholderText("(automatic)")
@@ -106,7 +109,7 @@ class GenerateExcitationDialog(QDialog):
             "Sampling interval of an embedded Path series (a plain sine is continuous)."
         )
         form.addRow("dt [s]:", self._dt)
-        left.addLayout(form)
+        params_layout.addLayout(form)
 
         self._sine_group = QGroupBox("Continuous sine")
         sine_form = QFormLayout(self._sine_group)
@@ -116,7 +119,7 @@ class GenerateExcitationDialog(QDialog):
         sine_form.addRow("Ramp-in [cycles]:", self._ramp_in)
         self._ramp_out = self._spin(0.0, 1e3, 0.0, decimals=2, step=0.5)
         sine_form.addRow("Ramp-out [cycles]:", self._ramp_out)
-        left.addWidget(self._sine_group)
+        params_layout.addWidget(self._sine_group)
 
         self._beat_group = QGroupBox("Sine-beat")
         beat_form = QFormLayout(self._beat_group)
@@ -137,12 +140,12 @@ class GenerateExcitationDialog(QDialog):
         beat_form.addRow("Number of beats:", self._beats)
         self._pause = self._spin(0.0, 1e3, 2.0, decimals=3, step=0.5)
         beat_form.addRow("Pause between beats [s]:", self._pause)
-        left.addWidget(self._beat_group)
+        params_layout.addWidget(self._beat_group)
+        params_layout.addStretch(1)
+        left.addWidget(scroll_area(params, vertical_only=True), 1)
 
-        self._info = QLabel("")
-        self._info.setWordWrap(True)
+        self._info = MessageArea()
         left.addWidget(self._info)
-        left.addStretch(1)
         self._buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
@@ -310,7 +313,7 @@ class GenerateExcitationDialog(QDialog):
             dt, accel = self._catalog.generated_accel(descriptor)
             spectrum = self._catalog.generated_spectrum(descriptor)
         except ValueError as exc:
-            self._info.setText(str(exc))
+            self._info.show_message(str(exc), "error")
             self._buttons.button(QDialogButtonBox.StandardButton.Ok).setEnabled(False)
             return
         times = [i * dt for i in range(accel.size)]
@@ -337,7 +340,7 @@ class GenerateExcitationDialog(QDialog):
             and not (descriptor["ramp_in_cycles"] or descriptor["ramp_out_cycles"])
             else f"embedded Path series, {accel.size} points"
         )
-        self._info.setText(
+        self._info.show_message(
             f"{accel.size} samples, {(accel.size - 1) * dt:g} s, peak {float(abs(accel).max()):g} "
             f"{descriptor['units']}. Stored as {stored}."
         )

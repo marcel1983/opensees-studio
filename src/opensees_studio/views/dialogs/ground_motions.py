@@ -38,6 +38,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QMessageBox,
     QPushButton,
+    QSplitter,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -73,6 +74,7 @@ from opensees_studio.viewmodels.ground_motion_catalog_vm import (
     ScalingPreview,
 )
 from opensees_studio.views.dialogs.generate_excitation import GenerateExcitationDialog
+from opensees_studio.views.screen_fit import FittedDialog, MessageArea, scroll_area
 
 _COLUMNS = ("Name", "dt [s]", "npts", "PGA", "D5-95 [s]", "Units", "Status")
 
@@ -82,14 +84,14 @@ _TABLE_FILTER = "Spectrum tables (*.txt *.csv *.dat);;All files (*)"
 _RECORD_PENS = ("#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2")
 
 
-class GroundMotionsDialog(QDialog):
+class GroundMotionsDialog(FittedDialog):
     """Catalog of the project's ground-motion records."""
 
     def __init__(self, vm: ProjectViewModel, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Ground Motions")
         self.setModal(False)
-        self.resize(1180, 820)
+        self.resize(1180, 760)
         self._vm = vm
         self._catalog = GroundMotionCatalogViewModel(vm.project, self._base_dir())
         self._curve: Any | None = None
@@ -161,7 +163,12 @@ class GroundMotionsDialog(QDialog):
         controls.addWidget(self._generate_btn)
         root.addLayout(controls)
 
-        body = QHBoxLayout()
+        # Refusals, warnings and status stay at the top, outside the scrolling forms.
+        self._status = MessageArea()
+        root.addWidget(self._status)
+        self._scale_warning = MessageArea()
+        root.addWidget(self._scale_warning)
+
         self._table = QTableWidget(0, len(_COLUMNS))
         self._table.setHorizontalHeaderLabels(_COLUMNS)
         self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -169,16 +176,13 @@ class GroundMotionsDialog(QDialog):
         self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._table.verticalHeader().setVisible(False)
         self._table.itemSelectionChanged.connect(self._on_selection_changed)
-        body.addWidget(self._table, 1)
 
         pg.setConfigOptions(antialias=True)
-        plots = QVBoxLayout()
         self._plot = pg.PlotWidget()
         self._plot.setBackground("#1e1e1e")
         self._plot.showGrid(x=True, y=True, alpha=0.3)
         self._plot.setLabel("bottom", "Time [s]")
         self._plot.setLabel("left", "Acceleration")
-        plots.addWidget(self._plot, 1)
 
         self._spectrum_plot = pg.PlotWidget()
         self._spectrum_plot.setBackground("#1e1e1e")
@@ -187,19 +191,33 @@ class GroundMotionsDialog(QDialog):
         self._spectrum_plot.setLabel("bottom", "Period [s]")
         self._spectrum_plot.setLabel("left", "Sa [g], 5 % damping")
         self._spectrum_plot.addLegend(offset=(-10, 10))
-        plots.addWidget(self._spectrum_plot, 1)
-        body.addLayout(plots, 1)
-        root.addLayout(body, 1)
 
-        panels = QHBoxLayout()
-        panels.addWidget(self._build_target_group(), 1)
-        panels.addWidget(self._build_scale_group(), 2)
-        panels.addWidget(self._build_generated_group(), 1)
-        root.addLayout(panels)
+        # Left: the target, scale and generated-input forms, scrolling on a short
+        # screen. Right: the record table and both plots, resizable against each other.
+        forms = QWidget()
+        forms_layout = QVBoxLayout(forms)
+        forms_layout.setContentsMargins(0, 0, 0, 0)
+        forms_layout.addWidget(self._build_target_group())
+        forms_layout.addWidget(self._build_scale_group())
+        forms_layout.addWidget(self._build_generated_group())
+        forms_layout.addStretch(1)
+        self._forms_scroll = scroll_area(forms, vertical_only=True)
 
-        self._status = QLabel("")
-        self._status.setWordWrap(True)
-        root.addWidget(self._status)
+        views = QSplitter(Qt.Orientation.Vertical)
+        views.addWidget(self._table)
+        views.addWidget(self._plot)
+        views.addWidget(self._spectrum_plot)
+        views.setChildrenCollapsible(False)
+        views.setSizes([140, 240, 300])
+
+        body = QSplitter(Qt.Orientation.Horizontal)
+        body.addWidget(self._forms_scroll)
+        body.addWidget(views)
+        body.setChildrenCollapsible(False)
+        body.setStretchFactor(0, 0)
+        body.setStretchFactor(1, 1)
+        body.setSizes([610, 570])
+        root.addWidget(body, 1)
 
         self._on_format_changed()
         self._on_method_changed()
@@ -314,17 +332,13 @@ class GroundMotionsDialog(QDialog):
         self._factors_label = QLabel("")
         self._factors_label.setWordWrap(True)
         outer.addWidget(self._factors_label)
-        self._scale_warning = QLabel("")
-        self._scale_warning.setWordWrap(True)
-        self._scale_warning.setStyleSheet("color: #b8860b; font-weight: bold;")
-        self._scale_warning.setVisible(False)
-        outer.addWidget(self._scale_warning)
         return group
 
     def _build_generated_group(self) -> QGroupBox:
         group = QGroupBox("Generated inputs (time series, not records)")
         layout = QVBoxLayout(group)
         self._generated_list = QListWidget()
+        self._generated_list.setMinimumHeight(60)
         self._generated_list.itemDoubleClicked.connect(self._on_edit_generated)
         layout.addWidget(self._generated_list, 1)
         self._edit_generated_btn = QPushButton("&Edit…")
@@ -398,7 +412,7 @@ class GroundMotionsDialog(QDialog):
 
     def scale_warning_text(self) -> str:
         """The warning shown under the scaling factors (empty when none)."""
-        return self._scale_warning.text() if self._scale_warning.isVisible() else ""
+        return self._scale_warning.text()
 
     def _on_method_changed(self, *_: object) -> None:
         method = self._method.currentData()
@@ -409,8 +423,7 @@ class GroundMotionsDialog(QDialog):
         self._clear_preview()
 
     def _show_scale_warning(self, warnings: list[str]) -> None:
-        self._scale_warning.setText("\n".join(warnings))
-        self._scale_warning.setVisible(bool(warnings))
+        self._scale_warning.show_message("\n".join(warnings), "warning")
 
     def _clear_preview(self) -> None:
         self._show_scale_warning([])
@@ -448,6 +461,9 @@ class GroundMotionsDialog(QDialog):
 
     def status_text(self) -> str:
         return self._status.text()
+
+    def _set_status(self, text: str, level: str = "info") -> None:
+        self._status.show_message(text, level)
 
     def _refresh(self, *_: object) -> None:
         self._catalog.set_project(self._vm.project, self._base_dir())
@@ -532,7 +548,7 @@ class GroundMotionsDialog(QDialog):
         if rec is None or units is None or units == rec.accel_units:
             return
         self._vm.apply_command(SetGroundMotionUnitsCommand(self._vm, rec.id, units))
-        self._status.setText(f"'{rec.name}' units set to {units}.")
+        self._set_status(f"'{rec.name}' units set to {units}.")
 
     def set_selected_units(self, units: str) -> None:
         """Set the selected record's acceleration units (undoable)."""
@@ -572,7 +588,7 @@ class GroundMotionsDialog(QDialog):
             )
         self._spectrum_plot.enableAutoRange()
         if problems:
-            self._status.setText(" ".join(problems))
+            self._set_status(" ".join(problems), "error")
 
     def spectrum_curve_count(self) -> int:
         """Record curves plus the target overlay (the scaled mean is separate)."""
@@ -590,8 +606,8 @@ class GroundMotionsDialog(QDialog):
             return
         values = self._catalog.values_for(rec)
         if values is None:
-            self._status.setText(
-                f"'{rec.name}': cannot read {rec.source_path} (status: {rec.status})."
+            self._set_status(
+                f"'{rec.name}': cannot read {rec.source_path} (status: {rec.status}).", "error"
             )
             return
         times = [i * rec.dt for i in range(len(values))]
@@ -621,10 +637,10 @@ class GroundMotionsDialog(QDialog):
             )
         except (OSError, ValueError) as exc:
             QMessageBox.warning(self, "Import failed", str(exc))
-            self._status.setText(f"Import failed: {exc}")
+            self._set_status(f"Import failed: {exc}", "error")
             return False
         self._vm.apply_command(AddGroundMotionCommand(self._vm, record))
-        self._status.setText(f"Imported '{record.name}' ({record.npts} points, dt {record.dt:g}).")
+        self._set_status(f"Imported '{record.name}' ({record.npts} points, dt {record.dt:g}).")
         self._select_record(record.id)
         return True
 
@@ -646,10 +662,10 @@ class GroundMotionsDialog(QDialog):
             relinked, values = self._catalog.build_relink(rec, path)
         except (OSError, ValueError) as exc:
             QMessageBox.warning(self, "Relink failed", str(exc))
-            self._status.setText(f"Relink failed: {exc}")
+            self._set_status(f"Relink failed: {exc}", "error")
             return False
         self._vm.apply_command(RelinkGroundMotionCommand(self._vm, relinked, values))
-        self._status.setText(f"Relinked '{relinked.name}' to {relinked.source_path}.")
+        self._set_status(f"Relinked '{relinked.name}' to {relinked.source_path}.")
         self._select_record(relinked.id)
         return True
 
@@ -668,7 +684,7 @@ class GroundMotionsDialog(QDialog):
             )
             return False
         self._vm.apply_command(RemoveGroundMotionCommand(self._vm, rec.id))
-        self._status.setText(f"Removed '{rec.name}'.")
+        self._set_status(f"Removed '{rec.name}'.")
         return True
 
     def _on_remove(self) -> None:
@@ -693,10 +709,10 @@ class GroundMotionsDialog(QDialog):
             spectrum = build()
         except ValueError as exc:
             QMessageBox.warning(self, "Target spectrum", str(exc))
-            self._status.setText(f"Target rejected: {exc}")
+            self._set_status(f"Target rejected: {exc}", "error")
             return False
         self._vm.apply_command(SetTargetSpectrumCommand(self._vm, spectrum))
-        self._status.setText(f"Target set: {spectrum.describe()}.")
+        self._set_status(f"Target set: {spectrum.describe()}.")
         return True
 
     def set_target_tbdy(self, sds: float, sd1: float, *, vertical: bool = False) -> bool:
@@ -734,10 +750,10 @@ class GroundMotionsDialog(QDialog):
             spectrum = self._catalog.build_target_user(path)
         except (OSError, ValueError) as exc:
             QMessageBox.warning(self, "Target spectrum", str(exc))
-            self._status.setText(f"Target table rejected: {exc}")
+            self._set_status(f"Target table rejected: {exc}", "error")
             return False
         self._vm.apply_command(SetTargetSpectrumCommand(self._vm, spectrum))
-        self._status.setText(f"Target set: {spectrum.describe()}.")
+        self._set_status(f"Target set: {spectrum.describe()}.")
         return True
 
     # ---- scaling -----------------------------------------------------------------
@@ -759,7 +775,7 @@ class GroundMotionsDialog(QDialog):
                 pair_consecutive=self._pairs.isChecked(),
             )
         except (KeyError, ValueError) as exc:
-            self._status.setText(f"Scaling refused: {exc}")
+            self._set_status(f"Scaling refused: {exc}", "error")
             return None
         self._preview = preview
         names = {rec.id: rec.name for rec in self._catalog.records()}
@@ -777,7 +793,7 @@ class GroundMotionsDialog(QDialog):
             )
         self._factors_label.setText("\n".join(lines))
         self._show_scale_warning(preview.warnings)
-        self._status.setText(preview.summary)
+        self._set_status(preview.summary)
         if preview.periods is not None and preview.scaled_mean_sa is not None:
             self._scaled_curve = self._spectrum_plot.plot(
                 preview.periods,
@@ -800,7 +816,7 @@ class GroundMotionsDialog(QDialog):
                 self._vm, preview.series_factors, f"Scale ground motions ({preview.method})"
             )
         )
-        self._status.setText(
+        self._set_status(
             f"Applied factors to time series {sorted(preview.series_factors)}. {preview.summary}"
         )
         return True
@@ -822,10 +838,10 @@ class GroundMotionsDialog(QDialog):
             return False
         if dialog._existing is None:
             self._vm.apply_command(AddTimeSeriesCommand(self._vm, ts))
-            self._status.setText(f"Added generated time series #{ts.id} '{ts.name}'.")
+            self._set_status(f"Added generated time series #{ts.id} '{ts.name}'.")
         else:
             self._vm.apply_command(ReplaceTimeSeriesCommand(self._vm, ts))
-            self._status.setText(f"Updated generated time series #{ts.id} '{ts.name}'.")
+            self._set_status(f"Updated generated time series #{ts.id} '{ts.name}'.")
         self.select_generated(ts.id)
         return True
 

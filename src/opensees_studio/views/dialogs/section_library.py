@@ -26,9 +26,10 @@ from opensees_studio.commands import (
 )
 from opensees_studio.viewmodels import ProjectViewModel
 from opensees_studio.views.dialogs.section_forms import FORM_REGISTRY, form_for
+from opensees_studio.views.screen_fit import FittedDialog
 
 
-class SectionLibraryDialog(QDialog):
+class SectionLibraryDialog(FittedDialog):
     def __init__(self, vm: ProjectViewModel, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Section Library")

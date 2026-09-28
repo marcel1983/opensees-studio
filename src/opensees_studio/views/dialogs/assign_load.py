@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import (
     QComboBox,
-    QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
@@ -14,11 +13,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from opensees_studio.views.screen_fit import FittedDialog
+
 # Sentinel the pattern combo's userData holds to mean "create a new one".
 _NEW_PATTERN_SENTINEL = "__new__"
 
 
-class AssignLoadDialog(QDialog):
+class AssignLoadDialog(FittedDialog):
     """Modal dialog for entering a 6-component force vector + pattern pick.
 
     ``existing_patterns`` — list of ``(pattern_id, pattern_name)`` tuples.

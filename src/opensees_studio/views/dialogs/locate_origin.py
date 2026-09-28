@@ -8,7 +8,6 @@ coordinate system, leaving its grid data unchanged.
 from __future__ import annotations
 
 from PySide6.QtWidgets import (
-    QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
@@ -18,8 +17,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from opensees_studio.views.screen_fit import FittedDialog
 
-class CoordSystemLocationOrientationDialog(QDialog):
+
+class CoordSystemLocationOrientationDialog(FittedDialog):
     """Just origin + XYZ Euler rotation in degrees."""
 
     def __init__(

@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import (
     QComboBox,
-    QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
@@ -24,9 +23,10 @@ from PySide6.QtWidgets import (
 )
 
 from opensees_studio.core import Project
+from opensees_studio.views.screen_fit import FittedDialog
 
 
-class AssignHingeDialog(QDialog):
+class AssignHingeDialog(FittedDialog):
     """Modal dialog: configure BeamWithHinges parameters."""
 
     def __init__(self, n_selected: int, project: Project, parent: QWidget | None = None) -> None:

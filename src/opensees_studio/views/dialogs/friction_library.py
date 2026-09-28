@@ -12,7 +12,6 @@ from typing import Any
 from pydantic import ValidationError
 from PySide6.QtCore import QLocale, Qt
 from PySide6.QtWidgets import (
-    QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
@@ -41,6 +40,7 @@ from opensees_studio.core import (
     VelNormalFrcDepFriction,
 )
 from opensees_studio.viewmodels import ProjectViewModel
+from opensees_studio.views.screen_fit import FittedDialog, MessageArea, scroll_area
 
 
 def _spin(default: float, *, minimum: float = -1e15, decimals: int = 6) -> QDoubleSpinBox:
@@ -185,7 +185,7 @@ def friction_form_for(model: Any) -> FrictionFormBase:
     return form
 
 
-class FrictionLibraryDialog(QDialog):
+class FrictionLibraryDialog(FittedDialog):
     """Manage the project's friction models: add, edit, delete."""
 
     def __init__(self, vm: ProjectViewModel, parent: QWidget | None = None) -> None:
@@ -227,7 +227,9 @@ class FrictionLibraryDialog(QDialog):
         self._type_label.setStyleSheet("font-weight: bold;")
         right.addWidget(self._type_label)
         self._stack = QStackedWidget()
-        right.addWidget(self._stack, stretch=1)
+        right.addWidget(scroll_area(self._stack, vertical_only=True), stretch=1)
+        self._message = MessageArea()
+        right.addWidget(self._message)
         self._apply_btn = QPushButton("Apply changes")
         self._apply_btn.clicked.connect(self._on_apply)
         right.addWidget(self._apply_btn, alignment=Qt.AlignmentFlag.AlignRight)
@@ -274,15 +276,23 @@ class FrictionLibraryDialog(QDialog):
         self._stack.addWidget(form)
         self._stack.setCurrentWidget(form)
         self._type_label.setText(form.type_label)
+        self._message.clear_message()
 
     def _on_apply(self) -> None:
         if self._stack.count() == 0 or self._vm.project is None:
             return
         form = self._stack.currentWidget()
         try:
-            self._vm.apply_command(UpdateFrictionModelCommand(self._vm, form.read()))
+            model = form.read()
+            self._vm.apply_command(UpdateFrictionModelCommand(self._vm, model))
         except (ValidationError, ValueError) as exc:
-            QMessageBox.critical(self, "Validation error", str(exc))
+            self._message.show_message(f"Friction model rejected: {exc}", "error")
+            return
+        self._message.show_message(f"Friction model #{model.id} updated.")
+
+    def message_text(self) -> str:
+        """The dialog's status or refusal line (empty when none)."""
+        return self._message.text()
 
     def _on_add(self) -> None:
         if self._vm.project is None:

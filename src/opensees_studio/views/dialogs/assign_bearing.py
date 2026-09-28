@@ -26,7 +26,6 @@ from PySide6.QtCore import QLocale
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
-    QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
@@ -51,6 +50,7 @@ from opensees_studio.core import (
     pendulum_restoring_stiffness,
     sliding_yield_displacement,
 )
+from opensees_studio.views.screen_fit import FittedDialog, MessageArea, scroll_area
 
 BEARING_TYPES: tuple[tuple[str, str], ...] = (
     ("ElastomericBearingPlasticity", "elastomericBearingPlasticity (bilinear)"),
@@ -66,7 +66,7 @@ def _uniaxial_materials(project: Project) -> list[Any]:
     return [m for m in project.materials if not isinstance(m, ElasticIsotropic)]
 
 
-class AssignElastomericBearingDialog(QDialog):
+class AssignElastomericBearingDialog(FittedDialog):
     """Modal dialog: bearing type, parameters, materials, derived helpers."""
 
     def __init__(
@@ -113,13 +113,17 @@ class AssignElastomericBearingDialog(QDialog):
 
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
-        root.addWidget(
-            QLabel(
-                f"Connect node <b>{self._node_ids[0]}</b> (bottom) and "
-                f"<b>{self._node_ids[1]}</b> (top) with a bearing. "
-                "Coincident nodes are allowed; the runner writes the orientation."
-            )
+        # Parameters scroll on a short screen; the refusal line and the buttons stay put.
+        content = QWidget()
+        body = QVBoxLayout(content)
+        body.setContentsMargins(0, 0, 0, 0)
+        intro = QLabel(
+            f"Connect node <b>{self._node_ids[0]}</b> (bottom) and "
+            f"<b>{self._node_ids[1]}</b> (top) with a bearing. "
+            "Coincident nodes are allowed; the runner writes the orientation."
         )
+        intro.setWordWrap(True)
+        body.addWidget(intro)
 
         form = QFormLayout()
         self._form = form
@@ -176,7 +180,7 @@ class AssignElastomericBearingDialog(QDialog):
         form.addRow("Shear distance ratio (-shearDist):", self._shear_dist)
         form.addRow("", self._do_rayleigh)
         form.addRow("Element mass (-mass):", self._mass)
-        root.addLayout(form)
+        body.addLayout(form)
 
         helpers = QGroupBox("Derived (read-only)")
         hform = QFormLayout(helpers)
@@ -197,11 +201,11 @@ class AssignElastomericBearingDialog(QDialog):
         hform.addRow("Slip displacement mu W / Kinit:", self._slip_label)
         hform.addRow("Restoring stiffness W / Reff:", self._k_r_label)
         hform.addRow("Isolated period 2 pi sqrt(Reff / g):", self._period_label)
-        root.addWidget(helpers)
+        body.addWidget(helpers)
+        body.addStretch(1)
+        root.addWidget(scroll_area(content, vertical_only=True), 1)
 
-        self._error = QLabel("")
-        self._error.setStyleSheet("color: #c0392b;")
-        self._error.setWordWrap(True)
+        self._error = MessageArea()
         root.addWidget(self._error)
 
         for spin in (
@@ -393,7 +397,7 @@ class AssignElastomericBearingDialog(QDialog):
         try:
             self.build_element(999999)
         except ValueError as exc:
-            self._error.setText(f"Bearing rejected: {exc}")
+            self._error.show_message(f"Bearing rejected: {exc}", "error")
             return
-        self._error.setText("")
+        self._error.clear_message()
         super().accept()

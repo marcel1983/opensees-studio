@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from PySide6.QtWidgets import (
-    QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
@@ -13,9 +12,10 @@ from PySide6.QtWidgets import (
 )
 
 from opensees_studio.core import LinearTimeSeries
+from opensees_studio.views.screen_fit import FittedDialog
 
 
-class LinearTimeSeriesDialog(QDialog):
+class LinearTimeSeriesDialog(FittedDialog):
     """Modal dialog: build a simple ``timeSeries Linear`` entity."""
 
     def __init__(self, next_ts_id: int, parent: QWidget | None = None) -> None:

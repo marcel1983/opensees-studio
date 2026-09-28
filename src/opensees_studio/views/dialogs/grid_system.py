@@ -14,7 +14,6 @@ from itertools import product
 
 from PySide6.QtWidgets import (
     QCheckBox,
-    QDialog,
     QDialogButtonBox,
     QFormLayout,
     QLabel,
@@ -25,6 +24,7 @@ from PySide6.QtWidgets import (
 
 from opensees_studio.core import Node
 from opensees_studio.core.geometry import GridSystem
+from opensees_studio.views.screen_fit import FittedDialog
 
 
 def _parse_spacings(text: str) -> list[float]:
@@ -60,7 +60,7 @@ def _coords_from_spacings(spacings: list[float], origin: float = 0.0) -> list[fl
     return coords
 
 
-class GridSystemDialog(QDialog):
+class GridSystemDialog(FittedDialog):
     """Dialog for entering X/Y/Z grid-line coordinates."""
 
     def __init__(

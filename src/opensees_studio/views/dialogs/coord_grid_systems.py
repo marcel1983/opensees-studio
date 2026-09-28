@@ -40,6 +40,7 @@ from opensees_studio.views.dialogs.grid_system import (
     _coords_from_spacings,
     _parse_spacings,
 )
+from opensees_studio.views.screen_fit import FittedDialog
 
 
 def _spacings_text(coords: list[float]) -> str:
@@ -50,7 +51,7 @@ def _spacings_text(coords: list[float]) -> str:
     return ", ".join(f"{s:g}" for s in spacings)
 
 
-class CoordSystemDataDialog(QDialog):
+class CoordSystemDataDialog(FittedDialog):
     """Edit one CoordinateGridSystem (origin + orientation + grid)."""
 
     def __init__(
@@ -241,7 +242,7 @@ class CoordSystemDataDialog(QDialog):
         )
 
 
-class CoordinateGridSystemsDialog(QDialog):
+class CoordinateGridSystemsDialog(FittedDialog):
     """Main Coordinate/Grid Systems form (SAP2000 parity)."""
 
     def __init__(

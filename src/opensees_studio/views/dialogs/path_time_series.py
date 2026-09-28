@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
     QFileDialog,
@@ -29,9 +28,10 @@ from opensees_studio.services.peer_record import (
     parse_peer_record,
     parse_plain_values,
 )
+from opensees_studio.views.screen_fit import FittedDialog
 
 
-class PathTimeSeriesDialog(QDialog):
+class PathTimeSeriesDialog(FittedDialog):
     """Modal dialog: import or build a PathTimeSeries from a file."""
 
     def __init__(self, next_ts_id: int, parent: QWidget | None = None) -> None:

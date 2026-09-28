@@ -55,6 +55,13 @@ def _spin(
     return sb
 
 
+def _note(text: str) -> QLabel:
+    """A word-wrapped hint row, so a long note never widens the form."""
+    label = QLabel(text)
+    label.setWordWrap(True)
+    return label
+
+
 def _int_spin(default: int = 1, minimum: int = 1, maximum: int = 1000000) -> QSpinBox:
     sb = QSpinBox()
     sb.setRange(minimum, maximum)
@@ -251,7 +258,7 @@ class ModalCaseForm(CaseFormBase):
         self._layout.addRow("Number of modes:", self._n_modes)
         self._layout.addRow("Solver:", self._solver)
         self._layout.addRow(
-            QLabel(
+            _note(
                 "<i>Auto gives history-independent results: dense below the threshold, "
                 "ARPACK above it as the first eigen call of a fresh process. ARPACK falls "
                 "back to fullGenLapack for very small models.</i>"
@@ -320,7 +327,7 @@ class TransientCaseForm(CaseFormBase):
         self._layout.addRow(QLabel("<b>Preload static cases (optional):</b>"))
         self._layout.addRow(self._preload_picker)
         self._layout.addRow(
-            QLabel(
+            _note(
                 "<i>Run these Static cases first, then hold them constant via "
                 "loadConst -time 0.0 before the transient starts.</i>"
             )
@@ -342,7 +349,7 @@ class TransientCaseForm(CaseFormBase):
         self._layout.addRow("Rayleigh βK:", self._beta_k)
         self._layout.addRow("Mode-1 damping ratio:", self._mode1_damping)
         self._layout.addRow(
-            QLabel(
+            _note(
                 "<i>If mode-1 damping is > 0, the runner computes βK = 2ζ/√λ1 "
                 "after preload and uses it instead of the manual βK value.</i>"
             )
@@ -496,7 +503,7 @@ class ResponseSpectrumCaseForm(CaseFormBase):
         self._layout.addRow("Combination:", self._combination)
         self._layout.addRow("Modal damping (CQC):", self._damping)
         self._layout.addRow(
-            QLabel(
+            _note(
                 "<i>CQC (default) is independent of the eigen basis inside closely spaced "
                 "mode pairs; SRSS is not and warns about them after a run. The damping feeds "
                 "the CQC correlation only: 0 means the spectrum's own damping ratio.</i>",

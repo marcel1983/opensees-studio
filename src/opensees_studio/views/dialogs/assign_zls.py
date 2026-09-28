@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import (
     QComboBox,
-    QDialog,
     QDialogButtonBox,
     QFormLayout,
     QLabel,
@@ -20,9 +19,10 @@ from PySide6.QtWidgets import (
 )
 
 from opensees_studio.core import Project
+from opensees_studio.views.screen_fit import FittedDialog
 
 
-class AssignZeroLengthSectionDialog(QDialog):
+class AssignZeroLengthSectionDialog(FittedDialog):
     """Modal dialog: pick a section, confirm creation between 2 nodes."""
 
     def __init__(

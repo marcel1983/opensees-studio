@@ -15,7 +15,6 @@ import pyqtgraph as pg
 from PySide6.QtCore import QLocale
 from PySide6.QtWidgets import (
     QComboBox,
-    QDialog,
     QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
@@ -34,6 +33,7 @@ from opensees_studio.viewmodels.material_tester_vm import (
     PROTOCOL_LABELS,
     MaterialTesterViewModel,
 )
+from opensees_studio.views.screen_fit import FittedDialog
 
 
 def _parse_peaks(text: str) -> list[float]:
@@ -41,7 +41,7 @@ def _parse_peaks(text: str) -> list[float]:
     return [float(tok) for tok in re.split(r"[\s,;]+", text.strip()) if tok]
 
 
-class MaterialTesterDialog(QDialog):
+class MaterialTesterDialog(FittedDialog):
     """Pick a material and a protocol, run, plot stress against strain."""
 
     def __init__(self, vm: ProjectViewModel, parent: QWidget | None = None) -> None:

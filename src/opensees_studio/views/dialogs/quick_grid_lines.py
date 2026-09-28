@@ -8,7 +8,6 @@ lists that the caller converts into :class:`GridLine` records.
 from __future__ import annotations
 
 from PySide6.QtWidgets import (
-    QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
     QGroupBox,
@@ -19,8 +18,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from opensees_studio.views.screen_fit import FittedDialog
 
-class QuickGridLinesDialog(QDialog):
+
+class QuickGridLinesDialog(FittedDialog):
     """Three parallel (n, spacing, first_coord) inputs — one per axis."""
 
     def __init__(self, parent: QWidget | None = None) -> None:

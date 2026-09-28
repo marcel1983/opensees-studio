@@ -10,7 +10,6 @@ from __future__ import annotations
 from pydantic import ValidationError
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QDialog,
     QDialogButtonBox,
     QHBoxLayout,
     QInputDialog,
@@ -31,9 +30,10 @@ from opensees_studio.commands import (
 )
 from opensees_studio.viewmodels import ProjectViewModel
 from opensees_studio.views.dialogs.material_forms import FORM_REGISTRY, form_for
+from opensees_studio.views.screen_fit import FittedDialog
 
 
-class MaterialLibraryDialog(QDialog):
+class MaterialLibraryDialog(FittedDialog):
     """Manage all materials in the project: add, edit, delete."""
 
     def __init__(self, vm: ProjectViewModel, parent: QWidget | None = None) -> None:

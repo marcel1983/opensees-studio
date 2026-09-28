@@ -52,6 +52,7 @@ from opensees_studio.core.geometry import (
     GridLine,
     GridSystem,
 )
+from opensees_studio.views.screen_fit import FittedDialog
 
 _LINE_TYPE_CHOICES = ["Primary", "Secondary"]
 _BUBBLE_LOC_CHOICES = ["Start", "End"]
@@ -280,7 +281,7 @@ class _AxisGridTable(QWidget):
                     item.setBackground(new)
 
 
-class DefineGridSystemDataDialog(QDialog):
+class DefineGridSystemDataDialog(FittedDialog):
     """SAP2000-parity Define Grid System Data form."""
 
     def __init__(

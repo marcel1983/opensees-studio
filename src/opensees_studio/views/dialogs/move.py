@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from PySide6.QtWidgets import (
-    QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
@@ -12,8 +11,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from opensees_studio.views.screen_fit import FittedDialog
 
-class MoveDialog(QDialog):
+
+class MoveDialog(FittedDialog):
     """Dialog for an (dx, dy, dz) translation."""
 
     def __init__(self, n_nodes: int, parent: QWidget | None = None) -> None:

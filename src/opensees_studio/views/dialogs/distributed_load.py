@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from PySide6.QtWidgets import (
-    QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
@@ -12,8 +11,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from opensees_studio.views.screen_fit import FittedDialog
 
-class AssignDistributedLoadDialog(QDialog):
+
+class AssignDistributedLoadDialog(FittedDialog):
     """Modal dialog for entering uniform distributed loads (wy, wz, wx).
 
     Components are in the **element local frame** (local y / z / x axes).

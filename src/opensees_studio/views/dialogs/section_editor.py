@@ -16,7 +16,6 @@ import pyqtgraph as pg
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QComboBox,
-    QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
@@ -42,6 +41,7 @@ from opensees_studio.services.section_properties import (
     compute_section_props,
     expand_fibres,
 )
+from opensees_studio.views.screen_fit import FittedDialog, scroll_area
 
 _PATCH_COLORS = [
     "#4e79a7",
@@ -55,7 +55,7 @@ _PATCH_COLORS = [
 ]
 
 
-class FiberSectionEditor(QDialog):
+class FiberSectionEditor(FittedDialog):
     """Modal dialog: build a FiberSection from patches + layers."""
 
     def __init__(
@@ -97,6 +97,10 @@ class FiberSectionEditor(QDialog):
         # ── Left panel: controls ──
         left = QWidget()
         left_layout = QVBoxLayout(left)
+        # The patch and layer forms scroll on a short screen; OK and Cancel stay put.
+        controls = QWidget()
+        controls_layout = QVBoxLayout(controls)
+        controls_layout.setContentsMargins(0, 0, 0, 0)
 
         # Add-patch controls
         patch_group = QGroupBox("Add Patch")
@@ -152,7 +156,7 @@ class FiberSectionEditor(QDialog):
         self._add_patch_btn = QPushButton("Add patch")
         self._add_patch_btn.clicked.connect(self._on_add_patch)
         pf.addRow(self._add_patch_btn)
-        left_layout.addWidget(patch_group)
+        controls_layout.addWidget(patch_group)
 
         # Add-layer controls
         layer_group = QGroupBox("Add Rebar Layer")
@@ -178,15 +182,17 @@ class FiberSectionEditor(QDialog):
         self._add_layer_btn = QPushButton("Add layer")
         self._add_layer_btn.clicked.connect(self._on_add_layer)
         lf.addRow(self._add_layer_btn)
-        left_layout.addWidget(layer_group)
+        controls_layout.addWidget(layer_group)
 
         # Item list + remove
         self._item_list = QListWidget()
-        left_layout.addWidget(QLabel("Components:"))
-        left_layout.addWidget(self._item_list)
+        self._item_list.setMinimumHeight(80)
+        controls_layout.addWidget(QLabel("Components:"))
+        controls_layout.addWidget(self._item_list)
         self._remove_btn = QPushButton("Remove selected")
         self._remove_btn.clicked.connect(self._on_remove)
-        left_layout.addWidget(self._remove_btn)
+        controls_layout.addWidget(self._remove_btn)
+        left_layout.addWidget(scroll_area(controls, vertical_only=True), 1)
 
         # Buttons
         buttons = QDialogButtonBox(
