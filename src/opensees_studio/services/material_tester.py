@@ -49,6 +49,7 @@ from opensees_studio.core.materials import (
     ElasticIsotropic,
     ElasticPP,
     ElasticUniaxial,
+    Hardening,
     HystereticMaterial,
     Steel01,
     Steel02,
@@ -64,6 +65,7 @@ SUPPORTED_MATERIALS: tuple[type, ...] = (
     Concrete02,
     Concrete04,
     ElasticPP,
+    Hardening,
     HystereticMaterial,
 )
 
@@ -218,6 +220,11 @@ def _emit_uniaxial(ops: Any, mat: Any) -> None:
                 args.append(mat.epsy_neg if mat.epsy_neg is not None else -mat.epsy_pos)
                 args.append(mat.eps0)
             ops.uniaxialMaterial("ElasticPP", mat.id, *args)
+        case Hardening():
+            hardening_args: list[Any] = [mat.E, mat.sigmaY, mat.H_iso, mat.H_kin]
+            if mat.eta:
+                hardening_args.append(mat.eta)
+            ops.uniaxialMaterial("Hardening", mat.id, *hardening_args)
         case HystereticMaterial():
             ops.uniaxialMaterial(
                 "Hysteretic",

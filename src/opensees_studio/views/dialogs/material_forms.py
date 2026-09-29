@@ -26,6 +26,7 @@ from opensees_studio.core import (
     ElasticIsotropic,
     ElasticPP,
     ElasticUniaxial,
+    Hardening,
     Steel01,
     Steel02,
 )
@@ -362,6 +363,45 @@ class ElasticPPForm(MaterialFormBase):
         )
 
 
+# ─────────────────────────── Hardening ───────────────────────────
+class HardeningForm(MaterialFormBase):
+    type_label = "Hardening — linear isotropic and kinematic hardening"
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._e = _spin(200e9, minimum=1e-9)
+        self._sigma_y = _spin(355e6, minimum=1e-9)
+        self._h_iso = _spin(0.0, minimum=0.0)
+        self._h_kin = _spin(0.0, minimum=0.0)
+        self._eta = _spin(0.0, minimum=0.0, step=0.01)
+        for label, w in (
+            ("E:", self._e),
+            ("sigmaY (yield stress):", self._sigma_y),
+            ("H_iso (isotropic):", self._h_iso),
+            ("H_kin (kinematic):", self._h_kin),
+            ("eta (viscosity, 0 = none):", self._eta),
+        ):
+            self._layout.addRow(label, w)
+
+    def _populate_specific(self, m: Hardening) -> None:
+        self._e.setValue(m.E)
+        self._sigma_y.setValue(m.sigmaY)
+        self._h_iso.setValue(m.H_iso)
+        self._h_kin.setValue(m.H_kin)
+        self._eta.setValue(m.eta)
+
+    def _read_specific(self, mid: int) -> Hardening:
+        return Hardening(
+            id=mid,
+            name=self._name_edit.text(),
+            E=self._e.value(),
+            sigmaY=self._sigma_y.value(),
+            H_iso=self._h_iso.value(),
+            H_kin=self._h_kin.value(),
+            eta=self._eta.value(),
+        )
+
+
 # ─────────────────────────── registry ───────────────────────────
 #: Maps a "type" key (matches the Pydantic discriminator) to a form class.
 FORM_REGISTRY: dict[str, type[MaterialFormBase]] = {
@@ -373,6 +413,7 @@ FORM_REGISTRY: dict[str, type[MaterialFormBase]] = {
     "Elastic": ElasticUniaxialForm,
     "ElasticIsotropic": ElasticIsotropicForm,
     "ElasticPP": ElasticPPForm,
+    "Hardening": HardeningForm,
 }
 
 

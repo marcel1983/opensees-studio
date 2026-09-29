@@ -59,6 +59,7 @@ from opensees_studio.core import (
     ElasticUniaxial,
     FiberSection,
     ForceBeamColumn,
+    Hardening,
     HystereticMaterial,
     HystereticSM,
     ImposedSupportMotionPattern,
@@ -302,6 +303,11 @@ class OpenSeesRunner:
                     args.append(mat.epsy_neg if mat.epsy_neg is not None else -mat.epsy_pos)
                     args.append(mat.eps0)
                 ops.uniaxialMaterial("ElasticPP", mat.id, *args)
+            case Hardening():
+                hardening_args: list[Any] = [mat.E, mat.sigmaY, mat.H_iso, mat.H_kin]
+                if mat.eta:
+                    hardening_args.append(mat.eta)
+                ops.uniaxialMaterial("Hardening", mat.id, *hardening_args)
             case HystereticMaterial():
                 ops.uniaxialMaterial(
                     "Hysteretic",

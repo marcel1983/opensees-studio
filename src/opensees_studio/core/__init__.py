@@ -136,6 +136,7 @@ from opensees_studio.core.materials import (
     ElasticIsotropic,
     ElasticPP,
     ElasticUniaxial,
+    Hardening,
     HystereticMaterial,
     HystereticSM,
     Material,
@@ -286,6 +287,7 @@ __all__ = [  # noqa: RUF022 - grouped by domain under section comments, not alph
     "Concrete02",
     "Concrete04",
     "ElasticPP",
+    "Hardening",
     "HystereticMaterial",
     "HystereticSM",
     # Sections

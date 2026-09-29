@@ -140,6 +140,23 @@ class Concrete04(Entity):
         return self
 
 
+class Hardening(Entity):
+    """Rate-independent plasticity with combined linear isotropic and kinematic hardening —
+    ``uniaxialMaterial Hardening tag E sigmaY H_iso H_kin <eta>``.
+
+    Monotonic loading follows ``E`` up to ``sigmaY`` and ``E*(H_iso + H_kin)/(E + H_iso +
+    H_kin)`` beyond it. ``H_kin`` translates the elastic range (Bauschinger effect), ``H_iso``
+    widens it. ``eta`` is the optional viscosity, written only when it is not zero.
+    """
+
+    type: Literal["Hardening"] = "Hardening"
+    E: PositiveFloat = Field(..., description="Elastic modulus.")
+    sigmaY: PositiveFloat = Field(..., description="Yield stress.")
+    H_iso: float = Field(..., ge=0.0, description="Isotropic hardening modulus.")
+    H_kin: float = Field(..., ge=0.0, description="Kinematic hardening modulus.")
+    eta: float = Field(default=0.0, ge=0.0, description="Visco-plastic coefficient.")
+
+
 class ElasticPP(Entity):
     """Elastic-perfectly-plastic — ``uniaxialMaterial ElasticPP``."""
 
@@ -237,6 +254,7 @@ Material = Annotated[
     | Concrete02
     | Concrete04
     | ElasticPP
+    | Hardening
     | HystereticMaterial
     | HystereticSM,
     Field(discriminator="type"),
