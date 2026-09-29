@@ -952,8 +952,8 @@ class OpenSeesRunner:
 
     def _setup_analysis(self, case: Any) -> None:
         ops = self._ops
-        ops.system(case.system)
-        ops.numberer("RCM")
+        ops.system(case.system, *case.system_args)
+        ops.numberer(case.numberer)
         ops.constraints(case.constraints)
         ops.test(case.test, case.tolerance, case.max_iter)
         ops.algorithm(case.algorithm)
@@ -1160,8 +1160,8 @@ class OpenSeesRunner:
                     linear_ids.append(pid)
             if const_ids:
                 self._emit_patterns_for_case(const_ids)
-                ops.system(case.system)
-                ops.numberer("RCM")
+                ops.system(case.system, *case.system_args)
+                ops.numberer(case.numberer)
                 ops.constraints(case.constraints)
                 ops.test(case.test, case.tolerance, case.max_iter)
                 ops.algorithm(case.algorithm)
@@ -1182,8 +1182,8 @@ class OpenSeesRunner:
             self._emit_patterns_for_case(linear_ids)
 
         # Configure analysis — DisplacementControl integrator.
-        ops.system(case.system)
-        ops.numberer("RCM")
+        ops.system(case.system, *case.system_args)
+        ops.numberer(case.numberer)
         ops.constraints(case.constraints)
         ops.test(case.test, case.tolerance, case.max_iter)
         ops.algorithm(case.algorithm)

@@ -10,15 +10,65 @@ in Phase 6/8.
 from __future__ import annotations
 
 import warnings
-from typing import Annotated, Literal
+from typing import Annotated, Literal, get_args
 
-from pydantic import Field, PositiveFloat, PositiveInt, field_validator
+from pydantic import Field, PositiveFloat, PositiveInt, field_validator, model_validator
 
-from opensees_studio.core._base import Entity
+from opensees_studio.core._base import Entity, omit_when_default
 from opensees_studio.core.modal import KNOWN_SOLVERS, OFFERED_SOLVERS, SOLVER_AUTO
 
+Numberer = Literal["Plain", "RCM", "AMD"]
+"""DOF numberers offered: each gives its own equation numbering in OpenSeesPy 3.8.0, and an
+unknown name is an error there, not a silent default."""
 
-class StaticCase(Entity):
+NUMBERERS: tuple[str, ...] = get_args(Numberer)
+
+SYSTEMS: tuple[str, ...] = (
+    "BandGeneral",
+    "BandSPD",
+    "ProfileSPD",
+    "SparseGeneral",
+    "UmfPack",
+    "FullGeneral",
+)
+"""Linear solvers offered; each runs in OpenSeesPy 3.8.0 and gives its own result bits.
+
+``system`` stays a free string so files naming another solver still load; the runner passes
+it to OpenSees, which refuses an unknown name.
+"""
+
+SYSTEM_ARGS: dict[str, tuple[str, ...]] = {"SparseGeneral": ("-piv",)}
+"""Arguments a system accepts here. ``SparseGeneral -piv`` asks SuperLU for partial pivoting,
+which this build always applies (``DiagPivotThresh`` is fixed at 1.0): the flag changes no
+result bit, and is kept so a script's ``system SparseGeneral -piv`` is reproduced as written."""
+
+
+class _SolverOptions(Entity):
+    """``numberer`` and ``system`` arguments shared by the stepped analysis cases.
+
+    Both are left out of the file at their defaults (RCM, no arguments), so projects that do
+    not use them save exactly as before.
+    """
+
+    numberer: Numberer = "RCM"
+    system_args: tuple[str, ...] = ()
+
+    serialize_without_defaults = omit_when_default("numberer", "system_args")
+
+    @model_validator(mode="after")
+    def _known_system_args(self) -> _SolverOptions:
+        system = getattr(self, "system", "")
+        allowed = SYSTEM_ARGS.get(system, ())
+        unknown = [a for a in self.system_args if a not in allowed]
+        if unknown:
+            accepted = ", ".join(allowed) if allowed else "none"
+            raise ValueError(
+                f"system {system} does not take {', '.join(unknown)} (accepted: {accepted})."
+            )
+        return self
+
+
+class StaticCase(_SolverOptions):
     """Linear or nonlinear static analysis (single load step or pushover)."""
 
     type: Literal["Static"] = "Static"
@@ -63,7 +113,7 @@ class ModalCase(Entity):
         return SOLVER_AUTO
 
 
-class TransientCase(Entity):
+class TransientCase(_SolverOptions):
     """Direct-integration time-history analysis.
 
     Supports chained analysis via ``preload_case_ids``: a list of
@@ -148,7 +198,7 @@ class TransientCase(Entity):
     )
 
 
-class PushoverCase(Entity):
+class PushoverCase(_SolverOptions):
     """Displacement-controlled monotonic pushover analysis.
 
     Applies the reference load pattern(s), then incrementally drives

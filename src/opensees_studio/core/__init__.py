@@ -5,6 +5,9 @@ to use from a script, a Jupyter notebook, or a future CLI.
 """
 
 from opensees_studio.core.analysis import (
+    NUMBERERS,
+    SYSTEM_ARGS,
+    SYSTEMS,
     AnalysisCase,
     ModalCase,
     PushoverCase,
@@ -391,6 +394,9 @@ __all__ = [  # noqa: RUF022 - grouped by domain under section comments, not alph
     # Analysis
     "AnalysisCase",
     "StaticCase",
+    "NUMBERERS",
+    "SYSTEMS",
+    "SYSTEM_ARGS",
     "ModalCase",
     "TransientCase",
     "PushoverCase",

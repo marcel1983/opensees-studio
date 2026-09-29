@@ -21,6 +21,9 @@ from PySide6.QtWidgets import (
 )
 
 from opensees_studio.core import (
+    NUMBERERS,
+    SYSTEM_ARGS,
+    SYSTEMS,
     AnalysisCase,
     LoadPattern,
     ModalCase,
@@ -153,14 +156,57 @@ class CaseFormBase(QWidget):
 
 
 # ─────────────────────────── Static ───────────────────────────
-_STATIC_SYSTEMS = [
-    "BandGeneral",
-    "BandSPD",
-    "ProfileSPD",
-    "SparseGeneral",
-    "UmfPack",
-    "FullGeneral",
-]
+_NO_ARGS = "(none)"
+_ARG_TIPS = {
+    "-piv": "SuperLU pivots in this build with or without -piv (same result bits); "
+    "kept so a script's command is reproduced as written.",
+}
+
+
+class _SolverRows:
+    """Numberer, system and system-argument rows shared by the stepped case forms."""
+
+    def __init__(self, layout: QFormLayout) -> None:
+        self.numberer = QComboBox()
+        self.numberer.addItems(list(NUMBERERS))
+        self.numberer.setCurrentText("RCM")
+        self.system = QComboBox()
+        self.system.addItems(list(SYSTEMS))
+        self.system.setCurrentText("BandGeneral")
+        self.args = QComboBox()
+        self.system.currentTextChanged.connect(self._fill_args)
+        self._fill_args(self.system.currentText())
+        layout.addRow("Numberer:", self.numberer)
+        layout.addRow("System:", self.system)
+        layout.addRow("System arguments:", self.args)
+
+    def _fill_args(self, system: str) -> None:
+        self.args.clear()
+        self.args.addItem(_NO_ARGS, "")
+        for arg in SYSTEM_ARGS.get(system, ()):
+            self.args.addItem(arg, arg)
+            self.args.setItemData(
+                self.args.count() - 1, _ARG_TIPS.get(arg, ""), Qt.ItemDataRole.ToolTipRole
+            )
+        self.args.setEnabled(self.args.count() > 1)
+
+    def populate(self, case: StaticCase | TransientCase | PushoverCase) -> None:
+        self.numberer.setCurrentText(case.numberer)
+        if self.system.findText(case.system) < 0:
+            # A solver a file names but this build does not offer: show it as stored.
+            self.system.addItem(case.system)
+        self.system.setCurrentText(case.system)
+        index = self.args.findData(" ".join(case.system_args))
+        self.args.setCurrentIndex(max(index, 0))
+
+    def values(self) -> dict[str, object]:
+        return {
+            "numberer": self.numberer.currentText(),
+            "system": self.system.currentText(),
+            "system_args": tuple(str(self.args.currentData() or "").split()),
+        }
+
+
 _CONSTRAINTS = ["Plain", "Lagrange", "Penalty", "Transformation"]
 _INTEGRATORS_STATIC = ["LoadControl", "DisplacementControl", "ArcLength"]
 _ALGORITHMS = ["Linear", "Newton", "ModifiedNewton", "KrylovNewton", "BFGS", "Broyden"]
@@ -180,7 +226,6 @@ class StaticCaseForm(CaseFormBase):
         self._patterns_picker = _make_pattern_picker(patterns)
         self._n_steps = _int_spin(1)
         self._lf = _spin(1.0, minimum=-1e6, maximum=1e6, step=0.1)
-        self._system = self._combo(_STATIC_SYSTEMS, "BandGeneral")
         self._constraints = self._combo(_CONSTRAINTS, "Plain")
         self._integrator = self._combo(_INTEGRATORS_STATIC, "LoadControl")
         self._algorithm = self._combo(_ALGORITHMS, "Linear")
@@ -192,7 +237,7 @@ class StaticCaseForm(CaseFormBase):
         self._layout.addRow(self._patterns_picker)
         self._layout.addRow("Steps:", self._n_steps)
         self._layout.addRow("Load factor / step:", self._lf)
-        self._layout.addRow("System:", self._system)
+        self._solver = _SolverRows(self._layout)
         self._layout.addRow("Constraints:", self._constraints)
         self._layout.addRow("Integrator:", self._integrator)
         self._layout.addRow("Algorithm:", self._algorithm)
@@ -211,7 +256,7 @@ class StaticCaseForm(CaseFormBase):
         _select_pattern_ids(self._patterns_picker, c.pattern_ids)
         self._n_steps.setValue(c.n_steps)
         self._lf.setValue(c.load_factor_increment)
-        self._system.setCurrentText(c.system)
+        self._solver.populate(c)
         self._constraints.setCurrentText(c.constraints)
         self._integrator.setCurrentText(c.integrator)
         self._algorithm.setCurrentText(c.algorithm)
@@ -226,7 +271,7 @@ class StaticCaseForm(CaseFormBase):
             pattern_ids=_selected_pattern_ids(self._patterns_picker) or [1],
             n_steps=self._n_steps.value(),
             load_factor_increment=self._lf.value(),
-            system=self._system.currentText(),
+            **self._solver.values(),  # type: ignore[arg-type]
             constraints=self._constraints.currentText(),
             integrator=self._integrator.currentText(),
             algorithm=self._algorithm.currentText(),
@@ -301,8 +346,6 @@ class TransientCaseForm(CaseFormBase):
         self._remove_patterns_picker = _make_pattern_picker(patterns)
         self._dt = _spin(0.01, minimum=1e-12, step=1e-3)
         self._n_steps = _int_spin(1000, minimum=1, maximum=10_000_000)
-        self._system = QComboBox()
-        self._system.addItems(_STATIC_SYSTEMS)
         self._constraints = QComboBox()
         self._constraints.addItems(_CONSTRAINTS)
         self._integrator = QComboBox()
@@ -334,7 +377,7 @@ class TransientCaseForm(CaseFormBase):
         self._layout.addRow(self._remove_patterns_picker)
         self._layout.addRow("dt:", self._dt)
         self._layout.addRow("Number of steps:", self._n_steps)
-        self._layout.addRow("System:", self._system)
+        self._solver = _SolverRows(self._layout)
         self._layout.addRow("Constraints:", self._constraints)
         self._layout.addRow("Integrator:", self._integrator)
         self._layout.addRow("Newmark γ:", self._gamma)
@@ -359,7 +402,7 @@ class TransientCaseForm(CaseFormBase):
         _select_pattern_ids(self._remove_patterns_picker, c.remove_patterns)
         self._dt.setValue(c.dt)
         self._n_steps.setValue(c.n_steps)
-        self._system.setCurrentText(c.system)
+        self._solver.populate(c)
         self._constraints.setCurrentText(c.constraints)
         self._integrator.setCurrentText(c.integrator)
         self._gamma.setValue(c.integrator_params[0])
@@ -382,7 +425,7 @@ class TransientCaseForm(CaseFormBase):
             remove_patterns=_selected_pattern_ids(self._remove_patterns_picker),
             dt=self._dt.value(),
             n_steps=self._n_steps.value(),
-            system=self._system.currentText(),
+            **self._solver.values(),  # type: ignore[arg-type]
             constraints=self._constraints.currentText(),
             integrator=self._integrator.currentText(),
             integrator_params=(self._gamma.value(), self._beta.value()),
@@ -415,8 +458,6 @@ class PushoverCaseForm(CaseFormBase):
         self._base_nodes.setPlaceholderText(
             "comma-separated node ids (leave blank for all supports)"
         )
-        self._system = QComboBox()
-        self._system.addItems(_STATIC_SYSTEMS)
         self._constraints = QComboBox()
         self._constraints.addItems(_CONSTRAINTS)
         self._algorithm = QComboBox()
@@ -434,7 +475,7 @@ class PushoverCaseForm(CaseFormBase):
         self._layout.addRow("Target displacement:", self._target)
         self._layout.addRow("Step size:", self._step)
         self._layout.addRow("Base nodes:", self._base_nodes)
-        self._layout.addRow("System:", self._system)
+        self._solver = _SolverRows(self._layout)
         self._layout.addRow("Constraints:", self._constraints)
         self._layout.addRow("Algorithm:", self._algorithm)
         self._layout.addRow("Test:", self._test)
@@ -448,7 +489,7 @@ class PushoverCaseForm(CaseFormBase):
         self._target.setValue(c.target_disp)
         self._step.setValue(c.step_size)
         self._base_nodes.setText(", ".join(str(n) for n in c.base_nodes))
-        self._system.setCurrentText(c.system)
+        self._solver.populate(c)
         self._constraints.setCurrentText(c.constraints)
         self._algorithm.setCurrentText(c.algorithm)
         self._test.setCurrentText(c.test)
@@ -467,7 +508,7 @@ class PushoverCaseForm(CaseFormBase):
             target_disp=self._target.value(),
             step_size=self._step.value(),
             base_nodes=base_ids,
-            system=self._system.currentText(),
+            **self._solver.values(),  # type: ignore[arg-type]
             constraints=self._constraints.currentText(),
             algorithm=self._algorithm.currentText(),
             test=self._test.currentText(),
