@@ -1,10 +1,12 @@
-"""Numberer, system and system-argument controls of the stepped case forms."""
+"""Numberer and system controls of the stepped case forms."""
 
 from __future__ import annotations
 
 import pytest
 
 pytest.importorskip("PySide6")
+
+from PySide6.QtCore import Qt
 
 from opensees_studio.core import PlainLoadPattern, PushoverCase, StaticCase, TransientCase
 from opensees_studio.views.dialogs.case_forms import (
@@ -17,25 +19,21 @@ PATTERNS = [PlainLoadPattern(id=1, time_series_id=1)]
 
 
 @pytest.mark.gui
-def test_static_form_defaults_and_plain_sparse_general_piv(qtbot) -> None:  # type: ignore[no-untyped-def]
+def test_static_form_defaults_and_plain_sparse_general(qtbot) -> None:  # type: ignore[no-untyped-def]
     form = StaticCaseForm(PATTERNS, [])
     qtbot.addWidget(form)
     rows = form._solver
     default = form.read(1)
     assert (default.numberer, default.system, default.system_args) == ("RCM", "BandGeneral", ())
-    assert not rows.args.isEnabled()
+    assert not hasattr(rows, "args")  # no system arguments are offered
 
     rows.numberer.setCurrentText("Plain")
     rows.system.setCurrentText("SparseGeneral")
-    assert rows.args.isEnabled()
-    assert [rows.args.itemText(i) for i in range(rows.args.count())] == ["(none)", "-piv"]
-    rows.args.setCurrentText("-piv")
     case = form.read(1)
-    assert (case.numberer, case.system, case.system_args) == ("Plain", "SparseGeneral", ("-piv",))
-
-    # switching to a system without arguments drops them
-    rows.system.setCurrentText("UmfPack")
-    assert form.read(1).system_args == ()
+    assert (case.numberer, case.system, case.system_args) == ("Plain", "SparseGeneral", ())
+    tip = rows.system.itemData(rows.system.currentIndex(), Qt.ItemDataRole.ToolTipRole)
+    assert tip == "SparseGeneral: partial pivoting is always on in this build"
+    assert rows.system.itemData(0, Qt.ItemDataRole.ToolTipRole) is None
 
 
 @pytest.mark.gui
@@ -49,7 +47,6 @@ def test_static_form_defaults_and_plain_sparse_general_piv(qtbot) -> None:  # ty
                 pattern_ids=[1],
                 numberer="AMD",
                 system="SparseGeneral",
-                system_args=("-piv",),
             ),
         ),
         (

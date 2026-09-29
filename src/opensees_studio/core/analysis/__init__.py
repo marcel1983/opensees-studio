@@ -37,10 +37,18 @@ SYSTEMS: tuple[str, ...] = (
 it to OpenSees, which refuses an unknown name.
 """
 
-SYSTEM_ARGS: dict[str, tuple[str, ...]] = {"SparseGeneral": ("-piv",)}
-"""Arguments a system accepts here. ``SparseGeneral -piv`` asks SuperLU for partial pivoting,
-which this build always applies (``DiagPivotThresh`` is fixed at 1.0): the flag changes no
-result bit, and is kept so a script's ``system SparseGeneral -piv`` is reproduced as written."""
+SYSTEM_ARGS: dict[str, tuple[str, ...]] = {}
+"""Arguments a system accepts here, per system: none at present.
+
+``SparseGeneral -piv`` is not offered: this build ignores the flag and always applies SuperLU
+partial pivoting (``DiagPivotThresh`` is fixed at 1.0), so the flag changes no result bit.
+"""
+
+SYSTEM_NOTES: dict[str, str] = {"SparseGeneral": "partial pivoting is always on in this build"}
+"""Short notes shown with a system in the case forms."""
+
+_RETIRED_SYSTEM_ARGS: dict[str, tuple[str, ...]] = {"SparseGeneral": ("-piv",)}
+"""Arguments earlier files may carry that load with a notice and are dropped."""
 
 
 class _SolverOptions(Entity):
@@ -54,6 +62,26 @@ class _SolverOptions(Entity):
     system_args: tuple[str, ...] = ()
 
     serialize_without_defaults = omit_when_default("numberer", "system_args")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_retired_system_args(cls, data: object) -> object:
+        if not isinstance(data, dict) or not data.get("system_args"):
+            return data
+        system = data.get("system", "")
+        retired = _RETIRED_SYSTEM_ARGS.get(system, ())
+        dropped = [a for a in data["system_args"] if a in retired]
+        if not dropped:
+            return data
+        warnings.warn(
+            f"Analysis case {data.get('id')}: system {system} {' '.join(dropped)} is not "
+            f"offered ({SYSTEM_NOTES.get(system, 'no effect in this build')}); "
+            f"running without {' '.join(dropped)}.",
+            UserWarning,
+            stacklevel=2,
+        )
+        kept = tuple(a for a in data["system_args"] if a not in retired)
+        return {**data, "system_args": kept}
 
     @model_validator(mode="after")
     def _known_system_args(self) -> _SolverOptions:

@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 
 from opensees_studio.core import (
     NUMBERERS,
-    SYSTEM_ARGS,
+    SYSTEM_NOTES,
     SYSTEMS,
     AnalysisCase,
     LoadPattern,
@@ -156,39 +156,24 @@ class CaseFormBase(QWidget):
 
 
 # ─────────────────────────── Static ───────────────────────────
-_NO_ARGS = "(none)"
-_ARG_TIPS = {
-    "-piv": "SuperLU pivots in this build with or without -piv (same result bits); "
-    "kept so a script's command is reproduced as written.",
-}
-
-
 class _SolverRows:
-    """Numberer, system and system-argument rows shared by the stepped case forms."""
+    """Numberer and system rows shared by the stepped case forms."""
 
     def __init__(self, layout: QFormLayout) -> None:
         self.numberer = QComboBox()
         self.numberer.addItems(list(NUMBERERS))
         self.numberer.setCurrentText("RCM")
         self.system = QComboBox()
-        self.system.addItems(list(SYSTEMS))
+        for name in SYSTEMS:
+            self.system.addItem(name)
+            note = SYSTEM_NOTES.get(name)
+            if note:
+                self.system.setItemData(
+                    self.system.count() - 1, f"{name}: {note}", Qt.ItemDataRole.ToolTipRole
+                )
         self.system.setCurrentText("BandGeneral")
-        self.args = QComboBox()
-        self.system.currentTextChanged.connect(self._fill_args)
-        self._fill_args(self.system.currentText())
         layout.addRow("Numberer:", self.numberer)
         layout.addRow("System:", self.system)
-        layout.addRow("System arguments:", self.args)
-
-    def _fill_args(self, system: str) -> None:
-        self.args.clear()
-        self.args.addItem(_NO_ARGS, "")
-        for arg in SYSTEM_ARGS.get(system, ()):
-            self.args.addItem(arg, arg)
-            self.args.setItemData(
-                self.args.count() - 1, _ARG_TIPS.get(arg, ""), Qt.ItemDataRole.ToolTipRole
-            )
-        self.args.setEnabled(self.args.count() > 1)
 
     def populate(self, case: StaticCase | TransientCase | PushoverCase) -> None:
         self.numberer.setCurrentText(case.numberer)
@@ -196,15 +181,9 @@ class _SolverRows:
             # A solver a file names but this build does not offer: show it as stored.
             self.system.addItem(case.system)
         self.system.setCurrentText(case.system)
-        index = self.args.findData(" ".join(case.system_args))
-        self.args.setCurrentIndex(max(index, 0))
 
     def values(self) -> dict[str, object]:
-        return {
-            "numberer": self.numberer.currentText(),
-            "system": self.system.currentText(),
-            "system_args": tuple(str(self.args.currentData() or "").split()),
-        }
+        return {"numberer": self.numberer.currentText(), "system": self.system.currentText()}
 
 
 _CONSTRAINTS = ["Plain", "Lagrange", "Penalty", "Transformation"]

@@ -110,7 +110,7 @@ These are non-obvious things that are easy to break if you don't know:
   `QDoubleSpinBox`, it rounds to its decimals.
 - An option added to an existing model keeps old files byte-identical by
   leaving its default out of the dump: `core._base.omit_when_default`
-  (used by the beam integration rule, numberer and system arguments).
+  (used by the beam integration rule and the numberer).
 - `Entity.id` is `PositiveInt` (>0). The sentinel `999999` is reserved
   for in-flight / temporary objects that haven't been assigned a real id.
 - Eigen determinism rule. ARPACK keeps its random start vector across

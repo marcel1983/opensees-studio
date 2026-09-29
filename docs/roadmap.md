@@ -613,8 +613,8 @@ Status legend: ✅ done · 🟡 partial · ⬜ planned · ✂️ deferred / out-
     (examples 05, 06 and 07, BUGS-006 and BUGS-007).
   - ✅ Beam integration rule and points (example 07); CompositeSimpson not
     offered, the build gets its weights wrong for every count but 3.
-  - ✅ Numberer and system with arguments in analysis cases (example 04,
-    BUGS-005); `SparseGeneral -piv` offered though the build always pivots.
+  - ✅ Numberer and system in analysis cases (example 04, BUGS-005);
+    `SparseGeneral -piv` not offered, the build always pivots.
   - ✅ Hardening uniaxial material (example 02, BUGS-002).
   - ✅ W-shape template in the fiber editor, equal to WFSection2d within
     3e-15 relative (example 07, BUGS-008).

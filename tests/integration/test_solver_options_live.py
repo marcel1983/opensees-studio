@@ -10,22 +10,26 @@ import pytest
 
 pytest.importorskip("openseespy.opensees")
 
+import openseespy.opensees as ops
+
 from opensees_studio.core import NUMBERERS, SYSTEM_ARGS, SYSTEMS, StaticCase
 from opensees_studio.services import load_project
 from opensees_studio.services.opensees_runner import OpenSeesRunner
 
 EXAMPLES = Path(__file__).resolve().parents[2] / "examples"
 OPTIONS = [(system, ()) for system in SYSTEMS] + [
-    (system, args) for system, allowed in SYSTEM_ARGS.items() for args in [allowed]
+    (system, (arg,)) for system, allowed in SYSTEM_ARGS.items() for arg in allowed
 ]
 
 
-def _run(example: str, **options):  # type: ignore[no-untyped-def]
+def _run(example: str, ops_module=None, **options):  # type: ignore[no-untyped-def]
     project = load_project(EXAMPLES / f"{example}.osmodel")
     case = next(c for c in project.analyses if isinstance(c, StaticCase))
     case = case.model_copy(update=options)
     project.analyses = [case]
-    return OpenSeesRunner(project).run(case)
+    if ops_module is None:
+        return OpenSeesRunner(project).run(case)
+    return OpenSeesRunner(project, ops_module=ops_module).run(case)
 
 
 def _disp(result) -> np.ndarray:  # type: ignore[no-untyped-def]
@@ -45,17 +49,32 @@ def test_each_offered_option_runs_a_small_static_case(numberer: str, option) -> 
     assert float(np.max(np.abs(result - reference))) <= 1e-9 * scale
 
 
-def test_plain_sparse_general_piv_runs_the_nonlinear_gravity_case() -> None:
+def test_plain_sparse_general_runs_the_nonlinear_gravity_case() -> None:
     default = _run("rc_frame_gravity")
-    source = _run(
-        "rc_frame_gravity", numberer="Plain", system="SparseGeneral", system_args=("-piv",)
-    )
+    source = _run("rc_frame_gravity", numberer="Plain", system="SparseGeneral")
     assert source.n_steps == default.n_steps
     assert np.allclose(_disp(source), _disp(default), rtol=1e-9, atol=1e-14)
 
 
+class _WithPiv:
+    """The live module with ``-piv`` appended to ``system SparseGeneral``."""
+
+    def __init__(self) -> None:
+        self.systems: list[tuple[str, ...]] = []
+
+    def __getattr__(self, name: str):  # type: ignore[no-untyped-def]
+        return getattr(ops, name)
+
+    def system(self, name: str, *args: str) -> object:
+        command = (name, *args, "-piv") if name == "SparseGeneral" else (name, *args)
+        self.systems.append(command)
+        return ops.system(*command)
+
+
 def test_piv_changes_no_result_bit_in_this_build() -> None:
-    """Why -piv is documented as a no-op: SuperLU always pivots here."""
+    """Why -piv is not offered: SuperLU always pivots here, with or without the flag."""
     plain = _disp(_run("rc_frame_gravity", system="SparseGeneral"))
-    piv = _disp(_run("rc_frame_gravity", system="SparseGeneral", system_args=("-piv",)))
+    with_piv = _WithPiv()
+    piv = _disp(_run("rc_frame_gravity", ops_module=with_piv, system="SparseGeneral"))
+    assert with_piv.systems == [("SparseGeneral", "-piv")]
     assert np.array_equal(plain, piv)

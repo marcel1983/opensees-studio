@@ -7,6 +7,7 @@ to use from a script, a Jupyter notebook, or a future CLI.
 from opensees_studio.core.analysis import (
     NUMBERERS,
     SYSTEM_ARGS,
+    SYSTEM_NOTES,
     SYSTEMS,
     AnalysisCase,
     ModalCase,
@@ -401,6 +402,7 @@ __all__ = [  # noqa: RUF022 - grouped by domain under section comments, not alph
     "NUMBERERS",
     "SYSTEMS",
     "SYSTEM_ARGS",
+    "SYSTEM_NOTES",
     "ModalCase",
     "TransientCase",
     "PushoverCase",

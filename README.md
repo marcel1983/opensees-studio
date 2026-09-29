@@ -257,10 +257,10 @@ fails, the dialog shows the error message instead of a curve.
   Radau or Trapezoidal with 2 to 10 points for force and displacement
   beam-columns. Also in the Properties dock. Default Lobatto with 5 points.
 - **Analysis cases**: Static, Transient and Pushover forms have *Numberer*
-  (Plain, RCM, AMD; default RCM), *System* (BandGeneral, BandSPD, ProfileSPD,
-  SparseGeneral, UmfPack, FullGeneral) and *System arguments* (`-piv` for
-  SparseGeneral; this build pivots with or without it, so the flag changes
-  no result and is kept to reproduce a script's command as written).
+  (Plain, RCM, AMD; default RCM) and *System* (BandGeneral, BandSPD,
+  ProfileSPD, SparseGeneral, UmfPack, FullGeneral). SparseGeneral notes that
+  partial pivoting is always on in this build, so `-piv` is not offered; a
+  saved project that carries it loads with a notice and runs without it.
 - **Hardening material**: `uniaxialMaterial Hardening` (E, sigmaY, H_iso,
   H_kin, optional eta) in the material library and the Material Tester.
 - **Fiber Section Editor, Add Template, W-shape (wide flange)**: d, bf, tf,
