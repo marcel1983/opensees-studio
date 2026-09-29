@@ -23,7 +23,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from opensees_studio.core import BEARING_CLASSES, SLIDING_BEARING_CLASSES, Project
+from opensees_studio.core import (
+    BEARING_CLASSES,
+    GEOM_TRANSF_TYPES,
+    SLIDING_BEARING_CLASSES,
+    Project,
+)
 from opensees_studio.views.float_field import FloatField
 
 # Element types the Properties dock lets the user switch between.
@@ -277,7 +282,18 @@ class PropertyEditorDock(QScrollArea):
         elif hasattr(el, "area"):
             form.addRow("Area:", QLabel(f"{el.area:g}"))
 
-        if hasattr(el, "geom_transf"):
+        if hasattr(el, "geom_transf") and self.on_change_element_fields is not None:
+            transf_cb = QComboBox()
+            transf_cb.addItems(list(GEOM_TRANSF_TYPES))
+            transf_cb.setCurrentText(el.geom_transf)
+
+            def _on_transf_changed(new: str, _eid: int = el.id, _old: str = el.geom_transf) -> None:
+                if new != _old and self.on_change_element_fields is not None:
+                    self.on_change_element_fields(_eid, {"geom_transf": new})
+
+            transf_cb.currentTextChanged.connect(_on_transf_changed)
+            form.addRow("Geom transf:", transf_cb)
+        elif hasattr(el, "geom_transf"):
             form.addRow("Geom transf:", QLabel(el.geom_transf))
         if isinstance(el, SLIDING_BEARING_CLASSES):
             self._add_sliding_bearing_rows(form, el, self._project)

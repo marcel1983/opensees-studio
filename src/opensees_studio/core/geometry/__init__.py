@@ -21,6 +21,7 @@ from opensees_studio.core.geometry.bearings import (
     sliding_yield_displacement,
 )
 from opensees_studio.core.geometry.elements import (
+    GEOM_TRANSF_TYPES,
     BeamWithHingesElement,
     CorotTrussElement,
     DispBeamColumn,
@@ -45,6 +46,7 @@ from opensees_studio.core.geometry.node import Node
 __all__ = [
     "BEARING_CLASSES",
     "ELASTOMERIC_BEARING_CLASSES",
+    "GEOM_TRANSF_TYPES",
     "SLIDING_BEARING_CLASSES",
     "BeamWithHingesElement",
     "CoordinateGridSystem",

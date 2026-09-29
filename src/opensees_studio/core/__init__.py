@@ -51,6 +51,7 @@ from opensees_studio.core.generators import (
 from opensees_studio.core.geometry import (
     BEARING_CLASSES,
     ELASTOMERIC_BEARING_CLASSES,
+    GEOM_TRANSF_TYPES,
     SLIDING_BEARING_CLASSES,
     BeamWithHingesElement,
     CoordinateGridSystem,
@@ -233,6 +234,7 @@ __all__ = [  # noqa: RUF022 - grouped by domain under section comments, not alph
     "CorotTrussElement",
     "ElasticBeamColumn",
     "ForceBeamColumn",
+    "GEOM_TRANSF_TYPES",
     "DispBeamColumn",
     "ZeroLengthElement",
     "ZeroLengthSectionElement",

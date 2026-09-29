@@ -7,6 +7,7 @@ from opensees_studio.views.dialogs.assign_hinge import AssignHingeDialog
 from opensees_studio.views.dialogs.assign_load import AssignLoadDialog
 from opensees_studio.views.dialogs.assign_masses import AssignMassesDialog
 from opensees_studio.views.dialogs.assign_property import (
+    AssignGeomTransfDialog,
     AssignMaterialDialog,
     AssignSectionDialog,
 )
@@ -49,6 +50,7 @@ __all__ = [
     "AssignDistributedLoadDialog",
     "AssignElastomericBearingDialog",
     "AssignEqualDOFDialog",
+    "AssignGeomTransfDialog",
     "AssignHingeDialog",
     "AssignLoadDialog",
     "AssignMassesDialog",

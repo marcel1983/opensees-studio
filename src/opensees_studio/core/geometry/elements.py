@@ -10,7 +10,7 @@ Conventions follow OpenSeesPy ``element ...`` commands.
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated, Literal, get_args
 
 from pydantic import Field, PositiveFloat, PositiveInt
 
@@ -21,6 +21,12 @@ from opensees_studio.core.geometry.bearings import (
     FlatSliderBearingElement,
     SingleFPBearingElement,
 )
+
+GeomTransfType = Literal["Linear", "PDelta", "Corotational"]
+"""``geomTransf`` of a frame element. All three take effect in OpenSeesPy 3.8.0, in 2D and
+in 3D (the runner picks ``vecxz`` from the element axis)."""
+
+GEOM_TRANSF_TYPES: tuple[str, ...] = get_args(GeomTransfType)
 
 
 class TrussElement(Entity):
@@ -54,7 +60,7 @@ class ElasticBeamColumn(Entity):
     type: Literal["ElasticBeamColumn"] = "ElasticBeamColumn"
     nodes: tuple[PositiveInt, PositiveInt]
     section_id: PositiveInt
-    geom_transf: Literal["Linear", "PDelta", "Corotational"] = "Linear"
+    geom_transf: GeomTransfType = "Linear"
     rho: float = Field(default=0.0, ge=0.0, description="Mass per unit length.")
     consistent_mass: bool = Field(
         default=False,
@@ -73,7 +79,7 @@ class ForceBeamColumn(Entity):
     nodes: tuple[PositiveInt, PositiveInt]
     section_id: PositiveInt
     integration_points: int = Field(default=5, ge=2, le=10)
-    geom_transf: Literal["Linear", "PDelta", "Corotational"] = "Linear"
+    geom_transf: GeomTransfType = "Linear"
     max_iter: int = Field(default=10, ge=1)
     tolerance: float = Field(default=1e-12, gt=0.0)
 
@@ -85,7 +91,7 @@ class DispBeamColumn(Entity):
     nodes: tuple[PositiveInt, PositiveInt]
     section_id: PositiveInt
     integration_points: int = Field(default=5, ge=2, le=10)
-    geom_transf: Literal["Linear", "PDelta", "Corotational"] = "Linear"
+    geom_transf: GeomTransfType = "Linear"
 
 
 class ZeroLengthElement(Entity):
@@ -163,7 +169,7 @@ class BeamWithHingesElement(Entity):
     Iy: float | None = None
     G: float | None = None
     J: float | None = None
-    geom_transf: Literal["Linear", "PDelta", "Corotational"] = "Linear"
+    geom_transf: GeomTransfType = "Linear"
 
 
 class QuadElement(Entity):

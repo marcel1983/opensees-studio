@@ -11,6 +11,7 @@ from opensees_studio.commands.constraints import (
 )
 from opensees_studio.commands.elements import (
     AddElementsCommand,
+    AssignElementFieldsCommand,
     AssignMaterialCommand,
     AssignSectionCommand,
     ConvertElementTypeCommand,
@@ -72,6 +73,7 @@ __all__ = [
     "AddNodesCommand",
     "AddSectionsCommand",
     "AddTimeSeriesCommand",
+    "AssignElementFieldsCommand",
     "AssignMaterialCommand",
     "AssignSectionCommand",
     "ConvertElementTypeCommand",

@@ -219,21 +219,26 @@ class UpdateElementFieldsCommand(ProjectCommand):
         keys = ", ".join(sorted(fields))
         super().__init__(vm, f"Edit element {element_id} ({keys})")
         self._element_id = element_id
-        self._fields = dict(fields)
         self._previous: Any | None = None
+        # Built and validated before the push (see AssignElementFieldsCommand).
+        self._updated: Any | None = None
+        for el in self.project.elements:
+            if el.id == element_id:
+                # Filter out fields not declared on the element's model.
+                accepted = {k: v for k, v in fields.items() if k in type(el).model_fields}
+                if accepted:
+                    self._updated = type(el).model_validate({**el.model_dump(), **accepted})
+                break
 
     def redo(self) -> None:
-        for i, el in enumerate(self.project.elements):
-            if el.id != self._element_id:
-                continue
-            # Filter out fields not declared on the element's model.
-            accepted = {k: v for k, v in self._fields.items() if k in el.__class__.model_fields}
-            if not accepted:
-                return
-            self._previous = el
-            self.project.elements[i] = el.model_copy(update=accepted)
-            self._notify()
+        if self._updated is None:
             return
+        for i, el in enumerate(self.project.elements):
+            if el.id == self._element_id:
+                self._previous = el
+                self.project.elements[i] = self._updated
+                self._notify()
+                return
 
     def undo(self) -> None:
         if self._previous is None:
@@ -274,3 +279,58 @@ class AssignMaterialCommand(ProjectCommand):
                 )
         self._previous.clear()
         self._notify()
+
+
+class AssignElementFieldsCommand(ProjectCommand):
+    """Set the same field value(s) on a set of elements, validated, in one undoable step.
+
+    Used by the Frame menu assignments (geometric transformation, beam
+    integration). Elements whose class lacks any of the fields are skipped,
+    so a mixed selection of frames and trusses assigns to the frames only.
+    Each changed element is rebuilt through Pydantic validation when the
+    command is created, so an invalid value raises before anything changes.
+    """
+
+    def __init__(
+        self,
+        vm: ProjectViewModel,
+        element_ids: set[int],
+        fields: dict[str, Any],
+        *,
+        text: str | None = None,
+    ) -> None:
+        keys = ", ".join(sorted(fields))
+        super().__init__(vm, text or f"Assign {keys} to {len(element_ids)} element(s)")
+        # Validated here, before the push: an exception raised inside redo() would
+        # be swallowed by Qt and leave a half-applied command on the stack.
+        self._updated: dict[int, Any] = {
+            el.id: type(el).model_validate({**el.model_dump(), **fields})
+            for el in self.project.elements
+            if el.id in element_ids and self.accepts(el, fields)
+        }
+        self._previous: dict[int, Any] = {}
+
+    @staticmethod
+    def accepts(element: Any, fields: dict[str, Any]) -> bool:
+        """``element`` declares every one of ``fields``."""
+        return all(k in type(element).model_fields for k in fields)
+
+    def redo(self) -> None:
+        self._previous.clear()
+        for i, el in enumerate(self.project.elements):
+            if el.id in self._updated:
+                self._previous[el.id] = el
+                self.project.elements[i] = self._updated[el.id]
+        self._notify()
+
+    def undo(self) -> None:
+        for i, el in enumerate(self.project.elements):
+            if el.id in self._previous:
+                self.project.elements[i] = self._previous[el.id]
+        self._previous.clear()
+        self._notify()
+
+    @property
+    def changed_ids(self) -> set[int]:
+        """Elements the command changes."""
+        return set(self._updated)

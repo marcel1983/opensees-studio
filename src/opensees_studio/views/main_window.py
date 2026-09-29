@@ -10,6 +10,7 @@ Adds on top of Phase 3:
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QActionGroup, QKeySequence
@@ -77,6 +78,7 @@ from opensees_studio.views.dialogs import (
     AssignDistributedLoadDialog,
     AssignElastomericBearingDialog,
     AssignEqualDOFDialog,
+    AssignGeomTransfDialog,
     AssignHingeDialog,
     AssignLoadDialog,
     AssignMassesDialog,
@@ -279,6 +281,7 @@ class MainWindow(QMainWindow):
         self._act_assign_hinge = QAction("Plastic &Hinge…", self)
         self._act_assign_section = QAction("S&ection…", self)
         self._act_assign_material = QAction("&Material…", self)
+        self._act_assign_geom_transf = QAction("&Geometric Transformation…", self)
 
         # Display (post-processing)
         self._act_show_deformed = QAction("Show &Deformed Shape", self)
@@ -364,6 +367,7 @@ class MainWindow(QMainWindow):
         m_frame = m_assign.addMenu("&Frame")
         m_frame.addAction(self._act_assign_section)
         m_frame.addAction(self._act_assign_material)
+        m_frame.addAction(self._act_assign_geom_transf)
         m_frame.addSeparator()
         m_frame.addAction(self._act_assign_distributed_load)
         m_frame.addAction(self._act_assign_hinge)
@@ -552,6 +556,7 @@ class MainWindow(QMainWindow):
         self._act_assign_hinge.triggered.connect(self._on_assign_hinge)
         self._act_assign_section.triggered.connect(self._on_assign_section)
         self._act_assign_material.triggered.connect(self._on_assign_material)
+        self._act_assign_geom_transf.triggered.connect(self._on_assign_geom_transf)
 
         # Analyze
         self._act_case_manager.triggered.connect(self._on_case_manager)
@@ -1421,6 +1426,48 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, "Assign Material failed", str(exc))
 
+    def _selected_accepting(self, fields: dict[str, Any]) -> set[int]:
+        """Selected elements that declare every one of ``fields`` (frames for a transformation)."""
+        from opensees_studio.commands import AssignElementFieldsCommand
+
+        project = self._vm.project
+        if project is None:
+            return set()
+        selected = set(self._canvas.selection.elements)
+        return {
+            el.id
+            for el in project.elements
+            if el.id in selected and AssignElementFieldsCommand.accepts(el, fields)
+        }
+
+    def _assign_element_fields(self, title: str, ids: set[int], fields: dict[str, Any]) -> None:
+        from opensees_studio.commands import AssignElementFieldsCommand
+
+        try:
+            self._vm.apply_command(AssignElementFieldsCommand(self._vm, ids, fields))
+            self._log(f"{title}: {fields} on {len(ids)} element(s).")
+        except Exception as exc:
+            QMessageBox.critical(self, f"{title} failed", str(exc))
+
+    def _on_assign_geom_transf(self) -> None:
+        """Assign > Frame > Geometric Transformation: Linear, PDelta or Corotational."""
+        project = self._vm.project
+        ids = self._selected_accepting({"geom_transf": "Linear"})
+        if project is None or not ids:
+            QMessageBox.information(
+                self, "Geometric Transformation", "Select one or more frame elements first."
+            )
+            return
+        current = {project.element(i).geom_transf for i in ids}  # type: ignore[union-attr]
+        dlg = AssignGeomTransfDialog(
+            len(ids), project.ndm, current.pop() if len(current) == 1 else None, self
+        )
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        self._assign_element_fields(
+            "Geometric Transformation", ids, {"geom_transf": dlg.transf_type()}
+        )
+
     # ── slots: analyze ──────────────────────────────────────────────
     def _on_case_manager(self) -> None:
         if self._vm.project is None:
@@ -2178,6 +2225,7 @@ class MainWindow(QMainWindow):
         self._act_assign_bearing.setEnabled(has_project and n_sel == 2)
         self._act_assign_distributed_load.setEnabled(has_project and has_selected_elements)
         self._act_assign_hinge.setEnabled(has_project and has_selected_elements)
+        self._act_assign_geom_transf.setEnabled(has_project and has_selected_elements)
         self._act_delete.setEnabled(has_project and has_selection)
         self._act_move.setEnabled(has_project and has_selected_nodes)
         self._act_replicate.setEnabled(has_project and has_selected_nodes)
