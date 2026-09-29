@@ -1,4 +1,4 @@
-"""Results panel — a dock that tabulates the latest analysis output.
+"""Results panel: a dock that tabulates the latest analysis output.
 
 One tab per table of :mod:`opensees_studio.services.result_tables`: static
 displacements, reactions and element forces; the pushover curve; modal
@@ -150,7 +150,7 @@ class ResultsPanel(QWidget):
                 self._add_table_tab(table, name)
         elif isinstance(results, PushoverResults):
             self._title.setText(
-                f"<b>Pushover — case #{results.case_id} '{results.case_name}'</b>  "
+                f"<b>Pushover: case #{results.case_id} '{results.case_name}'</b>  "
                 f"({results.n_steps} step(s))"
             )
             for table, name in zip(

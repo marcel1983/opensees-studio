@@ -42,9 +42,9 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   distributed loads, ground motions (`PathTimeSeries` /
   `UniformExcitation`).
 - **Materials and sections** — `Steel01`, `Steel02`, `Concrete01`,
-  `Concrete02`, `ElasticPP`, `Hysteretic`, fiber sections (rectangular /
-  circular patches + rebar layers), `SectionAggregator`,
-  `BeamWithHinges`.
+  `Concrete02`, `ElasticPP`, `Hysteretic`, `Hardening`, fiber sections
+  (rectangular / circular patches + rebar layers, a W-shape template),
+  `SectionAggregator`, `BeamWithHinges`.
 - **Analyses** — static (load- or displacement-controlled), modal,
   displacement-controlled pushover, transient time-history with
   mode-1 Rayleigh damping. Chained workflows: gravity preload →
@@ -238,6 +238,34 @@ a header `strain,stress [<stress unit>]`, then one `strain,stress` row per
 point with a point decimal separator. Only materials the tester can drive are
 listed (nD `ElasticIsotropic` and `HystereticSM` are not); if a run still
 fails, the dialog shows the error message instead of a curve.
+
+### Precision, frame options and analysis settings
+
+- **Numeric input**: every floating-point field accepts scientific notation
+  (`1e-10`, `2.9e4`), keeps the full double and shows the shortest text that
+  reads back to it. Out-of-range text is refused; the value commits on Enter
+  or focus-out.
+- **Results panel**: *Significant digits* (default 6, up to 15) changes the
+  display only. *Export CSV...* writes the current table at full precision
+  with the units in the header. Tables: static displacements, reactions and
+  element forces, the pushover curve, modal frequencies, response spectrum
+  peaks and modes, and the time history of a chosen node.
+- **Assign > Frame > Geometric Transformation...**: Linear, PDelta or
+  Corotational for the selected frames (vecxz in 3D as before). Also editable
+  in the Properties dock. Default Linear.
+- **Assign > Frame > Beam Integration...**: Lobatto, Legendre, NewtonCotes,
+  Radau or Trapezoidal with 2 to 10 points for force and displacement
+  beam-columns. Also in the Properties dock. Default Lobatto with 5 points.
+- **Analysis cases**: Static, Transient and Pushover forms have *Numberer*
+  (Plain, RCM, AMD; default RCM), *System* (BandGeneral, BandSPD, ProfileSPD,
+  SparseGeneral, UmfPack, FullGeneral) and *System arguments* (`-piv` for
+  SparseGeneral; this build pivots with or without it, so the flag changes
+  no result and is kept to reproduce a script's command as written).
+- **Hardening material**: `uniaxialMaterial Hardening` (E, sigmaY, H_iso,
+  H_kin, optional eta) in the material library and the Material Tester.
+- **Fiber Section Editor, Add Template, W-shape (wide flange)**: d, bf, tf,
+  tw, fibres across the web depth and through each flange (WFSection2d Nfw
+  and Nff), one material. The three patches reproduce `WFSection2d`.
 
 ### Ground motions
 

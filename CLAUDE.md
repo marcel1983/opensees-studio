@@ -105,6 +105,12 @@ These are non-obvious things that are easy to break if you don't know:
   strong reference to the view model (or anything owning its `QUndoStack`)
   on a command: the cycle through the stack corrupts the heap when the GC
   frees many of them (`0xC0000374`).
+- Floating-point inputs use `views.float_field.FloatField` (full double,
+  scientific notation, shortest round-trip display); do not add a plain
+  `QDoubleSpinBox`, it rounds to its decimals.
+- An option added to an existing model keeps old files byte-identical by
+  leaving its default out of the dump: `core._base.omit_when_default`
+  (used by the beam integration rule, numberer and system arguments).
 - `Entity.id` is `PositiveInt` (>0). The sentinel `999999` is reserved
   for in-flight / temporary objects that haven't been assigned a real id.
 - Eigen determinism rule. ARPACK keeps its random start vector across

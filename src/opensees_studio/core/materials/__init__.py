@@ -141,7 +141,7 @@ class Concrete04(Entity):
 
 
 class Hardening(Entity):
-    """Rate-independent plasticity with combined linear isotropic and kinematic hardening —
+    """Rate-independent plasticity with combined linear isotropic and kinematic hardening:
     ``uniaxialMaterial Hardening tag E sigmaY H_iso H_kin <eta>``.
 
     Monotonic loading follows ``E`` up to ``sigmaY`` and ``E*(H_iso + H_kin)/(E + H_iso +

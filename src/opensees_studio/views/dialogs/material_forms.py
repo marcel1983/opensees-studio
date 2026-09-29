@@ -365,7 +365,7 @@ class ElasticPPForm(MaterialFormBase):
 
 # ─────────────────────────── Hardening ───────────────────────────
 class HardeningForm(MaterialFormBase):
-    type_label = "Hardening — linear isotropic and kinematic hardening"
+    type_label = "Hardening: linear isotropic and kinematic hardening"
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)

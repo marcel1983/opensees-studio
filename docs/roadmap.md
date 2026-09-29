@@ -601,9 +601,27 @@ Status legend: ✅ done · 🟡 partial · ⬜ planned · ✂️ deferred / out-
   another drive; test a record-backed project saved to a sibling folder).
   Closed 2026-09-28 (`1180164`): `save_project(previous_path=...)` rebases
   every catalog path, a missing record stays missing, 10 new tests.
+- ✅ Campaign fix package (2026-09-29): the seven gaps that blocked the
+  OpenSeesPy structural example campaign (`E:\osv-campaign\01-structural`).
+  Every option offered was proven to take effect in OpenSeesPy 3.8.0 in a
+  separate process; defaults and example files are unchanged.
+  - ✅ Numeric input: one full-precision float field with scientific
+    notation (examples 01 and 03, BUGS-001 and BUGS-003).
+  - ✅ Results: significant-digits setting and full-precision CSV export
+    with units (example 01, BUGS-001).
+  - ✅ Geometric transformation assignment, Frame menu and Properties dock
+    (examples 05, 06 and 07, BUGS-006 and BUGS-007).
+  - ✅ Beam integration rule and points (example 07); CompositeSimpson not
+    offered, the build gets its weights wrong for every count but 3.
+  - ✅ Numberer and system with arguments in analysis cases (example 04,
+    BUGS-005); `SparseGeneral -piv` offered though the build always pivots.
+  - ✅ Hardening uniaxial material (example 02, BUGS-002).
+  - ✅ W-shape template in the fiber editor, equal to WFSection2d within
+    3e-15 relative (example 07, BUGS-008).
 - ⬜ IDA (Incremental Dynamic Analysis) batch runner
 - 🟡 Fiber-section editor — exists for rectangular / circular sections;
-  confined / unconfined visual presets pending
+  W-shape (wide flange) template done (2026-09-29); confined / unconfined
+  visual presets pending
 
 ## Backlog (post Phase 8)
 - ⬜ Pre-analysis model validation: detect under-restrained or mechanism 2D/3D
