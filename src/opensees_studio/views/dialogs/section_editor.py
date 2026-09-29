@@ -17,7 +17,6 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QComboBox,
     QDialogButtonBox,
-    QDoubleSpinBox,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
@@ -41,6 +40,7 @@ from opensees_studio.services.section_properties import (
     compute_section_props,
     expand_fibres,
 )
+from opensees_studio.views.float_field import FloatField
 from opensees_studio.views.plot_style import axis_label, readable_plot
 from opensees_studio.views.screen_fit import FittedDialog, scroll_area
 
@@ -226,10 +226,9 @@ class FiberSectionEditor(FittedDialog):
 
     # ── helpers ─────────────────────────────────────────────────────
     @staticmethod
-    def _spin(default: float = 0.0, *, step: float = 0.01, minimum: float = -1e6) -> QDoubleSpinBox:
-        sb = QDoubleSpinBox()
+    def _spin(default: float = 0.0, *, step: float = 0.01, minimum: float = -1e6) -> FloatField:
+        sb = FloatField()
         sb.setRange(minimum, 1e6)
-        sb.setDecimals(6)
         sb.setSingleStep(step)
         sb.setValue(default)
         return sb

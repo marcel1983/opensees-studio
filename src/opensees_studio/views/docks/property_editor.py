@@ -13,7 +13,6 @@ from typing import Any
 
 from PySide6.QtWidgets import (
     QComboBox,
-    QDoubleSpinBox,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
@@ -25,6 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 from opensees_studio.core import BEARING_CLASSES, SLIDING_BEARING_CLASSES, Project
+from opensees_studio.views.float_field import FloatField
 
 # Element types the Properties dock lets the user switch between.
 # "ElasticBeamColumn" needs a section; "Truss" / "CorotTruss" need a
@@ -137,12 +137,11 @@ class PropertyEditorDock(QScrollArea):
         # ── Mass editor ──
         group = QGroupBox("Lumped mass")
         gform = QFormLayout(group)
-        self._mass_spins: list[QDoubleSpinBox] = []
+        self._mass_spins: list[FloatField] = []
         labels = ("mx", "my", "mz", "Ixx", "Iyy", "Izz")
         for i, lbl in enumerate(labels):
-            sb = QDoubleSpinBox()
+            sb = FloatField()
             sb.setRange(0.0, 1e12)
-            sb.setDecimals(4)
             sb.setSingleStep(100.0)
             sb.setValue(float(node.mass[i]))
             self._mass_spins.append(sb)
@@ -248,9 +247,8 @@ class PropertyEditorDock(QScrollArea):
 
         # ── Inline-editable Area (truss-style elements). ──
         if hasattr(el, "area") and self.on_change_element_fields is not None:
-            area_spin = QDoubleSpinBox()
+            area_spin = FloatField()
             area_spin.setRange(1e-12, 1e6)
-            area_spin.setDecimals(8)
             area_spin.setValue(float(el.area))  # type: ignore[attr-defined]
             area_spin.setSingleStep(
                 float(el.area) * 0.1  # type: ignore[attr-defined]
@@ -269,7 +267,7 @@ class PropertyEditorDock(QScrollArea):
                     current = float(self._project.element(_eid).area)  # type: ignore[union-attr]
                 except (KeyError, AttributeError):
                     current = None
-                if current is not None and abs(current - new_val) < 1e-15:
+                if current == new_val:
                     return
                 if self.on_change_element_fields is not None:
                     self.on_change_element_fields(_eid, {"area": new_val})

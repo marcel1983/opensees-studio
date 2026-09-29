@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import (
     QDialogButtonBox,
-    QDoubleSpinBox,
     QFormLayout,
     QLineEdit,
     QVBoxLayout,
@@ -12,6 +11,7 @@ from PySide6.QtWidgets import (
 )
 
 from opensees_studio.core import LinearTimeSeries
+from opensees_studio.views.float_field import FloatField
 from opensees_studio.views.screen_fit import FittedDialog
 
 
@@ -31,9 +31,8 @@ class LinearTimeSeriesDialog(FittedDialog):
         self._name_edit = QLineEdit("Linear")
         form.addRow("Name:", self._name_edit)
 
-        self._factor_spin = QDoubleSpinBox()
+        self._factor_spin = FloatField()
         self._factor_spin.setRange(-1e12, 1e12)
-        self._factor_spin.setDecimals(6)
         self._factor_spin.setSingleStep(0.1)
         self._factor_spin.setValue(1.0)
         form.addRow("Factor:", self._factor_spin)

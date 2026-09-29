@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import (
     QDialogButtonBox,
-    QDoubleSpinBox,
     QFormLayout,
     QLabel,
     QVBoxLayout,
     QWidget,
 )
 
+from opensees_studio.views.float_field import FloatField
 from opensees_studio.views.screen_fit import FittedDialog
 
 
@@ -31,15 +31,14 @@ class AssignDistributedLoadDialog(FittedDialog):
         layout.addWidget(QLabel(f"Apply to <b>{n_selected}</b> selected element(s)."))
 
         form = QFormLayout()
-        self._spinboxes: dict[str, QDoubleSpinBox] = {}
+        self._spinboxes: dict[str, FloatField] = {}
         for label, tip in (
             ("wx", "Load per length in local-x (axial)"),
             ("wy", "Load per length in local-y (transverse, in-plane for 2D)"),
             ("wz", "Load per length in local-z (out-of-plane for 2D)"),
         ):
-            sb = QDoubleSpinBox()
+            sb = FloatField()
             sb.setRange(-1e12, 1e12)
-            sb.setDecimals(4)
             sb.setSingleStep(1.0)
             sb.setValue(0.0)
             sb.setToolTip(tip)

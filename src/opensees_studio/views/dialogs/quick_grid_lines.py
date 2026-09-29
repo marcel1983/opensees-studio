@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import (
     QDialogButtonBox,
-    QDoubleSpinBox,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -18,6 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from opensees_studio.views.float_field import FloatField
 from opensees_studio.views.screen_fit import FittedDialog
 
 
@@ -64,21 +64,19 @@ class QuickGridLinesDialog(FittedDialog):
         self,
         title: str,
         parent_layout: QVBoxLayout,
-    ) -> tuple[QSpinBox, QDoubleSpinBox, QDoubleSpinBox]:
+    ) -> tuple[QSpinBox, FloatField, FloatField]:
         box = QGroupBox(title)
         row = QHBoxLayout(box)
 
         n = QSpinBox()
         n.setRange(0, 200)
         n.setValue(3)
-        s = QDoubleSpinBox()
+        s = FloatField()
         s.setRange(0.0, 1e6)
-        s.setDecimals(4)
         s.setSingleStep(0.5)
         s.setValue(1.0)
-        f = QDoubleSpinBox()
+        f = FloatField()
         f.setRange(-1e6, 1e6)
-        f.setDecimals(4)
         f.setSingleStep(0.5)
         f.setValue(0.0)
 
@@ -94,7 +92,7 @@ class QuickGridLinesDialog(FittedDialog):
     def ordinates(self) -> tuple[list[float], list[float], list[float]]:
         """Return (xs, ys, zs) — flat lists of ordinate values."""
 
-        def axis(n: QSpinBox, s: QDoubleSpinBox, f: QDoubleSpinBox) -> list[float]:
+        def axis(n: QSpinBox, s: FloatField, f: FloatField) -> list[float]:
             return [f.value() + i * s.value() for i in range(n.value())]
 
         return (

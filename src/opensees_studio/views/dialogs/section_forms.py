@@ -10,7 +10,6 @@ from __future__ import annotations
 from typing import Any
 
 from PySide6.QtWidgets import (
-    QDoubleSpinBox,
     QFormLayout,
     QLabel,
     QLineEdit,
@@ -22,19 +21,18 @@ from opensees_studio.core import (
     FiberSection,
     SectionAggregator,
 )
+from opensees_studio.views.float_field import FloatField
 
 
 def _spin(
     default: float = 0.0,
     *,
-    decimals: int = 8,
     minimum: float = 1e-12,
     maximum: float = 1e15,
     step: float = 1.0,
-) -> QDoubleSpinBox:
-    sb = QDoubleSpinBox()
+) -> FloatField:
+    sb = FloatField()
     sb.setRange(minimum, maximum)
-    sb.setDecimals(decimals)
     sb.setSingleStep(step)
     sb.setValue(default)
     return sb

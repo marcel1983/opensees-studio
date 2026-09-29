@@ -7,7 +7,6 @@ import math
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QComboBox,
-    QDoubleSpinBox,
     QFormLayout,
     QHBoxLayout,
     QLabel,
@@ -16,6 +15,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from opensees_studio.views.float_field import FloatField
 
 
 class ModeShapeAnimator(QWidget):
@@ -58,14 +59,14 @@ class ModeShapeAnimator(QWidget):
         self._mode_combo.currentIndexChanged.connect(self._emit_static_frame)
         form.addRow("Mode:", self._mode_combo)
 
-        self._scale = QDoubleSpinBox()
+        self._scale = FloatField()
         self._scale.setRange(0.01, 100.0)
         self._scale.setValue(1.0)
         self._scale.setSingleStep(0.5)
         self._scale.valueChanged.connect(self._emit_static_frame)
         form.addRow("Scale:", self._scale)
 
-        self._period = QDoubleSpinBox()
+        self._period = FloatField()
         self._period.setRange(0.1, 30.0)
         self._period.setSuffix(" s")
         self._period.setValue(self._DEFAULT_PERIOD_S)

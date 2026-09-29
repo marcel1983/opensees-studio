@@ -22,15 +22,14 @@ from __future__ import annotations
 from typing import Any
 
 from pydantic import ValidationError
-from PySide6.QtCore import QLocale
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialogButtonBox,
-    QDoubleSpinBox,
     QFormLayout,
     QGroupBox,
     QLabel,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -50,6 +49,7 @@ from opensees_studio.core import (
     pendulum_restoring_stiffness,
     sliding_yield_displacement,
 )
+from opensees_studio.views.float_field import FloatField
 from opensees_studio.views.screen_fit import FittedDialog, MessageArea, scroll_area
 
 BEARING_TYPES: tuple[tuple[str, str], ...] = (
@@ -82,12 +82,8 @@ class AssignElastomericBearingDialog(FittedDialog):
 
     # ---- UI --------------------------------------------------------------------
     @staticmethod
-    def _spin(
-        lo: float, hi: float, value: float, decimals: int = 4, step: float = 0.1
-    ) -> QDoubleSpinBox:
-        spin = QDoubleSpinBox()
-        spin.setLocale(QLocale(QLocale.Language.C))
-        spin.setDecimals(decimals)
+    def _spin(lo: float, hi: float, value: float, step: float = 0.1) -> FloatField:
+        spin = FloatField()
         spin.setRange(lo, hi)
         spin.setSingleStep(step)
         spin.setValue(value)
@@ -133,28 +129,30 @@ class AssignElastomericBearingDialog(FittedDialog):
         self._type.currentIndexChanged.connect(self._on_type_changed)
         form.addRow("Element:", self._type)
 
-        self._k_init = self._spin(1e-9, 1e12, 1000.0, decimals=4, step=10.0)
-        self._qd = self._spin(1e-9, 1e12, 10.0, decimals=4, step=1.0)
-        self._alpha1 = self._spin(0.0, 1.0, 0.1, decimals=4, step=0.01)
-        self._alpha2 = self._spin(0.0, 1.0, 0.0, decimals=4, step=0.01)
-        self._mu = self._spin(1e-6, 100.0, 2.0, decimals=3, step=0.5)
+        self._k_init = self._spin(1e-9, 1e12, 1000.0, step=10.0)
+        self._qd = self._spin(1e-9, 1e12, 10.0, step=1.0)
+        self._alpha1 = self._spin(0.0, 1.0, 0.1, step=0.01)
+        self._alpha2 = self._spin(0.0, 1.0, 0.0, step=0.01)
+        self._mu = self._spin(1e-6, 100.0, 2.0, step=0.5)
         form.addRow("Kinit (initial stiffness):", self._k_init)
         form.addRow("Qd (characteristic strength):", self._qd)
         form.addRow("alpha1 (post-yield ratio, 0 <= alpha1 < 1):", self._alpha1)
         form.addRow("alpha2 (hardening ratio):", self._alpha2)
         form.addRow("mu (hardening exponent):", self._mu)
 
-        self._eta = self._spin(1e-6, 1e3, 1.0, decimals=3, step=0.5)
-        self._beta = self._spin(0.0, 10.0, 0.5, decimals=3, step=0.1)
-        self._gamma = self._spin(0.0, 10.0, 0.5, decimals=3, step=0.1)
+        self._eta = self._spin(1e-6, 1e3, 1.0, step=0.5)
+        self._beta = self._spin(0.0, 10.0, 0.5, step=0.1)
+        self._gamma = self._spin(0.0, 10.0, 0.5, step=0.1)
         form.addRow("eta (Bouc-Wen):", self._eta)
         form.addRow("beta (Bouc-Wen):", self._beta)
         form.addRow("gamma (Bouc-Wen):", self._gamma)
 
         self._friction = self._friction_combo()
-        self._r_eff = self._spin(0.0, 1e9, 1.0, decimals=4, step=0.1)
-        self._max_iter = self._spin(1.0, 1e4, 25.0, decimals=0, step=1.0)
-        self._tol = self._spin(1e-15, 1.0, 1e-12, decimals=15, step=1e-12)
+        self._r_eff = self._spin(0.0, 1e9, 1.0, step=0.1)
+        self._max_iter = QSpinBox()
+        self._max_iter.setRange(1, 10000)
+        self._max_iter.setValue(25)
+        self._tol = self._spin(1e-15, 1.0, 1e-12, step=1e-12)
         form.addRow("Friction model:", self._friction)
         form.addRow("Reff (effective radius, single FP):", self._r_eff)
         form.addRow("-iter maximum iterations:", self._max_iter)
@@ -174,9 +172,9 @@ class AssignElastomericBearingDialog(FittedDialog):
         for w in (self._t_label, self._t_mat, self._my_label, self._my_mat):
             w.setVisible(is_3d)
 
-        self._shear_dist = self._spin(0.0, 1.0, 0.5, decimals=3, step=0.1)
+        self._shear_dist = self._spin(0.0, 1.0, 0.5, step=0.1)
         self._do_rayleigh = QCheckBox("Include in Rayleigh damping (-doRayleigh)")
-        self._mass = self._spin(0.0, 1e12, 0.0, decimals=6, step=0.1)
+        self._mass = self._spin(0.0, 1e12, 0.0, step=0.1)
         form.addRow("Shear distance ratio (-shearDist):", self._shear_dist)
         form.addRow("", self._do_rayleigh)
         form.addRow("Element mass (-mass):", self._mass)
@@ -187,13 +185,13 @@ class AssignElastomericBearingDialog(FittedDialog):
         self._hform = hform
         self._u_y_label = QLabel("")
         self._f_y_label = QLabel("")
-        self._u_eff = self._spin(1e-9, 1e9, 0.1, decimals=4, step=0.01)
+        self._u_eff = self._spin(1e-9, 1e9, 0.1, step=0.01)
         self._k_eff_label = QLabel("")
         hform.addRow("Yield displacement u_y:", self._u_y_label)
         hform.addRow("Yield force F_y:", self._f_y_label)
         hform.addRow("Displacement for K_eff:", self._u_eff)
         hform.addRow("Effective (secant) stiffness K_eff:", self._k_eff_label)
-        self._weight = self._spin(1e-9, 1e15, 100.0, decimals=4, step=10.0)
+        self._weight = self._spin(1e-9, 1e15, 100.0, step=10.0)
         self._slip_label = QLabel("")
         self._k_r_label = QLabel("")
         self._period_label = QLabel("")
@@ -354,7 +352,7 @@ class AssignElastomericBearingDialog(FittedDialog):
         if sliding:
             common.update(
                 friction_model_id=int(self._friction.currentData()),
-                max_iter=int(self._max_iter.value()),
+                max_iter=self._max_iter.value(),
                 tol=self._tol.value(),
             )
         else:

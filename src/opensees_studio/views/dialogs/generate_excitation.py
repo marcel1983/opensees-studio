@@ -17,11 +17,10 @@ from typing import Any
 
 import numpy as np
 import pyqtgraph as pg
-from PySide6.QtCore import QLocale, Qt
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QComboBox,
     QDialogButtonBox,
-    QDoubleSpinBox,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
@@ -39,6 +38,7 @@ from opensees_studio.viewmodels.ground_motion_catalog_vm import (
     GroundMotionCatalogViewModel,
     accel_axis_units,
 )
+from opensees_studio.views.float_field import FloatField
 from opensees_studio.views.plot_style import TARGET_PEN, add_legend, axis_label, readable_plot
 from opensees_studio.views.screen_fit import FittedDialog, MessageArea, scroll_area
 
@@ -72,10 +72,8 @@ class GenerateExcitationDialog(FittedDialog):
 
     # ---- construction ------------------------------------------------------
     @staticmethod
-    def _spin(lo: float, hi: float, value: float, decimals: int, step: float) -> QDoubleSpinBox:
-        spin = QDoubleSpinBox()
-        spin.setLocale(QLocale(QLocale.Language.C))
-        spin.setDecimals(decimals)
+    def _spin(lo: float, hi: float, value: float, step: float) -> FloatField:
+        spin = FloatField()
         spin.setRange(lo, hi)
         spin.setSingleStep(step)
         spin.setValue(value)
@@ -97,16 +95,16 @@ class GenerateExcitationDialog(FittedDialog):
             self._kind.addItem(label, key)
         self._kind.currentIndexChanged.connect(self._on_kind_changed)
         form.addRow("Type:", self._kind)
-        self._amplitude = self._spin(1e-6, 1e6, 0.5, decimals=4, step=0.05)
+        self._amplitude = self._spin(1e-6, 1e6, 0.5, step=0.05)
         form.addRow("Amplitude (peak):", self._amplitude)
         self._units = QComboBox()
         for key, label in GENERATED_UNIT_CHOICES:
             self._units.addItem(label, key)
         self._units.setToolTip("Unit of the amplitude; the series factor carries the conversion.")
         form.addRow("Amplitude units:", self._units)
-        self._frequency = self._spin(0.01, 200.0, 1.0, decimals=3, step=0.1)
+        self._frequency = self._spin(0.01, 200.0, 1.0, step=0.1)
         form.addRow("Frequency [Hz]:", self._frequency)
-        self._dt = self._spin(1e-5, 1.0, 0.005, decimals=5, step=0.001)
+        self._dt = self._spin(1e-5, 1.0, 0.005, step=0.001)
         self._dt.setToolTip(
             "Sampling interval of an embedded Path series (a plain sine is continuous)."
         )
@@ -115,11 +113,11 @@ class GenerateExcitationDialog(FittedDialog):
 
         self._sine_group = QGroupBox("Continuous sine")
         sine_form = QFormLayout(self._sine_group)
-        self._duration = self._spin(0.01, 1e4, 10.0, decimals=3, step=0.5)
+        self._duration = self._spin(0.01, 1e4, 10.0, step=0.5)
         sine_form.addRow("Duration [s]:", self._duration)
-        self._ramp_in = self._spin(0.0, 1e3, 0.0, decimals=2, step=0.5)
+        self._ramp_in = self._spin(0.0, 1e3, 0.0, step=0.5)
         sine_form.addRow("Ramp-in [cycles]:", self._ramp_in)
-        self._ramp_out = self._spin(0.0, 1e3, 0.0, decimals=2, step=0.5)
+        self._ramp_out = self._spin(0.0, 1e3, 0.0, step=0.5)
         sine_form.addRow("Ramp-out [cycles]:", self._ramp_out)
         params_layout.addWidget(self._sine_group)
 
@@ -140,7 +138,7 @@ class GenerateExcitationDialog(FittedDialog):
         self._beats.setRange(1, 1000)
         self._beats.setValue(5)
         beat_form.addRow("Number of beats:", self._beats)
-        self._pause = self._spin(0.0, 1e3, 2.0, decimals=3, step=0.5)
+        self._pause = self._spin(0.0, 1e3, 2.0, step=0.5)
         beat_form.addRow("Pause between beats [s]:", self._pause)
         params_layout.addWidget(self._beat_group)
         params_layout.addStretch(1)

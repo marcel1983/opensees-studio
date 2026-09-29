@@ -8,7 +8,6 @@ from typing import Any
 from PySide6.QtWidgets import (
     QComboBox,
     QDialogButtonBox,
-    QDoubleSpinBox,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
@@ -21,6 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from opensees_studio.viewmodels import AnalysisRunner, ProjectViewModel
+from opensees_studio.views.float_field import FloatField
 from opensees_studio.views.screen_fit import FittedDialog
 
 
@@ -61,21 +61,18 @@ class RunAnalysisDialog(FittedDialog):
         self._damping_box = QGroupBox("Rayleigh damping (transient only)")
         form = QFormLayout(self._damping_box)
 
-        self._alpha_m = QDoubleSpinBox()
+        self._alpha_m = FloatField()
         self._alpha_m.setRange(0.0, 1e6)
-        self._alpha_m.setDecimals(6)
         self._alpha_m.setSingleStep(0.01)
         form.addRow("alphaM (mass-prop.):", self._alpha_m)
 
-        self._beta_k = QDoubleSpinBox()
+        self._beta_k = FloatField()
         self._beta_k.setRange(0.0, 1e6)
-        self._beta_k.setDecimals(6)
         self._beta_k.setSingleStep(1e-4)
         form.addRow("betaK (stiffness-prop.):", self._beta_k)
 
-        self._mode1_damping = QDoubleSpinBox()
+        self._mode1_damping = FloatField()
         self._mode1_damping.setRange(0.0, 1.0)
-        self._mode1_damping.setDecimals(6)
         self._mode1_damping.setSingleStep(0.01)
         form.addRow("Mode-1 damping zeta:", self._mode1_damping)
 

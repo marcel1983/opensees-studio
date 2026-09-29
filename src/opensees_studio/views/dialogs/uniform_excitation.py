@@ -12,7 +12,6 @@ from __future__ import annotations
 from PySide6.QtWidgets import (
     QComboBox,
     QDialogButtonBox,
-    QDoubleSpinBox,
     QFormLayout,
     QLabel,
     QLineEdit,
@@ -21,6 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from opensees_studio.core import Project, UniformExcitationPattern
+from opensees_studio.views.float_field import FloatField
 from opensees_studio.views.screen_fit import FittedDialog
 
 _DIRECTION_CHOICES: list[tuple[int, str]] = [
@@ -80,9 +80,8 @@ class UniformExcitationDialog(FittedDialog):
             self._accel_cb.setEnabled(False)
             form.addRow("Accel series:", self._accel_cb)
 
-        self._factor_spin = QDoubleSpinBox()
+        self._factor_spin = FloatField()
         self._factor_spin.setRange(-1e12, 1e12)
-        self._factor_spin.setDecimals(6)
         self._factor_spin.setSingleStep(0.1)
         self._factor_spin.setValue(1.0)
         self._factor_spin.setToolTip("Extra scale applied on top of the TimeSeries' own factor.")

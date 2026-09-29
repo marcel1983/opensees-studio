@@ -52,6 +52,7 @@ from opensees_studio.core.geometry import (
     GridLine,
     GridSystem,
 )
+from opensees_studio.views.float_field import format_float
 from opensees_studio.views.screen_fit import FittedDialog
 
 _LINE_TYPE_CHOICES = ["Primary", "Secondary"]
@@ -126,7 +127,7 @@ class _AxisGridTable(QWidget):
         for row, v in enumerate(self._iter_display_values(ords)):
             item = self._table.item(row, 1)
             if item is not None:
-                item.setText(f"{v:g}")
+                item.setText(format_float(v))
 
     def _iter_display_values(self, ords: list[float]) -> list[float]:
         if not self._show_spacing:
@@ -219,7 +220,7 @@ class _AxisGridTable(QWidget):
                 display_val = ln.ordinate - float(prev_item.text()) if prev_item else ln.ordinate
             except ValueError:
                 display_val = ln.ordinate
-        self._table.setItem(row, 1, QTableWidgetItem(f"{display_val:g}"))
+        self._table.setItem(row, 1, QTableWidgetItem(format_float(display_val)))
 
         # Line Type combo
         cb = QComboBox()

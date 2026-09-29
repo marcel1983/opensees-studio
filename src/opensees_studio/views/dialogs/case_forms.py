@@ -11,7 +11,6 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
-    QDoubleSpinBox,
     QFormLayout,
     QLabel,
     QLineEdit,
@@ -36,20 +35,19 @@ from opensees_studio.core.modal import (
     SOLVER_DENSE,
     dense_eigen_max_free_dof,
 )
+from opensees_studio.views.float_field import FloatField
 
 
 # ─────────────────────────── helpers ───────────────────────────
 def _spin(
     default: float = 0.0,
     *,
-    decimals: int = 6,
     minimum: float = -1e15,
     maximum: float = 1e15,
     step: float = 1.0,
-) -> QDoubleSpinBox:
-    sb = QDoubleSpinBox()
+) -> FloatField:
+    sb = FloatField()
     sb.setRange(minimum, maximum)
-    sb.setDecimals(decimals)
     sb.setSingleStep(step)
     sb.setValue(default)
     return sb
@@ -181,13 +179,13 @@ class StaticCaseForm(CaseFormBase):
         super().__init__(patterns, analyses, parent)
         self._patterns_picker = _make_pattern_picker(patterns)
         self._n_steps = _int_spin(1)
-        self._lf = _spin(1.0, decimals=4, minimum=-1e6, maximum=1e6, step=0.1)
+        self._lf = _spin(1.0, minimum=-1e6, maximum=1e6, step=0.1)
         self._system = self._combo(_STATIC_SYSTEMS, "BandGeneral")
         self._constraints = self._combo(_CONSTRAINTS, "Plain")
         self._integrator = self._combo(_INTEGRATORS_STATIC, "LoadControl")
         self._algorithm = self._combo(_ALGORITHMS, "Linear")
         self._test = self._combo(_TESTS, "NormDispIncr")
-        self._tol = _spin(1e-8, decimals=12, minimum=1e-15, step=1e-9)
+        self._tol = _spin(1e-8, minimum=1e-15, step=1e-9)
         self._max_iter = _int_spin(25)
 
         self._layout.addRow(QLabel("<b>Patterns to apply (multi-select):</b>"))
@@ -301,7 +299,7 @@ class TransientCaseForm(CaseFormBase):
         self._patterns_picker = _make_pattern_picker(patterns)
         self._preload_picker = _make_analysis_picker(analyses, only_static=True)
         self._remove_patterns_picker = _make_pattern_picker(patterns)
-        self._dt = _spin(0.01, decimals=8, minimum=1e-12, step=1e-3)
+        self._dt = _spin(0.01, minimum=1e-12, step=1e-3)
         self._n_steps = _int_spin(1000, minimum=1, maximum=10_000_000)
         self._system = QComboBox()
         self._system.addItems(_STATIC_SYSTEMS)
@@ -309,18 +307,18 @@ class TransientCaseForm(CaseFormBase):
         self._constraints.addItems(_CONSTRAINTS)
         self._integrator = QComboBox()
         self._integrator.addItems(_INTEGRATORS_TRANSIENT)
-        self._gamma = _spin(0.5, decimals=4, minimum=0.0, maximum=1.0, step=0.01)
-        self._beta = _spin(0.25, decimals=4, minimum=0.0, maximum=1.0, step=0.01)
+        self._gamma = _spin(0.5, minimum=0.0, maximum=1.0, step=0.01)
+        self._beta = _spin(0.25, minimum=0.0, maximum=1.0, step=0.01)
         self._algorithm = QComboBox()
         self._algorithm.addItems(_ALGORITHMS)
         self._algorithm.setCurrentText("Newton")
         self._test = QComboBox()
         self._test.addItems(_TESTS)
-        self._tol = _spin(1e-6, decimals=12, minimum=1e-15, step=1e-7)
+        self._tol = _spin(1e-6, minimum=1e-15, step=1e-7)
         self._max_iter = _int_spin(25)
-        self._alpha_m = _spin(0.0, decimals=8, minimum=0.0, maximum=1e12, step=1e-4)
-        self._beta_k = _spin(0.0, decimals=8, minimum=0.0, maximum=1e12, step=1e-6)
-        self._mode1_damping = _spin(0.0, decimals=6, minimum=0.0, maximum=1.0, step=0.01)
+        self._alpha_m = _spin(0.0, minimum=0.0, maximum=1e12, step=1e-4)
+        self._beta_k = _spin(0.0, minimum=0.0, maximum=1e12, step=1e-6)
+        self._mode1_damping = _spin(0.0, minimum=0.0, maximum=1.0, step=0.01)
 
         self._layout.addRow(QLabel("<b>Patterns to apply (multi-select):</b>"))
         self._layout.addRow(self._patterns_picker)
@@ -411,8 +409,8 @@ class PushoverCaseForm(CaseFormBase):
         self._patterns_picker = _make_pattern_picker(patterns)
         self._control_node = _int_spin(1, minimum=1)
         self._control_dof = _int_spin(1, minimum=1, maximum=6)
-        self._target = _spin(0.1, decimals=6, minimum=-1e6, maximum=1e6, step=0.001)
-        self._step = _spin(0.001, decimals=8, minimum=1e-12, step=1e-4)
+        self._target = _spin(0.1, minimum=-1e6, maximum=1e6, step=0.001)
+        self._step = _spin(0.001, minimum=1e-12, step=1e-4)
         self._base_nodes = QLineEdit()
         self._base_nodes.setPlaceholderText(
             "comma-separated node ids (leave blank for all supports)"
@@ -426,7 +424,7 @@ class PushoverCaseForm(CaseFormBase):
         self._algorithm.setCurrentText("Newton")
         self._test = QComboBox()
         self._test.addItems(_TESTS)
-        self._tol = _spin(1e-6, decimals=12, minimum=1e-15, step=1e-7)
+        self._tol = _spin(1e-6, minimum=1e-15, step=1e-7)
         self._max_iter = _int_spin(25)
 
         self._layout.addRow(QLabel("<b>Patterns (applied as reference):</b>"))
@@ -494,7 +492,7 @@ class ResponseSpectrumCaseForm(CaseFormBase):
         self._direction = _int_spin(1, minimum=1, maximum=6)
         self._combination = QComboBox()
         self._combination.addItems(["CQC", "SRSS"])
-        self._damping = _spin(0.0, decimals=4, minimum=0.0, maximum=1.0, step=0.01)
+        self._damping = _spin(0.0, minimum=0.0, maximum=1.0, step=0.01)
         self._damping.setSpecialValueText("spectrum damping")
 
         self._layout.addRow("Modal case ID:", self._modal_case)

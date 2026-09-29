@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QDoubleSpinBox,
     QFormLayout,
     QHBoxLayout,
     QLabel,
@@ -15,6 +14,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from opensees_studio.views.float_field import FloatField
 
 if TYPE_CHECKING:
     pass
@@ -56,9 +57,8 @@ class DeformedShapeView(QWidget):
         self._slider.setValue(100)  # 1.00 ×
         self._slider.valueChanged.connect(self._on_slider)
 
-        self._spin = QDoubleSpinBox()
+        self._spin = FloatField()
         self._spin.setRange(0.001, 1e6)
-        self._spin.setDecimals(4)
         self._spin.setValue(self._suggested)
         self._spin.valueChanged.connect(self._on_spin)
         form.addRow("Scale (current):", self._spin)

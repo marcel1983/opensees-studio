@@ -12,7 +12,6 @@ from __future__ import annotations
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialogButtonBox,
-    QDoubleSpinBox,
     QFormLayout,
     QLabel,
     QVBoxLayout,
@@ -21,6 +20,7 @@ from PySide6.QtWidgets import (
 
 from opensees_studio.core import Node
 from opensees_studio.core.geometry import GridSystem
+from opensees_studio.views.float_field import FloatField
 from opensees_studio.views.screen_fit import FittedDialog
 
 
@@ -74,10 +74,9 @@ class AddNodeDialog(FittedDialog):
         root.addWidget(buttons)
 
     @staticmethod
-    def _spin() -> QDoubleSpinBox:
-        sb = QDoubleSpinBox()
+    def _spin() -> FloatField:
+        sb = FloatField()
         sb.setRange(-1e9, 1e9)
-        sb.setDecimals(6)
         sb.setSingleStep(0.5)
         sb.setValue(0.0)
         return sb

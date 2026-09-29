@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 
 from opensees_studio.core import Node
 from opensees_studio.core.geometry import GridSystem
+from opensees_studio.views.float_field import format_float
 from opensees_studio.views.screen_fit import FittedDialog
 
 
@@ -134,7 +135,7 @@ class GridSystemDialog(FittedDialog):
             if not spacings:
                 # Single line at nonzero origin — degenerate, show empty.
                 return ""
-            return ", ".join(f"{s:g}" for s in spacings)
+            return ", ".join(format_float(s) for s in spacings)
 
         self._x_edit.setText(to_spacings_text(grid.x_lines))
         self._y_edit.setText(to_spacings_text(grid.y_lines))

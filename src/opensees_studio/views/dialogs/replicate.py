@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import (
     QDialogButtonBox,
-    QDoubleSpinBox,
     QFormLayout,
     QLabel,
     QSpinBox,
@@ -16,6 +15,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from opensees_studio.views.float_field import FloatField
 from opensees_studio.views.screen_fit import FittedDialog
 
 
@@ -38,10 +38,9 @@ class ReplicateDialog(FittedDialog):
 
         form = QFormLayout()
 
-        def _spin(default: float = 0.0) -> QDoubleSpinBox:
-            sb = QDoubleSpinBox()
+        def _spin(default: float = 0.0) -> FloatField:
+            sb = FloatField()
             sb.setRange(-1e9, 1e9)
-            sb.setDecimals(4)
             sb.setSingleStep(1.0)
             sb.setValue(default)
             return sb

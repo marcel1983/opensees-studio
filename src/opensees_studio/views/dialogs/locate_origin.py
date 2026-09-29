@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import (
     QDialogButtonBox,
-    QDoubleSpinBox,
     QFormLayout,
     QGroupBox,
     QLabel,
@@ -17,6 +16,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from opensees_studio.views.float_field import FloatField
 from opensees_studio.views.screen_fit import FittedDialog
 
 
@@ -71,18 +71,16 @@ class CoordSystemLocationOrientationDialog(FittedDialog):
         root.addWidget(buttons)
 
     @staticmethod
-    def _spin() -> QDoubleSpinBox:
-        sb = QDoubleSpinBox()
+    def _spin() -> FloatField:
+        sb = FloatField()
         sb.setRange(-1e9, 1e9)
-        sb.setDecimals(6)
         sb.setSingleStep(0.5)
         return sb
 
     @staticmethod
-    def _rot_spin() -> QDoubleSpinBox:
-        sb = QDoubleSpinBox()
+    def _rot_spin() -> FloatField:
+        sb = FloatField()
         sb.setRange(-360.0, 360.0)
-        sb.setDecimals(3)
         sb.setSingleStep(1.0)
         return sb
 

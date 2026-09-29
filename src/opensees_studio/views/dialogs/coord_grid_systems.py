@@ -17,7 +17,6 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
     QDialogButtonBox,
-    QDoubleSpinBox,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
@@ -40,6 +39,7 @@ from opensees_studio.views.dialogs.grid_system import (
     _coords_from_spacings,
     _parse_spacings,
 )
+from opensees_studio.views.float_field import FloatField, format_float
 from opensees_studio.views.screen_fit import FittedDialog
 
 
@@ -48,7 +48,7 @@ def _spacings_text(coords: list[float]) -> str:
     if len(coords) < 2:
         return ""
     spacings = [coords[i + 1] - coords[i] for i in range(len(coords) - 1)]
-    return ", ".join(f"{s:g}" for s in spacings)
+    return ", ".join(format_float(s) for s in spacings)
 
 
 class CoordSystemDataDialog(FittedDialog):
@@ -173,19 +173,17 @@ class CoordSystemDataDialog(FittedDialog):
 
     # ── helpers ──────────────────────────────────────────────────
     @staticmethod
-    def _spin() -> QDoubleSpinBox:
-        sb = QDoubleSpinBox()
+    def _spin() -> FloatField:
+        sb = FloatField()
         sb.setRange(-1e9, 1e9)
-        sb.setDecimals(6)
         sb.setSingleStep(0.5)
         sb.setValue(0.0)
         return sb
 
     @staticmethod
-    def _rot_spin() -> QDoubleSpinBox:
-        sb = QDoubleSpinBox()
+    def _rot_spin() -> FloatField:
+        sb = FloatField()
         sb.setRange(-360.0, 360.0)
-        sb.setDecimals(3)
         sb.setSingleStep(1.0)
         sb.setValue(0.0)
         return sb

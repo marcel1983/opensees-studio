@@ -10,10 +10,9 @@ from __future__ import annotations
 from typing import Any
 
 from pydantic import ValidationError
-from PySide6.QtCore import QLocale, Qt
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialogButtonBox,
-    QDoubleSpinBox,
     QFormLayout,
     QHBoxLayout,
     QInputDialog,
@@ -40,15 +39,13 @@ from opensees_studio.core import (
     VelNormalFrcDepFriction,
 )
 from opensees_studio.viewmodels import ProjectViewModel
+from opensees_studio.views.float_field import FloatField
 from opensees_studio.views.screen_fit import FittedDialog, MessageArea, scroll_area
 
 
-def _spin(default: float, *, minimum: float = -1e15, decimals: int = 6) -> QDoubleSpinBox:
-    sb = QDoubleSpinBox()
-    sb.setLocale(QLocale(QLocale.Language.C))
-    sb.setKeyboardTracking(False)
+def _spin(default: float, *, minimum: float = -1e15) -> FloatField:
+    sb = FloatField()
     sb.setRange(minimum, 1e15)
-    sb.setDecimals(decimals)
     sb.setSingleStep(0.01)
     sb.setValue(default)
     return sb

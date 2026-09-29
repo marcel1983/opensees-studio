@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import (
     QDialogButtonBox,
-    QDoubleSpinBox,
     QFormLayout,
     QLabel,
     QVBoxLayout,
     QWidget,
 )
 
+from opensees_studio.views.float_field import FloatField
 from opensees_studio.views.screen_fit import FittedDialog
 
 
@@ -29,10 +29,9 @@ class MoveDialog(FittedDialog):
 
         form = QFormLayout()
 
-        def _spin() -> QDoubleSpinBox:
-            sb = QDoubleSpinBox()
+        def _spin() -> FloatField:
+            sb = FloatField()
             sb.setRange(-1e9, 1e9)
-            sb.setDecimals(4)
             sb.setSingleStep(1.0)
             return sb
 

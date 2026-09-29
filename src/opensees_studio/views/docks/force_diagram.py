@@ -13,7 +13,6 @@ from __future__ import annotations
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QComboBox,
-    QDoubleSpinBox,
     QFormLayout,
     QGroupBox,
     QLabel,
@@ -24,6 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 from opensees_studio.services.element_forces import ForceComponent
+from opensees_studio.views.float_field import FloatField
 
 
 class ForceDiagramView(QWidget):
@@ -73,9 +73,8 @@ class ForceDiagramView(QWidget):
             self._component.addItem(comp.value, comp)
         form.addRow("Component:", self._component)
 
-        self._scale_spin = QDoubleSpinBox()
+        self._scale_spin = FloatField()
         self._scale_spin.setRange(1e-9, 1e9)
-        self._scale_spin.setDecimals(6)
         self._scale_spin.setValue(suggested_scale)
         self._scale_spin.setSingleStep(
             suggested_scale * 0.1 if suggested_scale > 0 else 0.01,

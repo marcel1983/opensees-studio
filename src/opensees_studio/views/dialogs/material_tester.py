@@ -12,10 +12,8 @@ import re
 from typing import Any
 
 import pyqtgraph as pg
-from PySide6.QtCore import QLocale
 from PySide6.QtWidgets import (
     QComboBox,
-    QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
@@ -33,6 +31,7 @@ from opensees_studio.viewmodels.material_tester_vm import (
     PROTOCOL_LABELS,
     MaterialTesterViewModel,
 )
+from opensees_studio.views.float_field import FloatField, format_float
 from opensees_studio.views.plot_style import axis_label, readable_plot
 from opensees_studio.views.screen_fit import FittedDialog
 
@@ -79,9 +78,7 @@ class MaterialTesterDialog(FittedDialog):
         self._protocol.currentIndexChanged.connect(self._on_protocol_changed)
         form.addRow("Protocol:", self._protocol)
 
-        self._amplitude = QDoubleSpinBox()
-        self._amplitude.setLocale(QLocale(QLocale.Language.C))
-        self._amplitude.setDecimals(6)
+        self._amplitude = FloatField()
         self._amplitude.setRange(1e-6, 1.0)
         self._amplitude.setSingleStep(0.001)
         self._amplitude.setValue(self._tester.amplitude)
@@ -94,7 +91,7 @@ class MaterialTesterDialog(FittedDialog):
         self._cycles_label = QLabel("Cycles:")
         form.addRow(self._cycles_label, self._cycles)
 
-        self._peaks = QLineEdit(" ".join(f"{p:g}" for p in self._tester.peaks))
+        self._peaks = QLineEdit(" ".join(format_float(p) for p in self._tester.peaks))
         self._peaks.setToolTip("Positive, increasing peak strains, e.g. 0.0025 0.005 0.01")
         self._peaks_label = QLabel("Peak strains:")
         form.addRow(self._peaks_label, self._peaks)

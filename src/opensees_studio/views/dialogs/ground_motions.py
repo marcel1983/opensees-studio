@@ -24,12 +24,11 @@ from typing import Any
 
 import numpy as np
 import pyqtgraph as pg
-from PySide6.QtCore import QItemSelectionModel, QLocale, Qt
+from PySide6.QtCore import QItemSelectionModel, Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
-    QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
     QGroupBox,
@@ -75,6 +74,7 @@ from opensees_studio.viewmodels.ground_motion_catalog_vm import (
     accel_axis_units,
 )
 from opensees_studio.views.dialogs.generate_excitation import GenerateExcitationDialog
+from opensees_studio.views.float_field import FloatField
 from opensees_studio.views.plot_style import TARGET_PEN, add_legend, axis_label, readable_plot
 from opensees_studio.views.screen_fit import FittedDialog, MessageArea, scroll_area
 
@@ -137,9 +137,7 @@ class GroundMotionsDialog(FittedDialog):
 
         self._dt_label = QLabel("dt [s]:")
         controls.addWidget(self._dt_label)
-        self._dt = QDoubleSpinBox()
-        self._dt.setLocale(QLocale(QLocale.Language.C))
-        self._dt.setDecimals(6)
+        self._dt = FloatField()
         self._dt.setRange(1e-6, 10.0)
         self._dt.setSingleStep(0.005)
         self._dt.setValue(0.01)
@@ -232,12 +230,8 @@ class GroundMotionsDialog(FittedDialog):
         self._on_method_changed()
 
     @staticmethod
-    def _spin(
-        lo: float, hi: float, value: float, decimals: int = 3, step: float = 0.1
-    ) -> QDoubleSpinBox:
-        spin = QDoubleSpinBox()
-        spin.setLocale(QLocale(QLocale.Language.C))
-        spin.setDecimals(decimals)
+    def _spin(lo: float, hi: float, value: float, step: float = 0.1) -> FloatField:
+        spin = FloatField()
         spin.setRange(lo, hi)
         spin.setSingleStep(step)
         spin.setValue(value)
@@ -252,16 +246,16 @@ class GroundMotionsDialog(FittedDialog):
         self._target_kind.addItem("User table (period, Sa)", "user")
         self._target_kind.currentIndexChanged.connect(self._on_target_kind_changed)
         form.addRow("Kind:", self._target_kind)
-        self._sds = self._spin(0.001, 10.0, 1.0, decimals=4, step=0.05)
+        self._sds = self._spin(0.001, 10.0, 1.0, step=0.05)
         self._sds.setToolTip("Short-period design spectral acceleration from the AFAD TDTH map.")
         form.addRow("SDS [g]:", self._sds)
-        self._sd1 = self._spin(0.001, 10.0, 0.4, decimals=4, step=0.05)
+        self._sd1 = self._spin(0.001, 10.0, 0.4, step=0.05)
         self._sd1.setToolTip("1 s design spectral acceleration from the AFAD TDTH map.")
         form.addRow("SD1 [g]:", self._sd1)
-        self._ss = self._spin(0.001, 10.0, 1.0, decimals=4, step=0.05)
+        self._ss = self._spin(0.001, 10.0, 1.0, step=0.05)
         self._ss.setToolTip("Mapped short-period spectral acceleration Ss (AFAD TDTH map).")
         form.addRow("Ss [g]:", self._ss)
-        self._s1 = self._spin(0.001, 10.0, 0.3, decimals=4, step=0.05)
+        self._s1 = self._spin(0.001, 10.0, 0.3, step=0.05)
         self._s1.setToolTip("Mapped 1 s spectral acceleration S1 (AFAD TDTH map).")
         form.addRow("S1 [g]:", self._s1)
         self._site_class = QComboBox()
@@ -307,15 +301,15 @@ class GroundMotionsDialog(FittedDialog):
             self._method.addItem(label, key)
         self._method.currentIndexChanged.connect(self._on_method_changed)
         form.addRow("Method:", self._method)
-        self._target_pga = self._spin(0.001, 10.0, 0.4, decimals=4, step=0.05)
+        self._target_pga = self._spin(0.001, 10.0, 0.4, step=0.05)
         form.addRow("Target PGA [g]:", self._target_pga)
-        self._t1 = self._spin(0.01, 20.0, 1.0, decimals=3, step=0.05)
+        self._t1 = self._spin(0.01, 20.0, 1.0, step=0.05)
         self._t1.setToolTip("Fundamental period of the structure.")
         form.addRow("T1 [s]:", self._t1)
         preset = TBDY_RANGE_PRESET
-        self._range_a = self._spin(0.01, 5.0, preset.a, decimals=2, step=0.05)
-        self._range_b = self._spin(0.02, 10.0, preset.b, decimals=2, step=0.05)
-        self._alpha = self._spin(0.1, 5.0, preset.alpha, decimals=2, step=0.05)
+        self._range_a = self._spin(0.01, 5.0, preset.a, step=0.05)
+        self._range_b = self._spin(0.02, 10.0, preset.b, step=0.05)
+        self._alpha = self._spin(0.1, 5.0, preset.alpha, step=0.05)
         self._alpha.setToolTip(
             f"{preset.label}: alpha {preset.alpha:g} for SRSS pairs; "
             "for single components alpha is the engineer's choice."

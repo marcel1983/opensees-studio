@@ -5,7 +5,6 @@ from __future__ import annotations
 from PySide6.QtWidgets import (
     QComboBox,
     QDialogButtonBox,
-    QDoubleSpinBox,
     QFormLayout,
     QLabel,
     QLineEdit,
@@ -13,6 +12,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from opensees_studio.views.float_field import FloatField
 from opensees_studio.views.screen_fit import FittedDialog
 
 # Sentinel the pattern combo's userData holds to mean "create a new one".
@@ -77,11 +77,10 @@ class AssignLoadDialog(FittedDialog):
 
         # ── Force vector ──
         form = QFormLayout()
-        self._spinboxes: dict[str, QDoubleSpinBox] = {}
+        self._spinboxes: dict[str, FloatField] = {}
         for label in ("Fx", "Fy", "Fz", "Mx", "My", "Mz"):
-            sb = QDoubleSpinBox()
+            sb = FloatField()
             sb.setRange(-1e12, 1e12)
-            sb.setDecimals(4)
             sb.setSingleStep(1.0)
             sb.setValue(0.0)
             self._spinboxes[label] = sb
