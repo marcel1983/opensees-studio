@@ -75,6 +75,7 @@ from opensees_studio.views.canvas3d.model_renderer import RendererMode
 from opensees_studio.views.dialogs import (
     AddNodeDialog,
     AnalysisCaseManagerDialog,
+    AssignBeamIntegrationDialog,
     AssignDistributedLoadDialog,
     AssignElastomericBearingDialog,
     AssignEqualDOFDialog,
@@ -282,6 +283,7 @@ class MainWindow(QMainWindow):
         self._act_assign_section = QAction("S&ection…", self)
         self._act_assign_material = QAction("&Material…", self)
         self._act_assign_geom_transf = QAction("&Geometric Transformation…", self)
+        self._act_assign_integration = QAction("Beam &Integration…", self)
 
         # Display (post-processing)
         self._act_show_deformed = QAction("Show &Deformed Shape", self)
@@ -368,6 +370,7 @@ class MainWindow(QMainWindow):
         m_frame.addAction(self._act_assign_section)
         m_frame.addAction(self._act_assign_material)
         m_frame.addAction(self._act_assign_geom_transf)
+        m_frame.addAction(self._act_assign_integration)
         m_frame.addSeparator()
         m_frame.addAction(self._act_assign_distributed_load)
         m_frame.addAction(self._act_assign_hinge)
@@ -557,6 +560,7 @@ class MainWindow(QMainWindow):
         self._act_assign_section.triggered.connect(self._on_assign_section)
         self._act_assign_material.triggered.connect(self._on_assign_material)
         self._act_assign_geom_transf.triggered.connect(self._on_assign_geom_transf)
+        self._act_assign_integration.triggered.connect(self._on_assign_integration)
 
         # Analyze
         self._act_case_manager.triggered.connect(self._on_case_manager)
@@ -1468,6 +1472,34 @@ class MainWindow(QMainWindow):
             "Geometric Transformation", ids, {"geom_transf": dlg.transf_type()}
         )
 
+    def _on_assign_integration(self) -> None:
+        """Assign > Frame > Beam Integration: rule and points of force/disp beam-columns."""
+        project = self._vm.project
+        ids = self._selected_accepting({"integration": "Lobatto", "integration_points": 5})
+        if project is None or not ids:
+            QMessageBox.information(
+                self,
+                "Beam Integration",
+                "Select one or more force or displacement beam-column elements first.",
+            )
+            return
+        frames = [project.element(i) for i in ids]
+        rules = {el.integration for el in frames}  # type: ignore[union-attr]
+        points = {el.integration_points for el in frames}  # type: ignore[union-attr]
+        dlg = AssignBeamIntegrationDialog(
+            len(ids),
+            rules.pop() if len(rules) == 1 else None,
+            points.pop() if len(points) == 1 else None,
+            self,
+        )
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        self._assign_element_fields(
+            "Beam Integration",
+            ids,
+            {"integration": dlg.rule(), "integration_points": dlg.points()},
+        )
+
     # ── slots: analyze ──────────────────────────────────────────────
     def _on_case_manager(self) -> None:
         if self._vm.project is None:
@@ -2226,6 +2258,7 @@ class MainWindow(QMainWindow):
         self._act_assign_distributed_load.setEnabled(has_project and has_selected_elements)
         self._act_assign_hinge.setEnabled(has_project and has_selected_elements)
         self._act_assign_geom_transf.setEnabled(has_project and has_selected_elements)
+        self._act_assign_integration.setEnabled(has_project and has_selected_elements)
         self._act_delete.setEnabled(has_project and has_selection)
         self._act_move.setEnabled(has_project and has_selected_nodes)
         self._act_replicate.setEnabled(has_project and has_selected_nodes)

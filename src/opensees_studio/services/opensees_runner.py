@@ -627,7 +627,7 @@ class OpenSeesRunner:
                 )
             case ForceBeamColumn():
                 tag = self._element_geom_transf_tag[el.id]
-                ops.beamIntegration("Lobatto", el.id, el.section_id, el.integration_points)
+                ops.beamIntegration(el.integration, el.id, el.section_id, el.integration_points)
                 ops.element(
                     "forceBeamColumn",
                     el.id,
@@ -640,7 +640,7 @@ class OpenSeesRunner:
                 )
             case DispBeamColumn():
                 tag = self._element_geom_transf_tag[el.id]
-                ops.beamIntegration("Lobatto", el.id, el.section_id, el.integration_points)
+                ops.beamIntegration(el.integration, el.id, el.section_id, el.integration_points)
                 ops.element("dispBeamColumn", el.id, *el.nodes, tag, el.id)
             case ZeroLengthElement():
                 zl_args: list[Any] = [

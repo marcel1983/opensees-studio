@@ -14,7 +14,7 @@ from typing import Annotated, Literal, get_args
 
 from pydantic import Field, PositiveFloat, PositiveInt
 
-from opensees_studio.core._base import Entity
+from opensees_studio.core._base import Entity, omit_when_default
 from opensees_studio.core.geometry.bearings import (
     ElastomericBearingBoucWenElement,
     ElastomericBearingPlasticityElement,
@@ -27,6 +27,14 @@ GeomTransfType = Literal["Linear", "PDelta", "Corotational"]
 in 3D (the runner picks ``vecxz`` from the element axis)."""
 
 GEOM_TRANSF_TYPES: tuple[str, ...] = get_args(GeomTransfType)
+
+BeamIntegrationRule = Literal["Lobatto", "Legendre", "NewtonCotes", "Radau", "Trapezoidal"]
+"""``beamIntegration`` rule of a force or displacement beam-column. Each gives its own
+section locations and weights in OpenSeesPy 3.8.0 for 2 to 10 points. Beyond 10 points the
+build silently returns zero weights; CompositeSimpson is left out because the build gets its
+weights wrong for every count but 3."""
+
+BEAM_INTEGRATION_RULES: tuple[str, ...] = get_args(BeamIntegrationRule)
 
 
 class TrussElement(Entity):
@@ -79,9 +87,12 @@ class ForceBeamColumn(Entity):
     nodes: tuple[PositiveInt, PositiveInt]
     section_id: PositiveInt
     integration_points: int = Field(default=5, ge=2, le=10)
+    integration: BeamIntegrationRule = "Lobatto"
     geom_transf: GeomTransfType = "Linear"
     max_iter: int = Field(default=10, ge=1)
     tolerance: float = Field(default=1e-12, gt=0.0)
+
+    serialize_without_defaults = omit_when_default("integration")
 
 
 class DispBeamColumn(Entity):
@@ -91,7 +102,10 @@ class DispBeamColumn(Entity):
     nodes: tuple[PositiveInt, PositiveInt]
     section_id: PositiveInt
     integration_points: int = Field(default=5, ge=2, le=10)
+    integration: BeamIntegrationRule = "Lobatto"
     geom_transf: GeomTransfType = "Linear"
+
+    serialize_without_defaults = omit_when_default("integration")
 
 
 class ZeroLengthElement(Entity):

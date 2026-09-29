@@ -1,16 +1,18 @@
-"""Frame assignment dialogs: section, material and geometric transformation."""
+"""Frame assignment dialogs: section, material, geometric transformation, integration."""
 
 from __future__ import annotations
 
 from PySide6.QtWidgets import (
     QComboBox,
     QDialogButtonBox,
+    QFormLayout,
     QLabel,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
 
-from opensees_studio.core import GEOM_TRANSF_TYPES
+from opensees_studio.core import BEAM_INTEGRATION_RULES, GEOM_TRANSF_TYPES
 from opensees_studio.views.screen_fit import FittedDialog
 
 
@@ -123,3 +125,45 @@ class AssignGeomTransfDialog(FittedDialog):
 
     def transf_type(self) -> str:
         return self._combo.currentText()
+
+
+class AssignBeamIntegrationDialog(FittedDialog):
+    """Pick the ``beamIntegration`` rule and point count for force/displacement beam-columns."""
+
+    def __init__(
+        self,
+        n_frames: int,
+        rule: str | None = None,
+        points: int | None = None,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Beam Integration")
+        layout = QVBoxLayout(self)
+        layout.addWidget(
+            QLabel(f"Integration of <b>{n_frames}</b> selected force/displacement beam-column(s).")
+        )
+        form = QFormLayout()
+        self._rule = QComboBox()
+        self._rule.addItems(list(BEAM_INTEGRATION_RULES))
+        self._rule.setCurrentText(rule or "Lobatto")
+        form.addRow("Rule:", self._rule)
+        self._points = QSpinBox()
+        self._points.setRange(2, 10)
+        self._points.setValue(points or 5)
+        form.addRow("Integration points:", self._points)
+        layout.addLayout(form)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
+            parent=self,
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setEnabled(n_frames > 0)
+
+    def rule(self) -> str:
+        return self._rule.currentText()
+
+    def points(self) -> int:
+        return self._points.value()

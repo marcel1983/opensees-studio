@@ -7,6 +7,7 @@ from opensees_studio.views.dialogs.assign_hinge import AssignHingeDialog
 from opensees_studio.views.dialogs.assign_load import AssignLoadDialog
 from opensees_studio.views.dialogs.assign_masses import AssignMassesDialog
 from opensees_studio.views.dialogs.assign_property import (
+    AssignBeamIntegrationDialog,
     AssignGeomTransfDialog,
     AssignMaterialDialog,
     AssignSectionDialog,
@@ -47,6 +48,7 @@ __all__ = [
     "PRESETS",
     "AddNodeDialog",
     "AnalysisCaseManagerDialog",
+    "AssignBeamIntegrationDialog",
     "AssignDistributedLoadDialog",
     "AssignElastomericBearingDialog",
     "AssignEqualDOFDialog",

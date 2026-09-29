@@ -19,11 +19,13 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QScrollArea,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
 
 from opensees_studio.core import (
+    BEAM_INTEGRATION_RULES,
     BEARING_CLASSES,
     GEOM_TRANSF_TYPES,
     SLIDING_BEARING_CLASSES,
@@ -295,12 +297,41 @@ class PropertyEditorDock(QScrollArea):
             form.addRow("Geom transf:", transf_cb)
         elif hasattr(el, "geom_transf"):
             form.addRow("Geom transf:", QLabel(el.geom_transf))
+        if hasattr(el, "integration") and self.on_change_element_fields is not None:
+            self._add_integration_rows(form, el)
+        elif hasattr(el, "integration"):
+            form.addRow("Integration:", QLabel(f"{el.integration}, {el.integration_points} points"))
         if isinstance(el, SLIDING_BEARING_CLASSES):
             self._add_sliding_bearing_rows(form, el, self._project)
         elif isinstance(el, BEARING_CLASSES):
             self._add_bearing_rows(form, el)
         self._layout.addLayout(form)
         self._layout.addStretch(1)
+
+    def _add_integration_rows(self, form: QFormLayout, el: Any) -> None:
+        """Editable beam integration rule and point count (force/disp beam-columns)."""
+        rule_cb = QComboBox()
+        rule_cb.addItems(list(BEAM_INTEGRATION_RULES))
+        rule_cb.setCurrentText(el.integration)
+        points_sb = QSpinBox()
+        points_sb.setRange(2, 10)
+        points_sb.setValue(el.integration_points)
+
+        def _commit(_arg: object = None, _eid: int = el.id) -> None:
+            rule, points = rule_cb.currentText(), points_sb.value()
+            if (rule, points) == (el.integration, el.integration_points):
+                return
+            if self.on_change_element_fields is not None:
+                self.on_change_element_fields(
+                    _eid, {"integration": rule, "integration_points": points}
+                )
+
+        rule_cb.currentTextChanged.connect(_commit)
+        points_sb.editingFinished.connect(_commit)
+        self._integration_rule = rule_cb
+        self._integration_points = points_sb
+        form.addRow("Integration rule:", rule_cb)
+        form.addRow("Integration points:", points_sb)
 
     @staticmethod
     def _add_bearing_options_row(form: QFormLayout, el: Any) -> None:
