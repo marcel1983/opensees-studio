@@ -1,7 +1,8 @@
 """Fiber Section Editor — interactive cross-section builder.
 
 Lets the user define a FiberSection visually by adding rectangular/circular
-patches and straight rebar layers. A live preview canvas on the right shows
+patches and straight rebar layers, or a template shape: "W-shape (wide
+flange)" adds the three patches of OpenSees ``WFSection2d``. A live preview canvas on the right shows
 the expanded fibre grid with color-coded materials and computed section
 properties (A, centroid, Iy, Iz).
 
@@ -35,6 +36,7 @@ from opensees_studio.core.sections import (
     FiberSection,
     RectangularPatch,
     StraightLayer,
+    w_shape_patches,
 )
 from opensees_studio.services.section_properties import (
     compute_section_props,
@@ -102,6 +104,8 @@ class FiberSectionEditor(FittedDialog):
         controls = QWidget()
         controls_layout = QVBoxLayout(controls)
         controls_layout.setContentsMargins(0, 0, 0, 0)
+
+        controls_layout.addWidget(self._build_template_group())
 
         # Add-patch controls
         patch_group = QGroupBox("Add Patch")
@@ -223,6 +227,77 @@ class FiberSectionEditor(FittedDialog):
         splitter.setStretchFactor(1, 2)
 
         self._on_patch_type_changed(0)
+
+    def _build_template_group(self) -> QGroupBox:
+        """Template shapes; "W-shape (wide flange)" is the one offered."""
+        group = QGroupBox("Add Template")
+        form = QFormLayout(group)
+        self._template = QComboBox()
+        self._template.addItem("W-shape (wide flange)", "w_shape")
+        form.addRow("Template:", self._template)
+        self._w_mat = QComboBox()
+        for mid in self._material_ids:
+            self._w_mat.addItem(f"Material {mid}", mid)
+        if not self._material_ids:
+            self._w_mat.addItem("(none)", 1)
+        form.addRow("Material:", self._w_mat)
+        self._w_d = self._spin(0.3, minimum=1e-12)
+        self._w_bf = self._spin(0.15, minimum=1e-12)
+        self._w_tf = self._spin(0.012, step=0.001, minimum=1e-12)
+        self._w_tw = self._spin(0.008, step=0.001, minimum=1e-12)
+        self._w_nfw = self._ispin(15)
+        self._w_nff = self._ispin(4)
+        self._w_nfw.setToolTip("Fibres along the clear web depth d - 2 tf (WFSection2d Nfw).")
+        self._w_nff.setToolTip("Fibres through each flange thickness (WFSection2d Nff).")
+        for label, widget in (
+            ("d (depth, along y):", self._w_d),
+            ("bf (flange width):", self._w_bf),
+            ("tf (flange thickness):", self._w_tf),
+            ("tw (web thickness):", self._w_tw),
+            ("Fibres across web depth:", self._w_nfw),
+            ("Fibres through flange:", self._w_nff),
+        ):
+            form.addRow(label, widget)
+        self._template_error = QLabel("")
+        self._template_error.setWordWrap(True)
+        self._template_error.setStyleSheet("color: #c0392b;")
+        form.addRow(self._template_error)
+        self._add_template_btn = QPushButton("Add W-shape")
+        self._add_template_btn.clicked.connect(self._on_add_template)
+        form.addRow(self._add_template_btn)
+        return group
+
+    def _on_add_template(self) -> None:
+        """Add the flange, web and flange patches of the W-shape."""
+        mid = self._w_mat.currentData() or 1
+        try:
+            patches = w_shape_patches(
+                mid,
+                d=self._w_d.value(),
+                bf=self._w_bf.value(),
+                tf=self._w_tf.value(),
+                tw=self._w_tw.value(),
+                n_web=self._w_nfw.value(),
+                n_flange=self._w_nff.value(),
+            )
+        except ValueError as exc:
+            self._template_error.setText(str(exc))
+            return
+        self._template_error.setText("")
+        # Patches come first in the component list; layers follow them.
+        at = len(self._patches)
+        for offset, (part, patch) in enumerate(
+            zip(("top flange", "web", "bottom flange"), patches, strict=True)
+        ):
+            self._patches.append(patch)
+            self._item_list.insertItem(
+                at + offset,
+                QListWidgetItem(
+                    f"W-shape {part}  mat={mid}  y {patch.y_i:.4g}→{patch.y_j:.4g}  "
+                    f"{patch.n_fib_y}×{patch.n_fib_z}"
+                ),
+            )
+        self._refresh_preview()
 
     # ── helpers ─────────────────────────────────────────────────────
     @staticmethod

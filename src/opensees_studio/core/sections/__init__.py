@@ -194,6 +194,63 @@ class FiberSection(Entity):
     fibres: list[Fibre] = Field(default_factory=list)
 
 
+def w_shape_patches(
+    material_id: int,
+    d: float,
+    bf: float,
+    tf: float,
+    tw: float,
+    n_web: int,
+    n_flange: int,
+) -> list[RectangularPatch]:
+    """Rectangular patches of a wide-flange (W) shape, depth along local y.
+
+    Top flange, web and bottom flange, one material. ``n_flange`` fibres through each
+    flange thickness and ``n_web`` along the clear web depth ``d - 2*tf``, one across the
+    width: the fibre locations and areas of OpenSees ``section WFSection2d secTag matTag d
+    tw bf tf Nfw Nff`` (``Nfw = n_web``, ``Nff = n_flange``), so the two give the same
+    section response.
+    """
+    if min(d, bf, tf, tw) <= 0.0:
+        raise ValueError("d, bf, tf and tw must be positive.")
+    if d <= 2.0 * tf:
+        raise ValueError(f"d ({d}) must exceed twice the flange thickness ({2.0 * tf}).")
+    if tw > bf:
+        raise ValueError(f"tw ({tw}) must not exceed bf ({bf}).")
+    if n_web < 1 or n_flange < 1:
+        raise ValueError("Fibre counts must be at least 1.")
+    half_d, half_dw = 0.5 * d, 0.5 * d - tf
+    return [
+        RectangularPatch(
+            material_id=material_id,
+            n_fib_y=n_flange,
+            n_fib_z=1,
+            y_i=half_dw,
+            z_i=-0.5 * bf,
+            y_j=half_d,
+            z_j=0.5 * bf,
+        ),
+        RectangularPatch(
+            material_id=material_id,
+            n_fib_y=n_web,
+            n_fib_z=1,
+            y_i=-half_dw,
+            z_i=-0.5 * tw,
+            y_j=half_dw,
+            z_j=0.5 * tw,
+        ),
+        RectangularPatch(
+            material_id=material_id,
+            n_fib_y=n_flange,
+            n_fib_z=1,
+            y_i=-half_d,
+            z_i=-0.5 * bf,
+            y_j=-half_dw,
+            z_j=0.5 * bf,
+        ),
+    ]
+
+
 # ──────────────────────────── Aggregator ────────────────────────────
 class AggregatorDOF(BaseModel):
     """One DOF → uniaxialMaterial pairing inside a ``SectionAggregator``."""

@@ -181,6 +181,7 @@ from opensees_studio.core.sections import (
     SectionAggregator,
     SectionShape,
     StraightLayer,
+    w_shape_patches,
 )
 from opensees_studio.core.target_spectrum import (
     TBDY_KINDS,
@@ -294,6 +295,7 @@ __all__ = [  # noqa: RUF022 - grouped by domain under section comments, not alph
     "Section",
     "ElasticSection",
     "FiberSection",
+    "w_shape_patches",
     "Fibre",
     "RectangularPatch",
     "CircularPatch",
