@@ -902,6 +902,7 @@ class MainWindow(QMainWindow):
         if self._vm.path is None:
             return self._on_save_as()
         try:
+            self._warn_case_references()
             self._vm.save()
             self._log(f"Saved: {self._vm.path}")
         except Exception as exc:
@@ -919,6 +920,7 @@ class MainWindow(QMainWindow):
         if not path:
             return False
         try:
+            self._warn_case_references()
             out = self._vm.save(path)
             self._log(f"Saved: {out}")
         except Exception as exc:
@@ -980,6 +982,16 @@ class MainWindow(QMainWindow):
         return True, analyses[labels.index(choice) - 1]
 
     # ── slots: edit ──────────────────────────────────────────────────
+    def _warn_case_references(self) -> None:
+        project = self._vm.project
+        if project is None:
+            return
+        errors = [
+            error for case in project.analyses for error in project.case_reference_errors(case)
+        ]
+        if errors:
+            QMessageBox.warning(self, "Saving with invalid case references", "\n".join(errors))
+
     def _on_delete(self) -> None:
         if self._vm.project is None:
             return
