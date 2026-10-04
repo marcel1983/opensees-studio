@@ -59,6 +59,10 @@ docs = [
     "myst-parser>=2.0",
     "furo>=2024.1.29",
 ]
+packaging = [
+    # Freezes the desktop app into dist/OpenSeesStudio (see packaging/README.md).
+    "pyinstaller>=6.16",
+]
 
 [project.scripts]
 opensees-studio = "opensees_studio.__main__:main"
