@@ -108,6 +108,24 @@ These are non-obvious things that are easy to break if you don't know:
 - Floating-point inputs use `views.float_field.FloatField` (full double,
   scientific notation, shortest round-trip display); do not add a plain
   `QDoubleSpinBox`, it rounds to its decimals.
+- Unsaved-changes prompt. `MainWindow.closeEvent` confirms only a
+  *user-initiated* close: one the window manager sent (`event.spontaneous()`)
+  or `File → Quit`, which goes through `_on_quit`. A programmatic `close()`
+  (test teardown, `closeAllWindows()` while shutting down) never prompts — a
+  modal dialog with no event loop running wedges the exit. `_on_save` and
+  `_on_save_as` return `True` when the file was written, and
+  `_confirm_discard_changes(action)` is the one prompt shared by close, New
+  and Open so the three cannot drift apart.
+- Draw tools need something to snap to. `MainWindow._require_drawable_grid`
+  offers Define → Coordinate System/Grids… when the project has no visible
+  grid lines: the canvas rejects every off-grid click, so a fresh project
+  with an empty Global grid looks broken rather than empty.
+- `services.persistence._write_text_atomic` is the only way a project or a
+  snapshot reaches disk; a save must never truncate the file the user
+  already has. `load_project` refuses a `schema_version` newer than
+  `SCHEMA_VERSION` instead of quietly rewriting it one version down.
+- An unregistered material type is not a crash: `material_forms.form_for`
+  returns a read-only placeholder, the same contract `section_forms` has.
 - An option added to an existing model keeps old files byte-identical by
   leaving its default out of the dump: `core._base.omit_when_default`
   (used by the beam integration rule and the numberer).
