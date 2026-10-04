@@ -170,7 +170,17 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--no-clean", action="store_true", help="reuse the PyInstaller cache")
     parser.add_argument("--zip", action="store_true", help="also write dist/<name>-<os>.zip")
+    parser.add_argument(
+        "--zip-only",
+        action="store_true",
+        help="pack the existing bundle and stop: signing has to happen before zipping",
+    )
     args = parser.parse_args(argv)
+
+    if args.zip_only:
+        archive = make_zip()
+        print(f"[build] archive: {archive} ({archive.stat().st_size / 1024 / 1024:.0f} MB)")
+        return 0
 
     build(clean=not args.no_clean)
     if not args.no_smoke:

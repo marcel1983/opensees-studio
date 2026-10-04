@@ -25,6 +25,12 @@ jobs:
   bundle:
     name: ${{ matrix.artifact }}
     runs-on: ${{ matrix.os }}
+    # Promotion of the two "is signing configured?" secrets to the job env:
+    # a step's `if:` cannot read `secrets` directly, and the signing steps and
+    # the pack step have to agree on whether it ran.
+    env:
+      MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+      WINDOWS_CERT_PFX: ${{ secrets.WINDOWS_CERT_PFX }}
     strategy:
       fail-fast: false
       matrix:
@@ -65,13 +71,86 @@ jobs:
       # session is not reliable enough to gate a release on. The CLI test
       # already drives the same executable with `console=False`, which is
       # where a windowed bundle usually breaks.
+      #
+      # No --zip here: signing has to happen on the unpacked bundle, before it
+      # is compressed. The zip is written by the step after the signing ones.
       - name: Build and smoke-test the bundle
         if: runner.os == 'Linux'
-        run: xvfb-run -a python packaging/build.py --gui-smoke --zip
+        run: xvfb-run -a python packaging/build.py --gui-smoke
 
       - name: Build and smoke-test the bundle
         if: runner.os != 'Linux'
-        run: python packaging/build.py --zip
+        run: python packaging/build.py
+
+      # ── Signing ─────────────────────────────────────────────────────────
+      # Both steps are skipped unless the secrets exist, so a fork (or a tag
+      # pushed without them) still produces working, unsigned archives — just
+      # with the Gatekeeper / SmartScreen prompts the README describes. Set
+      # MACOS_CERT_P12, MACOS_CERT_PASSWORD, MACOS_SIGN_IDENTITY,
+      # MACOS_NOTARY_APPLE_ID, MACOS_NOTARY_TEAM_ID, MACOS_NOTARY_PASSWORD for
+      # macOS and WINDOWS_CERT_PFX / WINDOWS_CERT_PASSWORD for Windows. See
+      # packaging/README.md, "Signing".
+      - name: Sign and notarize (macOS, when configured)
+        if: runner.os == 'macOS' && env.MACOS_CERT_P12 != ''
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          MACOS_NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
+          MACOS_NOTARY_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
+          MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN=build.keychain
+          KEYCHAIN_PASSWORD=$(openssl rand -hex 16)
+          echo "$MACOS_CERT_P12" | base64 --decode > /tmp/cert.p12
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import /tmp/cert.p12 -k "$KEYCHAIN" \
+            -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm -f /tmp/cert.p12
+          # --deep signs the bundled dylibs too; the runtime option is what the
+          # notary service requires.
+          codesign --force --deep --options runtime --timestamp \
+            --sign "$MACOS_SIGN_IDENTITY" dist/OpenSeesStudio/OpenSeesStudio
+          codesign --verify --deep --strict --verbose=2 dist/OpenSeesStudio/OpenSeesStudio
+          python packaging/build.py --zip-only
+          xcrun notarytool submit dist/OpenSeesStudio-macos.zip \
+            --apple-id "$MACOS_NOTARY_APPLE_ID" \
+            --team-id "$MACOS_NOTARY_TEAM_ID" \
+            --password "$MACOS_NOTARY_PASSWORD" --wait
+          # Staple the ticket to the executable, then rewrite the archive so
+          # what users download carries it.
+          xcrun stapler staple dist/OpenSeesStudio/OpenSeesStudio
+          rm -f dist/*.zip
+          python packaging/build.py --zip-only
+
+      - name: Sign (Windows, when configured)
+        if: runner.os == 'Windows' && env.WINDOWS_CERT_PFX != ''
+        env:
+          WINDOWS_CERT_PFX: ${{ secrets.WINDOWS_CERT_PFX }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        shell: pwsh
+        run: |
+          [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\cert.pfx",
+            [Convert]::FromBase64String($env:WINDOWS_CERT_PFX))
+          $exe = "dist\OpenSeesStudio\OpenSeesStudio.exe"
+          & signtool sign /f "$env:RUNNER_TEMP\cert.pfx" /p $env:WINDOWS_CERT_PASSWORD `
+            /fd sha256 /tr http://timestamp.digicert.com /td sha256 $exe
+          & signtool verify /pa /v $exe
+          Remove-Item "$env:RUNNER_TEMP\cert.pfx"
+
+      # Always runs, signed or not: without the signing steps this is the only
+      # zip, with them it is the re-zipped, stapled one.
+      - name: Pack the bundle
+        # Skipped on macOS only when the signing step above already wrote the
+        # stapled archive.
+        if: runner.os != 'macOS' || env.MACOS_CERT_P12 == ''
+        run: python packaging/build.py --zip-only
 
       - name: Report the bundle size
         shell: bash
@@ -101,8 +180,18 @@ jobs:
       - name: List what is about to be published
         run: ls -l dist
 
+      # Users have no way to check a 500 MB download against anything. The
+      # hashes are cheap and they also make a corrupted upload obvious.
+      - name: Write SHA256SUMS.txt
+        run: |
+          cd dist
+          sha256sum ./*.zip > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
       - uses: softprops/action-gh-release@v2
         with:
-          files: dist/*.zip
+          files: |
+            dist/*.zip
+            dist/SHA256SUMS.txt
           fail_on_unmatched_files: true
 

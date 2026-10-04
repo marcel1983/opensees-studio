@@ -7,6 +7,25 @@ that this is pre-alpha: minor and patch releases may change the `.osmodel`
 schema (it carries a `schema_version`, and a file from a newer build is now
 refused instead of silently downgraded).
 
+## [Unreleased]
+
+### Added
+
+- **Layering enforced in CI** with import-linter (`[tool.importlinter]`):
+  `views > commands > viewmodels > services > core`, plus "core imports no Qt
+  and no OpenSeesPy", "services import no Qt except `services/qt_workers.py`"
+  and "nobody outside `services/` imports OpenSeesPy directly".
+- **Signing and notarization wired** into the bundle workflow, skipped unless
+  the signing secrets exist, plus `SHA256SUMS.txt` for every release archive.
+- `packaging/build.py --zip-only`, which is what makes signing possible at
+  all: the bundle has to be signed before it is compressed.
+
+### Changed
+
+- `docs/gap-analysis-gidopensees.md` re-reviewed at 0.0.3: the ground-motion
+  record library row moves to ✅; every other ❌ row was re-verified against
+  the code with the generated catalog excluded.
+
 ## [0.0.3] — 2026-10-04
 
 The first release built entirely by CI: the 0.0.2 archives were correct only

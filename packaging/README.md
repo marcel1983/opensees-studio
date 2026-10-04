@@ -94,6 +94,44 @@ picking this up should start by writing that check, not by editing
 `excludes`.
 
 
+## Signing and checksums
+
+The archives are published with a `SHA256SUMS.txt` so a download can be
+checked:
+
+```bash
+sha256sum -c SHA256SUMS.txt          # Linux
+shasum -a 256 -c SHA256SUMS.txt      # macOS
+certutil -hashfile OpenSeesStudio-windows.zip SHA256   # Windows
+```
+
+The binaries themselves are **not signed** unless the repository has signing
+secrets configured, which is why the READMEs tell users about the Gatekeeper
+and SmartScreen prompts. `desktop.yml` has the signing steps already wired;
+they are skipped when the secrets are absent, so a fork still builds working
+archives. To turn them on, add:
+
+| Secret | What it is |
+| --- | --- |
+| `MACOS_CERT_P12` | base64 of the Developer ID Application certificate (`.p12`) |
+| `MACOS_CERT_PASSWORD` | its password |
+| `MACOS_SIGN_IDENTITY` | e.g. `Developer ID Application: Name (TEAMID)` |
+| `MACOS_NOTARY_APPLE_ID` | Apple ID used with `notarytool` |
+| `MACOS_NOTARY_TEAM_ID` | team id |
+| `MACOS_NOTARY_PASSWORD` | app-specific password for that Apple ID |
+| `WINDOWS_CERT_PFX` | base64 of the code-signing certificate (`.pfx`) |
+| `WINDOWS_CERT_PASSWORD` | its password |
+
+Two details that are easy to get wrong, and are why `build.py` has
+`--zip-only`: signing has to happen on the **unpacked** bundle, so the build
+and the archive are separate steps, and on macOS the notary ticket is stapled
+afterwards, which means the archive has to be written twice — the second time
+so what users download carries the ticket.
+
+**This path has not been exercised against a real certificate**: it is written
+from the documented tool invocations and gated so that it cannot break an
+unsigned build. Treat the first signed release as the test.
+
 ## Cross-platform builds
 
 `.github/workflows/desktop.yml` builds all three platforms on demand, on
