@@ -3,8 +3,44 @@
 **Source:** `D:\GitHub\gidopensees` (GPL-3.0, AUTh Lab of R/C and Masonry Structures)
 **Scope:** Material / section / element / constraint / load / damping schema coverage.
 **Date:** 2026-05-22
-**Reviewed:** 2026-09-18 against `src/opensees_studio/core/` and
-`services/opensees_runner.py` at commit `a332f9d`.
+**Reviewed:** 2026-10-04 against `src/opensees_studio/core/` and
+`services/opensees_runner.py` at commit `dc18c7e` (the 2026-09-18 pass is kept
+below).
+
+## Review notes (2026-10-04)
+
+Re-verified every ❌ and 🟡 row against the code, this time by searching for a
+real model class or a command the runner emits and **excluding all of
+`core/catalog/`** — a generated stub is not an implementation. Result: no ❌
+row moved. The material and element backlog is unchanged, and the top P1
+targets below are still the top P1 targets.
+
+One row does move, and it is the largest change since the last pass:
+
+- **Ground motion Records (BOOK 8)**: 🟡 → ✅. GM-1/2/3 shipped a real record
+  layer, not the "single file, no library" the row described:
+  `core/ground_motion.py` (record model plus AT2, two-column and
+  single-column readers), `core/ground_motion_metadata.py` (PGA, PGV, PGD,
+  Arias intensity, D5-95), `Project.ground_motions` — a catalog whose entries
+  are referenced by relative path and content hash, so a moved or edited
+  record is detected — `core/scaling.py` (PGA, Sa(T1), period range),
+  `core/target_spectrum.py` and `core/tbdy_site.py` (TBDY-2018 horizontal and
+  vertical design spectra), `services/peer_record.py`, and the Ground Motions
+  dialog with its viewmodel.
+
+Studio-only additions since 2026-09-18, none of which is a gidopensees object
+and therefore none of which changes a row:
+
+- Material Tester: a Qt dialog over the headless service (Define menu,
+  Ctrl+Shift+T), with CSV export.
+- Fiber section editor: W-shape template; beam integration rules and
+  geometric transformations assignable per element.
+- Analysis cases: numberer and system options; result precision setting and
+  full-precision CSV export of the result tables.
+- Response spectrum: CQC is the default combination for new cases, and modal
+  results are made history-independent (see `core.modal`).
+
+The summary counts were recomputed from the tables after the Records row moved.
 
 ## Review notes (2026-09-18)
 
@@ -213,7 +249,7 @@ Priority rationale:
 |---|---|---|---|---|---|
 | Ground motion | Point_Ground_Motion_from_Record | `PathTimeSeries` + `UniformExcitationPattern` | ✅ | ✅ | P0 |
 | Ground motion | Point_Sine_Ground_Motion | `TrigTimeSeries` + `UniformExcitationPattern` (GM-3; sine-beat and ramped sine as generated `PathTimeSeries`) | ✅ | ✅ | P1 |
-| Ground motion | Records (BOOK 8 — ground motion file library) | `PathTimeSeries.file_path` (single file, no library) | 🟡 | ✅ | P1 |
+| Ground motion | Records (BOOK 8 — ground motion file library) | `Project.ground_motions` catalog (relative path + content hash), AT2 / two-column / single-column readers, metadata (PGA/PGV/PGD/Arias/D5-95), scaling by PGA / Sa(T1) / period range, TBDY-2018 target spectra | ✅ | ✅ | P1 |
 
 ## 15. Constraints
 
@@ -249,8 +285,8 @@ Priority rationale:
 
 | Status | Count |
 |---|---|
-| ✅ Fully in OpenSees Studio | 31 |
-| 🟡 Partial (1 at P0, 3 at P1) | 4 |
+| ✅ Fully in OpenSees Studio | 32 |
+| 🟡 Partial (1 at P0, 2 at P1) | 3 |
 | ❌ P1 targets (Phase 8 additions) | 18 |
 | ❌ P2 deferred | 30 |
 | Total rows | 83 |
@@ -270,4 +306,7 @@ Priority rationale:
     support-motion half shipped as `ImposedSupportMotionPattern`
 11. Region-scoped Rayleigh damping (`region ... -rayleigh`): only the
     per-element `do_rayleigh` opt-in on `ZeroLengthElement` exists
-12. Sine ground motion / ground motion record library: sine ground motion shipped in GM-3 (`TrigTimeSeries`), the record library in GM-1 (catalog); remaining: multi-record library semantics per gidopensees BOOK 8
+12. ~~Sine ground motion / ground motion record library~~: both shipped (GM-1
+    catalog, GM-3 `TrigTimeSeries`). What gidopensees BOOK 8 still has and
+    Studio does not is the per-book *multi-record* semantics (selecting a set
+    from the library in one object); Studio references records one at a time.
