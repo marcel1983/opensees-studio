@@ -140,6 +140,7 @@ class MainWindow(QMainWindow):
         self._diagram_renderer: DiagramRenderer | None = None  # built lazily once canvas exists
         self._show_node_labels = False
         self._show_element_labels = False
+        self._user_close_requested = False  # File → Quit sets this before close()
 
         self._build_central_canvas()
         self._tool_controller = ToolController(self._canvas, self._vm, self)
@@ -514,7 +515,7 @@ class MainWindow(QMainWindow):
         self._act_open.triggered.connect(self._on_open)
         self._act_save.triggered.connect(self._on_save)
         self._act_save_as.triggered.connect(self._on_save_as)
-        self._act_quit.triggered.connect(self.close)
+        self._act_quit.triggered.connect(self._on_quit)
         self._act_about.triggered.connect(self._on_about)
         self._act_set_units.triggered.connect(self._on_set_units)
 
@@ -605,6 +606,8 @@ class MainWindow(QMainWindow):
 
     # ── slots: file ──────────────────────────────────────────────────
     def _on_new(self) -> None:
+        if not self._confirm_discard_changes("Creating a new project"):
+            return
         self._vm.new_project()
 
     def _on_new_2d(self) -> None:
@@ -614,6 +617,8 @@ class MainWindow(QMainWindow):
         truss model use 'New 2D Truss' so the solver doesn't face
         unrestrained rotational DOFs.
         """
+        if not self._confirm_discard_changes("Creating a new project"):
+            return
         self._vm.new_project(ndm=2, ndf=3)
 
     def _on_new_2d_truss(self) -> None:
@@ -623,10 +628,14 @@ class MainWindow(QMainWindow):
         the Basic Truss Example and keeps the stiffness matrix well
         posed (no empty rotational rows).
         """
+        if not self._confirm_discard_changes("Creating a new project"):
+            return
         self._vm.new_project(ndm=2, ndf=2)
         self._log("New empty project.")
 
     def _on_open(self) -> None:
+        if not self._confirm_discard_changes("Opening another project"):
+            return
         path, _ = QFileDialog.getOpenFileName(
             self,
             "Open project",
@@ -678,21 +687,65 @@ class MainWindow(QMainWindow):
         return answer == QMessageBox.StandardButton.Yes
 
     def closeEvent(self, event) -> None:  # type: ignore[no-untyped-def]
-        """Normal close: the pre-run snapshot is no longer needed."""
+        """Close: confirm unsaved work for a user-initiated close only.
+
+        A close the user asked for (the window-manager button, Alt+F4, File →
+        Quit) confirms unsaved changes. A programmatic ``close()`` — the test
+        session teardown, ``closeAllWindows()`` while shutting down — does
+        not: there is nobody to answer the dialog, and a modal prompt there
+        would wedge the shutdown.
+        """
+        user_initiated = event.spontaneous() or self._user_close_requested
+        self._user_close_requested = False
+        if user_initiated and not self._confirm_discard_changes("Closing the application"):
+            event.ignore()
+            return
         self._vm.discard_run_snapshot()
         super().closeEvent(event)
 
-    def _on_save(self) -> None:
+    def _on_quit(self) -> None:
+        """File → Quit — a user gesture, so unsaved changes are confirmed."""
+        self._user_close_requested = True
+        self.close()
+
+    def _confirm_discard_changes(self, action: str) -> bool:
+        """Ask before throwing away unsaved work. True when it is safe to go on.
+
+        ``is_dirty`` used to drive only the ``*`` in the window title, so
+        closing, opening and File → New dropped the model without a word.
+        Returns False when the user cancels, or chooses Save and the save
+        does not go through (dialog cancelled, write failed).
+        """
+        if self._vm.project is None or not self._vm.is_dirty:
+            return True
+        answer = QMessageBox.warning(
+            self,
+            "Unsaved changes",
+            f"{action} will discard changes that have not been saved.\n\nSave the project first?",
+            QMessageBox.StandardButton.Save
+            | QMessageBox.StandardButton.Discard
+            | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Save,
+        )
+        if answer == QMessageBox.StandardButton.Cancel:
+            return False
+        if answer == QMessageBox.StandardButton.Save:
+            return self._on_save()
+        return True
+
+    def _on_save(self) -> bool:
+        """Save to the current path (asking for one if needed). True when written."""
         if self._vm.path is None:
-            self._on_save_as()
-            return
+            return self._on_save_as()
         try:
             self._vm.save()
             self._log(f"Saved: {self._vm.path}")
         except Exception as exc:
             QMessageBox.critical(self, "Save failed", str(exc))
+            return False
+        return True
 
-    def _on_save_as(self) -> None:
+    def _on_save_as(self) -> bool:
         path, _ = QFileDialog.getSaveFileName(
             self,
             "Save project as",
@@ -700,12 +753,14 @@ class MainWindow(QMainWindow):
             f"OpenSees Studio model (*{PROJECT_FILE_SUFFIX})",
         )
         if not path:
-            return
+            return False
         try:
             out = self._vm.save(path)
             self._log(f"Saved: {out}")
         except Exception as exc:
             QMessageBox.critical(self, "Save failed", str(exc))
+            return False
+        return True
 
     # ── slots: edit ──────────────────────────────────────────────────
     def _on_delete(self) -> None:
@@ -800,7 +855,52 @@ class MainWindow(QMainWindow):
     def _on_select_tool(self) -> None:
         self._tool_controller.set_active(None)
 
+    def _require_drawable_grid(self, tool_name: str) -> bool:
+        """True when the project has a grid the draw tools can snap to.
+
+        A brand-new project has an empty Global grid, so the canvas has no
+        intersection to snap to and every click is correctly rejected as
+        off-grid — the tool looks broken and nothing says why. Offer to
+        define a grid instead.
+        """
+        if self._vm.project is None:
+            return False
+        if self._has_grid_lines():
+            return True
+        answer = QMessageBox.question(
+            self,
+            f"{tool_name}: no grid defined",
+            "This project has no grid yet, so there is no intersection to snap to.\n\n"
+            "Define a grid now? (Define → Coordinate System/Grids…)",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return False
+        self._on_grid_system()
+        return self._has_grid_lines()
+
+    def _has_grid_lines(self) -> bool:
+        """True when some visible coordinate system carries grid lines."""
+        project = self._vm.project
+        if project is None:
+            return False
+        return any(
+            cs.grid.visible
+            and not cs.grid.hide_all
+            and bool(cs.grid.x_lines or cs.grid.y_lines or cs.grid.z_lines)
+            for cs in project.coord_systems
+        )
+
+    def _abort_tool_activation(self) -> None:
+        """Fall back to Select when a draw tool refused to arm."""
+        self._act_tool_select.setChecked(True)
+        self._tool_controller.set_active(None)
+
     def _on_draw_frame_tool(self) -> None:
+        if not self._require_drawable_grid("Draw Frame"):
+            self._abort_tool_activation()
+            return
         if self._draw_frame_tool is None:
             self._draw_frame_tool = DrawFrameTool(self._canvas, self._vm, self)
             self._draw_frame_tool.statusChanged.connect(
@@ -809,6 +909,9 @@ class MainWindow(QMainWindow):
         self._tool_controller.set_active(self._draw_frame_tool)
 
     def _on_draw_node_tool(self) -> None:
+        if not self._require_drawable_grid("Draw Node"):
+            self._abort_tool_activation()
+            return
         if self._draw_node_tool is None:
             self._draw_node_tool = DrawNodeTool(self._canvas, self._vm, self)
             self._draw_node_tool.statusChanged.connect(
@@ -817,6 +920,9 @@ class MainWindow(QMainWindow):
         self._tool_controller.set_active(self._draw_node_tool)
 
     def _on_draw_truss_tool(self) -> None:
+        if not self._require_drawable_grid("Draw Truss"):
+            self._abort_tool_activation()
+            return
         if self._draw_truss_tool is None:
             self._draw_truss_tool = DrawTrussTool(self._canvas, self._vm, self)
             self._draw_truss_tool.statusChanged.connect(
@@ -1528,6 +1634,11 @@ class MainWindow(QMainWindow):
                 # Keep an unread failure report alive after the Run dialog closes.
                 box.setParent(self, box.windowFlags())
                 box.show()
+            # The dialog connects seven signals of the long-lived runner and
+            # is parented to this window, so without this it stays alive
+            # after exec() returns and every later run keeps appending to
+            # its log widget.
+            dlg.deleteLater()
 
     def _failure_parent(self) -> QWidget:
         """The dialog that started the run while it is open, else the main window."""
@@ -2102,7 +2213,7 @@ class MainWindow(QMainWindow):
             "About OpenSees Studio",
             f"<h3>OpenSees Studio {__version__}</h3>"
             "<p>A modern desktop GUI for OpenSeesPy.</p>"
-            "<p>MIT License.</p>",
+            "<p>GNU Affero General Public License v3.0 — see LICENSE.</p>",
         )
 
     def _on_set_units(self) -> None:
