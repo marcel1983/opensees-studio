@@ -39,9 +39,24 @@ SMOKE_PROJECT = ROOT / "examples" / "cantilever.osmodel"
 SMOKE_CASE = 1  # Static, "Tip-Load"
 
 
+def platform_suffix() -> str:
+    """Which platform this build is for, as it appears in the archive name.
+
+    From ``sys.platform``, not ``os.name``: ``os.name`` is ``"posix"`` on both
+    Linux and macOS, so asking it produced a macOS bundle named
+    ``OpenSeesStudio-linux.zip`` — which then overwrote the Linux archive on
+    the release, because both jobs attach to the same one.
+    """
+    if sys.platform.startswith("win"):
+        return "windows"
+    if sys.platform == "darwin":
+        return "macos"
+    return "linux"
+
+
 def executable_path() -> Path:
     """The bundle's executable on this platform."""
-    name = f"{APP_NAME}.exe" if os.name == "nt" else APP_NAME
+    name = f"{APP_NAME}.exe" if sys.platform.startswith("win") else APP_NAME
     return DIST / APP_NAME / name
 
 
@@ -136,8 +151,7 @@ def smoke_test_gui(timeout_s: int = 20) -> None:
 
 def make_zip() -> Path:
     """Zip the bundle for handing to a user."""
-    suffix = {"nt": "windows", "darwin": "macos"}.get(os.name, "linux")
-    target = DIST / f"{APP_NAME}-{suffix}.zip"
+    target = DIST / f"{APP_NAME}-{platform_suffix()}.zip"
     folder = DIST / APP_NAME
     with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
         for path in sorted(folder.rglob("*")):
