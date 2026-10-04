@@ -11,6 +11,11 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **An OpenSees coverage review** (`reports/OPENSEES_COVERAGE_2026-10-04.md`):
+  what the application emits, measured against the installed build's 237
+  commands (42 used), and what is missing, prioritised — rigid diaphragms and
+  links, static imposed displacement, `twoNodeLink` with a rate-dependent
+  damper, section-level output, convergence diagnostics, wrapper materials.
 - **A bridge from the gidopensees catalog to the runtime**: `CatalogMaterial`
   puts one of the catalog's 58 materials into a project, `core/quantities.py`
   reads the numbers out of the schema's unit-carrying defaults, and the
