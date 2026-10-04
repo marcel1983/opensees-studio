@@ -155,6 +155,28 @@ of that history:
   mass (every DOF that carries mass), so the cumulative mass participation
   of a complete set of modes is 100 percent, never more.
 
+## Install (no Python needed)
+
+Prebuilt desktop bundles are attached to the
+[releases](https://github.com/ogunc/opensees-studio/releases): download the
+archive for your system, unpack it anywhere and run `OpenSeesStudio` (or
+`OpenSeesStudio.exe`). Nothing else has to be installed — the bundle carries
+its own Python, Qt, VTK and OpenSees.
+
+Unpack the whole folder, not the executable on its own: the libraries live
+beside it. A bundle is about 1.3 GB unpacked and roughly 570 MB to download,
+most of it the VTK renderer, the OpenSees solver and the Qt runtime.
+
+The first launch of a downloaded bundle may be blocked by the operating
+system, since these binaries are not code-signed: on macOS, right-click →
+Open the first time; on Windows, "More info" → "Run anyway" in the
+SmartScreen prompt.
+
+Maintainers build and publish them with
+`python packaging/build.py --gui-smoke --zip`; see
+[`packaging/README.md`](packaging/README.md) for what that does and the
+traps in it.
+
 ## Install (development)
 
 **Desktop GUI** (includes Qt, PyVista, pyqtgraph, imageio):

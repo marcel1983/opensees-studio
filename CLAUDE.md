@@ -126,6 +126,13 @@ These are non-obvious things that are easy to break if you don't know:
   `SCHEMA_VERSION` instead of quietly rewriting it one version down.
 - An unregistered material type is not a crash: `material_forms.form_for`
   returns a read-only placeholder, the same contract `section_forms` has.
+- Never hardcode how the analysis child is spawned. Both spawn sites
+  (`viewmodels/analysis_runner.py` and the eigen re-exec in `run.py`) build
+  their argv from `child_cli.analysis_cli_command()`: a source install
+  re-enters through `python -u -m opensees_studio.run`, a frozen bundle
+  through its own executable plus `child_cli.CLI_FLAG`, which `__main__`
+  dispatches back to `run.main`. A hardcoded `sys.executable -m ...` works
+  in development and breaks every packaged build.
 - An option added to an existing model keeps old files byte-identical by
   leaving its default out of the dump: `core._base.omit_when_default`
   (used by the beam integration rule and the numberer).
@@ -163,6 +170,17 @@ Web / headless: `pip install -e .` (then verify with
 `python -c "import sys, opensees_studio.core; assert 'PySide6' not in sys.modules"`).
 
 See `docs/adr/ADR-0002-headless-gui-dep-split.md` for the rationale.
+
+### Frozen builds
+
+`packaging/` freezes the app into a folder an end user runs without Python
+(`pip install -e ".[gui,packaging]"`, then `python packaging/build.py`). The
+GUI never solves in its own process, so the bundle re-enters itself as the
+analysis CLI — see the child-spawn gotcha above. Build with **Python 3.12**:
+the interpreter inside the bundle has to be the one the Windows
+`opensees.pyd` links against. `packaging/README.md` documents the traps
+(the `vtk` shim, PyVista's mypyc module, why VTK is not trimmed); the smoke
+test in `build.py` is what proves a bundle can solve before it is shipped.
 
 ## Running
 
