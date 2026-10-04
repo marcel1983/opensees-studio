@@ -23,6 +23,7 @@ See [`packaging/README.md`](packaging/README.md).
 ruff check src tests
 ruff format --check src tests
 python tools/typecheck.py       # the same mypy ratchet CI enforces
+lint-imports                    # the layering, also enforced in CI
 pytest tests/unit tests/integration tests/tools
 pytest tests/gui                # one process; check the exit code, not only the count
 ```

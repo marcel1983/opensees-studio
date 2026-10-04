@@ -53,9 +53,13 @@ architecture document.
   out of the run log and stay in the stderr capture. The Material Tester still
   calls OpenSees in the GUI process.
 
-The dependency direction is strict and one-way: `views → viewmodels →
-services → core`. CI does not enforce this with import-linter yet, but
-PRs that violate it will be rejected on review.
+The dependency direction is strict and one-way: `views → commands →
+viewmodels → services → core`, and CI enforces it with import-linter
+(`[tool.importlinter]` in `pyproject.toml`, run as `lint-imports`): the
+layers, plus "core imports no Qt and no OpenSeesPy", "services import no Qt
+except `services/qt_workers.py`", and "nobody outside `services/` imports
+OpenSeesPy directly". Run it before pushing; a violation fails the `test`
+job.
 
 ## Tech stack
 

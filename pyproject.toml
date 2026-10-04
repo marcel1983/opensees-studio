@@ -53,6 +53,8 @@ dev = [
     "mypy>=1.8",
     "pre-commit>=3.6",
     "hatch>=1.9",
+    # Enforces the layering in CLAUDE.md; see [tool.importlinter].
+    "import-linter>=2.15",
 ]
 docs = [
     "sphinx>=7.2",
@@ -119,6 +121,65 @@ plugins = []
 [[tool.mypy.overrides]]
 module = ["openseespy.*", "pyvista.*", "pyvistaqt.*", "vtk.*", "pyqtgraph.*"]
 ignore_missing_imports = true
+
+# ─────────── Import Linter ───────────
+# The layering in CLAUDE.md, enforced instead of trusted. `views` may import
+# anything below it, `core` nothing above it, and Qt/OpenSeesPy stay out of the
+# packages that must work headless.
+[tool.importlinter]
+root_package = "opensees_studio"
+# Forbidden-import contracts below name external packages (PySide6, openseespy),
+# and import-linter only looks outside the root package when told to.
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Layers: views > commands > viewmodels > services > core"
+type = "layers"
+layers = [
+    "opensees_studio.views",
+    "opensees_studio.commands",
+    "opensees_studio.viewmodels",
+    "opensees_studio.services",
+    "opensees_studio.core",
+]
+
+[[tool.importlinter.contracts]]
+name = "core is headless: no Qt, no OpenSeesPy"
+type = "forbidden"
+source_modules = ["opensees_studio.core"]
+forbidden_modules = [
+    "PySide6",
+    "PyQt5",
+    "PyQt6",
+    "PySide2",
+    "openseespy",
+    "openseespywin",
+]
+
+[[tool.importlinter.contracts]]
+name = "services are Qt-free (except the one sanctioned worker bridge)"
+type = "forbidden"
+source_modules = ["opensees_studio.services"]
+forbidden_modules = ["PySide6", "PyQt5", "PyQt6", "PySide2"]
+# services/qt_workers.py exists to run an analysis on a QThread and is the only
+# module allowed to import Qt; services/__init__.py must not pull it in, so the
+# headless tier stays headless. import-linter reports the external module at its
+# top level, hence `PySide6` rather than `PySide6.QtCore`.
+ignore_imports = ["opensees_studio.services.qt_workers -> PySide6"]
+
+[[tool.importlinter.contracts]]
+name = "only services talk to OpenSees"
+type = "forbidden"
+source_modules = [
+    "opensees_studio.core",
+    "opensees_studio.views",
+    "opensees_studio.viewmodels",
+    "opensees_studio.commands",
+]
+forbidden_modules = ["openseespy", "openseespywin"]
+# Direct imports only: viewmodels -> services -> openseespy is the sanctioned
+# path, and the layers contract already pins the direction.
+allow_indirect_imports = true
 
 # ─────────── Pytest ───────────
 [tool.pytest.ini_options]
