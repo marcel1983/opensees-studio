@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
 import tempfile
 import traceback
@@ -76,6 +77,10 @@ class AnalysisRunner(QObject):
         self._last_error: dict[str, str] | None = None
         self._finished_entry: dict[str, Any] | None = None
         self._out_dir: Path | None = None
+        #: True when ``_out_dir`` is a throwaway directory this runner created
+        #: (no caller-supplied ``results_dir``), so it must remove it again.
+        self._out_dir_is_temp = False
+        self._last_results: Any = None
         self.last_exit_code: int | None = None
 
     # ── public API ───────────────────────────────────────────────────
@@ -105,6 +110,8 @@ class AnalysisRunner(QObject):
         if self._is_running:
             raise RuntimeError("Another analysis is already running.")
 
+        self._last_results = None
+        self._out_dir_is_temp = False
         snapshot = write_run_snapshot(project, project_path)
         self.log.emit(f"Snapshot written: {snapshot}")
 
@@ -142,6 +149,7 @@ class AnalysisRunner(QObject):
 
     # ── child process mode ───────────────────────────────────────────
     def _run_in_child(self, case: Any, snapshot: Path, results_dir: Path | None) -> None:
+        self._out_dir_is_temp = results_dir is None
         out_dir = results_dir or Path(tempfile.mkdtemp(prefix="osstudio_"))
         out_dir.mkdir(parents=True, exist_ok=True)
         # The dialog may pass a modified copy of the case (run-time damping
@@ -276,6 +284,7 @@ class AnalysisRunner(QObject):
                 if self._finished_entry is None or self._out_dir is None:
                     raise RuntimeError("The analysis process reported no finished case.")
                 results = load_results(self._finished_entry, self._out_dir)
+                self._last_results = results
             except Exception:
                 self._on_failed(
                     "Results could not be loaded from the analysis output:\n"
@@ -319,7 +328,24 @@ class AnalysisRunner(QObject):
         self._is_running = running
         self.runningChanged.emit(running)
 
+    def _discard_temp_out_dir(self) -> None:
+        """Remove the throwaway results directory of a finished run.
+
+        ``load_results`` materializes every result kind in memory except
+        ``TransientResults``, which streams its history from the ``.h5`` file;
+        a transient run without a project path therefore keeps its directory
+        (it is the only thing that can read the history back). A caller that
+        passed ``results_dir`` owns that directory and it is never touched.
+        """
+        out_dir, is_temp, results = self._out_dir, self._out_dir_is_temp, self._last_results
+        if is_temp and out_dir is not None and getattr(results, "h5_path", None) is None:
+            shutil.rmtree(out_dir, ignore_errors=True)
+        self._out_dir = None
+        self._out_dir_is_temp = False
+        self._last_results = None
+
     def _teardown(self) -> None:
+        self._discard_temp_out_dir()
         if self._thread is not None:
             self._thread.quit()
             self._thread.wait()

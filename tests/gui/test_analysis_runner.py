@@ -113,3 +113,62 @@ def test_double_run_rejected(qtbot, cantilever_vm) -> None:  # type: ignore[no-u
     with pytest.raises(RuntimeError, match="already running"):
         runner.run(cantilever_vm.project, case)
     qtbot.waitSignal(runner.finished, timeout=10000).wait()
+
+
+# ─────────────────── throwaway results directories ───────────────────
+@pytest.mark.gui
+def test_a_run_without_results_dir_cleans_up_after_itself(  # type: ignore[no-untyped-def]
+    qtbot, cantilever_vm, tmp_path, monkeypatch
+) -> None:
+    """Static results live in memory once loaded; the scratch dir must go."""
+    import tempfile
+
+    real_mkdtemp = tempfile.mkdtemp
+
+    def _mkdtemp_in(*args, **kwargs):  # type: ignore[no-untyped-def]
+        return real_mkdtemp(*args, dir=str(tmp_path), **kwargs)
+
+    monkeypatch.setattr(tempfile, "mkdtemp", _mkdtemp_in)
+    runner = AnalysisRunner()
+
+    with qtbot.waitSignal(runner.finished, timeout=20000):
+        runner.run(cantilever_vm.project, cantilever_vm.project.analyses[0])
+    qtbot.wait(50)  # let the queued teardown run
+
+    assert list(tmp_path.glob("osstudio_*")) == []
+
+
+@pytest.mark.gui
+def test_a_caller_supplied_results_dir_is_kept(  # type: ignore[no-untyped-def]
+    qtbot, cantilever_vm, tmp_path
+) -> None:
+    """A transient-style caller owns its directory; the runner must not delete it."""
+    out_dir = tmp_path / "project_results"
+    runner = AnalysisRunner()
+
+    with qtbot.waitSignal(runner.finished, timeout=20000):
+        runner.run(cantilever_vm.project, cantilever_vm.project.analyses[0], results_dir=out_dir)
+    qtbot.wait(50)
+
+    assert out_dir.is_dir()
+    assert list(out_dir.glob("case_*.h5"))
+
+
+@pytest.mark.gui
+def test_transient_results_keep_their_scratch_dir(qtbot, tmp_path) -> None:
+    """TransientResults streams from the .h5 file, so its directory has to survive."""
+    from opensees_studio.services.results import TransientResults
+
+    h5 = tmp_path / "case_1.h5"
+    h5.write_bytes(b"")
+    runner = AnalysisRunner()
+    runner._out_dir = tmp_path
+    runner._out_dir_is_temp = True
+    runner._last_results = TransientResults(
+        case_id=1, case_name="EQ", h5_path=h5, n_steps=10, dt=0.01, n_steps_requested=10
+    )
+
+    runner._discard_temp_out_dir()
+
+    assert tmp_path.is_dir()
+    assert h5.exists()
