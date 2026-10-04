@@ -7,6 +7,43 @@ that this is pre-alpha: minor and patch releases may change the `.osmodel`
 schema (it carries a `schema_version`, and a file from a newer build is now
 refused instead of silently downgraded).
 
+## [0.0.3] — 2026-10-04
+
+The first release built entirely by CI: the 0.0.2 archives were correct only
+after being repaired by hand, because of the naming bug below.
+
+### Fixed
+
+- **The macOS archive was named `OpenSeesStudio-linux.zip`** and replaced the
+  Linux asset on the release, so what shipped as Linux was a Mach-O bundle no
+  Linux machine could run. The name now comes from `sys.platform` (`os.name`
+  is `"posix"` on both Linux and macOS), pinned by
+  `tests/unit/test_packaging_build.py`.
+- **One publisher instead of three**: each platform job attached its own
+  archive to the same release, which races and silently overwrites on a name
+  collision. A `publish` job now collects the artifacts and writes the
+  release once.
+- The redundant `verify-source` job (one unit test file, missing `libEGL` on
+  Ubuntu) is gone; the main CI `test` job already covers it.
+
+### Added
+
+- **mypy ratchet** (`tools/typecheck.py`, `tools/mypy-budget.txt`): CI fails
+  when the number of type errors grows above the recorded budget.
+- **Codegen drift test**: the committed catalog is compared byte for byte
+  against a fresh codegen run, so a hand edit or a stale regeneration fails.
+- Coverage floor (75%, today 76%) and a coverage artifact on the Ubuntu job.
+- Python 3.13 and 3.14 in the Linux test matrix.
+- `.github/dependabot.yml` (pip and GitHub Actions; the OpenSees wheels are
+  ignored because they are ABI-bound to the interpreter).
+
+### Changed
+
+- `-m "not slow"` removed from CI: nothing carried the marker. The CLI parity
+  module is now marked `slow` for local runs.
+- ADR-0001 moves to Accepted, with its units carve-out recorded.
+- README "What works today" lists what actually shipped.
+
 ## [0.0.2] — 2026-10-04
 
 The first release with a desktop bundle: download, unpack, run — no Python,
