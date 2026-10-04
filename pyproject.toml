@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "opensees-studio"
-version = "0.0.1"
+dynamic = ["version"]
 description = "A modern, SAP2000-style desktop GUI for OpenSeesPy."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -70,6 +70,10 @@ opensees-studio = "opensees_studio.__main__:main"
 [project.urls]
 Homepage = "https://github.com/ogunc/opensees-studio"
 Issues = "https://github.com/ogunc/opensees-studio/issues"
+
+[tool.hatch.version]
+# Single source of truth: the same string the app reports in About.
+path = "src/opensees_studio/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/opensees_studio"]
