@@ -37,27 +37,44 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
 
 ## What works today
 
-- **Modeling** — grids, nodes, frames (elastic + force-based), trusses,
-  quads, zero-length sections, restraints, equalDOF constraints,
-  distributed loads, ground motions (`PathTimeSeries` /
-  `UniformExcitation`).
-- **Materials and sections** — `Steel01`, `Steel02`, `Concrete01`,
-  `Concrete02`, `ElasticPP`, `Hysteretic`, `Hardening`, fiber sections
-  (rectangular / circular patches + rebar layers, a W-shape template),
-  `SectionAggregator`, `BeamWithHinges`.
-- **Analyses** — static (load- or displacement-controlled), modal,
-  displacement-controlled pushover, transient time-history with
-  mode-1 Rayleigh damping. Chained workflows: gravity preload →
-  `loadConst -time 0.0` → pushover or transient.
-- **Post-processing** — deformed shape (with scale slider), animated
-  mode shapes, axial / shear / moment diagrams, pushover curves
-  (in display units), time-history plots, hysteresis loops,
-  response-spectrum SRSS / CQC, snapshot + video export.
+- **Modeling** — grids, nodes, frames (elastic, force-based and
+  displacement-based), trusses, corotational trusses, quads, zero-length
+  elements and zero-length sections, restraints, equalDOF constraints,
+  distributed loads, imposed support motion.
+- **Materials** — `Steel01`, `Steel02`, `Concrete01`, `Concrete02`,
+  `Concrete04` (Popovics), `ElasticPP`, `Hardening`, `Hysteretic`,
+  `HystereticSM`, elastic uniaxial and `ElasticIsotropic`.
+- **Sections** — `ElasticSection`, fiber sections (rectangular / circular
+  patches, straight rebar layers, a W-shape template), `SectionAggregator`,
+  `BeamWithHinges`; geometric transformations and beam integration rules are
+  assignable per element.
+- **Seismic isolators** — elastomeric bearings (plasticity and Bouc-Wen,
+  2D/3D) and sliding bearings (`flatSliderBearing`, `singleFPBearing`) with
+  Coulomb, velocity-dependent and normal-force-dependent friction models.
+- **Analyses** — static (load- or displacement-controlled), modal
+  (deterministic solver selection, see below), displacement-controlled
+  pushover, transient time-history with Rayleigh damping. Chained workflows:
+  gravity preload → `loadConst -time 0.0` → pushover or transient. Numberer
+  and system options per case.
+- **Ground motions** — a project catalog with relative, hash-checked record
+  references; AT2, two-column and single-column readers; PGA / PGV / PGD /
+  Arias / D5-95 metadata; scaling by PGA, Sa(T1) or a period range;
+  TBDY-2018 design spectra (horizontal and vertical) and user target spectra;
+  sine and sine-beat generators.
+- **Post-processing** — deformed shape (with scale slider), animated mode
+  shapes, axial / shear / moment diagrams, pushover curves (in display
+  units), time-history plots, hysteresis loops, response-spectrum SRSS / CQC,
+  snapshot and video export, full-precision CSV of the result tables.
+- **Material tester** — run any supported uniaxial material through a
+  monotonic or cyclic strain protocol in an isolated model and plot the
+  stress–strain history, without a full analysis.
 - **Persistence** — projects save as a single JSON `.osmodel` file
-  (Pydantic-validated, round-trip-clean).
-- **Examples** — 20+ verified examples bundled, including the OpenSees
-  Wiki Examples-1 through Example-4 family and a fiber-section RC frame
-  pushover. See [`examples/README.md`](examples/README.md).
+  (Pydantic-validated, round-trip-clean) with a schema version, and a
+  pre-run snapshot offers to recover unsaved work after a crash.
+- **Examples** — 29 verified examples bundled, including the OpenSees Wiki
+  Examples-1 through Example-4 family, an RC frame pushover, isolated
+  frames and a moment-curvature workflow. See
+  [`examples/README.md`](examples/README.md).
 
 ## Tech stack
 

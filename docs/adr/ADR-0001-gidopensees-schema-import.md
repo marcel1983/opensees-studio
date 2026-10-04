@@ -2,11 +2,22 @@
 
 | Field | Value |
 |---|---|
-| **Status** | Proposed |
+| **Status** | Accepted (units carve-out deferred — see §2.7) |
 | **Date** | 2026-05-22 |
 | **Author** | ogunc |
 | **Deciders** | Core maintainers |
 | **Source project** | [gidopensees](https://github.com/rclab-auth/gidopensees) — GPL-3.0, AUTh Lab of R/C and Masonry Structures |
+
+> **Status note (2026-10-04).** The decision shipped: the parser
+> (`tools/gidopensees_import/parse_schemas.py`), the generator
+> (`tools/gidopensees_import/codegen.py`) and the committed tree
+> (`src/opensees_studio/core/catalog/`) are in the repository, covered by
+> `tests/tools/`, including a drift test that regenerates the catalog and
+> compares it byte for byte with what is committed. Two pieces of the
+> decision are still open work, not open questions: `#UNITS#` fields are
+> `str` with a `# TODO: unit-aware type` comment instead of `UnitTag`
+> annotations (§2.7), and the catalog is not yet wired into the OpenSees
+> runtime (the catalog README says so).
 
 ---
 
