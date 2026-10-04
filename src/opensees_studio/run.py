@@ -54,6 +54,8 @@ import traceback
 from pathlib import Path
 from typing import Any
 
+from opensees_studio.child_cli import analysis_cli_command
+
 EXIT_OK = 0
 EXIT_ANALYSIS_ERROR = 2
 EXIT_INVALID_PROJECT = 3
@@ -175,10 +177,7 @@ def _run_in_fresh_process(
     is replaced by the parent's complete one afterwards.
     """
     cmd = [
-        sys.executable,
-        "-u",
-        "-m",
-        "opensees_studio.run",
+        *analysis_cli_command(),
         "--project",
         str(args.project),
         "--cases",

@@ -26,6 +26,7 @@ from typing import Any
 
 from PySide6.QtCore import QObject, QProcess, QProcessEnvironment, QThread, QTimer, Signal
 
+from opensees_studio.child_cli import analysis_cli_command, is_frozen
 from opensees_studio.core import Project
 from opensees_studio.services import write_run_snapshot
 from opensees_studio.services.qt_workers import AnalysisWorker
@@ -33,6 +34,28 @@ from opensees_studio.services.result_store import load_results
 
 IN_PROCESS_ENV = "OPENSEES_STUDIO_IN_PROCESS"
 """Set to ``1`` to run analyses on a thread of the GUI process instead of a child."""
+
+CREATE_NO_WINDOW = 0x08000000
+"""Windows process creation flag: no console window for the child."""
+
+
+def _hide_child_console(process: QProcess) -> None:
+    """Run the frozen child without flashing a console window on Windows.
+
+    A ``--noconsole`` bundle re-runs itself for the analysis; Windows gives
+    that child its own console unless it is created with ``CREATE_NO_WINDOW``.
+    Qt exposes the creation flags through a modifier callable, which older
+    bindings do not have — the child then still runs, it just shows a window.
+    """
+    modifier = getattr(process, "setCreateProcessArgumentsModifier", None)
+    if modifier is None:  # pragma: no cover - depends on the Qt binding
+        return
+
+    def _apply(args: object) -> None:  # pragma: no cover - Windows only
+        args.flags |= CREATE_NO_WINDOW  # type: ignore[attr-defined]
+
+    modifier(_apply)
+
 
 STDERR_TAIL_LINES = 40
 KILL_AFTER_TERMINATE_MS = 1500
@@ -168,16 +191,15 @@ class AnalysisRunner(QObject):
         self.last_exit_code = None
 
         process = QProcess(self)
-        process.setProgram(sys.executable)
+        command = analysis_cli_command()
+        process.setProgram(command[0])
         # Unbuffered child: whatever it wrote before a hard exit reaches the pipe.
         env = QProcessEnvironment.systemEnvironment()
         env.insert("PYTHONUNBUFFERED", "1")
         process.setProcessEnvironment(env)
         process.setArguments(
             [
-                "-u",
-                "-m",
-                "opensees_studio.run",
+                *command[1:],
                 "--project",
                 str(snapshot),
                 "--cases",
@@ -188,6 +210,8 @@ class AnalysisRunner(QObject):
                 str(override),
             ]
         )
+        if is_frozen() and os.name == "nt":
+            _hide_child_console(process)
         process.readyReadStandardOutput.connect(self._on_stdout)
         process.readyReadStandardError.connect(self._on_stderr)
         process.started.connect(self._on_started)
@@ -196,7 +220,7 @@ class AnalysisRunner(QObject):
         self._process = process
 
         self._set_running(True)
-        self.log.emit(f"Starting analysis process: {sys.executable} -m opensees_studio.run")
+        self.log.emit(f"Starting analysis process: {' '.join(command)}")
         process.start()
 
     def _kill_if_alive(self) -> None:
