@@ -4,10 +4,10 @@
 # `src/opensees_studio`. `python tools/typecheck.py` enforces it in CI.
 #
 # Where the backlog is, for whoever picks this up:
-#   services/opensees_runner.py      136
-#   views/main_window.py              58
+#   services/opensees_runner.py      129
+#   views/main_window.py              59
 #   views/docks/property_editor.py    19
 #   views/dialogs/ground_motions.py   14
 #   core/project.py                   14
 # Most of it is `union-attr` on the optional project/element models.
-391
+384

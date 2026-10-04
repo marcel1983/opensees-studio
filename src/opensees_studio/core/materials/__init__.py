@@ -16,6 +16,7 @@ from typing import Annotated, Literal
 from pydantic import Field, PositiveFloat, model_validator
 
 from opensees_studio.core._base import Entity
+from opensees_studio.core.catalog_material import CatalogMaterial
 
 
 # ──────────────────────────── Linear-elastic ────────────────────────────
@@ -256,7 +257,8 @@ Material = Annotated[
     | ElasticPP
     | Hardening
     | HystereticMaterial
-    | HystereticSM,
+    | HystereticSM
+    | CatalogMaterial,
     Field(discriminator="type"),
 ]
 """Tagged union of every material kind. Pydantic uses ``type`` to dispatch on JSON load."""

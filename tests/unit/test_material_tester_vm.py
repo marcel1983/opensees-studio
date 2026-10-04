@@ -127,15 +127,26 @@ def test_unlisted_material_cannot_be_run() -> None:
 
 
 def test_service_type_error_yields_error_message() -> None:
+    """A material with no emitter is reported, not turned into a traceback.
+
+    This used to be HystereticSM, which had no branch in the tester's own copy
+    of the material commands. The tester now shares the emitters with the
+    analysis runner, so HystereticSM works there (see the test below) and the
+    unsupported case is a type nothing registers.
+    """
+
+    class Mystery:
+        type = "Mystery"
+        id = 9
+        name = "???"
+
     def _unsupported(mat, protocol):
-        return test_uniaxial_material(
-            HystereticSM(id=9, pos_env=[(1.0, 0.01), (2.0, 0.02)]), protocol, ops_module=MagicMock()
-        )
+        return test_uniaxial_material(Mystery(), protocol, ops_module=MagicMock())
 
     vm = MaterialTesterViewModel(_project(), tester=_unsupported)
     assert vm.run() is False
     assert vm.error is not None
-    assert "TypeError: Unsupported material type: HystereticSM" in vm.error
+    assert "TypeError: Unsupported material type: Mystery" in vm.error
     assert vm.strain.size == 0
     assert vm.result is None
     assert vm.summary_text() == vm.error

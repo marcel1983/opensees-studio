@@ -84,6 +84,30 @@ Tester service.
 The summary counts were recomputed from the tables; the original figures did
 not match the rows.
 
+### Catalog bridge status (2026-10-04)
+
+`CatalogMaterial` + `services/catalog_emitters.py` connect the generated
+catalog to the runtime, one name at a time, with the argument order confirmed
+against the solver. Three of the four names probed so far are deliberately
+**not** wired, because measuring them contradicted the schema:
+
+- `Viscous` — `uniaxialMaterial Viscous tag C alpha` is accepted, but with the
+  elements this application builds the rate never reaches the material: a
+  ramped SDOF gave the same response with C = 0, 50 and 100, and an
+  imposed-velocity `zeroLength` hard-exited OpenSees.
+- `Viscous_Damper` — same element question; needs the same investigation.
+- `Elastic_Perfectly_Plastic_with_Gap` — the signature is `tag E Fy gap <eta>`
+  (OpenSeesPy docs). Measured through the Material Tester and through an
+  imposed-displacement `zeroLength`, the response does not follow the field
+  names: with `gap = +0.002` it is zero in both directions, and with
+  `gap = -0.002` the compression force peaks at half the yield strain and
+  falls to zero at the yield strain.
+
+So the catalog is a **schema source**, not a runtime source: each name needs
+its own investigation and a test that runs it. `Elastic` is wired and verified
+(`tests/integration/test_catalog_materials.py`); the next candidate should
+start by reproducing the material in a script and stating its law.
+
 ## How to read this table
 
 | Column | Meaning |

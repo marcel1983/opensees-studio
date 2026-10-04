@@ -45,23 +45,15 @@ from opensees_studio.core import (
     BEARING_CLASSES,
     SLIDING_BEARING_CLASSES,
     BeamWithHingesElement,
-    Concrete01,
-    Concrete02,
-    Concrete04,
+    CatalogMaterial,
     ConstantTimeSeries,
     CorotTrussElement,
     CoulombFriction,
     DispBeamColumn,
     ElasticBeamColumn,
-    ElasticIsotropic,
-    ElasticPP,
     ElasticSection,
-    ElasticUniaxial,
     FiberSection,
     ForceBeamColumn,
-    Hardening,
-    HystereticMaterial,
-    HystereticSM,
     ImposedSupportMotionPattern,
     LinearTimeSeries,
     ModalCase,
@@ -73,8 +65,6 @@ from opensees_studio.core import (
     ResponseSpectrumCase,
     SectionAggregator,
     StaticCase,
-    Steel01,
-    Steel02,
     TransientCase,
     TrigTimeSeries,
     TrussElement,
@@ -92,6 +82,8 @@ from opensees_studio.core.modal import (
     resolve_modal_solver,
 )
 from opensees_studio.core.modal_combination import DEFAULT_MODAL_DAMPING, closely_spaced_pairs
+from opensees_studio.services.catalog_emitters import emit_catalog_material
+from opensees_studio.services.material_emitters import emit_material
 from opensees_studio.services.opensees_io import (
     check_recorder_output,
     load_recorder_table,
@@ -258,94 +250,15 @@ class OpenSeesRunner:
 
     # ─────────────────────── materials ───────────────────────
     def _emit_material(self, mat: Any) -> None:
-        ops = self._ops
-        match mat:
-            case ElasticUniaxial():
-                args: list[Any] = [mat.E]
-                if mat.eta or mat.Eneg is not None:
-                    args.append(mat.eta)
-                if mat.Eneg is not None:
-                    args.append(mat.Eneg)
-                ops.uniaxialMaterial("Elastic", mat.id, *args)
-            case Steel01():
-                args = [mat.Fy, mat.E0, mat.b]
-                if mat.a1 is not None:
-                    args.extend([mat.a1, mat.a2, mat.a3, mat.a4])
-                ops.uniaxialMaterial("Steel01", mat.id, *args)
-            case Steel02():
-                ops.uniaxialMaterial(
-                    "Steel02", mat.id, mat.Fy, mat.E0, mat.b, mat.R0, mat.cR1, mat.cR2
-                )
-            case Concrete01():
-                ops.uniaxialMaterial("Concrete01", mat.id, mat.fpc, mat.epsc0, mat.fpcu, mat.epsU)
-            case Concrete02():
-                ops.uniaxialMaterial(
-                    "Concrete02",
-                    mat.id,
-                    mat.fpc,
-                    mat.epsc0,
-                    mat.fpcu,
-                    mat.epsU,
-                    mat.lambda_,
-                    mat.ft,
-                    mat.Ets,
-                )
-            case Concrete04():
-                args = [mat.fpc, mat.epsc0, mat.epscu, mat.Ec]
-                if mat.fct is not None:
-                    args.extend([mat.fct, mat.et])
-                    if mat.beta is not None:
-                        args.append(mat.beta)
-                ops.uniaxialMaterial("Concrete04", mat.id, *args)
-            case ElasticPP():
-                args = [mat.E, mat.epsy_pos]
-                if mat.epsy_neg is not None or mat.eps0 != 0.0:
-                    args.append(mat.epsy_neg if mat.epsy_neg is not None else -mat.epsy_pos)
-                    args.append(mat.eps0)
-                ops.uniaxialMaterial("ElasticPP", mat.id, *args)
-            case Hardening():
-                hardening_args: list[Any] = [mat.E, mat.sigmaY, mat.H_iso, mat.H_kin]
-                if mat.eta:
-                    hardening_args.append(mat.eta)
-                ops.uniaxialMaterial("Hardening", mat.id, *hardening_args)
-            case HystereticMaterial():
-                ops.uniaxialMaterial(
-                    "Hysteretic",
-                    mat.id,
-                    mat.s1p,
-                    mat.e1p,
-                    mat.s2p,
-                    mat.e2p,
-                    mat.s3p,
-                    mat.e3p,
-                    mat.s1n,
-                    mat.e1n,
-                    mat.s2n,
-                    mat.e2n,
-                    mat.s3n,
-                    mat.e3n,
-                    mat.px,
-                    mat.py,
-                    mat.d1,
-                    mat.d2,
-                    mat.beta,
-                )
-            case HystereticSM():
-                # uniaxialMaterial HystereticSM $tag -posEnv f1 d1 f2 d2 ...
-                #                                     <-negEnv f1 d1 ...>
-                # Envelopes carry (force, deformation) pairs in command order.
-                hsm_args: list[Any] = ["-posEnv"]
-                for force, defo in mat.pos_env:
-                    hsm_args.extend([force, defo])
-                if mat.neg_env:
-                    hsm_args.append("-negEnv")
-                    for force, defo in mat.neg_env:
-                        hsm_args.extend([force, defo])
-                ops.uniaxialMaterial("HystereticSM", mat.id, *hsm_args)
-            case ElasticIsotropic():
-                ops.nDMaterial("ElasticIsotropic", mat.id, mat.E, mat.nu, mat.rho)
-            case _:
-                raise NotImplementedError(f"Material type not yet handled: {type(mat).__name__}")
+        """Hand the material to its emitter (see ``services/material_emitters.py``).
+
+        A gidopensees catalog material goes through ``catalog_emitters``; a
+        type with no emitter raises rather than emitting a guessed command.
+        """
+        if isinstance(mat, CatalogMaterial):
+            emit_catalog_material(mat, self._ops)
+            return
+        emit_material(mat, self._ops)
 
     # ─────────────────────── sections ───────────────────────
     def _emit_friction_model(self, fm: Any) -> None:

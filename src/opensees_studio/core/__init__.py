@@ -16,6 +16,7 @@ from opensees_studio.core.analysis import (
     StaticCase,
     TransientCase,
 )
+from opensees_studio.core.catalog_material import CatalogMaterial, catalog_names, catalog_spec
 from opensees_studio.core.constraints import EqualDOFConstraint
 from opensees_studio.core.defaults import (
     DEFAULT_PATTERN_NAME,
@@ -273,7 +274,10 @@ __all__ = [  # noqa: RUF022 - grouped by domain under section comments, not alph
     "default_global_system",
     "make_grid_lines",
     # Materials
+    "CatalogMaterial",
     "Material",
+    "catalog_names",
+    "catalog_spec",
     # friction models
     "FRICTION_MODEL_CLASSES",
     "CoulombFriction",
