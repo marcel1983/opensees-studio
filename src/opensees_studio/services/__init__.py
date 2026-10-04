@@ -13,6 +13,7 @@ from opensees_studio.services.material_tester import (
     test_uniaxial_material,
 )
 from opensees_studio.services.opensees_runner import OpenSeesRunner
+from opensees_studio.services.opensees_script import export_script
 from opensees_studio.services.persistence import (
     PROJECT_FILE_SUFFIX,
     RUN_SNAPSHOT_SUFFIX,
@@ -40,6 +41,7 @@ __all__ = [
     "StaticResults",
     "TransientResults",
     "discard_run_snapshot",
+    "export_script",
     "load_project",
     "newer_run_snapshot",
     "run_snapshot_path",

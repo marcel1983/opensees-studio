@@ -68,6 +68,9 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
 - **Material tester** — run any supported uniaxial material through a
   monotonic or cyclic strain protocol in an isolated model and plot the
   stress–strain history, without a full analysis.
+- **Export** — the model, with or without one analysis case, as a plain
+  OpenSeesPy script generated from the same command sequence the solver
+  receives, so it reproduces the application's numbers.
 - **Persistence** — projects save as a single JSON `.osmodel` file
   (Pydantic-validated, round-trip-clean) with a schema version, and a
   pre-run snapshot offers to recover unsaved work after a crash.

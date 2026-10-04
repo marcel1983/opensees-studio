@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDockWidget,
     QFileDialog,
+    QInputDialog,
     QLabel,
     QMainWindow,
     QMessageBox,
@@ -61,6 +62,7 @@ from opensees_studio.services.element_forces import (
 from opensees_studio.services.element_forces import (
     auto_scale as force_diagram_auto_scale,
 )
+from opensees_studio.services.opensees_script import case_label, export_script
 from opensees_studio.services.results import (
     ModalResults,
     PushoverResults,
@@ -121,6 +123,9 @@ from opensees_studio.views.tools import (
     SelectTool,
     ToolController,
 )
+
+#: First entry of the export dialog's case list: no analysis block in the script.
+EXPORT_MODEL_ONLY = "Model only"
 
 
 class MainWindow(QMainWindow):
@@ -228,6 +233,7 @@ class MainWindow(QMainWindow):
         self._act_open = QAction("&Open…", self, shortcut=QKeySequence.StandardKey.Open)
         self._act_save = QAction("&Save", self, shortcut=QKeySequence.StandardKey.Save)
         self._act_save_as = QAction("Save &As…", self, shortcut=QKeySequence.StandardKey.SaveAs)
+        self._act_export_script = QAction("OpenSees &script (.py)…", self)
         self._act_quit = QAction("&Quit", self, shortcut=QKeySequence.StandardKey.Quit)
 
         # Edit (created from QUndoStack so text auto-tracks "Undo Add 4 nodes" etc.)
@@ -328,6 +334,9 @@ class MainWindow(QMainWindow):
         )
         m_file.addSeparator()
         m_file.addActions([self._act_save, self._act_save_as])
+        m_file.addSeparator()
+        m_export = m_file.addMenu("&Export")
+        m_export.addAction(self._act_export_script)
         m_file.addSeparator()
         m_file.addAction(self._act_quit)
 
@@ -515,6 +524,7 @@ class MainWindow(QMainWindow):
         self._act_open.triggered.connect(self._on_open)
         self._act_save.triggered.connect(self._on_save)
         self._act_save_as.triggered.connect(self._on_save_as)
+        self._act_export_script.triggered.connect(self._on_export_script)
         self._act_quit.triggered.connect(self._on_quit)
         self._act_about.triggered.connect(self._on_about)
         self._act_set_units.triggered.connect(self._on_set_units)
@@ -761,6 +771,59 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Save failed", str(exc))
             return False
         return True
+
+    def _on_export_script(self) -> None:
+        """File → Export → OpenSees script: the model as plain OpenSeesPy.
+
+        The script is the command sequence the runner itself emits, so it
+        cannot drift from what the solver is given (see
+        ``services/opensees_script.py``).
+        """
+        if self._vm.project is None:
+            QMessageBox.information(self, "Export script", "Open or create a project first.")
+            return
+        chosen, case = self._ask_export_case()
+        if not chosen:
+            return
+        default = (self._vm.path.stem if self._vm.path is not None else "model") + ".py"
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export OpenSees script",
+            default,
+            "Python script (*.py)",
+        )
+        if not path:
+            return
+        try:
+            source = export_script(
+                self._vm.project, case, version=__version__, filename=Path(path).name
+            )
+            Path(path).write_text(source, encoding="utf-8")
+        except Exception as exc:
+            QMessageBox.critical(self, "Export failed", str(exc))
+            return
+        self._log(f"Exported OpenSees script: {path}")
+
+    def _ask_export_case(self) -> tuple[bool, Any]:
+        """Ask which case the script should run. ``(False, None)`` on cancel."""
+        project = self._vm.project
+        if project is None or not project.analyses:
+            return True, None
+        analyses = project.analyses
+        labels = [EXPORT_MODEL_ONLY, *(case_label(c) for c in analyses)]
+        choice, accepted = QInputDialog.getItem(
+            self,
+            "Export OpenSees script",
+            "Include which analysis case?",
+            labels,
+            0,
+            False,
+        )
+        if not accepted:
+            return False, None
+        if choice == EXPORT_MODEL_ONLY:
+            return True, None
+        return True, analyses[labels.index(choice) - 1]
 
     # ── slots: edit ──────────────────────────────────────────────────
     def _on_delete(self) -> None:
@@ -2357,6 +2420,7 @@ class MainWindow(QMainWindow):
         n_sel = len(self._canvas.selection.nodes)
         self._act_save.setEnabled(has_project)
         self._act_save_as.setEnabled(has_project)
+        self._act_export_script.setEnabled(has_project)
         self._act_grid.setEnabled(True)
         self._act_add_node.setEnabled(True)
         self._act_assign_support.setEnabled(has_project and has_selected_nodes)
