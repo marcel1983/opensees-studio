@@ -44,6 +44,10 @@ from opensees_studio.services.results import (
 
 EXAMPLES = Path(__file__).resolve().parents[2] / "examples"
 
+#: Every test here starts at least one extra interpreter, which is what makes
+#: this the slowest module of the suite; it is what `-m "not slow"` is for.
+pytestmark = pytest.mark.slow
+
 CASES = [
     ("cantilever", 1, StaticResults),
     ("rc_frame_gravity", 1, StaticResults),
