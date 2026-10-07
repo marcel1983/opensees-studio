@@ -84,6 +84,13 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
 - **Material tester** — run any supported uniaxial material through a
   monotonic or cyclic strain protocol in an isolated model and plot the
   stress–strain history, without a full analysis.
+- **Import** — File → Import → DXF Drawing: straight bars from `LINE` and
+  `POLYLINE` entities, with the layers to keep ticked in the dialog, the
+  drawing's own units (`$INSUNITS`) converted to the project's and the plane
+  (plan, elevation or 3D) chosen before anything is inserted. Endpoints that
+  land on the same point become one node, and what is not a straight bar —
+  circles, text, hatches — is counted and reported rather than guessed at. The
+  whole import is one undo step.
 - **Export** — the model, with or without one analysis case, as a plain
   OpenSeesPy script generated from the same command sequence the solver
   receives, so it reproduces the application's numbers.

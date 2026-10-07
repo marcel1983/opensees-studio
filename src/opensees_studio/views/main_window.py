@@ -107,6 +107,7 @@ from opensees_studio.views.dialogs import (
     CoordinateGridSystemsDialog,
     DisplayOptionsDialog,
     DuplicatesDialog,
+    DxfImportDialog,
     FrameWizard,
     FrictionLibraryDialog,
     GroundMotionsDialog,
@@ -121,6 +122,7 @@ from opensees_studio.views.dialogs import (
     RunAnalysisDialog,
     SectionLibraryDialog,
     UniformExcitationDialog,
+    member_sections,
 )
 from opensees_studio.views.docks import (
     DeformedShapeView,
@@ -250,6 +252,7 @@ class MainWindow(QMainWindow):
         self._act_open = QAction("&Open…", self, shortcut=QKeySequence.StandardKey.Open)
         self._act_save = QAction("&Save", self, shortcut=QKeySequence.StandardKey.Save)
         self._act_save_as = QAction("Save &As…", self, shortcut=QKeySequence.StandardKey.SaveAs)
+        self._act_import_dxf = QAction("&DXF Drawing…", self)
         self._act_export_script = QAction("OpenSees &script (.py)…", self)
         self._act_quit = QAction("&Quit", self, shortcut=QKeySequence.StandardKey.Quit)
 
@@ -355,6 +358,8 @@ class MainWindow(QMainWindow):
         m_file.addSeparator()
         m_file.addActions([self._act_save, self._act_save_as])
         m_file.addSeparator()
+        m_import = m_file.addMenu("&Import")
+        m_import.addAction(self._act_import_dxf)
         m_export = m_file.addMenu("&Export")
         m_export.addAction(self._act_export_script)
         m_file.addSeparator()
@@ -548,6 +553,7 @@ class MainWindow(QMainWindow):
         self._act_open.triggered.connect(self._on_open)
         self._act_save.triggered.connect(self._on_save)
         self._act_save_as.triggered.connect(self._on_save_as)
+        self._act_import_dxf.triggered.connect(self._on_import_dxf)
         self._act_export_script.triggered.connect(self._on_export_script)
         self._act_quit.triggered.connect(self._on_quit)
         self._act_about.triggered.connect(self._on_about)
@@ -1149,6 +1155,53 @@ class MainWindow(QMainWindow):
         for element_id in element_ids:
             self._canvas.selection.select_element(element_id, additive=True)
         self._canvas.render()
+
+    def _on_import_dxf(self) -> None:
+        """File → Import → DXF Drawing: bars from a drawing, in one undo step.
+
+        The dialog decides what the drawing means (layers, units, plane); this
+        inserts the result the same way the frame wizard does, so a bad import is
+        one Ctrl+Z away.
+        """
+        project = self._vm.project
+        if project is None:
+            QMessageBox.information(self, "Import DXF", "Open or create a project first.")
+            return
+
+        dialog = DxfImportDialog(project, sections=member_sections(project), parent=self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        section_id = dialog.section_choice()
+        if section_id is None:
+            # Section ids are allocated inside the macro, so the models must be
+            # built there too: the dialog is asked for the drawing, not for bars.
+            section_id = project.next_section_id()
+
+        self._vm.undo_stack.beginMacro("Import DXF")
+        try:
+            if dialog.section_choice() is None:
+                self._vm.apply_command(
+                    AddSectionsCommand(self._vm, [make_default_section(section_id)])
+                )
+            bars = dialog.imported_bars(section_id)
+            if bars is None:
+                return
+            self._vm.apply_command(AddNodesCommand(self._vm, bars.nodes))
+            self._vm.apply_command(AddElementsCommand(self._vm, bars.elements))
+        except Exception as exc:
+            QMessageBox.critical(self, "Could not import the drawing", str(exc))
+            return
+        finally:
+            self._vm.undo_stack.endMacro()
+
+        self._canvas.selection.clear()
+        for node in bars.nodes:
+            self._canvas.selection.select_node(node.id, additive=True)
+        source = dialog.source()
+        self._log(f"Imported {bars.summary()} from {source.name if source else 'the drawing'}.")
+        drawing = dialog.drawing()
+        if drawing is not None and drawing.skipped_summary():
+            self._log(drawing.skipped_summary())
 
     def _on_frame_wizard(self) -> None:
         """Define → Create Portal Frame: a parametric 2D frame, one undo step.
@@ -2694,6 +2747,7 @@ class MainWindow(QMainWindow):
         n_sel = len(self._canvas.selection.nodes)
         self._act_save.setEnabled(has_project)
         self._act_save_as.setEnabled(has_project)
+        self._act_import_dxf.setEnabled(has_project)
         self._act_export_script.setEnabled(has_project)
         self._act_grid.setEnabled(True)
         self._act_add_node.setEnabled(True)

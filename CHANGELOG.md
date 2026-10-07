@@ -58,6 +58,26 @@ refused instead of silently downgraded).
   back to its grid, and a completely empty one to a unit length), and they are
   not pickable: a reference is not part of the structure.
 
+- **Importing a bar layout from a DXF drawing** (File → Import → DXF Drawing,
+  `services/dxf_import.py`). `LINE`, `LWPOLYLINE` and `POLYLINE` entities become
+  beam-column elements; everything else in the file — circles, text, hatches,
+  blocks — is counted and reported, so a drawing that imports four members where
+  the user expected two hundred says so instead of looking like a success.
+  The dialog makes the three decisions the file cannot make visible before
+  anything enters the model: **which layers** are structure (ticked in a list),
+  **what a drawing unit is worth** (`$INSUNITS` is turned into a factor to the
+  project's own unit, and a unitless file gets factor 1 with a note saying
+  nothing was converted), and **which plane** the two-dimensional drawing is
+  read as (plan, front or side elevation, or `3D` to keep the file's own axes),
+  plus the level it sits at and the origin it starts from. Curved polyline
+  segments are imported as straight chords and reported as such. Endpoints that
+  land within a tolerance of each other become one node — drawings repeat
+  coordinates instead of sharing vertices, and the model must not — with the
+  tolerance scaled to the drawing and the number of merges shown. Holes are left
+  to the user: everything arrives free, because a drawing cannot say what is
+  fixed. The whole import, including the default section when the project has
+  none, is one undo step.
+
 ### Fixed
 
 - **The failure report of a run crashed the application when the report had

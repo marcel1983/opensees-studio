@@ -26,6 +26,9 @@ dependencies = [
     "h5py>=3.10",
     "openseespy==3.8.0.0",
     "openseespywin==3.8.0.0 ; sys_platform == 'win32'",
+    # Reading a bar layout out of a DXF drawing (File → Import). Pure Python,
+    # headless, MIT — it belongs to the base tier like the rest of core/services.
+    "ezdxf>=1.3",
 ]
 
 [project.optional-dependencies]

@@ -114,6 +114,11 @@ _LENGTH_M: dict[UnitSystem, float] = {
 }
 
 
+def metres_per_unit(units: UnitSystem) -> float:
+    """How many metres one length unit of ``units`` is worth."""
+    return _LENGTH_M[units]
+
+
 def length_scale(source: UnitSystem, target: UnitSystem) -> float:
     """Factor taking a length from ``source`` units to ``target`` units.
 
