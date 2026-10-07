@@ -32,6 +32,16 @@ from opensees_studio.core.defaults import (
     make_default_time_series,
     make_default_truss_material,
 )
+from opensees_studio.core.frames import (
+    PLANE_AXES,
+    SUPPORTED_NDF,
+    PortalFrame,
+    PortalFrameError,
+    PortalFrameSpec,
+    RoofType,
+    SupportCondition,
+    build_portal_frame,
+)
 from opensees_studio.core.friction import (
     FRICTION_MODEL_CLASSES,
     CoulombFriction,
@@ -226,6 +236,15 @@ __all__ = [  # noqa: RUF022 - grouped by domain under section comments, not alph
     # Geometry
     "Node",
     "EqualDOFConstraint",
+    # Parametric portal frames (2D)
+    "PLANE_AXES",
+    "SUPPORTED_NDF",
+    "PortalFrame",
+    "PortalFrameError",
+    "PortalFrameSpec",
+    "RoofType",
+    "SupportCondition",
+    "build_portal_frame",
     # Auto-infrastructure defaults (shared with the web backend)
     "DEFAULT_TRUSS_AREA",
     "DEFAULT_PATTERN_NAME",

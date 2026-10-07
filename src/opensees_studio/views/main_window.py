@@ -37,6 +37,7 @@ from opensees_studio.commands import (
     AddEqualDOFConstraintCommand,
     AddNodalLoadsCommand,
     AddNodesCommand,
+    AddSectionsCommand,
     AssignMaterialCommand,
     AssignSectionCommand,
     DeleteElementsCommand,
@@ -50,9 +51,13 @@ from opensees_studio.commands import (
     SetRestraintCommand,
 )
 from opensees_studio.core import (
+    SUPPORTED_NDF,
     ElasticMembranePlateSection,
     Project,
     ShellMITC4Element,
+    build_portal_frame,
+    labels_for,
+    make_default_section,
 )
 from opensees_studio.core.geometry.ordering import QuadOrderError, order_quad_nodes
 from opensees_studio.services import PROJECT_FILE_SUFFIX
@@ -97,6 +102,7 @@ from opensees_studio.views.dialogs import (
     AssignZeroLengthSectionDialog,
     CoordinateGridSystemsDialog,
     DisplayOptionsDialog,
+    FrameWizard,
     FrictionLibraryDialog,
     GroundMotionsDialog,
     LinearTimeSeriesDialog,
@@ -274,6 +280,7 @@ class MainWindow(QMainWindow):
         self._act_grid = QAction("&Coordinate System/Grids…", self, shortcut="Ctrl+G")
         self._act_add_node = QAction("Add &Node…", self, shortcut="Ctrl+N")
         self._act_create_shell = QAction("Create S&hell from 4 Nodes…", self)
+        self._act_frame_wizard = QAction("Create Portal &Frame…", self)
         self._act_material_library = QAction("&Material Library…", self, shortcut="Ctrl+Shift+M")
         self._act_friction_library = QAction("&Friction Models…", self)
         self._act_material_tester = QAction("Material &Tester…", self, shortcut="Ctrl+Shift+T")
@@ -358,6 +365,7 @@ class MainWindow(QMainWindow):
         m_define.addAction(self._act_grid)
         m_define.addAction(self._act_add_node)
         m_define.addAction(self._act_create_shell)
+        m_define.addAction(self._act_frame_wizard)
         m_define.addSeparator()
         m_define.addActions(
             [
@@ -556,6 +564,7 @@ class MainWindow(QMainWindow):
         self._act_grid.triggered.connect(self._on_grid_system)
         self._act_add_node.triggered.connect(self._on_add_node)
         self._act_create_shell.triggered.connect(self._on_create_shell)
+        self._act_frame_wizard.triggered.connect(self._on_frame_wizard)
         self._act_material_library.triggered.connect(self._on_material_library)
         self._act_friction_library.triggered.connect(self._on_friction_library)
         self._act_material_tester.triggered.connect(self._on_material_tester)
@@ -1092,6 +1101,67 @@ class MainWindow(QMainWindow):
             f"Shell {element_id}: nodes {nodes}, plate section {section.id} "
             f"(winding ordered counter-clockwise)."
         )
+
+    def _on_frame_wizard(self) -> None:
+        """Define → Create Portal Frame: a parametric 2D frame, one undo step.
+
+        The geometry comes from ``core.frames``; this only collects it, resolves
+        the two section choices (creating the canonical default one *inside* the
+        macro when the project has none) and inserts the result.
+        """
+        project = self._vm.project
+        if project is None:
+            QMessageBox.information(self, "Portal frame", "Open or create a project first.")
+            return
+        if (project.ndm, project.ndf) not in SUPPORTED_NDF:
+            QMessageBox.information(
+                self,
+                "Portal frame",
+                "A plane frame needs a 2D frame model (ndm = 2, ndf = 3) or a 3D frame "
+                f"model (ndm = 3, ndf = 6); this project is ndm = {project.ndm}, "
+                f"ndf = {project.ndf}.",
+            )
+            return
+
+        sections = [s for s in project.sections if not isinstance(s, ElasticMembranePlateSection)]
+        wizard = FrameWizard(
+            sections,
+            ndm=project.ndm,
+            ndf=project.ndf,
+            length_unit=labels_for(project.meta.units).length,
+            parent=self,
+        )
+        if wizard.exec() != QDialog.DialogCode.Accepted:
+            return
+        column_id, rafter_id = wizard.section_choice()
+
+        self._vm.undo_stack.beginMacro("Create portal frame")
+        try:
+            if column_id is None or rafter_id is None:
+                section = make_default_section(project.next_section_id())
+                self._vm.apply_command(AddSectionsCommand(self._vm, [section]))
+                column_id = rafter_id = section.id
+            spec = wizard.spec(column_section_id=column_id, rafter_section_id=rafter_id)
+            frame = build_portal_frame(
+                spec,
+                ndm=project.ndm,
+                ndf=project.ndf,
+                first_node_id=project.next_node_id(),
+                first_element_id=project.next_element_id(),
+            )
+            self._vm.apply_command(AddNodesCommand(self._vm, frame.nodes))
+            self._vm.apply_command(AddElementsCommand(self._vm, frame.elements))
+        except Exception as exc:
+            QMessageBox.critical(self, "Cannot create the frame", str(exc))
+            return
+        finally:
+            self._vm.undo_stack.endMacro()
+
+        # Leave the frame selected: the next thing most users do is copy it.
+        self._canvas.selection.clear()
+        for node in frame.nodes:
+            self._canvas.selection.select_node(node.id, additive=True)
+        self._log(f"{frame.summary()} Left selected for Edit → Replicate.")
 
     def _on_add_node(self) -> None:
         if self._vm.project is None:
@@ -2506,6 +2576,7 @@ class MainWindow(QMainWindow):
         self._act_grid.setEnabled(True)
         self._act_add_node.setEnabled(True)
         self._act_create_shell.setEnabled(has_project)
+        self._act_frame_wizard.setEnabled(has_project)
         self._act_assign_support.setEnabled(has_project and has_selected_nodes)
         self._act_assign_masses.setEnabled(has_project and has_selected_nodes)
         self._act_assign_equal_dof.setEnabled(has_project and n_sel == 2)
