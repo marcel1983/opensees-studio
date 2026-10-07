@@ -42,6 +42,11 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   shells (Define → Create Shell from 4 Nodes derives the winding from the
   coordinates), zero-length elements and zero-length sections, restraints,
   equalDOF constraints, distributed loads, imposed support motion.
+- **A portal frame wizard** (Define → Create Portal Frame): bays and bay width,
+  eave height, one slope / two slopes / flat, the column and rafter sections and
+  fixed or pinned bases, in the XY, XZ or YZ plane. Column tops follow the roof
+  line, so an interior column comes out as tall as the roof above it, and the
+  whole frame is one undoable step that arrives selected for copying.
 - **Materials** — `Steel01`, `Steel02`, `Concrete01`, `Concrete02`,
   `Concrete04` (Popovics), `ElasticPP`, `Hardening`, `Hysteretic`,
   `HystereticSM`, elastic uniaxial and `ElasticIsotropic`.
@@ -79,6 +84,9 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
 - **Export** — the model, with or without one analysis case, as a plain
   OpenSeesPy script generated from the same command sequence the solver
   receives, so it reproduces the application's numbers.
+- **Copying geometry** — Edit → Move, Replicate (an offset applied N times,
+  which carries the loads of the copied nodes and elements with it) and Mirror
+  across a global plane.
 - **Persistence** — projects save as a single JSON `.osmodel` file
   (Pydantic-validated, round-trip-clean) with a schema version, and a
   pre-run snapshot offers to recover unsaved work after a crash.

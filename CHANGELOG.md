@@ -9,6 +9,29 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Added
+
+- **A portal frame wizard** (Define → Create Portal Frame): the geometry of a
+  2D plane frame from bays and bay width, eave height, a roof of one slope, two
+  slopes or none, a section per member group and fixed or pinned bases, in the
+  XY, XZ or YZ plane and at a chosen origin. The roof is a line and the column
+  tops sit on it, so an interior column is as tall as the roof above its base;
+  a gable whose ridge falls mid-bay gets a crown node and a split rafter. The
+  whole frame — including the default section, when the project has none — is
+  one undoable step, and it arrives selected because the next thing most users
+  do is copy it. The geometry is pure `core.frames`, so the wizard, the log line
+  and the tests read the same specification.
+
+### Fixed
+
+- **Replicate copied the geometry but not the loads**, so a copied loaded bay
+  came back empty: the nodes and elements were new, and nothing re-created the
+  nodal and element loads that pointed at the old ids. The copy now carries
+  them, and its undo removes exactly the loads it added (by identity, since two
+  loads on one node can compare equal). Masses and restraints were already
+  copied — they are node fields. Ground-motion and imposed-support patterns are
+  deliberately left alone: copying a frame should not multiply a base motion.
+
 ## [0.0.4] — 2026-10-06
 
 The AISC v16 shape library and the shell element — and the crash that running
