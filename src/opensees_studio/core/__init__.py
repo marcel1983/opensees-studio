@@ -41,6 +41,7 @@ from opensees_studio.core.frames import (
     RoofType,
     SupportCondition,
     build_portal_frame,
+    frame_grid,
 )
 from opensees_studio.core.friction import (
     FRICTION_MODEL_CLASSES,
@@ -245,6 +246,7 @@ __all__ = [  # noqa: RUF022 - grouped by domain under section comments, not alph
     "RoofType",
     "SupportCondition",
     "build_portal_frame",
+    "frame_grid",
     # Auto-infrastructure defaults (shared with the web backend)
     "DEFAULT_TRUSS_AREA",
     "DEFAULT_PATTERN_NAME",

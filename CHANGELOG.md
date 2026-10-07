@@ -72,13 +72,20 @@ refused instead of silently downgraded).
 
 ### Changed
 
-- **File → New 2D Frame now opens the portal frame wizard** (and carries the
-  ellipsis a dialog-opening action should: `New 2D Frame…`). A 2D frame project
-  on its own is an empty canvas, and the only plane it can build in is the
-  wizard's XY, so the wizard is what turns the menu entry into a frame.
-  Cancelling it leaves the empty project, which is still the right start for
-  drawing by hand, and Define → Create Portal Frame still builds one into the
-  project that is already open.
+- **File → New 2D Frame now opens the portal frame wizard and leaves the grid
+  the wizard used** (and carries the ellipsis a dialog-opening action should:
+  `New 2D Frame…`). A 2D frame project on its own is an empty canvas, and the
+  only plane it can build in is the wizard's XY, so the wizard is what turns the
+  menu entry into a frame. `core.frames.frame_grid` then writes a grid with a
+  line per column position (including the crown line when the ridge falls
+  mid-bay), a line per distinct roof level and one on the plane, labelled the
+  way every other grid in the application is (`X1`, `X2`…) and placed at the
+  origin the user typed. Frame and grid are one undo step, and for a 2D project
+  the view switches to the plane so the frame comes up face on with its heights
+  in the level list. Define → Create Portal Frame is deliberately unchanged: it
+  builds a frame into the project that is already open and touches nothing else.
+  Cancelling the wizard still leaves the empty project, which is the right start
+  for drawing by hand.
 
 ## [0.0.4] — 2026-10-06
 

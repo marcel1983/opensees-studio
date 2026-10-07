@@ -15,6 +15,7 @@ from opensees_studio.core import (
     RoofType,
     SupportCondition,
     build_portal_frame,
+    frame_grid,
 )
 
 FIXED = (True, True, True, True, True, True)
@@ -215,3 +216,73 @@ def test_the_summary_names_the_geometry() -> None:
     assert "ridge 4.3" in text
     assert "2 slopes" in text
     assert "10 %" in text
+
+
+# ──────────────────────────── the grid ────────────────────────────
+def _ordinates(grid) -> dict[str, list[float]]:  # type: ignore[no-untyped-def]
+    return {
+        "x": [line.ordinate for line in grid.grid.x_grid_lines],
+        "y": [line.ordinate for line in grid.grid.y_grid_lines],
+        "z": [line.ordinate for line in grid.grid.z_grid_lines],
+    }
+
+
+def _labels(grid) -> dict[str, list[str]]:  # type: ignore[no-untyped-def]
+    return {
+        "x": [line.id for line in grid.grid.x_grid_lines],
+        "y": [line.id for line in grid.grid.y_grid_lines],
+        "z": [line.id for line in grid.grid.z_grid_lines],
+    }
+
+
+def test_the_grid_marks_the_columns_the_roof_levels_and_the_plane() -> None:
+    """Started from a new 2D frame, the user keeps drawing on the wizard's lines."""
+    grid = frame_grid(_spec(bay_width=6.0, eave_height=4.0, slope=0.10, plane="XY"))
+
+    assert grid.name == "Portal Frame"
+    assert grid.grid.visible
+    assert _ordinates(grid) == {"x": [0.0, 3.0, 6.0], "y": [0.0, 4.0, 4.3], "z": [0.0]}
+
+
+def test_the_grid_sits_at_the_origin_the_wizard_was_given() -> None:
+    grid = frame_grid(_spec(origin=(10.0, 0.0, 2.0), plane="XY"))
+
+    assert grid.coord.origin == (10.0, 0.0, 2.0)
+    assert _ordinates(grid)["x"][0] == 0.0  # ordinates are relative to it
+
+
+def test_the_grid_lines_carry_the_application_labels() -> None:
+    grid = frame_grid(_spec(plane="XY"))
+
+    assert _labels(grid)["x"] == ["X1", "X2", "X3"]
+    assert _labels(grid)["y"] == ["Y1", "Y2", "Y3"]
+
+
+def test_a_flat_multi_bay_grid_has_one_line_per_column() -> None:
+    grid = frame_grid(
+        _spec(n_bays=3, bay_width=5.0, eave_height=3.0, slope=0.0, roof=RoofType.MONO_PITCH)
+    )
+
+    # The default plane is XZ: the span is x, the heights are z, and y is the plane.
+    assert _ordinates(grid) == {
+        "x": [0.0, 5.0, 10.0, 15.0],  # one line per column
+        "z": [0.0, 3.0],  # the ground and the single roof level, listed once
+        "y": [0.0],
+    }
+
+
+def test_a_mono_pitch_lists_every_column_height() -> None:
+    grid = frame_grid(
+        _spec(n_bays=2, bay_width=6.0, eave_height=4.0, slope=0.10, roof=RoofType.MONO_PITCH)
+    )
+
+    assert _ordinates(grid)["z"] == [0.0, 4.0, 4.6, 5.2]  # every column top
+
+
+def test_the_grid_follows_the_plane_the_frame_was_built_in() -> None:
+    grid = frame_grid(_spec(n_bays=1, bay_width=6.0, eave_height=4.0, plane="YZ"))
+
+    # YZ: span along y, height along z, and x is the plane's own level.
+    assert _ordinates(grid)["y"] == [0.0, 3.0, 6.0]
+    assert _ordinates(grid)["z"] == [0.0, 4.0, 4.3]
+    assert _ordinates(grid)["x"] == [0.0]

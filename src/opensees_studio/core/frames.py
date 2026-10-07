@@ -35,6 +35,12 @@ from dataclasses import dataclass
 from typing import Literal
 
 from opensees_studio.core.geometry.elements import ElasticBeamColumn
+from opensees_studio.core.geometry.grid import (
+    CoordinateGridSystem,
+    CoordinateSystem,
+    GridSystem,
+    make_grid_lines,
+)
 from opensees_studio.core.geometry.node import Node, Restraint6
 
 #: Frames are plane frames: a span axis, a height axis, and the axis normal to
@@ -334,4 +340,50 @@ def build_portal_frame(
         base_node_ids=bases,
         top_node_ids=tops,
         ridge_node_id=ridge_id,
+    )
+
+
+#: Two ordinates closer than this are the same grid line.
+GRID_TOLERANCE = 1e-9
+
+
+def _distinct(values: list[float]) -> list[float]:
+    """Sorted ordinates with near-equal ones collapsed (the roof line repeats)."""
+    result: list[float] = []
+    for value in sorted(values):
+        if not result or abs(value - result[-1]) > GRID_TOLERANCE:
+            result.append(value)
+    return result
+
+
+def frame_grid(spec: PortalFrameSpec, *, name: str = "Portal Frame") -> CoordinateGridSystem:
+    """A grid whose lines are the frame's columns, roof levels and plane.
+
+    Started from ``File → New 2D Frame`` so the user keeps drawing on the lines
+    the wizard just used: one line per column position (plus the crown line when
+    the ridge falls mid-bay), one per distinct height on the roof line, and one
+    on the plane's own level. Lines are labelled the way every other grid in the
+    application is (``X1``, ``X2``…), and the ordinates are relative to the
+    frame's origin, which is where the coordinate system sits.
+    """
+    span_axis, height_axis, _ = PLANE_AXES[spec.plane]
+
+    span_ordinates = [i * spec.bay_width for i in range(spec.n_bays + 1)]
+    if spec.has_ridge_node:
+        middle = spec.n_bays // 2
+        span_ordinates.append(middle * spec.bay_width + spec.bay_width / 2.0)
+    height_ordinates = [0.0, *spec.column_heights(), spec.ridge_height]
+
+    per_axis: list[list[float]] = [[0.0], [0.0], [0.0]]
+    per_axis[span_axis] = _distinct(span_ordinates)
+    per_axis[height_axis] = _distinct(height_ordinates)
+
+    return CoordinateGridSystem(
+        name=name,
+        coord=CoordinateSystem(origin=spec.origin),
+        grid=GridSystem(
+            x_grid_lines=make_grid_lines("X", per_axis[0]),
+            y_grid_lines=make_grid_lines("Y", per_axis[1]),
+            z_grid_lines=make_grid_lines("Z", per_axis[2]),
+        ),
     )

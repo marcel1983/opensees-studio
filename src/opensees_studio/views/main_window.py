@@ -59,6 +59,7 @@ from opensees_studio.core import (
     Project,
     ShellMITC4Element,
     build_portal_frame,
+    frame_grid,
     labels_for,
     make_default_section,
 )
@@ -661,7 +662,7 @@ class MainWindow(QMainWindow):
             return
         self._vm.new_project(ndm=2, ndf=3)
         self._log("New 2D frame project (ndm = 2, ndf = 3).")
-        self._on_frame_wizard()
+        self._create_portal_frame(with_grid=True)
 
     def _on_new_2d_truss(self) -> None:
         """Planar truss model — (ndm=2, ndf=2): only Ux, Uy per joint.
@@ -1152,6 +1153,16 @@ class MainWindow(QMainWindow):
     def _on_frame_wizard(self) -> None:
         """Define → Create Portal Frame: a parametric 2D frame, one undo step.
 
+        This builds a frame into whatever project is open and touches nothing
+        else. ``File → New 2D Frame`` (:meth:`_on_new_2d`) asks for the matching
+        grid as well, because there the wizard is the whole point of the menu
+        entry rather than one of the ways to draw a member.
+        """
+        self._create_portal_frame(with_grid=False)
+
+    def _create_portal_frame(self, *, with_grid: bool) -> None:
+        """Collect the wizard's answers and insert the frame (and, if asked, its grid).
+
         The geometry comes from ``core.frames``; this only collects it, resolves
         the two section choices (creating the canonical default one *inside* the
         macro when the project has none) and inserts the result.
@@ -1183,6 +1194,7 @@ class MainWindow(QMainWindow):
         column_id, rafter_id = wizard.section_choice()
 
         self._vm.undo_stack.beginMacro("Create portal frame")
+        grid = None
         try:
             if column_id is None or rafter_id is None:
                 section = make_default_section(project.next_section_id())
@@ -1198,6 +1210,12 @@ class MainWindow(QMainWindow):
             )
             self._vm.apply_command(AddNodesCommand(self._vm, frame.nodes))
             self._vm.apply_command(AddElementsCommand(self._vm, frame.elements))
+            if with_grid:
+                # The same undo step as the frame: one Ctrl+Z takes both back.
+                grid = frame_grid(spec)
+                self._vm.apply_command(
+                    SetCoordSystemsCommand(self._vm, [*project.coord_systems, grid])
+                )
         except Exception as exc:
             QMessageBox.critical(self, "Cannot create the frame", str(exc))
             return
@@ -1209,6 +1227,17 @@ class MainWindow(QMainWindow):
         for node in frame.nodes:
             self._canvas.selection.select_node(node.id, additive=True)
         self._log(f"{frame.summary()} Left selected for Edit → Replicate.")
+        if grid is not None:
+            lines = (
+                len(grid.grid.x_grid_lines)
+                + len(grid.grid.y_grid_lines)
+                + len(grid.grid.z_grid_lines)
+            )
+            self._log(f"Grid '{grid.name}' created with {lines} line(s) from the same numbers.")
+            if project.ndm == 2:
+                # A 2D model has one plane: show it face on, with the frame's
+                # heights available as the working-plane levels.
+                self._on_view_top()
 
     def _on_add_node(self) -> None:
         if self._vm.project is None:

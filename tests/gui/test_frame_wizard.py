@@ -138,6 +138,12 @@ def test_new_2d_frame_opens_the_wizard_and_builds_in_the_xy_plane(qtbot, monkeyp
     mw._act_new_2d.trigger()
 
     assert (mw._vm.project.ndm, mw._vm.project.ndf) == (2, 3)
+    # ... and the grid it drew the frame on comes with it, in the same undo step.
+    grids = [cs for cs in mw._vm.project.coord_systems if cs.name == "Portal Frame"]
+    assert len(grids) == 1
+    assert [line.ordinate for line in grids[0].grid.x_grid_lines] == [0.0, 2.5, 5.0]
+    assert [line.ordinate for line in grids[0].grid.y_grid_lines] == [0.0, 3.0, 3.25]
+    assert "Grid 'Portal Frame' created" in mw._console.toPlainText()
     # A 2D project has one plane, and the wizard uses it without asking.
     assert [node.coords for node in mw._vm.project.nodes] == [
         (0.0, 0.0, 0.0),
@@ -148,6 +154,11 @@ def test_new_2d_frame_opens_the_wizard_and_builds_in_the_xy_plane(qtbot, monkeyp
     ]
     assert len(mw._vm.project.elements) == 4
     assert "New 2D frame project" in mw._console.toPlainText()
+
+    # Frame and grid are one undo step.
+    mw._vm.undo_stack.undo()
+    assert mw._vm.project.nodes == []
+    assert [cs.name for cs in mw._vm.project.coord_systems] == ["Global"]
 
 
 @pytest.mark.gui
@@ -160,6 +171,7 @@ def test_cancelling_the_wizard_leaves_the_empty_2d_project(qtbot, monkeypatch) -
     assert (mw._vm.project.ndm, mw._vm.project.ndf) == (2, 3)
     assert mw._vm.project.nodes == []
     assert mw._vm.project.elements == []
+    assert [cs.name for cs in mw._vm.project.coord_systems] == ["Global"]  # no stray grid
 
 
 @pytest.mark.gui
@@ -185,6 +197,20 @@ def test_new_2d_frame_keeps_the_model_when_the_discard_is_refused(qtbot, monkeyp
 
 
 # ──────────────────────────── through the menu ────────────────────────────
+@pytest.mark.gui
+def test_create_portal_frame_does_not_add_a_grid(qtbot, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """The grid belongs to `New 2D Frame`; Define → Create Portal Frame leaves
+    the coordinate systems where they were."""
+    mw = _window(qtbot)
+    _accept_wizard(monkeypatch, _n_bays=1, _bay_width=6.0, _eave_height=4.0)
+
+    mw._act_frame_wizard.trigger()
+
+    assert len(mw._vm.project.nodes) == 5  # the frame is there...
+    assert [cs.name for cs in mw._vm.project.coord_systems] == ["Global"]  # ...without a grid
+    assert "Grid" not in mw._console.toPlainText()
+
+
 @pytest.mark.gui
 def test_the_menu_builds_the_frame_in_one_undo_step(qtbot, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     mw = _window(qtbot)
