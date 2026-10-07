@@ -38,16 +38,24 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
 ## What works today
 
 - **Modeling** — grids, nodes, frames (elastic, force-based and
-  displacement-based), trusses, corotational trusses, quads, zero-length
-  elements and zero-length sections, restraints, equalDOF constraints,
-  distributed loads, imposed support motion.
+  displacement-based), trusses, corotational trusses, quads, `ShellMITC4`
+  shells (Define → Create Shell from 4 Nodes derives the winding from the
+  coordinates), zero-length elements and zero-length sections, restraints,
+  equalDOF constraints, distributed loads, imposed support motion.
 - **Materials** — `Steel01`, `Steel02`, `Concrete01`, `Concrete02`,
   `Concrete04` (Popovics), `ElasticPP`, `Hardening`, `Hysteretic`,
   `HystereticSM`, elastic uniaxial and `ElasticIsotropic`.
 - **Sections** — `ElasticSection`, fiber sections (rectangular / circular
   patches, straight rebar layers, a W-shape template), `SectionAggregator`,
-  `BeamWithHinges`; geometric transformations and beam integration rules are
-  assignable per element.
+  `BeamWithHinges`, and `ElasticMembranePlateSection` (E, ν, h, ρ) for shells;
+  geometric transformations and beam integration rules are assignable per
+  element.
+- **AISC v16 shape library** — pick a shape by name in Define → Section
+  Library → "Add from AISC…" (1,660 shapes across 13 families). The data is
+  US customary and is shown both as published and converted to the project's
+  units; E and G stay the material's business. See
+  [`src/opensees_studio/data/README.md`](src/opensees_studio/data/README.md)
+  for provenance, licence and how the numbers were cross-checked.
 - **Seismic isolators** — elastomeric bearings (plasticity and Bouc-Wen,
   2D/3D) and sliding bearings (`flatSliderBearing`, `singleFPBearing`) with
   Coulomb, velocity-dependent and normal-force-dependent friction models.
