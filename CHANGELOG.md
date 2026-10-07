@@ -9,6 +9,13 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.4] — 2026-10-06
+
+The AISC v16 shape library and the shell element — and the crash that running
+them turned up, where opening a force diagram over a model with shells closed
+the application. It is also the first release whose layering import-linter
+enforces, and the first whose archives ship with checksums.
+
 ### Added
 
 - **An OpenSees coverage review** (`reports/OPENSEES_COVERAGE_2026-10-04.md`):
