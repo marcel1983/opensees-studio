@@ -84,6 +84,12 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
 - **Export** — the model, with or without one analysis case, as a plain
   OpenSeesPy script generated from the same command sequence the solver
   receives, so it reproduces the application's numbers.
+- **Model health** — Edit → Check Model for Duplicates: coincident nodes and
+  elements that describe the same member twice, with a tolerance that follows
+  the size of the model. Pairs that are deliberate — the two nodes of a
+  zero-length element or a bearing, nodes tied by `equalDOF` — are listed with
+  their reason and left alone; the repair merges the rest, repoints the loads
+  and constraints, and is one undoable step.
 - **Copying geometry** — Edit → Move, Replicate (an offset applied N times,
   which carries the loads of the copied nodes and elements with it) and Mirror
   across a global plane.

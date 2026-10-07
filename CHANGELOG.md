@@ -22,6 +22,31 @@ refused instead of silently downgraded).
   do is copy it. The geometry is pure `core.frames`, so the wizard, the log line
   and the tests read the same specification.
 
+### Added
+
+- **A duplicate checker and repair** (Edit → Check Model for Duplicates):
+  coincident nodes and elements that describe the same member twice, reported
+  before anything is touched. The tolerance is one part per million of the
+  model's extent, so the same numbers work in metres and in millimetres, and
+  the deliberate coincidences — the two nodes of a zero-length element or a
+  bearing, and nodes tied by an `equalDOF` constraint — are listed *with the
+  reason* and left alone rather than merged, which would quietly delete every
+  isolator in the model. Elements are compared by their whole definition, so
+  two members over the same nodes with different sections are reported as
+  parallel (information) instead of being removed as duplicates.
+  The repair is one undoable step: restraints are combined (a support is never
+  released by accident), masses that agree are kept once and masses that differ
+  are added, and element nodes, `equalDOF` constraints, nodal loads and
+  imposed-support lists follow the node that stays. Loads that were copies are
+  dropped rather than doubled, an element whose ends merge into one node is
+  removed for having no length left, and the element duplicates are recomputed
+  *after* the node merge — merging two nodes can turn two members into the same
+  member, which a report computed beforehand cannot see. Verified on a real
+  solve: a cantilever copied whole shows the *same* tip deflection (the copy
+  doubles stiffness and load together) while its supports carry 2000 N instead
+  of the 1000 N the structure is meant to; after the repair both match
+  `P L³/3EI` and `P`.
+
 ### Fixed
 
 - **The failure report of a run crashed the application when the report had
