@@ -56,6 +56,14 @@ for package in ("openseespylinux", "openseespy"):
     binaries += pkg_binaries
     hiddenimports += pkg_hidden
 
+# Package data that is not a Python module, so nothing discovers it: the AISC
+# shape table the section picker reads at runtime. Without this the frozen app
+# opens the picker and fails on a missing CSV.
+datas += [
+    (str(SRC / "opensees_studio" / "data" / name), "opensees_studio/data")
+    for name in ("aisc_v16.csv", "README.md", "LICENSE-steelpy.txt")
+]
+
 # PyVista is built with mypyc: `pyvista.typing.mypy_plugin` — imported at
 # runtime by `pyvista/core/dataobject.py`, not only by the type checker —
 # imports a top-level native module whose name is a content hash, e.g.
