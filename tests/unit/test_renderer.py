@@ -8,6 +8,7 @@ pv = pytest.importorskip("pyvista")
 import numpy as np  # noqa: E402
 
 from opensees_studio.core import (  # noqa: E402
+    CoordinateGridSystem,
     ElasticBeamColumn,
     ElasticSection,
     LinearTimeSeries,
@@ -17,7 +18,9 @@ from opensees_studio.core import (  # noqa: E402
     Project,
     Steel01,
     TrussElement,
+    make_grid_lines,
 )
+from opensees_studio.core.geometry.grid import GridSystem  # noqa: E402
 from opensees_studio.services.deformation import DeformationSource  # noqa: E402
 from opensees_studio.views.canvas3d.model_renderer import (  # noqa: E402
     ModelRenderer,
@@ -113,6 +116,91 @@ def test_render_twice_does_not_leak_actors(offscreen_plotter, small_3d_project) 
     r.render(small_3d_project)
     aux2 = len(r._aux_actors)
     assert aux1 == aux2  # not doubled
+
+
+# ──────────────────────── the origin reference ────────────────────────
+def test_the_origin_triad_marks_the_three_axes_from_the_origin(
+    offscreen_plotter, small_3d_project
+) -> None:  # type: ignore[no-untyped-def]
+    """A user looking at an unfamiliar model needs to know which way +Y runs."""
+    r = ModelRenderer(offscreen_plotter)
+    r.render(small_3d_project)
+
+    assert len(r._triad_actors) == 4  # three arrows and their labels
+    length = r._origin_triad_length(small_3d_project)
+    for axis, actor in enumerate(r._triad_actors[:3]):
+        xmin, xmax, ymin, ymax, zmin, zmax = actor.GetBounds()
+        spans = [xmax - xmin, ymax - ymin, zmax - zmin]
+        assert spans[axis] == pytest.approx(length, rel=1e-6)  # its own axis...
+        assert max(spans) == pytest.approx(length, rel=1e-6)  # ...and only that one
+        lower = (xmin, ymin, zmin)[axis]
+        assert lower == pytest.approx(0.0, abs=1e-9)  # it starts at (0, 0, 0)
+
+
+def test_the_triad_is_a_reference_not_a_target(offscreen_plotter, small_3d_project) -> None:  # type: ignore[no-untyped-def]
+    r = ModelRenderer(offscreen_plotter)
+    r.render(small_3d_project)
+
+    assert all(not actor.GetPickable() for actor in r._triad_actors)
+
+
+def test_the_triad_scales_with_the_model(offscreen_plotter, small_3d_project) -> None:  # type: ignore[no-untyped-def]
+    """Small next to a 100 m frame, visible next to a 100 mm one."""
+    r = ModelRenderer(offscreen_plotter)
+    small = r._origin_triad_length(small_3d_project)
+    large = r._origin_triad_length(
+        small_3d_project.model_copy(
+            update={
+                "nodes": [
+                    node.model_copy(update={"coords": tuple(c * 100 for c in node.coords)})
+                    for node in small_3d_project.nodes
+                ]
+            }
+        )
+    )
+
+    assert small == pytest.approx(0.08 * 5.0)  # the 3-4-5 diagonal of this model
+    assert large == pytest.approx(100.0 * small)
+
+
+def test_an_empty_project_still_gets_a_reference(offscreen_plotter) -> None:  # type: ignore[no-untyped-def]
+    r = ModelRenderer(offscreen_plotter)
+    r.render(Project())
+
+    assert len(r._triad_actors) == 4
+    assert r._origin_triad_length(Project()) == 1.0
+
+
+def test_the_triad_falls_back_to_the_grid_when_there_are_no_nodes(offscreen_plotter) -> None:  # type: ignore[no-untyped-def]
+    project = Project(
+        coord_systems=[
+            CoordinateGridSystem(
+                name="Global",
+                grid=GridSystem(
+                    x_grid_lines=make_grid_lines("X", [0.0, 10.0]),
+                    y_grid_lines=make_grid_lines("Y", [0.0]),
+                    z_grid_lines=make_grid_lines("Z", [0.0]),
+                ),
+            )
+        ]
+    )
+    r = ModelRenderer(offscreen_plotter)
+    r.render(project)
+
+    assert r._origin_triad_length(project) == pytest.approx(0.8)  # 8 % of the 10 m grid
+    assert len(r._triad_actors) == 4
+
+
+def test_the_triad_is_rebuilt_and_torn_down_with_the_scene(
+    offscreen_plotter, small_3d_project
+) -> None:  # type: ignore[no-untyped-def]
+    r = ModelRenderer(offscreen_plotter)
+    r.render(small_3d_project)
+    r.render(small_3d_project)
+    assert len(r._triad_actors) == 4  # not accumulated
+
+    r.render(None)
+    assert r._triad_actors == []
 
 
 # ──────────────────────────── selection ────────────────────────────

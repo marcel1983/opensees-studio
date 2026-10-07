@@ -47,6 +47,17 @@ refused instead of silently downgraded).
   of the 1000 N the structure is meant to; after the repair both match
   `P L³/3EI` and `P`.
 
+### Added
+
+- **An X / Y / Z reference at the origin.** Small red, green and blue arrows
+  with their labels, drawn as scene geometry at (0, 0, 0) rather than as a
+  corner widget, because the question they answer — which way does +Y run in
+  this model — is about the model, and the answer belongs next to the elements
+  being looked at. Their length is 8 % of the model's extent, so they stay small
+  next to a 100 m frame and visible next to a 100 mm one (an empty project falls
+  back to its grid, and a completely empty one to a unit length), and they are
+  not pickable: a reference is not part of the structure.
+
 ### Fixed
 
 - **The failure report of a run crashed the application when the report had

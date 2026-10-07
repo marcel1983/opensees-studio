@@ -78,6 +78,9 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   shapes, axial / shear / moment diagrams, pushover curves (in display
   units), time-history plots, hysteresis loops, response-spectrum SRSS / CQC,
   snapshot and video export, full-precision CSV of the result tables.
+- **A reference triad at the origin** — small red / green / blue arrows
+  labelled X, Y and Z, sized from the model, so the direction the elements run
+  in is never in doubt in an isometric view.
 - **Material tester** — run any supported uniaxial material through a
   monotonic or cyclic strain protocol in an isolated model and plot the
   stress–strain history, without a full analysis.

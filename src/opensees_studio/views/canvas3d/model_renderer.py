@@ -44,6 +44,12 @@ class RendererMode(enum.Enum):
     MODAL = "modal"
 
 
+#: Colours of the origin reference: the usual X red, Y green, Z blue.
+_TRIAD_COLORS: tuple[str, str, str] = ("#d0402f", "#2f9e4f", "#2f5fcf")
+
+#: Arrow length as a fraction of the model's extent, so it reads at any zoom.
+_TRIAD_LENGTH_FRACTION = 0.08
+
 #: Elements drawn as surfaces (a filled face) rather than as lines.
 _SURFACE_CLASSES = (
     QuadElement,
@@ -117,6 +123,7 @@ class ModelRenderer:
         self._frame_ids_ordered: list[int] = []
         self._frame_id_to_row: dict[int, int] = {}
 
+        self._triad_actors: list[Any] = []
         self._surface_pd: pv.PolyData | None = None
         self._surface_actor: Any = None
         self._surface_ids_ordered: list[int] = []
@@ -147,6 +154,7 @@ class ModelRenderer:
         # Grid renders even when there are no nodes yet — so the user sees
         # the grid before they place any geometry.
         self._build_grid(project)
+        self._build_origin_triad(project)
         if not project.nodes:
             return
         self._build_node_polydata(project)
@@ -377,6 +385,64 @@ class ModelRenderer:
             line_width=1.0,
             lighting=True,
             pickable=True,
+        )
+
+    def _origin_triad_length(self, project: Project) -> float:
+        """How long the reference arrows should be for this model.
+
+        A fraction of the model's own extent, so they stay small next to a 100 m
+        frame and still visible next to a 100 mm one. An empty project falls
+        back to the grid it is showing, and a completely empty one to 1.
+        """
+        reference = 0.0
+        if project.nodes:
+            points = np.asarray([node.coords for node in project.nodes], dtype=float)
+            reference = float(np.linalg.norm(points.max(axis=0) - points.min(axis=0)))
+        if reference <= 0.0:
+            for cs in project.coord_systems:
+                for lines in (cs.grid.x_grid_lines, cs.grid.y_grid_lines, cs.grid.z_grid_lines):
+                    for line in lines:
+                        reference = max(reference, abs(line.ordinate))
+        if reference <= 0.0:
+            return 1.0
+        return reference * _TRIAD_LENGTH_FRACTION
+
+    def _build_origin_triad(self, project: Project) -> None:
+        """A small X/Y/Z reference at the world origin (0, 0, 0).
+
+        Three arrows with their labels, in the colours everyone expects, scaled
+        to the model. Drawn as scene geometry rather than as a corner widget
+        because the question it answers — "which way is +Y here?" — is about the
+        model, and the answer has to sit next to the elements being looked at.
+        Not pickable: it is a reference, not part of the structure.
+        """
+        length = self._origin_triad_length(project)
+        origin = np.zeros(3)
+        for axis, color in enumerate(_TRIAD_COLORS):
+            direction = np.zeros(3)
+            direction[axis] = 1.0
+            arrow = pv.Arrow(
+                start=origin,
+                direction=direction,
+                scale=length,
+                tip_length=0.3,
+                tip_radius=0.075,
+                shaft_radius=0.018,
+            )
+            self._triad_actors.append(
+                self._plotter.add_mesh(arrow, color=color, pickable=False, lighting=False)
+            )
+        tips = np.eye(3, dtype=float) * length * 1.35
+        self._triad_actors.append(
+            self._plotter.add_point_labels(
+                tips,
+                ["X", "Y", "Z"],
+                font_size=11,
+                text_color="black",
+                shape=None,
+                always_visible=True,
+                pickable=False,
+            )
         )
 
     def _build_grid(self, project: Project) -> None:
@@ -767,13 +833,14 @@ class ModelRenderer:
             if a is not None:
                 with contextlib.suppress(Exception):
                     self._plotter.remove_actor(a, render=False)
-        for a in self._aux_actors:
+        for a in (*self._aux_actors, *self._triad_actors):
             with contextlib.suppress(Exception):
                 self._plotter.remove_actor(a, render=False)
         self._node_actor = None
         self._frame_actor = None
         self._surface_actor = None
         self._aux_actors.clear()
+        self._triad_actors.clear()
         self._node_pd = None
         self._node_glyph = None
         self._frame_pd = None
