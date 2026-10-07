@@ -9,6 +9,10 @@ from opensees_studio.commands.base import ProjectCommand
 from opensees_studio.commands.constraints import (
     AddEqualDOFConstraintCommand,
 )
+from opensees_studio.commands.duplicates import (
+    FixDuplicatesCommand,
+    RepairReport,
+)
 from opensees_studio.commands.elements import (
     AddElementsCommand,
     AssignElementFieldsCommand,
@@ -83,10 +87,12 @@ __all__ = [
     "DeleteMaterialsCommand",
     "DeleteNodesCommand",
     "DeleteSectionsCommand",
+    "FixDuplicatesCommand",
     "MirrorCommand",
     "MoveNodesCommand",
     "Plane",
     "ProjectCommand",
+    "RepairReport",
     "ReplaceElementsCommand",
     "ReplaceTimeSeriesCommand",
     "ReplicateCommand",

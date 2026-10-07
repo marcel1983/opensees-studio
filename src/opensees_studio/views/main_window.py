@@ -9,6 +9,7 @@ Adds on top of Phase 3:
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -43,6 +44,7 @@ from opensees_studio.commands import (
     AssignSectionCommand,
     DeleteElementsCommand,
     DeleteNodesCommand,
+    FixDuplicatesCommand,
     MirrorCommand,
     MoveNodesCommand,
     ReplaceElementsCommand,
@@ -103,6 +105,7 @@ from opensees_studio.views.dialogs import (
     AssignZeroLengthSectionDialog,
     CoordinateGridSystemsDialog,
     DisplayOptionsDialog,
+    DuplicatesDialog,
     FrameWizard,
     FrictionLibraryDialog,
     GroundMotionsDialog,
@@ -263,6 +266,7 @@ class MainWindow(QMainWindow):
         # Edit → transforms
         self._act_move = QAction("&Move…", self, shortcut="Ctrl+M")
         self._act_replicate = QAction("&Replicate…", self, shortcut="Ctrl+Shift+R")
+        self._act_check_duplicates = QAction("Check Model for &Duplicates…", self)
         self._act_mirror = QAction("Mirr&or…", self)
 
         # Tools (exclusive)
@@ -361,6 +365,8 @@ class MainWindow(QMainWindow):
         m_edit.addActions([self._act_delete, self._act_select_all, self._act_clear_selection])
         m_edit.addSeparator()
         m_edit.addActions([self._act_move, self._act_replicate, self._act_mirror])
+        m_edit.addSeparator()
+        m_edit.addAction(self._act_check_duplicates)
 
         m_define = mb.addMenu("&Define")
         m_define.addAction(self._act_grid)
@@ -552,6 +558,7 @@ class MainWindow(QMainWindow):
         self._act_select_all.triggered.connect(self._on_select_all)
         self._act_move.triggered.connect(self._on_move)
         self._act_replicate.triggered.connect(self._on_replicate)
+        self._act_check_duplicates.triggered.connect(self._on_check_duplicates)
         self._act_mirror.triggered.connect(self._on_mirror)
 
         # Tools
@@ -1102,6 +1109,39 @@ class MainWindow(QMainWindow):
             f"Shell {element_id}: nodes {nodes}, plate section {section.id} "
             f"(winding ordered counter-clockwise)."
         )
+
+    def _on_check_duplicates(self) -> None:
+        """Edit → Check Model for Duplicates: report, then repair on request.
+
+        The dialog reports; :class:`FixDuplicatesCommand` repairs and recomputes
+        the element duplicates *after* merging the nodes, because merging two
+        coincident nodes can turn two members into the same member.
+        """
+        project = self._vm.project
+        if project is None:
+            QMessageBox.information(self, "Duplicates", "Open or create a project first.")
+            return
+        dlg = DuplicatesDialog(project, on_select=self._select_report_row, parent=self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        command = FixDuplicatesCommand(self._vm, tolerance=dlg.tolerance())
+        try:
+            self._vm.apply_command(command)
+        except Exception as exc:
+            QMessageBox.critical(self, "Could not fix the duplicates", str(exc))
+            return
+        self._canvas.selection.clear()
+        self._canvas.render()
+        self._log(f"Duplicates: {command.report.summary()}")
+
+    def _select_report_row(self, node_ids: Sequence[int], element_ids: Sequence[int]) -> None:
+        """Highlight the nodes/elements of a report row so they can be inspected."""
+        self._canvas.selection.clear()
+        for node_id in node_ids:
+            self._canvas.selection.select_node(node_id, additive=True)
+        for element_id in element_ids:
+            self._canvas.selection.select_element(element_id, additive=True)
+        self._canvas.render()
 
     def _on_frame_wizard(self) -> None:
         """Define → Create Portal Frame: a parametric 2D frame, one undo step.
@@ -2624,6 +2664,7 @@ class MainWindow(QMainWindow):
         self._act_add_node.setEnabled(True)
         self._act_create_shell.setEnabled(has_project)
         self._act_frame_wizard.setEnabled(has_project)
+        self._act_check_duplicates.setEnabled(has_project)
         self._act_assign_support.setEnabled(has_project and has_selected_nodes)
         self._act_assign_masses.setEnabled(has_project and has_selected_nodes)
         self._act_assign_equal_dof.setEnabled(has_project and n_sel == 2)

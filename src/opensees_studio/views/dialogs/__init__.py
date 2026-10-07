@@ -24,6 +24,7 @@ from opensees_studio.views.dialogs.define_grid_data import (
 )
 from opensees_studio.views.dialogs.display_options import DisplayOptionsDialog
 from opensees_studio.views.dialogs.distributed_load import AssignDistributedLoadDialog
+from opensees_studio.views.dialogs.duplicates import DuplicatesDialog
 from opensees_studio.views.dialogs.frame_wizard import FrameWizard
 from opensees_studio.views.dialogs.friction_library import FrictionLibraryDialog
 from opensees_studio.views.dialogs.generate_excitation import GenerateExcitationDialog
@@ -66,6 +67,7 @@ __all__ = [
     "CoordinateGridSystemsDialog",
     "DefineGridSystemDataDialog",
     "DisplayOptionsDialog",
+    "DuplicatesDialog",
     "FrameWizard",
     "FrictionLibraryDialog",
     "GenerateExcitationDialog",
