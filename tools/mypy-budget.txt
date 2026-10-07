@@ -15,5 +15,8 @@
 # member without the field was an error. Reading through `getattr` removed them
 # and took the total from 384 to 375. Skipping face elements in the force
 # diagram narrowed the element union on that path too, and `element_forces.py`
-# and `diagram_renderer.py` now report no errors at all: 375 -> 373.
-373
+# and `diagram_renderer.py` now report no errors at all: 375 -> 373. Giving the
+# copy loops in `commands/transforms.py` their own variable names — one name for
+# a node and for an element in the same scope defeats the narrowing — left that
+# module clean too: 373 -> 367.
+367

@@ -13,7 +13,14 @@ from opensees_studio.commands import (
     MoveNodesCommand,
     ReplicateCommand,
 )
-from opensees_studio.core import Node, Steel01, TrussElement
+from opensees_studio.core import (
+    NodalLoad,
+    Node,
+    PlainLoadPattern,
+    Steel01,
+    TrussElement,
+    UniformElementLoad,
+)
 from opensees_studio.viewmodels import ProjectViewModel
 
 
@@ -42,6 +49,40 @@ def _populated_vm() -> ProjectViewModel:
                 TrussElement(id=3, nodes=(3, 4), area=1e-3, material_id=1),
                 TrussElement(id=4, nodes=(4, 1), area=1e-3, material_id=1),
             ],
+        )
+    )
+    return vm
+
+
+def _vm_with_loads() -> ProjectViewModel:
+    """Two nodes, one truss, a nodal load and a distributed load on it."""
+    vm = ProjectViewModel()
+    vm.new_project(ndm=2, ndf=2)
+    vm.apply_command(
+        AddNodesCommand(
+            vm,
+            [
+                Node(
+                    id=1,
+                    coords=(0, 0, 0),
+                    restraint=(True, True, False, False, False, False),
+                    mass=(5.0, 5.0, 0, 0, 0, 0),
+                ),
+                Node(id=2, coords=(1, 0, 0)),
+            ],
+        )
+    )
+    vm.project.materials.append(Steel01(id=1, Fy=420e6, E0=200e9, b=0.01))
+    vm.apply_command(
+        AddElementsCommand(vm, [TrussElement(id=1, nodes=(1, 2), area=1e-3, material_id=1)])
+    )
+    vm.project.load_patterns.append(
+        PlainLoadPattern(
+            id=1,
+            name="P",
+            time_series_id=1,
+            nodal_loads=[NodalLoad(node_id=2, forces=(0.0, -10.0, 0, 0, 0, 0))],
+            element_loads=[UniformElementLoad(element_id=1, wy=-3.0)],
         )
     )
     return vm
@@ -150,3 +191,68 @@ def test_mirror_undo_removes_copies(qtbot) -> None:  # type: ignore[no-untyped-d
     vm.undo_stack.undo()
     assert len(vm.project.nodes) == 4
     assert len(vm.project.elements) == 4
+
+
+# ──────────────── the copies carry the loads with them ────────────────
+@pytest.mark.gui
+def test_replicate_copies_the_loads_on_the_copied_entities(qtbot) -> None:  # type: ignore[no-untyped-def]
+    """A copy of a loaded bay that comes back unloaded is not a copy."""
+    vm = _vm_with_loads()
+    vm.apply_command(ReplicateCommand(vm, {1, 2}, {1}, offset=(0.0, 0.0, 3.0), n_copies=2))
+
+    pattern = vm.project.load_patterns[0]
+    assert len(vm.project.nodes) == 6
+    # One nodal load per copy, aimed at the copy's own node, same force.
+    assert [(load.node_id, load.forces) for load in pattern.nodal_loads] == [
+        (2, (0.0, -10.0, 0.0, 0.0, 0.0, 0.0)),
+        (4, (0.0, -10.0, 0.0, 0.0, 0.0, 0.0)),
+        (6, (0.0, -10.0, 0.0, 0.0, 0.0, 0.0)),
+    ]
+    assert [(load.element_id, load.wy) for load in pattern.element_loads] == [
+        (1, -3.0),
+        (2, -3.0),
+        (3, -3.0),
+    ]
+    # The copied nodes keep restraint and mass: they are node fields.
+    by_id = {node.id: node for node in vm.project.nodes}
+    assert by_id[3].restraint[:2] == (True, True)  # the copy of the fixed node 1
+    assert by_id[3].mass == (5.0, 5.0, 0, 0, 0, 0)
+
+
+@pytest.mark.gui
+def test_replicating_only_nodes_does_not_touch_element_loads(qtbot) -> None:  # type: ignore[no-untyped-def]
+    """Element loads follow the elements; a partially selected set copies neither."""
+    vm = _vm_with_loads()
+    vm.apply_command(ReplicateCommand(vm, {2}, set(), offset=(0.0, 0.0, 3.0), n_copies=1))
+
+    pattern = vm.project.load_patterns[0]
+    assert [load.node_id for load in pattern.nodal_loads] == [2, 3]
+    assert [load.element_id for load in pattern.element_loads] == [1]  # untouched
+
+
+@pytest.mark.gui
+def test_undoing_the_replicate_removes_the_copied_loads(qtbot) -> None:  # type: ignore[no-untyped-def]
+    vm = _vm_with_loads()
+    vm.apply_command(ReplicateCommand(vm, {1, 2}, {1}, offset=(0.0, 0.0, 3.0), n_copies=1))
+    assert len(vm.project.load_patterns[0].nodal_loads) == 2
+
+    vm.undo_stack.undo()
+
+    pattern = vm.project.load_patterns[0]
+    assert [load.node_id for load in pattern.nodal_loads] == [2]
+    assert [load.element_id for load in pattern.element_loads] == [1]
+    assert len(vm.project.nodes) == 2 and len(vm.project.elements) == 1
+
+
+@pytest.mark.gui
+def test_redo_does_not_duplicate_the_loads(qtbot) -> None:  # type: ignore[no-untyped-def]
+    """Redo after undo has to land on exactly one copy per copy, not two."""
+    vm = _vm_with_loads()
+    vm.apply_command(ReplicateCommand(vm, {1, 2}, {1}, offset=(0.0, 0.0, 3.0), n_copies=1))
+    vm.undo_stack.undo()
+    vm.undo_stack.redo()
+
+    pattern = vm.project.load_patterns[0]
+    assert [load.node_id for load in pattern.nodal_loads] == [2, 4]
+    assert [load.element_id for load in pattern.element_loads] == [1, 2]
+    assert len(vm.project.nodes) == 4

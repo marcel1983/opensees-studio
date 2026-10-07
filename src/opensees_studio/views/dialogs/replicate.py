@@ -35,6 +35,12 @@ class ReplicateDialog(FittedDialog):
         layout.addWidget(
             QLabel("<i>Only elements whose endpoints are both in the selection are copied.</i>")
         )
+        layout.addWidget(
+            QLabel(
+                "<i>Nodal and element loads on the copied nodes and elements come with them; "
+                "restraints, masses and ground motions are left where they are.</i>"
+            )
+        )
 
         form = QFormLayout()
 

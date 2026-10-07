@@ -10,7 +10,9 @@ For Replicate and Mirror, only elements whose **all** endpoint nodes
 fall in the selected set are duplicated — partial-cut elements are
 silently skipped, matching SAP/ETABS behavior.
 
-All copies inherit the source node's restraint, mass, and name.
+All copies inherit the source node's restraint, mass, and name, and the
+replicate carries the loads of the copied nodes and elements with it —
+otherwise a copy of a loaded floor comes back empty.
 """
 
 from __future__ import annotations
@@ -18,6 +20,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 
 from opensees_studio.commands.base import ProjectCommand
+from opensees_studio.core import NodalLoad, PlainLoadPattern, UniformElementLoad
 
 if TYPE_CHECKING:
     from opensees_studio.viewmodels import ProjectViewModel
@@ -77,6 +80,8 @@ class ReplicateCommand(ProjectCommand):
         self._n_copies = n_copies
         self._added_node_ids: set[int] = set()
         self._added_element_ids: set[int] = set()
+        self._added_nodal_loads: list[tuple[PlainLoadPattern, NodalLoad]] = []
+        self._added_element_loads: list[tuple[PlainLoadPattern, UniformElementLoad]] = []
 
     def redo(self) -> None:
         dx, dy, dz = self._offset
@@ -91,43 +96,88 @@ class ReplicateCommand(ProjectCommand):
         next_elem_id = self.project.next_element_id()
         self._added_node_ids.clear()
         self._added_element_ids.clear()
+        self._added_nodal_loads.clear()
+        self._added_element_loads.clear()
 
         for k in range(1, self._n_copies + 1):
             mapping: dict[int, int] = {}
-            for orig in src_nodes:
-                new_node = orig.model_copy(
+            for source_node in src_nodes:
+                new_node = source_node.model_copy(
                     update={
                         "id": next_node_id,
                         "coords": (
-                            orig.coords[0] + k * dx,
-                            orig.coords[1] + k * dy,
-                            orig.coords[2] + k * dz,
+                            source_node.coords[0] + k * dx,
+                            source_node.coords[1] + k * dy,
+                            source_node.coords[2] + k * dz,
                         ),
                     }
                 )
                 self.project.nodes.append(new_node)
                 self._added_node_ids.add(next_node_id)
-                mapping[orig.id] = next_node_id
+                mapping[source_node.id] = next_node_id
                 next_node_id += 1
-            for orig in src_elements:
-                new_elem = orig.model_copy(
+            element_mapping: dict[int, int] = {}
+            for source_element in src_elements:
+                new_elem = source_element.model_copy(
                     update={
                         "id": next_elem_id,
-                        "nodes": tuple(mapping[nid] for nid in orig.nodes),
+                        "nodes": tuple(mapping[nid] for nid in source_element.nodes),
                     }
                 )
                 self.project.elements.append(new_elem)
                 self._added_element_ids.add(next_elem_id)
+                element_mapping[source_element.id] = next_elem_id
                 next_elem_id += 1
+            self._copy_loads(mapping, element_mapping)
         self._notify()
+
+    def _copy_loads(self, node_mapping: dict[int, int], element_mapping: dict[int, int]) -> None:
+        """Re-create the loads that sit on the copied nodes and elements.
+
+        A copy of a loaded frame that comes back unloaded is not a copy of it:
+        the nodes and elements are new, so their loads have to be created again
+        against the new ids. Masses and restraints need nothing here — they are
+        node fields, and ``model_copy`` already carried them over.
+
+        Ground-motion and imposed-support patterns are deliberately left alone:
+        copying a frame should not multiply a base motion.
+        """
+        for pattern in self.project.load_patterns:
+            if not isinstance(pattern, PlainLoadPattern):
+                continue
+            for nodal_load in list(pattern.nodal_loads):
+                if nodal_load.node_id in node_mapping:
+                    copied_nodal_load = NodalLoad(
+                        node_id=node_mapping[nodal_load.node_id],
+                        forces=nodal_load.forces,
+                    )
+                    pattern.nodal_loads.append(copied_nodal_load)
+                    self._added_nodal_loads.append((pattern, copied_nodal_load))
+            for element_load in list(pattern.element_loads):
+                if element_load.element_id in element_mapping:
+                    copied_element_load = UniformElementLoad(
+                        element_id=element_mapping[element_load.element_id],
+                        wy=element_load.wy,
+                        wz=element_load.wz,
+                        wx=element_load.wx,
+                    )
+                    pattern.element_loads.append(copied_element_load)
+                    self._added_element_loads.append((pattern, copied_element_load))
 
     def undo(self) -> None:
         self.project.nodes[:] = [n for n in self.project.nodes if n.id not in self._added_node_ids]
         self.project.elements[:] = [
             e for e in self.project.elements if e.id not in self._added_element_ids
         ]
+        # By identity, not by equality: two loads on the same node can be equal.
+        for pattern, nodal_load in self._added_nodal_loads:
+            pattern.nodal_loads[:] = [x for x in pattern.nodal_loads if x is not nodal_load]
+        for pattern, element_load in self._added_element_loads:
+            pattern.element_loads[:] = [x for x in pattern.element_loads if x is not element_load]
         self._added_node_ids.clear()
         self._added_element_ids.clear()
+        self._added_nodal_loads.clear()
+        self._added_element_loads.clear()
         self._notify()
 
 
@@ -180,22 +230,22 @@ class MirrorCommand(ProjectCommand):
         self._added_element_ids.clear()
         mapping: dict[int, int] = {}
 
-        for orig in src_nodes:
-            new_node = orig.model_copy(
+        for source_node in src_nodes:
+            new_node = source_node.model_copy(
                 update={
                     "id": next_node_id,
-                    "coords": self._reflect(orig.coords, self._plane),
+                    "coords": self._reflect(source_node.coords, self._plane),
                 }
             )
             self.project.nodes.append(new_node)
             self._added_node_ids.add(next_node_id)
-            mapping[orig.id] = next_node_id
+            mapping[source_node.id] = next_node_id
             next_node_id += 1
-        for orig in src_elements:
-            new_elem = orig.model_copy(
+        for source_element in src_elements:
+            new_elem = source_element.model_copy(
                 update={
                     "id": next_elem_id,
-                    "nodes": tuple(mapping[nid] for nid in orig.nodes),
+                    "nodes": tuple(mapping[nid] for nid in source_element.nodes),
                 }
             )
             self.project.elements.append(new_elem)
