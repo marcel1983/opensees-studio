@@ -103,3 +103,25 @@ _GRAVITY: dict[UnitSystem, float] = {
 def gravity(units: UnitSystem) -> float:
     """Standard gravity in the acceleration unit of ``units`` (length/s^2)."""
     return _GRAVITY[units]
+
+
+#: Length of one unit of each system, in metres.
+_LENGTH_M: dict[UnitSystem, float] = {
+    UnitSystem.SI_M_N: 1.0,
+    UnitSystem.SI_MM_N: 1e-3,
+    UnitSystem.US_FT_KIP: 0.3048,
+    UnitSystem.US_IN_KIP: 0.0254,
+}
+
+
+def length_scale(source: UnitSystem, target: UnitSystem) -> float:
+    """Factor taking a length from ``source`` units to ``target`` units.
+
+    The application does not convert values an engineer typed (OpenSees is
+    unit-agnostic and the chosen system is recorded, not applied). This exists
+    for the one case where a value arrives in a unit system of its own — a
+    shape from a published library, which is in US customary units — so the
+    conversion is explicit, shown to the user, and never applied behind their
+    back. Areas scale by the square and second moments by the fourth power.
+    """
+    return _LENGTH_M[source] / _LENGTH_M[target]
