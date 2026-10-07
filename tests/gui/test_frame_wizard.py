@@ -16,10 +16,11 @@ pytest.importorskip("pyvistaqt")
 
 from PySide6.QtWidgets import QDialog, QMessageBox
 
-from opensees_studio.commands import AddSectionsCommand
+from opensees_studio.commands import AddNodesCommand, AddSectionsCommand
 from opensees_studio.core import (
     ElasticMembranePlateSection,
     ElasticSection,
+    Node,
     RoofType,
     SupportCondition,
 )
@@ -116,6 +117,71 @@ def test_the_next_button_needs_numbers_that_describe_a_frame(qtbot) -> None:  # 
 
     wizard._bay_width.setValue(6.0)
     assert wizard.page(0).isComplete()
+
+
+# ──────────────────── File → New 2D Frame ────────────────────
+def _fresh_window(qtbot):  # type: ignore[no-untyped-def]
+    from opensees_studio.views.main_window import MainWindow
+
+    mw = MainWindow()
+    qtbot.addWidget(mw)
+    mw._vm.new_project(ndm=3, ndf=6)  # something to replace, and clean (no prompt)
+    return mw
+
+
+@pytest.mark.gui
+def test_new_2d_frame_opens_the_wizard_and_builds_in_the_xy_plane(qtbot, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """`New 2D Frame` is an empty canvas on its own: the wizard is the frame."""
+    mw = _fresh_window(qtbot)
+    _accept_wizard(monkeypatch, _n_bays=1, _bay_width=5.0, _eave_height=3.0)
+
+    mw._act_new_2d.trigger()
+
+    assert (mw._vm.project.ndm, mw._vm.project.ndf) == (2, 3)
+    # A 2D project has one plane, and the wizard uses it without asking.
+    assert [node.coords for node in mw._vm.project.nodes] == [
+        (0.0, 0.0, 0.0),
+        (0.0, 3.0, 0.0),
+        (5.0, 0.0, 0.0),
+        (5.0, 3.0, 0.0),
+        (2.5, 3.25, 0.0),
+    ]
+    assert len(mw._vm.project.elements) == 4
+    assert "New 2D frame project" in mw._console.toPlainText()
+
+
+@pytest.mark.gui
+def test_cancelling_the_wizard_leaves_the_empty_2d_project(qtbot, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    mw = _fresh_window(qtbot)
+    monkeypatch.setattr(FrameWizard, "exec", lambda self: int(QDialog.DialogCode.Rejected))
+
+    mw._act_new_2d.trigger()
+
+    assert (mw._vm.project.ndm, mw._vm.project.ndf) == (2, 3)
+    assert mw._vm.project.nodes == []
+    assert mw._vm.project.elements == []
+
+
+@pytest.mark.gui
+def test_new_2d_frame_keeps_the_model_when_the_discard_is_refused(qtbot, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    mw = _window(qtbot)
+    mw._vm.apply_command(
+        AddNodesCommand(
+            mw._vm,
+            [Node(id=1, coords=(0.0, 0.0, 0.0)), Node(id=2, coords=(1.0, 0.0, 0.0))],
+        )
+    )
+    before = mw._vm.project.model_dump()
+    monkeypatch.setattr(mw, "_confirm_discard_changes", lambda _action: False)
+    monkeypatch.setattr(
+        FrameWizard,
+        "exec",
+        lambda self: pytest.fail("the wizard must not open when the discard was refused"),
+    )
+
+    mw._act_new_2d.trigger()
+
+    assert mw._vm.project.model_dump() == before  # the model the user chose to keep
 
 
 # ──────────────────────────── through the menu ────────────────────────────

@@ -244,7 +244,7 @@ class MainWindow(QMainWindow):
     def _build_actions(self) -> None:
         # File
         self._act_new = QAction("&New (3D Frame)", self, shortcut=QKeySequence.StandardKey.New)
-        self._act_new_2d = QAction("New &2D Frame", self)
+        self._act_new_2d = QAction("New &2D Frame…", self)
         self._act_new_2d_truss = QAction("New 2D &Truss", self)
         self._act_open = QAction("&Open…", self, shortcut=QKeySequence.StandardKey.Open)
         self._act_save = QAction("&Save", self, shortcut=QKeySequence.StandardKey.Save)
@@ -647,15 +647,21 @@ class MainWindow(QMainWindow):
         self._vm.new_project()
 
     def _on_new_2d(self) -> None:
-        """Planar frame model — (ndm=2, ndf=3): Ux, Uy, Rz per joint.
+        """Planar frame model — (ndm=2, ndf=3): Ux, Uy, Rz per joint, then the wizard.
 
-        Right choice when beam-columns are in the mix. For a pure
-        truss model use 'New 2D Truss' so the solver doesn't face
-        unrestrained rotational DOFs.
+        Right choice when beam-columns are in the mix; for a pure truss use
+        'New 2D Truss' so the solver doesn't face unrestrained rotational DOFs.
+
+        An empty 2D frame project is just an empty canvas, and the only plane it
+        can build in is the wizard's XY, so the wizard opens here: it is what
+        turns "new 2D frame" into a frame. Cancelling leaves the empty project,
+        which is still the right start for drawing by hand.
         """
-        if not self._confirm_discard_changes("Creating a new project"):
+        if not self._confirm_discard_changes("Creating a new 2D frame"):
             return
         self._vm.new_project(ndm=2, ndf=3)
+        self._log("New 2D frame project (ndm = 2, ndf = 3).")
+        self._on_frame_wizard()
 
     def _on_new_2d_truss(self) -> None:
         """Planar truss model — (ndm=2, ndf=2): only Ux, Uy per joint.

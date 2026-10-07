@@ -70,6 +70,16 @@ refused instead of silently downgraded).
   copied — they are node fields. Ground-motion and imposed-support patterns are
   deliberately left alone: copying a frame should not multiply a base motion.
 
+### Changed
+
+- **File → New 2D Frame now opens the portal frame wizard** (and carries the
+  ellipsis a dialog-opening action should: `New 2D Frame…`). A 2D frame project
+  on its own is an empty canvas, and the only plane it can build in is the
+  wizard's XY, so the wizard is what turns the menu entry into a frame.
+  Cancelling it leaves the empty project, which is still the right start for
+  drawing by hand, and Define → Create Portal Frame still builds one into the
+  project that is already open.
+
 ## [0.0.4] — 2026-10-06
 
 The AISC v16 shape library and the shell element — and the crash that running
