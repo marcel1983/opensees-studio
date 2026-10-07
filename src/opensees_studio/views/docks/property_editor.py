@@ -297,10 +297,15 @@ class PropertyEditorDock(QScrollArea):
             form.addRow("Geom transf:", transf_cb)
         elif hasattr(el, "geom_transf"):
             form.addRow("Geom transf:", QLabel(el.geom_transf))
-        if hasattr(el, "integration") and self.on_change_element_fields is not None:
+        # ``getattr`` rather than a ``hasattr`` guard plus attribute access: the
+        # element union is wide, and mypy does not narrow through ``hasattr``,
+        # so the direct read is a type error for every member without the field.
+        integration = getattr(el, "integration", None)
+        if integration is not None and self.on_change_element_fields is not None:
             self._add_integration_rows(form, el)
-        elif hasattr(el, "integration"):
-            form.addRow("Integration:", QLabel(f"{el.integration}, {el.integration_points} points"))
+        elif integration is not None:
+            points = getattr(el, "integration_points", None)
+            form.addRow("Integration:", QLabel(f"{integration}, {points} points"))
         if isinstance(el, SLIDING_BEARING_CLASSES):
             self._add_sliding_bearing_rows(form, el, self._project)
         elif isinstance(el, BEARING_CLASSES):

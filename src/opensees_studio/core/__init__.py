@@ -75,6 +75,7 @@ from opensees_studio.core.geometry import (
     GridSystem,
     Node,
     QuadElement,
+    ShellMITC4Element,
     SingleFPBearingElement,
     SlidingBearingElement,
     TrussElement,
@@ -173,6 +174,7 @@ from opensees_studio.core.sections import (
     AggregatorDOF,
     AngleShape,
     CircularPatch,
+    ElasticMembranePlateSection,
     ElasticSection,
     FiberSection,
     Fibre,
@@ -275,7 +277,9 @@ __all__ = [  # noqa: RUF022 - grouped by domain under section comments, not alph
     "make_grid_lines",
     # Materials
     "CatalogMaterial",
+    "ElasticMembranePlateSection",
     "Material",
+    "ShellMITC4Element",
     "catalog_names",
     "catalog_spec",
     # friction models

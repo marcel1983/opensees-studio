@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal, get_args
 
-from pydantic import Field, PositiveFloat, PositiveInt
+from pydantic import Field, PositiveFloat, PositiveInt, model_validator
 
 from opensees_studio.core._base import Entity, omit_when_default
 from opensees_studio.core.geometry.bearings import (
@@ -223,6 +223,30 @@ class QuadElement(Entity):
     )
 
 
+class ShellMITC4Element(Entity):
+    """Four-node shell — ``element ShellMITC4``.
+
+    A flat, arbitrarily oriented quadrilateral shell with membrane, bending and
+    transverse-shear behaviour, for plates and walls that carry load in their
+    own plane and out of it. Requires ``ndm=3``.
+
+    The four nodes must be listed counter-clockwise around the element's
+    positive normal (OpenSees convention). Unlike a :class:`QuadElement`, which
+    pairs a thickness with an ``nDMaterial``, a shell takes a *section* — see
+    :class:`~opensees_studio.core.sections.ElasticMembranePlateSection`.
+    """
+
+    type: Literal["ShellMITC4"] = "ShellMITC4"
+    nodes: tuple[PositiveInt, PositiveInt, PositiveInt, PositiveInt]
+    section_id: PositiveInt
+
+    @model_validator(mode="after")
+    def _distinct_nodes(self) -> ShellMITC4Element:
+        if len(set(self.nodes)) != 4:
+            raise ValueError(f"ShellMITC4 {self.id}: the four nodes must be distinct.")
+        return self
+
+
 Element = Annotated[
     TrussElement
     | CorotTrussElement
@@ -233,6 +257,7 @@ Element = Annotated[
     | ZeroLengthSectionElement
     | BeamWithHingesElement
     | QuadElement
+    | ShellMITC4Element
     | ElastomericBearingPlasticityElement
     | ElastomericBearingBoucWenElement
     | FlatSliderBearingElement

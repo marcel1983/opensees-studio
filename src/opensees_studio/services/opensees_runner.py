@@ -51,6 +51,7 @@ from opensees_studio.core import (
     CoulombFriction,
     DispBeamColumn,
     ElasticBeamColumn,
+    ElasticMembranePlateSection,
     ElasticSection,
     FiberSection,
     ForceBeamColumn,
@@ -64,6 +65,7 @@ from opensees_studio.core import (
     QuadElement,
     ResponseSpectrumCase,
     SectionAggregator,
+    ShellMITC4Element,
     StaticCase,
     TransientCase,
     TrigTimeSeries,
@@ -287,6 +289,9 @@ class OpenSeesRunner:
 
     def _emit_section(self, sec: Any) -> None:
         ops = self._ops
+        if isinstance(sec, ElasticMembranePlateSection):
+            self._emit_plate_section(sec)
+            return
         match sec:
             case ElasticSection():
                 if self.project.ndm == 2:
@@ -526,6 +531,14 @@ class OpenSeesRunner:
             args += ["-iter", el.max_iter, el.tol]
         return args
 
+    def _emit_plate_section(self, sec: Any) -> None:
+        """``section ElasticMembranePlateSection tag E nu h rho``.
+
+        The section ShellMITC4 takes. OpenSees defines it by its own (E, nu, h,
+        rho), so it never references an nDMaterial.
+        """
+        self._ops.section("ElasticMembranePlateSection", sec.id, sec.E, sec.nu, sec.h, sec.rho)
+
     def _emit_element(self, el: Any) -> None:
         ops = self._ops
         match el:
@@ -587,6 +600,9 @@ class OpenSeesRunner:
                     *el.nodes,
                     el.section_id,
                 )
+            case ShellMITC4Element():
+                # element ShellMITC4 eleTag n1 n2 n3 n4 secTag
+                ops.element("ShellMITC4", el.id, *el.nodes, el.section_id)
             case QuadElement() if True:
                 # element quad         eleTag n1 n2 n3 n4 thk type matTag <pressure rho b1 b2>
                 # element bbarQuad     eleTag n1 n2 n3 n4 thk matTag

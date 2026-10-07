@@ -251,6 +251,23 @@ def w_shape_patches(
     ]
 
 
+# ──────────────────────────── plate / shell ────────────────────────────
+class ElasticMembranePlateSection(Entity):
+    """Linear-elastic plate section — ``section ElasticMembranePlateSection``.
+
+    The section a ``ShellMITC4`` element takes. It carries the plate's own
+    elastic modulus and thickness rather than referencing a material: OpenSees
+    defines this section by (E, nu, h, rho) directly, so a shell model does not
+    need an ``nDMaterial`` at all.
+    """
+
+    type: Literal["ElasticMembranePlateSection"] = "ElasticMembranePlateSection"
+    E: PositiveFloat = Field(..., description="Plate elastic modulus.")
+    nu: float = Field(..., ge=-1.0, le=0.5, description="Poisson's ratio.")
+    h: PositiveFloat = Field(..., description="Plate thickness.")
+    rho: float = Field(default=0.0, ge=0.0, description="Mass density per unit volume.")
+
+
 # ──────────────────────────── Aggregator ────────────────────────────
 class AggregatorDOF(BaseModel):
     """One DOF → uniaxialMaterial pairing inside a ``SectionAggregator``."""
@@ -282,6 +299,6 @@ class SectionAggregator(Entity):
 
 
 Section = Annotated[
-    ElasticSection | FiberSection | SectionAggregator,
+    ElasticSection | FiberSection | SectionAggregator | ElasticMembranePlateSection,
     Field(discriminator="type"),
 ]
