@@ -35,7 +35,9 @@ import pytest
 pytest.importorskip("openseespy.opensees")
 
 from opensees_studio.core import (
+    ElasticBeamColumn,
     ElasticMembranePlateSection,
+    ElasticSection,
     LinearTimeSeries,
     NodalLoad,
     Node,
@@ -44,6 +46,7 @@ from opensees_studio.core import (
     ShellMITC4Element,
     StaticCase,
 )
+from opensees_studio.services.element_forces import ForceComponent, extract_diagram_data
 from opensees_studio.services.opensees_runner import OpenSeesRunner
 
 A = 1.0
@@ -208,3 +211,33 @@ def test_the_shell_carries_its_own_bending_stiffness(tmp_path: Path) -> None:
     thin = ShellMITC4Element(id=1, nodes=(1, 2, 3, 4), section_id=1)
     assert thin.section_id == 1  # the section, not a material, holds the thickness
     assert math.isclose(D, E * T**3 / (12.0 * (1.0 - NU**2)), rel_tol=0.0)
+
+
+# ──────────────── a shell has forces, but no force diagram ────────────────
+# The crash of 2026-10-06, at its source. OpenSees returns 24 force components
+# for a ShellMITC4 (4 nodes × 6) where a beam returns 12; read through the beam
+# index map those are not a diagram, and the renderer then died unpacking the
+# element's four nodes into `n_i, n_j` inside a Qt slot, which took the running
+# application down with it. A mixed model must give the beam a diagram and the
+# shells nothing.
+def test_a_solved_shell_returns_forces_but_no_diagram(tmp_path: Path) -> None:
+    project, _ = _plate_project(2, tmp_path)
+    beam = ElasticBeamColumn(id=99, nodes=(1, 2), section_id=3)
+    project = project.model_copy(
+        update={
+            "sections": [
+                *project.sections,
+                ElasticSection(id=3, E=E, A=0.01, Iz=1e-5, Iy=1e-5, G=80e9, J=1e-6),
+            ],
+            "elements": [*project.elements, beam],
+        }
+    )
+
+    results = OpenSeesRunner(project).run(project.analyses[0], results_dir=tmp_path / "mixed")
+
+    # Measured here, not assumed: this is why the extractor has to skip them.
+    assert results.element_forces[project.elements[0].id].shape == (1, 24)
+    assert results.element_forces[99].shape == (1, 12)
+
+    data = extract_diagram_data(project, results, ForceComponent.M3)
+    assert list(data.element_ids) == [99]

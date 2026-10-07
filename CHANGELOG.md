@@ -61,6 +61,15 @@ refused instead of silently downgraded).
 
 ### Fixed
 
+- **Opening a force diagram on a model with shells closed the application.**
+  OpenSees returns 24 force components for a `ShellMITC4` where a beam returns
+  12; the diagram read them through the beam index map and the renderer then
+  unpacked the shell's four nodes into `n_i, n_j` inside a Qt slot, so the
+  exception unwound the event loop and the process died with no dialog. Faces
+  (shells and quads) are now skipped where the diagram is built *and* where it
+  is drawn, and a model with no line results says so in the log instead of
+  showing nothing. Found by running the application, not by the test suite;
+  `tests/gui/test_force_diagram_shell.py` reproduces the click.
 - The Material Tester had its own copy of every `uniaxialMaterial` command.
   It now shares the runner's emitters, so a material cannot behave one way in
   the tester and another way in an analysis.

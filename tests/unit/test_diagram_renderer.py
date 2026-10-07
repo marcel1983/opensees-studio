@@ -19,9 +19,11 @@ import pyvista as pv
 
 from opensees_studio.core import (
     ElasticBeamColumn,
+    ElasticMembranePlateSection,
     ElasticSection,
     Node,
     Project,
+    ShellMITC4Element,
 )
 from opensees_studio.services.element_forces import (
     DiagramData,
@@ -133,3 +135,69 @@ def test_render_replaces_previous_overlay(offscreen_plotter, project_3d, static_
     data_v = extract_diagram_data(project_3d, static_results, ForceComponent.V2)
     r.render(project_3d, data_v, scale=0.05)
     assert r._actor is not first_actor
+
+
+# ──────────────── face elements: the crash of 2026-10-06 ────────────────
+# A shell returns a 24-component element force vector, which the beam index
+# map happily read as a beam's: the diagram then drew garbage and the renderer
+# died on `n_i, n_j = elem.nodes` inside a Qt slot, which took the running
+# application down.
+def _beam_and_shell() -> Project:
+    return Project(
+        ndm=3,
+        ndf=6,
+        nodes=[
+            Node(id=1, coords=(0.0, 0.0, 0.0)),
+            Node(id=2, coords=(3.0, 0.0, 0.0)),
+            Node(id=3, coords=(4.0, 0.0, 0.0)),
+            Node(id=4, coords=(4.0, 1.0, 0.0)),
+            Node(id=5, coords=(3.0, 1.0, 0.0)),
+        ],
+        sections=[
+            ElasticSection(id=1, E=200e9, A=0.01, Iz=1e-5, Iy=1e-5),
+            ElasticMembranePlateSection(id=2, E=30e9, nu=0.2, h=0.2, rho=2500.0),
+        ],
+        elements=[
+            ElasticBeamColumn(id=10, nodes=(1, 2), section_id=1),
+            ShellMITC4Element(id=20, nodes=(2, 3, 4, 5), section_id=2),
+        ],
+    )
+
+
+def _results_with_a_shell_force_vector() -> StaticResults:
+    beam = np.array([[100.0, 5.0, 0.0, 0.0, 0.0, 9.0, -100.0, -5.0, 0.0, 0.0, 0.0, -9.0]])
+    shell = np.arange(24, dtype=float).reshape(1, 24)  # what OpenSees returns
+    return StaticResults(case_id=1, case_name="t", n_steps=1, element_forces={10: beam, 20: shell})
+
+
+def test_the_extractor_skips_face_elements() -> None:
+    data = extract_diagram_data(
+        _beam_and_shell(), _results_with_a_shell_force_vector(), ForceComponent.M3
+    )
+    assert list(data.element_ids) == [10]
+    # And the beam's own numbers survive intact.
+    assert data.values_i == [9.0]
+    assert data.values_j == [9.0]
+
+
+def test_the_extractor_is_left_with_nothing_when_only_faces_return_forces() -> None:
+    project = _beam_and_shell()
+    project.elements = [el for el in project.elements if el.id == 20]
+    data = extract_diagram_data(project, _results_with_a_shell_force_vector(), ForceComponent.M3)
+    assert data.element_ids.size == 0
+    assert data.abs_max == 0.0
+
+
+def test_the_renderer_tolerates_a_face_element_in_the_data(offscreen_plotter) -> None:  # type: ignore[no-untyped-def]
+    """Defence in depth: a `DiagramData` naming a shell must not kill the app."""
+    project = _beam_and_shell()
+    r = DiagramRenderer(offscreen_plotter)
+    stale = DiagramData(
+        component=ForceComponent.M3,
+        element_ids=np.array([10, 20], dtype=int),  # 20 is the shell
+        values_i=np.array([9.0, 1.0]),
+        values_j=np.array([9.0, 1.0]),
+        abs_max=9.0,
+    )
+    r.render(project, stale, scale=0.05)
+    assert r._actor is not None  # the beam still draws

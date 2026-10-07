@@ -137,6 +137,13 @@ def extract_diagram_data(
     truss_types = (TrussElement, CorotTrussElement)
 
     for el in project.elements:
+        # A diagram is drawn between two ends: a quad or a shell returns a
+        # 24-component element force vector, but it has no i/j stations to plot
+        # along. Reading its components through the beam index map produced
+        # nonsense magnitudes and then killed the renderer, which unpacked
+        # `n_i, n_j = el.nodes`.
+        if len(el.nodes) != 2:
+            continue
         forces = results.element_forces.get(el.id)
         if forces is None or forces.size == 0:
             continue

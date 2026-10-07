@@ -95,6 +95,13 @@ class DiagramRenderer:
             elem = elem_lookup.get(int(eid))
             if elem is None:
                 continue
+            if len(elem.nodes) != 2:
+                # A face element has no i/j ends to draw a station plot
+                # between. `extract_diagram_data` already leaves them out;
+                # this keeps a stale or hand-built `DiagramData` from raising
+                # `ValueError: too many values to unpack` inside a Qt slot,
+                # which takes the whole application down.
+                continue
             n_i, n_j = elem.nodes
             pi, pj = node_pos.get(n_i), node_pos.get(n_j)
             if pi is None or pj is None:
@@ -190,8 +197,8 @@ class DiagramRenderer:
         candidates: list[tuple[float, np.ndarray]] = []  # (value, position)
         for k, eid in enumerate(data.element_ids):
             elem = elem_lookup.get(int(eid))
-            if elem is None:
-                continue
+            if elem is None or len(elem.nodes) != 2:
+                continue  # same reason as in `render`: faces have no two ends
             n_i, n_j = elem.nodes
             pi, pj = node_pos.get(n_i), node_pos.get(n_j)
             if pi is None or pj is None:

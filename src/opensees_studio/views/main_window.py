@@ -1989,6 +1989,12 @@ class MainWindow(QMainWindow):
                 self._latest_results,
                 component,
             )
+            if data.element_ids.size == 0:
+                self._log(
+                    f"Nothing to draw for {component.name}: a force diagram runs "
+                    "between the two ends of a line element, and no such element "
+                    "returned forces (shells and quads have no ends)."
+                )
             if self._diagram_renderer is not None:
                 self._diagram_renderer.render(self._vm.project, data, scale)
             self._canvas.render()

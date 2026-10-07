@@ -13,5 +13,7 @@
 # property editor used to contribute 19 of those: a `hasattr(el, "x")` guard
 # followed by `el.x` does not narrow mypy over a wide element union, so every
 # member without the field was an error. Reading through `getattr` removed them
-# and took the total from 384 to 375.
-375
+# and took the total from 384 to 375. Skipping face elements in the force
+# diagram narrowed the element union on that path too, and `element_forces.py`
+# and `diagram_renderer.py` now report no errors at all: 375 -> 373.
+373
