@@ -9,6 +9,7 @@ pytest.importorskip("PySide6")
 
 from opensees_studio.core import (
     AggregatorDOF,
+    ElasticMembranePlateSection,
     ElasticSection,
     FiberSection,
     RectangularPatch,
@@ -26,6 +27,20 @@ def test_fiber_section_has_registered_form() -> None:
 
 def test_section_aggregator_has_registered_form() -> None:
     assert "SectionAggregator" in FORM_REGISTRY
+
+
+def test_plate_section_has_registered_form() -> None:
+    assert "ElasticMembranePlateSection" in FORM_REGISTRY
+
+
+@pytest.mark.gui
+def test_form_for_plate_section_round_trips(qtbot) -> None:  # type: ignore[no-untyped-def]
+    s = ElasticMembranePlateSection(id=3, name="Slab", E=30e9, nu=0.2, h=0.25, rho=2500.0)
+    f = form_for(s)
+    qtbot.addWidget(f)
+    assert f.type_label == "Plate Section (shell)"
+    f.populate(s)
+    assert f.read() == s
 
 
 @pytest.mark.gui

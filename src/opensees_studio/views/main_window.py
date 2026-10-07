@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
 from opensees_studio import __version__
 from opensees_studio.commands import (
     AddElementLoadsCommand,
+    AddElementsCommand,
     AddEqualDOFConstraintCommand,
     AddNodalLoadsCommand,
     AddNodesCommand,
@@ -48,7 +49,12 @@ from opensees_studio.commands import (
     SetMassCommand,
     SetRestraintCommand,
 )
-from opensees_studio.core import Project
+from opensees_studio.core import (
+    ElasticMembranePlateSection,
+    Project,
+    ShellMITC4Element,
+)
+from opensees_studio.core.geometry.ordering import QuadOrderError, order_quad_nodes
 from opensees_studio.services import PROJECT_FILE_SUFFIX
 from opensees_studio.services.deformation import (
     linear_static_auto_scale,
@@ -267,6 +273,7 @@ class MainWindow(QMainWindow):
         # Define
         self._act_grid = QAction("&Coordinate System/Grids…", self, shortcut="Ctrl+G")
         self._act_add_node = QAction("Add &Node…", self, shortcut="Ctrl+N")
+        self._act_create_shell = QAction("Create S&hell from 4 Nodes…", self)
         self._act_material_library = QAction("&Material Library…", self, shortcut="Ctrl+Shift+M")
         self._act_friction_library = QAction("&Friction Models…", self)
         self._act_material_tester = QAction("Material &Tester…", self, shortcut="Ctrl+Shift+T")
@@ -350,6 +357,7 @@ class MainWindow(QMainWindow):
         m_define = mb.addMenu("&Define")
         m_define.addAction(self._act_grid)
         m_define.addAction(self._act_add_node)
+        m_define.addAction(self._act_create_shell)
         m_define.addSeparator()
         m_define.addActions(
             [
@@ -547,6 +555,7 @@ class MainWindow(QMainWindow):
         # Define
         self._act_grid.triggered.connect(self._on_grid_system)
         self._act_add_node.triggered.connect(self._on_add_node)
+        self._act_create_shell.triggered.connect(self._on_create_shell)
         self._act_material_library.triggered.connect(self._on_material_library)
         self._act_friction_library.triggered.connect(self._on_friction_library)
         self._act_material_tester.triggered.connect(self._on_material_tester)
@@ -1016,6 +1025,73 @@ class MainWindow(QMainWindow):
             self._log(f"Coordinate/Grid Systems updated: {names}.")
         except Exception as exc:
             QMessageBox.critical(self, "Grid update failed", str(exc))
+
+    def _on_create_shell(self) -> None:
+        """Define → Create Shell: a ShellMITC4 from four selected nodes.
+
+        The selection carries no order, so the winding is derived from the
+        nodes' coordinates: a shell built from a scrambled list is inverted or
+        twisted, and the user has no way to express "counter-clockwise" by
+        clicking.
+        """
+        project = self._vm.project
+        if project is None:
+            QMessageBox.information(self, "Create shell", "Open or create a project first.")
+            return
+        selected = [n for n in project.nodes if n.id in self._canvas.selection.nodes]
+        if len(selected) != 4:
+            QMessageBox.information(
+                self,
+                "Create shell",
+                f"Select exactly four nodes first (you have {len(selected)}).",
+            )
+            return
+        plate_sections = [s for s in project.sections if isinstance(s, ElasticMembranePlateSection)]
+        if not plate_sections:
+            QMessageBox.information(
+                self,
+                "Create shell",
+                "A shell needs a plate section. Add one from Define → Section Library "
+                "(type 'Plate Section (shell)').",
+            )
+            return
+        if len(plate_sections) == 1:
+            section = plate_sections[0]
+        else:
+            labels = [f"#{s.id} {s.name} (h = {s.h:g})" for s in plate_sections]
+            choice, accepted = QInputDialog.getItem(
+                self, "Create shell", "Plate section:", labels, 0, False
+            )
+            if not accepted:
+                return
+            section = plate_sections[labels.index(choice)]
+        points = [
+            (float(node.coords[0]), float(node.coords[1]), float(node.coords[2]))
+            for node in selected
+        ]
+        try:
+            order = order_quad_nodes(points)
+        except QuadOrderError as exc:
+            QMessageBox.critical(self, "Cannot build the shell", str(exc))
+            return
+        ordered = [selected[index] for index in order]
+        nodes = (ordered[0].id, ordered[1].id, ordered[2].id, ordered[3].id)
+        element_id = project.next_element_id()
+        try:
+            self._vm.apply_command(
+                AddElementsCommand(
+                    self._vm,
+                    [ShellMITC4Element(id=element_id, nodes=nodes, section_id=section.id)],
+                    text=f"Add shell {element_id}",
+                )
+            )
+        except Exception as exc:
+            QMessageBox.critical(self, "Cannot create the shell", str(exc))
+            return
+        self._log(
+            f"Shell {element_id}: nodes {nodes}, plate section {section.id} "
+            f"(winding ordered counter-clockwise)."
+        )
 
     def _on_add_node(self) -> None:
         if self._vm.project is None:
@@ -2423,6 +2499,7 @@ class MainWindow(QMainWindow):
         self._act_export_script.setEnabled(has_project)
         self._act_grid.setEnabled(True)
         self._act_add_node.setEnabled(True)
+        self._act_create_shell.setEnabled(has_project)
         self._act_assign_support.setEnabled(has_project and has_selected_nodes)
         self._act_assign_masses.setEnabled(has_project and has_selected_nodes)
         self._act_assign_equal_dof.setEnabled(has_project and n_sel == 2)

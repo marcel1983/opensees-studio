@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from opensees_studio.core import (
+    ElasticMembranePlateSection,
     ElasticSection,
     FiberSection,
     SectionAggregator,
@@ -190,10 +191,50 @@ class SectionAggregatorSummaryForm(SectionFormBase):
         return self._cached.model_copy(update={"id": sid})
 
 
+class ElasticMembranePlateSectionForm(SectionFormBase):
+    """The section a ShellMITC4 element takes: E, nu, h and rho."""
+
+    type_label = "Plate Section (shell)"
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._e = _spin(200e9, step=1e9)
+        self._nu = _spin(0.3, minimum=-1.0, maximum=0.5, step=0.05)
+        self._h = _spin(0.2, minimum=1e-9, step=0.01)
+        self._rho = _spin(7850.0, minimum=0.0, step=100.0)
+        for label, widget in (
+            ("E:", self._e),
+            ("Nu:", self._nu),
+            ("Thickness h:", self._h),
+            ("Density rho:", self._rho),
+        ):
+            self._layout.addRow(label, widget)
+        self._layout.addRow(
+            QLabel("<i>The plate carries its own E and thickness; no material reference.</i>")
+        )
+
+    def _populate_specific(self, s: ElasticMembranePlateSection) -> None:
+        self._e.setValue(s.E)
+        self._nu.setValue(s.nu)
+        self._h.setValue(s.h)
+        self._rho.setValue(s.rho)
+
+    def _read_specific(self, section_id: int) -> ElasticMembranePlateSection:
+        return ElasticMembranePlateSection(
+            id=section_id,
+            name=self._name_edit.text() or "Plate",
+            E=self._e.value(),
+            nu=self._nu.value(),
+            h=self._h.value(),
+            rho=self._rho.value(),
+        )
+
+
 FORM_REGISTRY: dict[str, type[SectionFormBase]] = {
     "ElasticSection": ElasticSectionForm,
     "FiberSection": FiberSectionSummaryForm,
     "SectionAggregator": SectionAggregatorSummaryForm,
+    "ElasticMembranePlateSection": ElasticMembranePlateSectionForm,
 }
 
 

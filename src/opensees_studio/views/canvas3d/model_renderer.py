@@ -28,6 +28,8 @@ from opensees_studio.core import (
     NodalLoad,
     PlainLoadPattern,
     Project,
+    QuadElement,
+    ShellMITC4Element,
     TrussElement,
     UniformElementLoad,
     ZeroLengthElement,
@@ -40,6 +42,13 @@ class RendererMode(enum.Enum):
     MODEL = "model"
     DEFORMED = "deformed"
     MODAL = "modal"
+
+
+#: Elements drawn as surfaces (a filled face) rather than as lines.
+_SURFACE_CLASSES = (
+    QuadElement,
+    ShellMITC4Element,
+)
 
 
 _FRAME_CLASSES = (
@@ -87,6 +96,7 @@ class ModelRenderer:
 
     _NODE_LUT: ClassVar[list[str]] = ["#d9d9d9", "#00ffff"]  # gray normal, cyan selected
     _FRAME_LUT: ClassVar[list[str]] = ["#338cd9", "#00ffff"]  # blue normal, cyan selected
+    _SURFACE_LUT: ClassVar[list[str]] = ["#a8b6c4", "#00ffff"]  # steel grey, cyan selected
 
     def __init__(self, plotter: Any, style: RenderStyle | None = None) -> None:
         self._plotter = plotter
@@ -106,6 +116,11 @@ class ModelRenderer:
         self._frame_actor: Any = None
         self._frame_ids_ordered: list[int] = []
         self._frame_id_to_row: dict[int, int] = {}
+
+        self._surface_pd: pv.PolyData | None = None
+        self._surface_actor: Any = None
+        self._surface_ids_ordered: list[int] = []
+        self._surface_id_to_row: dict[int, int] = {}
         self._node_label_actor: Any = None
         self._element_label_actor: Any = None
         self._show_node_labels: bool = False
@@ -136,6 +151,7 @@ class ModelRenderer:
             return
         self._build_node_polydata(project)
         self._build_frame_polydata(project)
+        self._build_surface_polydata(project)
         self._build_supports(project)
         self._build_loads(project)
         if self._show_section_extrusions:
@@ -197,6 +213,15 @@ class ModelRenderer:
                     states[row] = 1
             self._frame_pd.cell_data["_oss_state"] = states
             self._frame_pd.Modified()
+
+        if self._surface_pd is not None and self._surface_ids_ordered:
+            states = np.zeros(len(self._surface_ids_ordered), dtype=np.int8)
+            for eid in element_ids:
+                row = self._surface_id_to_row.get(eid)
+                if row is not None:
+                    states[row] = 1
+            self._surface_pd.cell_data["_oss_state"] = states
+            self._surface_pd.Modified()
 
     def set_mode(self, mode: RendererMode, deformation: DeformationSource | None = None) -> None:
         self._mode = mode
@@ -305,6 +330,53 @@ class ModelRenderer:
             line_width=3.0,
             pickable=True,
             lighting=False,
+        )
+
+    def _build_surface_polydata(self, project: Project) -> None:
+        """Faces for the surface elements (quads and shells).
+
+        Same contract as the frame path: one PolyData with a cell per element,
+        carrying ``_oss_id``/``_oss_kind``/``_oss_state`` so picking and
+        selection work the same way, and points shared with the node cloud so
+        a deformed shape moves the faces with it.
+        """
+        surfaces = [el for el in project.elements if isinstance(el, _SURFACE_CLASSES)]
+        if not surfaces or self._node_original_points is None:
+            return
+        cells: list[int] = []
+        ids: list[int] = []
+        for el in surfaces:
+            try:
+                rows = [self._node_id_to_row[nid] for nid in el.nodes[:4]]
+            except KeyError:
+                continue
+            if len(rows) != 4:
+                continue
+            cells.extend([4, *rows])  # a quad cell: size then the four corners
+            ids.append(el.id)
+        if not ids:
+            return
+        pd = pv.PolyData()
+        pd.points = self._node_original_points.copy()
+        pd.faces = np.array(cells, dtype=np.int64)
+        pd.cell_data["_oss_id"] = np.array(ids, dtype=np.int64)
+        pd.cell_data["_oss_kind"] = np.array(["element"] * len(ids), dtype=object)
+        pd.cell_data["_oss_state"] = np.zeros(len(ids), dtype=np.int8)
+
+        self._surface_pd = pd
+        self._surface_ids_ordered = ids
+        self._surface_id_to_row = {eid: i for i, eid in enumerate(ids)}
+        self._surface_actor = self._plotter.add_mesh(
+            pd,
+            scalars="_oss_state",
+            cmap=self._SURFACE_LUT,
+            clim=[0, 1],
+            show_scalar_bar=False,
+            show_edges=True,
+            edge_color="#5b6b7c",
+            line_width=1.0,
+            lighting=True,
+            pickable=True,
         )
 
     def _build_grid(self, project: Project) -> None:
@@ -683,12 +755,15 @@ class ModelRenderer:
         if self._frame_pd is not None:
             self._frame_pd.points = new_pts
             self._frame_pd.Modified()
+        if self._surface_pd is not None:
+            self._surface_pd.points = new_pts
+            self._surface_pd.Modified()
         self._rebuild_labels()
 
     # ── helpers ─────────────────────────────────────────────────────
     def _teardown_all(self) -> None:
         self._clear_label_actors()
-        for a in (self._node_actor, self._frame_actor):
+        for a in (self._node_actor, self._frame_actor, self._surface_actor):
             if a is not None:
                 with contextlib.suppress(Exception):
                     self._plotter.remove_actor(a, render=False)
@@ -697,6 +772,7 @@ class ModelRenderer:
                 self._plotter.remove_actor(a, render=False)
         self._node_actor = None
         self._frame_actor = None
+        self._surface_actor = None
         self._aux_actors.clear()
         self._node_pd = None
         self._node_glyph = None
@@ -705,6 +781,9 @@ class ModelRenderer:
         self._node_id_to_row = {}
         self._frame_ids_ordered = []
         self._frame_id_to_row = {}
+        self._surface_pd = None
+        self._surface_ids_ordered = []
+        self._surface_id_to_row = {}
         self._node_original_points = None
         self._deformation = None
         self._mode = RendererMode.MODEL
