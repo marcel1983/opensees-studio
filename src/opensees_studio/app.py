@@ -42,6 +42,13 @@ def run(argv: list[str]) -> int:
     app.setOrganizationName("OpenSees Studio")
     app.setApplicationDisplayName("OpenSees Studio")
 
+    # An unhandled exception in a slot would otherwise unwind the event loop and
+    # kill the process with the user's unsaved work in it. The analysis child
+    # does NOT install this: it reports errors as JSON and exits with a code.
+    from opensees_studio.views.error_reporting import install
+
+    install()
+
     window = MainWindow()
     window.show()
 

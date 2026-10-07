@@ -24,6 +24,19 @@ refused instead of silently downgraded).
 
 ### Fixed
 
+- **The failure report of a run crashed the application when the report had
+  already been closed.** The box is created with `WA_DeleteOnClose`, so once the
+  user dismisses it Qt has destroyed the C++ object while the window still held
+  the Python wrapper; the `finally:` of `Run Analysis` then asked a deleted
+  object for its parent and raised inside a Qt slot. The reference is now
+  validity-checked before it is touched and dropped as soon as the box
+  finishes.
+- **An unhandled error in the interface is now reported instead of only
+  printed.** `sys.excepthook` puts the traceback in the Console dock, points the
+  status bar at it and opens a non-modal dialog saying the model and any running
+  analysis are unaffected, so a failure in a slot is visible and the work can be
+  saved. The full traceback still goes to stderr, and the analysis child keeps
+  the default hook: its JSON protocol and exit codes are what the parent parses.
 - **Replicate copied the geometry but not the loads**, so a copied loaded bay
   came back empty: the nodes and elements were new, and nothing re-created the
   nodal and element loads that pointed at the old ids. The copy now carries

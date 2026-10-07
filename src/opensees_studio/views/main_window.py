@@ -12,6 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import shiboken6
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QActionGroup, QKeySequence
 from PySide6.QtWidgets import (
@@ -1838,16 +1839,32 @@ class MainWindow(QMainWindow):
             dlg.exec()
         finally:
             self._run_dialog = None
-            box = self._analysis_error_box
-            if box is not None and box.parent() is dlg:
-                # Keep an unread failure report alive after the Run dialog closes.
-                box.setParent(self, box.windowFlags())
-                box.show()
+            self._keep_failure_report_alive(dlg)
             # The dialog connects seven signals of the long-lived runner and
             # is parented to this window, so without this it stays alive
             # after exec() returns and every later run keeps appending to
             # its log widget.
             dlg.deleteLater()
+
+    def _keep_failure_report_alive(self, dlg: QWidget) -> None:
+        """Reparent an unread failure report so it outlives the Run dialog.
+
+        The report is created with ``WA_DeleteOnClose``, so once the user has
+        closed it Qt has destroyed the C++ object while this window still holds
+        the Python wrapper. ``box.parent()`` then raises ``RuntimeError``, and
+        an exception raised here — inside the ``finally`` of a Qt slot — used to
+        take the whole application down with it. Hence the validity check, and
+        the reference being dropped when the box is gone.
+        """
+        box = self._analysis_error_box
+        if box is None:
+            return
+        if not shiboken6.isValid(box):
+            self._analysis_error_box = None
+            return
+        if box.parent() is dlg:
+            box.setParent(self, box.windowFlags())
+            box.show()
 
     def _failure_parent(self) -> QWidget:
         """The dialog that started the run while it is open, else the main window."""
@@ -1887,11 +1904,41 @@ class MainWindow(QMainWindow):
         box.setStandardButtons(QMessageBox.StandardButton.Ok)
         box.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
         box.setModal(False)
+        box.finished.connect(self._forget_failure_report)
         self._analysis_error_box = box
         box.show()
         box.raise_()
         box.activateWindow()
         self._log(headline)
+
+    def report_unexpected_error(self, traceback_text: str) -> None:
+        """Show an unhandled exception instead of letting the process die.
+
+        Called by :mod:`opensees_studio.views.error_reporting`, which is what
+        ``sys.excepthook`` points at while the GUI is up. The model and the
+        analysis child are untouched by a Python error in a slot, so the message
+        says so and points at the Console dock, where the traceback is kept.
+        """
+        self._console.appendPlainText(traceback_text)
+        self.statusBar().showMessage("Unexpected error — see the Console dock.", 15000)
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle("Unexpected error")
+        box.setText(
+            "Something went wrong in the interface. Your model and any running analysis "
+            "are unaffected — save your work, then report this."
+        )
+        box.setDetailedText(traceback_text)
+        box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        box.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+        box.setModal(False)
+        box.show()
+        box.raise_()
+        box.activateWindow()
+
+    def _forget_failure_report(self, _result: int = 0) -> None:
+        """The report is closed (and, with ``WA_DeleteOnClose``, about to be deleted)."""
+        self._analysis_error_box = None
 
     def _on_display_options(self) -> None:
         dlg = DisplayOptionsDialog(
