@@ -106,6 +106,13 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
 - **Persistence** — projects save as a single JSON `.osmodel` file
   (Pydantic-validated, round-trip-clean) with a schema version, and a
   pre-run snapshot offers to recover unsaved work after a crash.
+- **Contextual help** — press **F1** and the manual opens on whatever you are
+  looking at: the item under the cursor in a menu that is open, the dialog on
+  top, or the contents page otherwise. It is written for the questions that come
+  up while modelling — how a command is used, what each parameter means, and the
+  mechanics behind it (what a slope does to a portal frame, why a fibre section
+  yields, what Rayleigh damping is fitted to, why a plate mesh is stiff until it
+  is refined).
 - **Examples** — 29 verified examples bundled, including the OpenSees Wiki
   Examples-1 through Example-4 family, an RC frame pushover, isolated
   frames and a moment-curvature workflow. See

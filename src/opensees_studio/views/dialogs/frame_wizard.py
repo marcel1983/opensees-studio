@@ -34,6 +34,7 @@ from opensees_studio.core import (
     RoofType,
     SupportCondition,
 )
+from opensees_studio.core.help import TOPIC_PROPERTY
 from opensees_studio.views.float_field import FloatField
 from opensees_studio.views.screen_fit import fit_to_available_screen
 
@@ -102,6 +103,7 @@ class FrameWizard(QWizard):
         self._ndf = ndf
         self._unit = length_unit
         self.setWindowTitle("Portal Frame Wizard")
+        self.setProperty(TOPIC_PROPERTY, "define.portal_frame")
         self.setWizardStyle(QWizard.WizardStyle.ModernStyle)
         self.setOption(QWizard.WizardOption.NoBackButtonOnStartPage, True)
 

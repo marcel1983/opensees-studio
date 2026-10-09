@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 )
 
 from opensees_studio.core import ElasticMembranePlateSection, Project
+from opensees_studio.core.help import TOPIC_PROPERTY
 from opensees_studio.core.units import labels_for
 from opensees_studio.services.dxf_import import (
     PLANE_CHOICES,
@@ -62,6 +63,7 @@ class DxfImportDialog(FittedDialog):
         self._drawing: DxfDrawing | None = None
         self._path: Path | None = None
         self.setWindowTitle("Import DXF")
+        self.setProperty(TOPIC_PROPERTY, "file.import_dxf")
         self._build_ui()
         self._refresh()
 

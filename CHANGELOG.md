@@ -78,6 +78,27 @@ refused instead of silently downgraded).
   fixed. The whole import, including the default section when the project has
   none, is one undo step.
 
+- **Contextual help, on F1** (`core/help.py`, `views/help_window.py`). The
+  manual ships with the application: **82 topics** in eleven groups, one per menu
+  action plus the mechanics behind them. F1 opens it on whatever is on screen —
+  the item under the cursor in a menu that is open, the dialog on top (the wizard
+  and the DXF import declare their own page), or the contents page otherwise —
+  and the topic tree, a filter and cross-reference links move between pages.
+  The content is written for the questions that come up while modelling: how the
+  command is used, what each parameter means, and the physics where it applies
+  (what the roof slope changes and what it does not, why a copy doubles the
+  reaction and not the deflection, when a CQC combination matters, what a merge
+  tolerance merges). The action→topic table and the topics are tested: a menu
+  action without help, a page nothing links to, or a cross-reference to a page
+  that does not exist all fail the suite.
+
+### Changed
+
+- **F1 is the help**, so Tools → Draw Node moves to **F4** (F2 and F3 keep Draw
+  Frame and Draw Truss). The help key is handled by an application event filter
+  rather than a shortcut, because the interesting case — a menu is open and the
+  popup owns the keyboard — is one only a filter sees.
+
 ### Fixed
 
 - **The failure report of a run crashed the application when the report had

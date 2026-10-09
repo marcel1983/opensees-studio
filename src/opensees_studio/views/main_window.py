@@ -64,6 +64,7 @@ from opensees_studio.core import (
     make_default_section,
 )
 from opensees_studio.core.geometry.ordering import QuadOrderError, order_quad_nodes
+from opensees_studio.core.help import ACTION_TOPICS, TOPIC_PROPERTY
 from opensees_studio.services import PROJECT_FILE_SUFFIX
 from opensees_studio.services.deformation import (
     linear_static_auto_scale,
@@ -135,6 +136,7 @@ from opensees_studio.views.docks import (
     ResultsPanel,
     TimeHistoryView,
 )
+from opensees_studio.views.help_window import HelpController
 from opensees_studio.views.tools import (
     DrawFrameTool,
     DrawNodeTool,
@@ -277,7 +279,7 @@ class MainWindow(QMainWindow):
         self._tool_group = QActionGroup(self)
         self._tool_group.setExclusive(True)
         self._act_tool_select = QAction("Se&lect", self, checkable=True, checked=True)
-        self._act_tool_draw_node = QAction("Draw &Node", self, checkable=True, shortcut="F1")
+        self._act_tool_draw_node = QAction("Draw &Node", self, checkable=True, shortcut="F4")
         self._act_tool_draw_frame = QAction("&Draw Frame", self, checkable=True, shortcut="F2")
         self._act_tool_draw_truss = QAction("Draw &Truss", self, checkable=True, shortcut="F3")
         self._tool_group.addAction(self._act_tool_select)
@@ -341,7 +343,24 @@ class MainWindow(QMainWindow):
         self._act_show_extruded = QAction("Show &Extruded Sections", self, checkable=True)
 
         self._act_about = QAction("&About OpenSees Studio…", self)
+        self._act_help_contents = QAction("&Help Contents (F1)", self)
         self._act_set_units = QAction("Set Display &Units…", self)
+
+    def _annotate_help_topics(self) -> None:
+        """Point every action at its help page (see ``core.help.ACTION_TOPICS``).
+
+        One table, keyed by the action's attribute name, so an action added
+        without help is visible in the coverage test rather than silently
+        opening the contents page.
+        """
+        for attribute, topic_id in ACTION_TOPICS.items():
+            action = getattr(self, attribute, None)
+            if isinstance(action, QAction):
+                action.setProperty(TOPIC_PROPERTY, topic_id)
+
+    def _on_help_contents(self) -> None:
+        """Help → Contents: the same F1, on the contents page."""
+        self._help_controller.open_help("index")
 
     def _build_menu_bar(self) -> None:
         mb = self.menuBar()
@@ -447,6 +466,8 @@ class MainWindow(QMainWindow):
         m_options.addAction(self._act_set_units)
 
         m_help = mb.addMenu("&Help")
+        m_help.addAction(self._act_help_contents)
+        m_help.addSeparator()
         m_help.addAction(self._act_about)
 
     def _build_view_toolbar(self) -> None:
@@ -557,6 +578,7 @@ class MainWindow(QMainWindow):
         self._act_export_script.triggered.connect(self._on_export_script)
         self._act_quit.triggered.connect(self._on_quit)
         self._act_about.triggered.connect(self._on_about)
+        self._act_help_contents.triggered.connect(self._on_help_contents)
         self._act_set_units.triggered.connect(self._on_set_units)
 
         # Edit
@@ -646,6 +668,11 @@ class MainWindow(QMainWindow):
         # Selection → properties + action enablement
         self._canvas.selection.selectionChanged.connect(self._on_selection_changed)
         self._canvas.element_tooltip = self.element_tooltip
+
+        # Contextual help: F1 anywhere, on the topic of what is on screen.
+        self._annotate_help_topics()
+        self._help_controller = HelpController(self)
+        self._help_controller.install()
 
     # ── slots: file ──────────────────────────────────────────────────
     def _on_new(self) -> None:
