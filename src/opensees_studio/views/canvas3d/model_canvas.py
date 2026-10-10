@@ -130,7 +130,10 @@ class ModelCanvas(QtInteractor):  # type: ignore[misc]
                     if self._default_selection_enabled
                     else TOOL_CLICK_MAX_DRIFT_PX
                 )
-                if drift <= budget:
+                # A gesture is a click unless the camera actually moved: if the
+                # view is identical to what it was at press, nothing was orbited
+                # and the pointer was just unsteady, however far it travelled.
+                if drift <= budget or not self._camera_moved_since_press():
                     # A click: undo the sub-threshold rotation VTK applied while
                     # the pointer drifted, so the view does not creep.
                     self._restore_camera(getattr(self, "_press_camera", None))
@@ -225,6 +228,17 @@ class ModelCanvas(QtInteractor):  # type: ignore[misc]
             tuple(float(value) for value in camera.position),
             tuple(float(value) for value in camera.focal_point),
             tuple(float(value) for value in camera.up),
+        )
+
+    def _camera_moved_since_press(self) -> bool:
+        """True when the camera is not where it was when the button went down."""
+        before = getattr(self, "_press_camera", None)
+        after = self._camera_state()
+        if before is None or after is None:
+            return False
+        return any(
+            not np.allclose(old, new, rtol=1e-9, atol=1e-12)
+            for old, new in zip(before, after, strict=True)
         )
 
     def _restore_camera(

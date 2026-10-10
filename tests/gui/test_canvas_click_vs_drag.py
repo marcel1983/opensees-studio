@@ -108,6 +108,29 @@ def test_a_draw_tool_gets_the_benefit_of_the_doubt(canvas) -> None:  # type: ign
     assert len(seen) == 1
 
 
+def test_a_drag_that_moved_nothing_is_still_a_click(canvas) -> None:  # type: ignore[no-untyped-def]
+    """If the view is identical to what it was at press, the pointer was just unsteady."""
+    seen = _clicks(canvas)
+    QTest.mousePress(canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, QPoint(400, 300))
+    pressed = canvas._camera_state()
+    assert pressed is not None
+    # Simulate an interactor that never started rotating, however far the pointer
+    # went: put the camera back to its press state before releasing.
+    QTest.mouseMove(canvas, QPoint(520, 380))
+    canvas.camera.position = pressed[0]
+    canvas.camera.focal_point = pressed[1]
+    canvas.camera.up = pressed[2]
+    assert canvas._camera_moved_since_press() is False
+    QTest.mouseRelease(
+        canvas,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+        QPoint(520, 380),
+    )
+
+    assert len(seen) == 1
+
+
 def test_a_drag_while_a_tool_is_armed_says_so(canvas) -> None:  # type: ignore[no-untyped-def]
     """Silence is what made the tool feel dead: a swallowed click explains itself."""
     canvas.set_default_selection_enabled(False)
