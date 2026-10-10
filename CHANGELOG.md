@@ -9,6 +9,66 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.7] — 2026-10-09
+
+The release that paints what a shell is doing: a colour map of its deformations,
+its internal forces and moments, and — for the membrane and bending tensors —
+the principal values and the directions they act along.
+
+### Added
+
+- **Display → Show Shell Contours…**: pick a field and the shell faces are
+  coloured with a legend. Deformations (`|u|`, `ux`, `uy`, `uz`) warp the mesh;
+  membrane forces (`N11`, `N22`, `N12`), bending moments (`M11`, `M22`, `M12`),
+  transverse shear (`V13`, `V23`, `V`), and the principals (`N1`, `N2`, `M1`,
+  `M2`) are painted on the undeformed shape. A signed field gets a colour range
+  symmetric about zero — a moment is read by its sign — and the legend names the
+  field with its unit in the project's system (`N11 [kip/in]`).
+- **Principal directions** as one segment per element, through its centroid and
+  along its major principal axis, with a length proportional to the spread
+  between the two principal values: where they are equal there is no direction
+  and nothing is drawn. The principals come from Mohr's circle
+  (`core/shell_results`), so they do not depend on the arbitrary local axes of
+  the mesh — which is the point of contouring them rather than the components.
+- **The section resultants now travel with the results.**
+  `StaticResults.element_stresses` (and the pushover equivalent) records the
+  eight resultants OpenSees reports per shell, averaged over its gauss points
+  and in its own order (`N11, N22, N12, M11, M22, M12, V13, V23`, all per unit
+  length); the result store writes and reads them, and a file written before the
+  field existed still loads.
+- A help page (`F1`) for the view: which fields exist, what the principals mean,
+  and the limits — a frame model has nothing to paint, and the values are
+  section resultants per unit length, not stresses.
+
+### Fixed
+
+- **A wrong belief about the solver, caught by the reference test.** An earlier
+  probe concluded that a `Linear` static case reports no section resultants;
+  what actually happens is that the response is only materialised when something
+  queries the element state, and `ops.reactions()` — which the runner always
+  calls before reading responses — does exactly that. A `Linear` case reports
+  the same numbers as Newton, so no caveat belongs in the view. The finding, the
+  correction and a test that pins it are in
+  `reports/SHELL_CONTOURS_PLAN_2026-10-09.md`.
+- Two mypy ratchet improvements while passing through: the runner's solver module
+  is typed `Any` (it is duck-typed at runtime and a mock in the tests) and
+  `MainWindow._post_dock` is typed `QDockWidget | None`, which between them took
+  the budget from 367 to **237**.
+
+### Verified
+
+- **A plate strip with a tip moment**, the one bending case with no
+  discretisation error in the moment: `M11` comes back as the applied moment per
+  unit width element for element (500.0 N·m/m for 500 N·m/m), `V13` is zero, and
+  the tip deflection is within 5 % of the cylindrical-bending value `M L² / 2D`
+  (4.94e-5 m against 4.80e-5 m — the 3 % is the thick strip and the two-element
+  span).
+- **Uniform membrane tension** of 2000 N/m reads back as exactly 2000, with
+  `N22 = 0` even at ν = 0.2, where the plate contracts freely.
+- The principal maths against hand cases (uniaxial, compression, pure shear at
+  ±45°, equibiaxial, the trace/determinant invariants, a tensor built from a
+  known `(major, minor, 30°)`, and rotation-independence).
+
 ## [0.0.6] — 2026-10-09
 
 The release that stops asking you to type numbers it could look up: a library of

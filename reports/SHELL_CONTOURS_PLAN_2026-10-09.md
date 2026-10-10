@@ -2,7 +2,8 @@
 
 **Date:** 2026-10-09
 **Requested for:** 0.0.7
-**Status:** probed and planned; nothing implemented yet.
+**Status:** implemented for 0.0.7 (`f58b331`, `1b695db`, `980f45f`, `c529059`,
+`1bcbd63`); this note is kept as the record of what the solver reports.
 **Scope:** a colour-mapped (contour) view of (a) the deformations of shell
 elements and (b) the internal forces and moments acting in their principal
 directions.
@@ -102,11 +103,15 @@ existing `tests/integration/test_shell_plate.py` solution as a cross-check. GUI:
 the dock lists the fields, renders an actor and a scalar bar, and reports the
 "no shells in this model" message instead of an empty map.
 
-## 3. Open questions for the implementation
+## 3. Decisions taken while implementing
 
-- Whether to colour by the *element* value (flat, honest about the 2×2 gauss
-  field) or the node-averaged one (smooth, prettier, less literal). Proposal:
-  node-averaged by default, with the element value in the tooltip.
-- Whether the deformation contour belongs to the existing Deformed Shape dock
-  (adding a colour-by picker) or to this new one. Proposal: this new dock, which
-  can also warp, and leave Deformed Shape as the control it is today.
+- **Node-averaged values**, with the element's own value used for the direction
+  glyphs and for the per-element reading. A shared node reads the mean of the
+  elements that meet there, which is what makes the picture continuous; an
+  element with no resultants contributes nothing rather than a zero.
+- **A new dock**, not a colour-by box on the Deformed Shape one: this view
+  warps, chooses a step and draws directions, and the Deformed Shape control
+  stays the small thing it is.
+- **A signed field is centred on zero** in the colour map, and a constant field
+  gets a band instead of a degenerate one; a hydrostatic state draws no
+  direction.
