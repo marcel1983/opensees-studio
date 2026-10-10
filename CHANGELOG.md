@@ -9,6 +9,50 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.8] — 2026-10-10
+
+The release that makes the drawing tools work on a model that already has
+members, and on a Wayland desktop at all.
+
+### Fixed
+
+- **Draw Node / Draw Frame did nothing on a project that already held a frame.**
+  Every click near a column or a rafter hit the *member*: the canvas reported an
+  element pick, the tools' base handler ignores that signal, and the click
+  vanished — no node, no element, and no message, because the handler that would
+  have spoken belongs to empty clicks. On a blank model it worked, which is why
+  it read as a regression against 0.0.1/0.0.2: there was nothing to hit then. A
+  member is now a pick target only for the select tool, while nodes stay
+  pickable so an existing node is still reused as an endpoint.
+- **Wayland sessions never delivered a mouse event to the 3D canvas.** The canvas
+  is a VTK render widget — a native child window — and a native Wayland
+  compositor does not route pointer events into it: no orbit, no selection and no
+  drawing, with nothing in the log because the event never arrived. The
+  application now asks for XWayland (`QT_QPA_PLATFORM=xcb`) when the session
+  offers Wayland *and* an X server, which every Wayland desktop ships. An
+  explicit `QT_QPA_PLATFORM` still wins.
+- **Arming a draw tool threw the view to top.** Draw Node, Draw Frame and Draw
+  Truss each called `canvas.view_xy()` on activation, so the camera jumped as
+  soon as the tool was picked and the click that followed landed somewhere the
+  user had not been looking. They no longer touch the camera; clicks are
+  resolved in screen space, so they work in plan, elevation and isometric alike.
+- **A click that drifted a few pixels was discarded as a camera drag.** The bound
+  was 3 px, so a trackpad, an unsteady hand or a remote desktop lost the click
+  silently. The decision now follows the *view*: a gesture is a click unless the
+  camera actually turned (more than 3°) or panned, and an accepted click puts the
+  camera back where it was so the drift leaves no trace.
+
+### Added
+
+- **The canvas explains itself.** A gesture taken as a drag while a tool is armed
+  says so in the status bar ("that was a drag (the view moved), so nothing was
+  placed"), a placed node says whether it snapped to the grid or landed on the
+  working plane, and a click that cannot be resolved at all (the view ray
+  parallel to the active level) is reported in the log instead of vanishing.
+- A project without a grid no longer refuses to draw and no longer opens a modal:
+  the tool arms, and its prompt says that clicks land on the working plane.
+  Clicks near a grid intersection still snap to it.
+
 ## [0.0.7] — 2026-10-09
 
 The release that paints what a shell is doing: a colour map of its deformations,
