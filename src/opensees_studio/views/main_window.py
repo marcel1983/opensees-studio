@@ -1066,31 +1066,6 @@ class MainWindow(QMainWindow):
     def _on_select_tool(self) -> None:
         self._tool_controller.set_active(None)
 
-    def _require_drawable_grid(self, tool_name: str) -> bool:
-        """True when the project has a grid the draw tools can snap to.
-
-        A brand-new project has an empty Global grid, so the canvas has no
-        intersection to snap to and every click is correctly rejected as
-        off-grid — the tool looks broken and nothing says why. Offer to
-        define a grid instead.
-        """
-        if self._vm.project is None:
-            return False
-        if self._has_grid_lines():
-            return True
-        answer = QMessageBox.question(
-            self,
-            f"{tool_name}: no grid defined",
-            "This project has no grid yet, so there is no intersection to snap to.\n\n"
-            "Define a grid now? (Define → Coordinate System/Grids…)",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.Yes,
-        )
-        if answer != QMessageBox.StandardButton.Yes:
-            return False
-        self._on_grid_system()
-        return self._has_grid_lines()
-
     def _has_grid_lines(self) -> bool:
         """True when some visible coordinate system carries grid lines."""
         project = self._vm.project
@@ -1109,7 +1084,7 @@ class MainWindow(QMainWindow):
         self._tool_controller.set_active(None)
 
     def _on_draw_frame_tool(self) -> None:
-        if not self._require_drawable_grid("Draw Frame"):
+        if self._vm.project is None:
             self._abort_tool_activation()
             return
         if self._draw_frame_tool is None:
@@ -1120,7 +1095,7 @@ class MainWindow(QMainWindow):
         self._tool_controller.set_active(self._draw_frame_tool)
 
     def _on_draw_node_tool(self) -> None:
-        if not self._require_drawable_grid("Draw Node"):
+        if self._vm.project is None:
             self._abort_tool_activation()
             return
         if self._draw_node_tool is None:
@@ -1131,7 +1106,7 @@ class MainWindow(QMainWindow):
         self._tool_controller.set_active(self._draw_node_tool)
 
     def _on_draw_truss_tool(self) -> None:
-        if not self._require_drawable_grid("Draw Truss"):
+        if self._vm.project is None:
             self._abort_tool_activation()
             return
         if self._draw_truss_tool is None:

@@ -11,7 +11,6 @@ the user doesn't accidentally create an overlapping duplicate).
 
 from __future__ import annotations
 
-import contextlib
 from typing import TYPE_CHECKING
 
 from opensees_studio.commands import AddNodesCommand
@@ -122,11 +121,10 @@ class DrawNodeTool(CanvasTool):
         super().__init__(canvas, vm, parent)
 
     def activate(self) -> None:
-        # Lock the camera to top (XY) view so clicks map 1:1 to world points
-        # on the Z=0 plane — same affordance as SAP2000's default workspace.
-        with contextlib.suppress(Exception):
-            self._canvas.view_xy()
-        # Turn on live snap-target preview while this tool is active.
+        # The camera is the user's: arming a tool must not move the view.
+        # Clicks are resolved in screen space against whatever the camera shows
+        # (grid intersections when close, the working plane otherwise), so the
+        # tool works in plan, elevation or isometric alike.
         self._canvas.set_snap_preview_enabled(True)
         super().activate()
 
@@ -136,20 +134,19 @@ class DrawNodeTool(CanvasTool):
 
     def prompt(self) -> str:
         return (
-            "Draw Node: top-down view locked. Click a grid intersection "
-            "to place a node. Switch to Select tool to finish."
+            "Draw Node: click a grid intersection, or anywhere on the working "
+            "plane, to place a node. Esc cancels; Select finishes." + self.grid_hint()
         )
 
     def on_node_picked(self, node_id: int) -> None:
         self.statusChanged.emit(f"Draw Node: node {node_id} already exists at that spot.")
 
-    def on_empty_clicked(self, x: float, y: float, z: float) -> None:
-        """Called only when the canvas has already confirmed a grid snap.
+    def on_empty_clicked(self, x: float, y: float, z: float, snapped: bool = True) -> None:
+        """Place a node at the point the canvas resolved.
 
-        The canvas runs a pixel-space snap test before emitting, so the
-        coordinates here are guaranteed to be exactly on a grid
-        intersection. Our only remaining job is to avoid creating a
-        duplicate node at an existing intersection.
+        The canvas has already decided *which* point: a grid intersection when
+        one was within a few pixels, otherwise where the click met the working
+        plane. Our remaining job is to avoid a duplicate at that spot.
         """
         project = self._vm.project
         if project is None:
@@ -169,4 +166,7 @@ class DrawNodeTool(CanvasTool):
         nid = project.next_node_id()
         node = Node(id=nid, coords=(x, y, z))
         self._vm.apply_command(AddNodesCommand(self._vm, [node], text=f"Add node {nid}"))
-        self.statusChanged.emit(f"Draw Node: added node {nid} at ({x:g}, {y:g}, {z:g}).")
+        where = "grid" if snapped else "working plane"
+        self.statusChanged.emit(
+            f"Draw Node: added node {nid} at ({x:g}, {y:g}, {z:g}) on the {where}."
+        )

@@ -39,7 +39,10 @@ class ModelCanvas(QtInteractor):  # type: ignore[misc]
     #: Emitted when the user clicks an empty area of the viewport.
     #: Payload: world-space (x, y, z) obtained by unprojecting the click
     #: onto the Z=0 plane. Tools use this to place new geometry.
-    emptyClicked = Signal(float, float, float)
+    emptyClicked = Signal(float, float, float, bool)
+    """Empty-space click: world x, y, z, and whether it snapped to a grid
+    intersection (False = it landed on the working plane where the ray crossed
+    it)."""
 
     def __init__(
         self,
@@ -118,6 +121,10 @@ class ModelCanvas(QtInteractor):  # type: ignore[misc]
         cy = (h_logical - pos.y()) * dpr
         tol_px = 15.0 * dpr
         target = self._nearest_grid_intersection_px(cx, cy, tol_px)
+        if target is None:
+            # Off the grid: preview the point on the working plane instead, so
+            # the highlight and the click agree.
+            target = self.world_on_working_plane(cx, cy)
         self._renderer.set_hover_snap(target)
         self.render()
 
@@ -245,16 +252,22 @@ class ModelCanvas(QtInteractor):  # type: ignore[misc]
         if _PICK_DEBUG:
             print("[pick] no hit within tolerance")
 
-        # ── Empty-click fallback: pixel-space snap to grid intersections. ──
-        # SAP2000 behaviour: only an intersection within a small pixel
-        # tolerance commits. Clicks anywhere else are silently ignored so
-        # users can't accidentally drop nodes in the middle of cells.
+        # ── Empty-click fallback. ──
+        # A grid intersection within a small pixel tolerance wins, so the
+        # SAP2000 habit of clicking a grid crossing still gives exactly that
+        # point. Anywhere else the click lands where the view ray crosses the
+        # working plane (Z = 0 when no level is active) — a dead click with no
+        # explanation is what made the draw tools feel broken.
         grid_tol_px = 15.0 * dpr
         snapped = self._nearest_grid_intersection_px(cx, cy, grid_tol_px)
         if snapped is not None:
-            self.emptyClicked.emit(float(snapped[0]), float(snapped[1]), float(snapped[2]))
+            self.emptyClicked.emit(float(snapped[0]), float(snapped[1]), float(snapped[2]), True)
+            return
+        free = self.world_on_working_plane(cx, cy)
+        if free is not None:
+            self.emptyClicked.emit(float(free[0]), float(free[1]), float(free[2]), False)
         elif _PICK_DEBUG:
-            print("[pick] off-grid click — no snap target within tolerance")
+            print("[pick] off-plane click — the view ray never meets the working plane")
 
     def _grid_intersections_world(self) -> np.ndarray | None:
         """Return an (N, 3) array of every snappable grid intersection.
@@ -432,6 +445,44 @@ class ModelCanvas(QtInteractor):  # type: ignore[misc]
             return out
         except Exception:
             return None
+
+    def world_on_working_plane(self, cx: float, cy: float) -> tuple[float, float, float] | None:
+        """Where a click at device pixel ``(cx, cy)`` meets the working plane.
+
+        ``(cx, cy)`` is in VTK display coordinates (origin bottom-left, device
+        pixels), the same convention :meth:`_project_world_to_screen` produces.
+        The plane is the active level — plan or elevation — or ``Z = 0`` when no
+        level is set, which is where a 2D model is drawn from the start.
+
+        Returns ``None`` when the ray is parallel to that plane (a level seen
+        edge-on), because then the click has no well-defined point on it.
+        """
+        try:
+            import vtk
+
+            coord = vtk.vtkCoordinate()
+            coord.SetCoordinateSystemToDisplay()
+            coord.SetValue(float(cx), float(cy), 0.0)
+            near = np.asarray(coord.GetComputedWorldValue(self.renderer)[:3], dtype=float)
+            coord.SetValue(float(cx), float(cy), 1.0)
+            far = np.asarray(coord.GetComputedWorldValue(self.renderer)[:3], dtype=float)
+        except Exception:
+            return None
+
+        direction = far - near
+        if not np.any(np.abs(direction) > 1e-12):
+            return None
+        if self._working_plane is not None:
+            plane, offset = self._working_plane
+            axis = {"XY": 2, "XZ": 1, "YZ": 0}[plane]
+        else:
+            axis, offset = 2, 0.0
+        if abs(direction[axis]) < 1e-12:
+            return None  # looking along the plane: no single point
+        t = (float(offset) - near[axis]) / direction[axis]
+        point = near + t * direction
+        point[axis] = float(offset)
+        return (float(point[0]), float(point[1]), float(point[2]))
 
     def _dispatch_pick(self, kind: str, entity_id: int) -> None:
         additive = self._is_additive_modifier()

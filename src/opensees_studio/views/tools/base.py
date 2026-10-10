@@ -65,10 +65,36 @@ class CanvasTool(QObject):
         """Status-bar text shown when the tool is active."""
         return f"{self.name}: ready."
 
+    def grid_hint(self) -> str:
+        """A sentence for the prompt when there is no grid to snap to.
+
+        A project with an empty grid (the default) still draws — the canvas
+        resolves a click onto the working plane — but it does not *snap*, and
+        the difference should be visible rather than discovered.
+        """
+        project = self._vm.project
+        if project is None:
+            return ""
+        has_lines = any(
+            system.grid.visible
+            and not system.grid.hide_all
+            and bool(system.grid.x_lines or system.grid.y_lines or system.grid.z_lines)
+            for system in project.coord_systems
+        )
+        if has_lines:
+            return ""
+        return " No grid defined: clicks land on the working plane (Define → Grids… snaps)."
+
     # ── hooks (override) ────────────────────────────────────────────
     def on_node_picked(self, node_id: int) -> None: ...
     def on_element_picked(self, element_id: int) -> None: ...
-    def on_empty_clicked(self, x: float, y: float, z: float) -> None: ...
+    def on_empty_clicked(self, x: float, y: float, z: float, snapped: bool = True) -> None:
+        """Empty-space click at a world point.
+
+        ``snapped`` is True when the point is a grid intersection, False when it
+        is where the click met the working plane (no intersection was close
+        enough). Tools may say which, so the user learns the difference.
+        """
 
 
 class SelectTool(CanvasTool):
@@ -128,6 +154,6 @@ class ToolController(QObject):
         if self._active is not None:
             self._active.on_element_picked(element_id)
 
-    def _on_empty_clicked(self, x: float, y: float, z: float) -> None:
+    def _on_empty_clicked(self, x: float, y: float, z: float, snapped: bool) -> None:
         if self._active is not None:
-            self._active.on_empty_clicked(x, y, z)
+            self._active.on_empty_clicked(x, y, z, snapped)

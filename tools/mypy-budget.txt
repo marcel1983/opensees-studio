@@ -25,4 +25,6 @@
 # Annotating `MainWindow._post_dock` as `QDockWidget | None` removed the
 # assignment errors every post-processing dock added (they all assigned a
 # QDockWidget to an attribute mypy had inferred as `None`): 243 -> 237.
-237
+# Dropping the modal grid guard from the draw tools took the last three
+# `QMessageBox`/`_require_drawable_grid` errors with it: 237 -> 234.
+234

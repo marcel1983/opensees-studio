@@ -9,7 +9,6 @@ whole "Draw Truss" action is a single undo step.
 
 from __future__ import annotations
 
-import contextlib
 from typing import TYPE_CHECKING
 
 from opensees_studio.commands import (
@@ -53,8 +52,9 @@ class DrawTrussTool(CanvasTool):
 
     # ── lifecycle ───────────────────────────────────────────────────
     def activate(self) -> None:
-        with contextlib.suppress(Exception):
-            self._canvas.view_xy()
+        # The camera stays where the user left it: a tool that moves the view
+        # makes every click land somewhere unexpected. Clicks are resolved in
+        # screen space, so this works in plan, elevation and isometric alike.
         self._canvas.set_snap_preview_enabled(True)
         super().activate()
 
@@ -68,16 +68,17 @@ class DrawTrussTool(CanvasTool):
 
     def prompt(self) -> str:
         if self._first_node_id is None:
-            return "Draw Truss: click the FIRST end (node or grid intersection)."
+            return "Draw Truss: click the FIRST end (node or grid intersection)." + self.grid_hint()
         return (
             f"Draw Truss: first node = {self._first_node_id}. Click the SECOND end (Esc to cancel)."
+            + self.grid_hint()
         )
 
     # ── picks ───────────────────────────────────────────────────────
     def on_node_picked(self, node_id: int) -> None:
         self._resolve_endpoint(node_id)
 
-    def on_empty_clicked(self, x: float, y: float, z: float) -> None:
+    def on_empty_clicked(self, x: float, y: float, z: float, snapped: bool = True) -> None:
         project = self._vm.project
         if project is None:
             return

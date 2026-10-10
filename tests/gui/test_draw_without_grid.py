@@ -1,18 +1,26 @@
-"""A brand-new project has an empty grid, so there is nothing to snap to.
+"""A brand-new project has an empty grid — and drawing still has to work.
 
-The canvas rejects off-grid clicks on purpose, which left Draw Node / Frame
-/ Truss apparently dead on a fresh model with no hint about why. Arming one
-of those tools must now offer to define a grid instead.
+Two contract changes, both from the same report: arming a draw tool moved the
+camera to top view, and a click that was not within a few pixels of a grid
+*intersection* was silently dropped, so the tool looked dead.
+
+Now:
+
+- arming a tool never touches the camera — the user's view is theirs;
+- a click resolves to a grid intersection when one is close, and otherwise to
+  where the view ray meets the working plane, so a node always lands where the
+  pointer was;
+- with no grid at all there is no snapping, and the status line says so instead
+  of a modal standing between the user and the canvas.
 """
 
 from __future__ import annotations
 
+import numpy as np
 import pytest
 
 pytest.importorskip("PySide6")
 pytest.importorskip("pyvistaqt")
-
-from PySide6.QtWidgets import QMessageBox
 
 from opensees_studio.commands import SetCoordSystemsCommand
 from opensees_studio.core import CoordinateGridSystem, GridSystem, make_grid_lines
@@ -55,62 +63,36 @@ def _give_it_a_grid(window) -> None:  # type: ignore[no-untyped-def]
     )
 
 
-def _answer(monkeypatch: pytest.MonkeyPatch, button) -> list[str]:  # type: ignore[no-untyped-def]
-    seen: list[str] = []
-
-    def _question(parent, title, text, *args, **kwargs):  # type: ignore[no-untyped-def]
-        seen.append(title)
-        return button
-
-    monkeypatch.setattr(QMessageBox, "question", staticmethod(_question))
-    return seen
-
-
 @pytest.mark.parametrize(("slot", "tool_name"), DRAW_TOOLS)
 @pytest.mark.gui
-def test_draw_tool_explains_the_missing_grid(  # type: ignore[no-untyped-def]
-    qtbot, window, monkeypatch, slot, tool_name
+def test_a_draw_tool_arms_without_a_grid_and_says_what_clicks_do(  # type: ignore[no-untyped-def]
+    qtbot, window, slot, tool_name
 ) -> None:
     assert not window._has_grid_lines()
-    seen = _answer(monkeypatch, QMessageBox.StandardButton.No)
 
     getattr(window, slot)()
 
-    assert seen == [f"{tool_name}: no grid defined"]
-    # The tool did not arm, and the toolbar fell back to Select rather than
-    # staying on a tool that cannot do anything.
-    assert window._tool_controller.active is None
-    assert window._act_tool_select.isChecked()
-    assert not window._act_tool_draw_node.isChecked()
-
-
-@pytest.mark.gui
-def test_accepting_the_prompt_defines_a_grid_and_arms_the_tool(  # type: ignore[no-untyped-def]
-    qtbot, window, monkeypatch
-) -> None:
-    _answer(monkeypatch, QMessageBox.StandardButton.Yes)
-    monkeypatch.setattr(window, "_on_grid_system", lambda: _give_it_a_grid(window))
-
-    window._on_draw_node_tool()
-
-    assert window._has_grid_lines()
+    # It arms: an empty grid is no longer a reason to refuse.
     assert window._tool_controller.active is not None
+    # ...and the status bar explains where a click will land.
+    message = window.statusBar().currentMessage()
+    assert message.startswith(tool_name)
+    assert "No grid defined" in message
+    assert "working plane" in message
 
 
 @pytest.mark.gui
-def test_a_project_with_a_grid_never_asks(qtbot, window, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_a_project_with_a_grid_says_nothing_about_grids(qtbot, window) -> None:  # type: ignore[no-untyped-def]
     _give_it_a_grid(window)
-    seen = _answer(monkeypatch, QMessageBox.StandardButton.No)
 
     window._on_draw_node_tool()
 
-    assert seen == []
     assert window._tool_controller.active is not None
+    assert "No grid defined" not in window.statusBar().currentMessage()
 
 
 @pytest.mark.gui
-def test_a_hidden_grid_does_not_count_as_snappable(qtbot, window, monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    """Grid lines that are switched off leave the canvas with no target either."""
+def test_a_hidden_grid_counts_as_no_grid_for_the_hint(qtbot, window) -> None:  # type: ignore[no-untyped-def]
     _give_it_a_grid(window)
     project = window._vm.project
     system = project.coord_systems[0]
@@ -120,9 +102,68 @@ def test_a_hidden_grid_does_not_count_as_snappable(qtbot, window, monkeypatch) -
             [system.model_copy(update={"grid": system.grid.model_copy(update={"visible": False})})],
         )
     )
-    seen = _answer(monkeypatch, QMessageBox.StandardButton.No)
 
     window._on_draw_node_tool()
 
-    assert seen == ["Draw Node: no grid defined"]
-    assert window._tool_controller.active is None
+    assert "No grid defined" in window.statusBar().currentMessage()
+    assert window._tool_controller.active is not None  # still armed
+
+
+@pytest.mark.parametrize(("slot", "tool_name"), DRAW_TOOLS)
+@pytest.mark.gui
+def test_arming_a_tool_does_not_move_the_camera(  # type: ignore[no-untyped-def]
+    qtbot, window, slot, tool_name
+) -> None:
+    """The report: the view jumped as soon as a draw tool was armed."""
+    canvas = window._canvas
+    window._on_view_iso()
+    before = (
+        np.asarray(canvas.camera.position, dtype=float).copy(),
+        np.asarray(canvas.camera.focal_point, dtype=float).copy(),
+        np.asarray(canvas.camera.up, dtype=float).copy(),
+    )
+
+    getattr(window, slot)()
+
+    assert window._tool_controller.active is not None
+    after = (
+        np.asarray(canvas.camera.position, dtype=float),
+        np.asarray(canvas.camera.focal_point, dtype=float),
+        np.asarray(canvas.camera.up, dtype=float),
+    )
+    for old, new in zip(before, after, strict=True):
+        assert np.allclose(old, new), f"{tool_name} moved the camera"
+
+
+@pytest.mark.gui
+def test_an_off_grid_click_still_creates_a_node(qtbot, window) -> None:  # type: ignore[no-untyped-def]
+    """The other half of the report: nothing was ever drawn."""
+    _give_it_a_grid(window)
+    project = window._vm.project
+    window._on_draw_node_tool()
+    tool = window._tool_controller.active
+
+    # The canvas reports an unsnapped point (no intersection within tolerance).
+    tool.on_empty_clicked(1.25, 2.75, 0.0, False)
+
+    assert len(project.nodes) == 1
+    node = project.nodes[0]
+    assert (node.coords[0], node.coords[1], node.coords[2]) == (1.25, 2.75, 0.0)
+    assert "working plane" in window.statusBar().currentMessage()
+
+
+@pytest.mark.gui
+def test_a_snapped_click_says_it_landed_on_the_grid(qtbot, window) -> None:  # type: ignore[no-untyped-def]
+    _give_it_a_grid(window)
+    window._on_draw_node_tool()
+    tool = window._tool_controller.active
+
+    tool.on_empty_clicked(5.0, 3.0, 0.0, True)
+
+    assert tuple(project_coords(window)) == (5.0, 3.0)
+    assert "on the grid" in window.statusBar().currentMessage()
+
+
+def project_coords(window) -> tuple[float, float]:  # type: ignore[no-untyped-def]
+    node = window._vm.project.nodes[0]
+    return node.coords[0], node.coords[1]

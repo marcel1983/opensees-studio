@@ -257,3 +257,109 @@ def test_single_node_radius_uses_grid_extent(qtbot) -> None:  # type: ignore[no-
     # Grid diagonal = sqrt(10² + 10²) ≈ 14.14. Radius ≈ 0.008 · 14.14 ≈ 0.113.
     # Without the grid fix we'd get the 0.05 floor. Assert it's *above* the floor.
     assert r > 0.05
+
+
+# ─────────────────── the working-plane fallback (0.0.7 fix) ───────────────────
+def _sized_canvas(qtbot):  # type: ignore[no-untyped-def]
+    from opensees_studio.views.canvas3d.model_canvas import ModelCanvas
+
+    canvas = ModelCanvas()
+    qtbot.addWidget(canvas)
+    canvas.resize(800, 600)
+    canvas.show()
+    qtbot.waitExposed(canvas)
+    return canvas
+
+
+def _look_down_at(canvas, focus: tuple[float, float, float]) -> None:  # type: ignore[no-untyped-def]
+    canvas.camera.position = (focus[0], focus[1], focus[2] + 10.0)
+    canvas.camera.focal_point = focus
+    canvas.camera.up = (0.0, 1.0, 0.0)
+    canvas.render()
+
+
+def test_a_click_meets_the_working_plane_when_no_intersection_is_close(qtbot) -> None:  # type: ignore[no-untyped-def]
+    """The fix for 'it never draws anything': a click always has a point.
+
+    With the camera looking down at Z = 0, the centre of the viewport is the
+    focal point — whatever the grid does or does not offer.
+    """
+    canvas = _sized_canvas(qtbot)
+    canvas.show_project(Project())  # empty grid: no intersection to snap to
+    _look_down_at(canvas, (4.0, -2.0, 0.0))
+
+    point = canvas.world_on_working_plane(canvas.width() / 2.0, canvas.height() / 2.0)
+
+    assert point is not None
+    assert point[0] == pytest.approx(4.0, abs=1e-6)
+    assert point[1] == pytest.approx(-2.0, abs=1e-6)
+    assert point[2] == pytest.approx(0.0, abs=1e-9)
+
+
+def test_the_fallback_point_follows_the_active_level(qtbot) -> None:  # type: ignore[no-untyped-def]
+    canvas = _sized_canvas(qtbot)
+    canvas.show_project(Project())
+    canvas.set_working_plane("XY", 3.5)  # a floor at Z = 3.5
+    _look_down_at(canvas, (0.0, 0.0, 3.5))
+
+    point = canvas.world_on_working_plane(canvas.width() / 2.0, canvas.height() / 2.0)
+
+    assert point is not None
+    assert point[2] == pytest.approx(3.5, abs=1e-9)
+
+
+def test_an_empty_click_emits_unsnapped_when_nothing_is_near(qtbot) -> None:  # type: ignore[no-untyped-def]
+    canvas = _sized_canvas(qtbot)
+    # A grid that is nowhere near the centre of the view.
+    canvas.show_project(
+        Project(
+            coord_systems=[
+                CoordinateGridSystem(
+                    name="Global",
+                    grid=GridSystem(
+                        x_grid_lines=make_grid_lines("X", [40.0, 45.0]),
+                        y_grid_lines=make_grid_lines("Y", [40.0]),
+                        z_grid_lines=make_grid_lines("Z", [0.0]),
+                    ),
+                ),
+            ],
+        ),
+    )
+    _look_down_at(canvas, (0.0, 0.0, 0.0))
+    seen: list[tuple] = []
+    canvas.emptyClicked.connect(lambda *args: seen.append(args))
+
+    canvas._handle_click(canvas.width() / 2.0, canvas.height() / 2.0)
+
+    assert seen, "an empty click must always resolve to a point"
+    x, y, z, snapped = seen[-1]
+    assert snapped is False
+    assert (x, y, z) == pytest.approx((0.0, 0.0, 0.0), abs=1e-6)
+
+
+def test_a_click_on_an_intersection_is_reported_as_snapped(qtbot) -> None:  # type: ignore[no-untyped-def]
+    canvas = _sized_canvas(qtbot)
+    canvas.show_project(
+        Project(
+            coord_systems=[
+                CoordinateGridSystem(
+                    name="Global",
+                    grid=GridSystem(
+                        x_grid_lines=make_grid_lines("X", [0.0]),
+                        y_grid_lines=make_grid_lines("Y", [0.0]),
+                        z_grid_lines=make_grid_lines("Z", [0.0]),
+                    ),
+                ),
+            ],
+        ),
+    )
+    _look_down_at(canvas, (0.0, 0.0, 0.0))
+    seen: list[tuple] = []
+    canvas.emptyClicked.connect(lambda *args: seen.append(args))
+
+    canvas._handle_click(canvas.width() / 2.0, canvas.height() / 2.0)
+
+    assert seen, "a click on the intersection must resolve"
+    x, y, z, snapped = seen[-1]
+    assert snapped is True
+    assert (x, y, z) == pytest.approx((0.0, 0.0, 0.0), abs=1e-6)
