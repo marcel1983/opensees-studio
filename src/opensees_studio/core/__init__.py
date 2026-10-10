@@ -223,6 +223,36 @@ from opensees_studio.core.sections import (
     StraightLayer,
     w_shape_patches,
 )
+from opensees_studio.core.shell_results import (
+    FIELD_NAMES as SHELL_FIELD_NAMES,
+)
+from opensees_studio.core.shell_results import (
+    PRINCIPAL_NAMES as SHELL_PRINCIPAL_NAMES,
+)
+from opensees_studio.core.shell_results import (
+    RESULTANT_NAMES as SHELL_RESULTANT_NAMES,
+)
+from opensees_studio.core.shell_results import (
+    Principal as ShellPrincipal,
+)
+from opensees_studio.core.shell_results import (
+    bending_principal,
+    membrane_principal,
+    principal_angle,
+    transverse_shear,
+)
+from opensees_studio.core.shell_results import (
+    field_label as shell_field_label,
+)
+from opensees_studio.core.shell_results import (
+    field_value as shell_field_value,
+)
+from opensees_studio.core.shell_results import (
+    named_values as shell_named_values,
+)
+from opensees_studio.core.shell_results import (
+    principal as shell_principal,
+)
 from opensees_studio.core.target_spectrum import (
     TBDY_KINDS,
     TBDY_TL,
@@ -367,6 +397,19 @@ __all__ = [  # noqa: RUF022 - grouped by domain under section comments, not alph
     "ElasticUniaxial",
     "Steel01",
     "TypicalMaterial",
+    # Shell section resultants (the contour view)
+    "SHELL_FIELD_NAMES",
+    "SHELL_PRINCIPAL_NAMES",
+    "SHELL_RESULTANT_NAMES",
+    "ShellPrincipal",
+    "bending_principal",
+    "membrane_principal",
+    "principal_angle",
+    "shell_field_label",
+    "shell_field_value",
+    "shell_named_values",
+    "shell_principal",
+    "transverse_shear",
     "material_catalog",
     "material_families",
     "typical_material_to_model",
