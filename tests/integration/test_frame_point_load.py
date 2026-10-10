@@ -70,16 +70,7 @@ def _solve(project: Project, tmp_path: Path):  # type: ignore[no-untyped-def]
 
 @pytest.mark.parametrize("element_cls", [ElasticBeamColumn, ForceBeamColumn, DispBeamColumn])
 def test_the_supports_share_the_load_by_the_lever_rule(element_cls: type, tmp_path: Path) -> None:
-    project = _beam(element_cls)
-    if element_cls is ForceBeamColumn:
-        # A force-based element only takes an element load into its resisting
-        # force once it iterates, and the first increment of the load moves no
-        # DOF: the default Linear / NormDispIncr pair stops there. Iterate on
-        # the unbalance instead.
-        project.analyses[0] = project.analyses[0].model_copy(
-            update={"algorithm": "Newton", "test": "NormUnbalance"}
-        )
-    results = _solve(project, tmp_path)
+    results = _solve(_beam(element_cls), tmp_path)
 
     b = LENGTH - A_POS
     assert float(results.node_reaction[1][0][1]) == pytest.approx(LOAD * b / LENGTH, rel=1e-6)
