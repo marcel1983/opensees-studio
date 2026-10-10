@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from opensees_studio.commands.base import ProjectCommand
 
 if TYPE_CHECKING:
-    from opensees_studio.core import GroundMotionRecord, TargetSpectrum
+    from opensees_studio.core import GroundMotionRecord, ResponseSpectrum, TargetSpectrum
     from opensees_studio.viewmodels import ProjectViewModel
 
 
@@ -162,6 +162,43 @@ class SetTargetSpectrumCommand(ProjectCommand):
 
     def undo(self) -> None:
         entries = self.project.target_spectra
+        if self._old is None:
+            entries[:] = [e for e in entries if e.id != self._new.id]
+        else:
+            entries[self._index] = self._old
+        self._notify()
+
+
+class AddSpectrumCommand(ProjectCommand):
+    """Add or replace (same id) a :class:`ResponseSpectrum` — the case's own table.
+
+    A ``TargetSpectrum`` is a design spectrum in g (the dialog plots it and the
+    scaling reads it); a response-spectrum *case* reads a ``ResponseSpectrum``,
+    tabulated in the project's acceleration unit. This is the command that puts
+    one — built from a code or typed by the user — into the project so a case can
+    point at it.
+    """
+
+    def __init__(self, vm: ProjectViewModel, spectrum: ResponseSpectrum) -> None:
+        super().__init__(vm, f"Add response spectrum '{spectrum.name or spectrum.id}'")
+        self._new = spectrum
+        self._old: ResponseSpectrum | None = None
+        self._index: int = -1
+
+    def redo(self) -> None:
+        entries = self.project.spectra
+        for i, entry in enumerate(entries):
+            if entry.id == self._new.id:
+                self._old, self._index = entry, i
+                entries[i] = self._new
+                break
+        else:
+            self._old, self._index = None, len(entries)
+            entries.append(self._new)
+        self._notify()
+
+    def undo(self) -> None:
+        entries = self.project.spectra
         if self._old is None:
             entries[:] = [e for e in entries if e.id != self._new.id]
         else:

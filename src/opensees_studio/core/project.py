@@ -202,6 +202,10 @@ class Project(BaseModel):
     def next_ground_motion_id(self) -> int:
         return self._next_id(self.ground_motions)
 
+    def next_spectrum_id(self) -> int:
+        """Lowest unused id for a case response spectrum (``project.spectra``)."""
+        return max((s.id for s in self.spectra), default=0) + 1
+
     def next_target_spectrum_id(self) -> int:
         return self._next_id(self.target_spectra)
 

@@ -16,6 +16,19 @@ from opensees_studio.core.analysis import (
     StaticCase,
     TransientCase,
 )
+from opensees_studio.core.asce7 import (
+    ASCE_SITE_CLASSES,
+    FA_TABLE,
+    FV_TABLE,
+    TL_DEFAULT,
+    ASCEDesignValues,
+    ASCESpectrumError,
+    asce7_corner_periods,
+    asce7_design_spectrum,
+    asce7_design_values,
+    fa_coefficient,
+    fv_coefficient,
+)
 from opensees_studio.core.catalog_material import CatalogMaterial, catalog_names, catalog_spec
 from opensees_studio.core.constraints import EqualDOFConstraint
 from opensees_studio.core.defaults import (
@@ -204,6 +217,7 @@ from opensees_studio.core.target_spectrum import (
     TargetSpectrum,
     TargetSpectrumKind,
     loglog_interp,
+    target_to_case_spectrum,
     tbdy2018_corner_periods,
     tbdy2018_sae,
     tbdy2018_saed,
@@ -237,6 +251,18 @@ __all__ = [  # noqa: RUF022 - grouped by domain under section comments, not alph
     # Geometry
     "Node",
     "EqualDOFConstraint",
+    # ASCE/SEI 7-16 design spectrum
+    "ASCE_SITE_CLASSES",
+    "FA_TABLE",
+    "FV_TABLE",
+    "TL_DEFAULT",
+    "ASCEDesignValues",
+    "ASCESpectrumError",
+    "asce7_corner_periods",
+    "asce7_design_spectrum",
+    "asce7_design_values",
+    "fa_coefficient",
+    "fv_coefficient",
     # Parametric portal frames (2D)
     "PLANE_AXES",
     "SUPPORTED_NDF",
@@ -380,6 +406,7 @@ __all__ = [  # noqa: RUF022 - grouped by domain under section comments, not alph
     "TBDY_TL",
     "TargetSpectrum",
     "TargetSpectrumKind",
+    "target_to_case_spectrum",
     "loglog_interp",
     "tbdy2018_corner_periods",
     "tbdy2018_sae",

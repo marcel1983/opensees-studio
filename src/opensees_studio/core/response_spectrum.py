@@ -55,6 +55,50 @@ class ElasticSpectrum(NamedTuple):
     damping: float
 
 
+def four_branch_spectrum(
+    periods: np.ndarray | list[float] | float,
+    sds: float,
+    sd1: float,
+    tl: float,
+) -> np.ndarray:
+    """The design spectrum shape both codes in this application share.
+
+    A constant-acceleration plateau between the two corner periods, a rising
+    branch below it, a 1/T decay above it and a 1/T² tail past the long-period
+    transition::
+
+        T < T0          Sa = SDS (0.4 + 0.6 T / T0)
+        T0 <= T <= Ts   Sa = SDS
+        Ts < T <= TL    Sa = SD1 / T
+        T > TL          Sa = SD1 TL / T^2
+
+    with ``T0 = 0.2 SD1/SDS`` and ``Ts = SD1/SDS``. TBDY 2018 (with TL = 6 s)
+    and ASCE/SEI 7-16 (with TL from its maps) define exactly these four
+    branches, so the shape lives here once and each code supplies its own
+    corner values.
+    """
+    if sds <= 0.0 or sd1 <= 0.0:
+        raise ValueError(f"SDS and SD1 must be positive, got SDS={sds}, SD1={sd1}.")
+    t0, ts = 0.2 * sd1 / sds, sd1 / sds
+    if tl <= ts:
+        raise ValueError(f"TL={tl} must exceed Ts={ts:.4g} s.")
+    t = np.atleast_1d(np.asarray(periods, dtype=float))
+    if np.any(t < 0.0):
+        raise ValueError("periods must be >= 0.")
+    with np.errstate(divide="ignore"):
+        return np.where(
+            t < t0,
+            (0.4 + 0.6 * t / t0) * sds,
+            np.where(
+                t <= ts,
+                sds,
+                np.where(
+                    t <= tl, sd1 / np.maximum(t, 1e-300), sd1 * tl / np.maximum(t, 1e-300) ** 2
+                ),
+            ),
+        )
+
+
 def default_periods(
     n: int = DEFAULT_N_PERIODS,
     t_min: float = DEFAULT_T_MIN,

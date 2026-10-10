@@ -40,19 +40,35 @@ import numpy as np
 from pydantic import Field, PositiveFloat, model_validator
 
 from opensees_studio.core._base import Entity
+from opensees_studio.core.asce7 import (
+    ASCE_SITE_CLASSES,
+    TL_DEFAULT,
+    asce7_corner_periods,
+    asce7_design_spectrum,
+    asce7_design_values,
+)
+from opensees_studio.core.loads import ResponseSpectrum
+from opensees_studio.core.response_spectrum import four_branch_spectrum
 from opensees_studio.core.tbdy_site import (
     EarthquakeLevel,
     SiteClass,
     tbdy2018_design_accelerations,
 )
+from opensees_studio.core.units import UnitSystem
 
 #: TBDY 2018 long-period transition, seconds.
 TBDY_TL = 6.0
 
-TargetSpectrumKind = Literal["tbdy2018", "tbdy2018_vertical", "user"]
+TargetSpectrumKind = Literal["tbdy2018", "tbdy2018_vertical", "asce7_16", "user"]
 
 #: Kinds built from SDS and SD1.
 TBDY_KINDS: frozenset[str] = frozenset({"tbdy2018", "tbdy2018_vertical"})
+
+#: The ASCE/SEI 7-16 design spectrum.
+ASCE_KINDS: frozenset[str] = frozenset({"asce7_16"})
+
+#: Kinds defined by a code (a shape from SDS and SD1) rather than by a table.
+CODE_KINDS: frozenset[str] = TBDY_KINDS | ASCE_KINDS
 
 
 def tbdy2018_corner_periods(sds: float, sd1: float) -> tuple[float, float]:
@@ -68,26 +84,12 @@ def tbdy2018_sae(
     sd1: float,
     tl: float = TBDY_TL,
 ) -> np.ndarray:
-    """Horizontal elastic design spectral acceleration Sae(T), in g."""
-    ta, tb = tbdy2018_corner_periods(sds, sd1)
-    if tl <= tb:
-        raise ValueError(f"TL={tl} must exceed TB={tb:.4g} s.")
-    t = np.atleast_1d(np.asarray(periods, dtype=float))
-    if np.any(t < 0.0):
-        raise ValueError("periods must be >= 0.")
-    with np.errstate(divide="ignore"):
-        sae = np.where(
-            t < ta,
-            (0.4 + 0.6 * t / ta) * sds,
-            np.where(
-                t <= tb,
-                sds,
-                np.where(
-                    t <= tl, sd1 / np.maximum(t, 1e-300), sd1 * tl / np.maximum(t, 1e-300) ** 2
-                ),
-            ),
-        )
-    return sae
+    """Horizontal elastic design spectral acceleration Sae(T), in g.
+
+    The four branches are the ones in :func:`core.response_spectrum.four_branch_spectrum`
+    (ASCE/SEI 7-16 describes the same shape); TBDY 2018 fixes TL = 6 s.
+    """
+    return four_branch_spectrum(periods, sds, sd1, tl)
 
 
 def tbdy2018_vertical_corner_periods(
@@ -123,6 +125,77 @@ def tbdy2018_saed(
             np.where(t <= tbd, plateau, plateau * tbd / np.maximum(t, 1e-300)),
         )
     return np.where(t <= tld, saed, np.nan)
+
+
+#: How many points a code spectrum is sampled at when it becomes a case
+#: spectrum. The case reads Sa(T) by linear interpolation, so the corners have to
+#: be in the table and the branches need enough points to keep the error small:
+#: 200 points over the 0 s to TL range keep the linear interpolation within
+#: 0.06 % of the exact curve everywhere (measured, the worst case being the 1/T
+#: branch of a large-SD1 spectrum).
+CASE_SPECTRUM_POINTS = 200
+
+
+def _case_periods(sds: float, sd1: float, tl: float) -> list[float]:
+    """The period grid a code spectrum is tabulated at: corners plus a ramp.
+
+    A log-ish ramp, because the interesting part of a design spectrum is the
+    short-period end: the corner periods themselves are inserted exactly, so the
+    plateau and both decay branches are reproduced where they change.
+
+    The grid starts just above zero rather than at it: a
+    ``ResponseSpectrum`` requires strictly positive periods and no mode has
+    T = 0. The case clamps at both ends of the table, so the first entry covers
+    the rigid end.
+    """
+    low, high = 1e-3, tl
+    ramp = [
+        low * (high / low) ** (index / (CASE_SPECTRUM_POINTS - 1))
+        for index in range(CASE_SPECTRUM_POINTS)
+    ]
+    corners = [0.2 * sd1 / sds, sd1 / sds, tl]
+    return sorted({round(value, 9) for value in [*ramp, *corners] if low <= value <= tl})
+
+
+def target_to_case_spectrum(
+    target: TargetSpectrum,
+    spectrum_id: int,
+    *,
+    units: UnitSystem,
+    name: str = "",
+    damping_ratio: float | None = None,
+) -> ResponseSpectrum:
+    """The target spectrum as a tabulated :class:`ResponseSpectrum` for a case.
+
+    A :class:`TargetSpectrum` is a *design* spectrum in units of g (the dialog
+    plots it and the scaling reads it); a :class:`ResponseSpectrumCase` reads a
+    :class:`ResponseSpectrum`, which is tabulated in the project's acceleration
+    unit. This is the conversion between the two, and it is explicit about both
+    halves of that: the same curve, sampled at its own corner periods, with g
+    turned into the project's unit by the standard gravity of that system.
+
+    A user-table target is copied point for point — resampling a table the user
+    typed would change the numbers they meant.
+    """
+    from opensees_studio.core.loads import ResponseSpectrum
+    from opensees_studio.core.units import gravity
+
+    factor = gravity(units)
+    if target.kind == "user":
+        periods = [float(value) for value in target.periods]
+        values = [float(value) * factor for value in target.sa]
+    else:
+        assert target.sds is not None and target.sd1 is not None
+        periods = _case_periods(target.sds, target.sd1, target.long_period_transition)
+        sa = target.sa_at(periods)
+        values = [float(value) * factor for value in np.atleast_1d(sa)]
+    return ResponseSpectrum(
+        id=spectrum_id,
+        name=name or target.name or target.describe()[:60],
+        periods=periods,
+        accelerations=values,
+        damping_ratio=target.damping_ratio if damping_ratio is None else damping_ratio,
+    )
 
 
 def loglog_interp(
@@ -182,6 +255,20 @@ class TargetSpectrum(Entity):
     )
     fs: float | None = Field(default=None, description="Derived site coefficient Fs (Tablo 2.1).")
     f1: float | None = Field(default=None, description="Derived site coefficient F1 (Tablo 2.2).")
+    asce_site_class: Literal["A", "B", "C", "D", "E", "F"] | None = Field(
+        default=None, description="ASCE 7-16 site class used to derive SDS and SD1."
+    )
+    asce_site_class_is_default: bool = Field(
+        default=False,
+        description="ASCE 7-16: D assumed because the soil is unknown (§11.4.3), "
+        "which forbids Fa below 1.2.",
+    )
+    fa: float | None = Field(default=None, description="Derived ASCE 7-16 Fa (Table 11.4-1).")
+    fv: float | None = Field(default=None, description="Derived ASCE 7-16 Fv (Table 11.4-2).")
+    tl: PositiveFloat | None = Field(
+        default=None,
+        description="ASCE 7-16 long-period transition period TL (Figs. 22-14 to 22-19).",
+    )
     periods: list[float] = Field(
         default_factory=list,
         description="User table periods (s), strictly increasing and positive.",
@@ -195,9 +282,16 @@ class TargetSpectrum(Entity):
     @model_validator(mode="before")
     @classmethod
     def _derive_from_site(cls, data: Any) -> Any:
-        """Fill ``fs``, ``f1``, ``sds`` and ``sd1`` from ``ss``, ``s1`` and ``site_class``."""
+        """Fill the derived values from the mapped Ss, S1 and the site class.
+
+        TBDY 2018 derives Fs and F1 (and SDS, SD1); ASCE 7-16 derives Fa and Fv
+        from its own site classes. The two are separate paths because the site
+        classes are not the same thing.
+        """
         if not isinstance(data, dict):
             return data
+        if data.get("asce_site_class") is not None:
+            return cls._derive_from_asce_site(data)
         site = [data.get(k) for k in ("ss", "s1", "site_class")]
         if all(v is None for v in site):
             return data
@@ -214,12 +308,54 @@ class TargetSpectrum(Entity):
                 )
         return {**data, "fs": derived.fs, "f1": derived.f1, "sds": derived.sds, "sd1": derived.sd1}
 
+    @classmethod
+    def _derive_from_asce_site(cls, data: dict[str, Any]) -> dict[str, Any]:
+        """ASCE 7-16: Fa, Fv, SMS, SM1, SDS and SD1 from Ss, S1 and the site class."""
+        site_class = str(data["asce_site_class"])
+        if site_class not in ASCE_SITE_CLASSES:
+            raise ValueError(
+                f"Unknown ASCE 7-16 site class {site_class!r}; "
+                f"use one of {', '.join(ASCE_SITE_CLASSES)}."
+            )
+        missing = [key for key in ("ss", "s1") if data.get(key) is None]
+        if missing:
+            raise ValueError(
+                "An ASCE 7-16 spectrum from the site needs ss and s1 together with asce_site_class."
+            )
+        derived = asce7_design_values(
+            float(data["ss"]),
+            float(data["s1"]),
+            site_class,
+            site_class_d_is_default=bool(data.get("asce_site_class_is_default", False)),
+        )
+        for key, value in (("sds", derived.sds), ("sd1", derived.sd1)):
+            given = data.get(key)
+            if given is not None and abs(float(given) - value) > 1e-9 * max(1.0, value):
+                raise ValueError(
+                    f"{key}={given} does not match the value {value:.6g} derived from "
+                    f"Ss, S1 and ASCE 7-16 site class {site_class}."
+                )
+        return {
+            **data,
+            "fa": derived.fa,
+            "fv": derived.fv,
+            "sds": derived.sds,
+            "sd1": derived.sd1,
+        }
+
     @model_validator(mode="after")
     def _check_definition(self) -> TargetSpectrum:
         if self.kind in TBDY_KINDS:
             if self.sds is None or self.sd1 is None:
                 raise ValueError(f"A {self.kind} target spectrum needs both sds and sd1.")
             tbdy2018_corner_periods(self.sds, self.sd1)
+        elif self.kind in ASCE_KINDS:
+            if self.sds is None or self.sd1 is None:
+                raise ValueError(
+                    "An ASCE 7-16 target spectrum needs SDS and SD1, either given "
+                    "directly or from Ss, S1 and the site class."
+                )
+            asce7_corner_periods(self.sds, self.sd1, self.tl or TL_DEFAULT)
         else:
             loglog_interp([1.0], self.periods, self.sa)
         return self
@@ -227,7 +363,14 @@ class TargetSpectrum(Entity):
     @property
     def from_site(self) -> bool:
         """True when SDS and SD1 were derived from Ss, S1 and the site class."""
-        return self.site_class is not None
+        return self.site_class is not None or self.asce_site_class is not None
+
+    @property
+    def long_period_transition(self) -> float:
+        """TL in seconds: the map value for ASCE 7-16, the code's 6 s for TBDY."""
+        if self.kind in ASCE_KINDS:
+            return float(self.tl or TL_DEFAULT)
+        return TBDY_TL
 
     def sa_at(self, periods: np.ndarray | list[float] | float) -> np.ndarray:
         """Target Sa (g) at ``periods``."""
@@ -236,6 +379,9 @@ class TargetSpectrum(Entity):
             if self.kind == "tbdy2018_vertical":
                 return tbdy2018_saed(periods, self.sds, self.sd1)
             return tbdy2018_sae(periods, self.sds, self.sd1)
+        if self.kind in ASCE_KINDS:
+            assert self.sds is not None and self.sd1 is not None
+            return asce7_design_spectrum(periods, self.sds, self.sd1, self.long_period_transition)
         return loglog_interp(periods, self.periods, self.sa)
 
     @property
@@ -249,7 +395,11 @@ class TargetSpectrum(Entity):
         return None
 
     def corner_periods(self) -> tuple[float, ...]:
-        """``(TA, TB, TL)`` or ``(TAD, TBD, TLD)`` in seconds; empty for a user table."""
+        """``(TA, TB, TL)``, ``(TAD, TBD, TLD)`` or ``(T0, Ts, TL)``; empty for a user table."""
+        assert not (self.kind in ASCE_KINDS and (self.sds is None or self.sd1 is None))
+        if self.kind in ASCE_KINDS:
+            assert self.sds is not None and self.sd1 is not None
+            return asce7_corner_periods(self.sds, self.sd1, self.long_period_transition)
         if self.kind not in TBDY_KINDS:
             return ()
         assert self.sds is not None and self.sd1 is not None
@@ -275,6 +425,19 @@ class TargetSpectrum(Entity):
                 text += (
                     f" from {level}Ss={self.ss:g} g, S1={self.s1:g} g, {self.site_class}"
                     f" (Fs={self.fs:g}, F1={self.f1:g})"
+                )
+            return text
+        if self.kind in ASCE_KINDS:
+            t0, ts, tl = self.corner_periods()
+            text = (
+                f"ASCE 7-16: SDS={self.sds:g} g, SD1={self.sd1:g} g "
+                f"(T0={t0:.3f} s, Ts={ts:.3f} s, TL={tl:g} s)"
+            )
+            if self.from_site:
+                default = " assumed" if self.asce_site_class_is_default else ""
+                text += (
+                    f" from Ss={self.ss:g} g, S1={self.s1:g} g, site class "
+                    f"{self.asce_site_class}{default} (Fa={self.fa:g}, Fv={self.fv:g})"
                 )
             return text
         return (

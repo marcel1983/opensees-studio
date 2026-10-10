@@ -47,6 +47,7 @@ from PySide6.QtWidgets import (
 from opensees_studio.commands import AddTimeSeriesCommand, ReplaceTimeSeriesCommand
 from opensees_studio.commands.ground_motions import (
     AddGroundMotionCommand,
+    AddSpectrumCommand,
     RelinkGroundMotionCommand,
     RemoveGroundMotionCommand,
     SetGroundMotionUnitsCommand,
@@ -54,11 +55,18 @@ from opensees_studio.commands.ground_motions import (
     SetTargetSpectrumCommand,
 )
 from opensees_studio.core import (
+    ASCE_SITE_CLASSES,
     EARTHQUAKE_LEVEL_LABELS,
     EARTHQUAKE_LEVELS,
     SITE_CLASSES,
     TBDY_RANGE_PRESET,
+    TL_DEFAULT,
+    ASCEDesignValues,
     ScalingMethod,
+    TargetSpectrum,
+    asce7_corner_periods,
+    asce7_design_values,
+    target_to_case_spectrum,
     tbdy2018_corner_periods,
     tbdy2018_design_accelerations,
     tbdy2018_vertical_corner_periods,
@@ -243,6 +251,8 @@ class GroundMotionsDialog(FittedDialog):
         self._target_kind = QComboBox()
         self._target_kind.addItem("TBDY 2018 (SDS, SD1)", "tbdy2018")
         self._target_kind.addItem("TBDY 2018 (Ss, S1, site class)", "tbdy2018_site")
+        self._target_kind.addItem("ASCE 7-16 (SDS, SD1, TL)", "asce7_16")
+        self._target_kind.addItem("ASCE 7-16 (Ss, S1, site class)", "asce7_16_site")
         self._target_kind.addItem("User table (period, Sa)", "user")
         self._target_kind.currentIndexChanged.connect(self._on_target_kind_changed)
         form.addRow("Kind:", self._target_kind)
@@ -270,19 +280,51 @@ class GroundMotionsDialog(FittedDialog):
         self._level.setCurrentIndex(1)  # DD-2
         self._level.setToolTip("Earthquake level the mapped Ss and S1 were read for (label only).")
         form.addRow("Level:", self._level)
+        self._asce_site_class = QComboBox()
+        for site in ASCE_SITE_CLASSES:
+            self._asce_site_class.addItem(site, site)
+        self._asce_site_class.setCurrentIndex(ASCE_SITE_CLASSES.index("D"))
+        self._asce_site_class.setToolTip(
+            "ASCE 7-16 site class (Table 20.3-1). D is the default when the soil is not "
+            "known; F, and E beyond the tables, require a site-specific study (§11.4.8)."
+        )
+        form.addRow("ASCE site class:", self._asce_site_class)
+        self._asce_d_default = QCheckBox("Site class D assumed (soil unknown: Fa >= 1.2)")
+        self._asce_d_default.setToolTip(
+            "§11.4.3: where D is selected as the default site class, Fa shall not be less "
+            "than 1.2. Tick it only when D was assumed rather than determined."
+        )
+        form.addRow("", self._asce_d_default)
+        self._tl = self._spin(0.1, 30.0, TL_DEFAULT, step=0.5)
+        self._tl.setToolTip(
+            "Long-period transition period TL from the maps of Figs. 22-14 to 22-19 "
+            "(4 s to 16 s across the United States)."
+        )
+        form.addRow("TL [s]:", self._tl)
         self._vertical = QCheckBox("Vertical spectrum SaeD (TAD = TA/3, TBD = TB/3)")
         form.addRow("", self._vertical)
         self._derived_label = QLabel("")
         self._derived_label.setWordWrap(True)
         self._derived_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         form.addRow("Derived:", self._derived_label)
-        for spin in (self._sds, self._sd1, self._ss, self._s1):
+        for spin in (self._sds, self._sd1, self._ss, self._s1, self._tl):
             spin.valueChanged.connect(self._refresh_derived)
         self._site_class.currentIndexChanged.connect(self._refresh_derived)
         self._vertical.toggled.connect(self._refresh_derived)
+        self._asce_d_default.toggled.connect(self._refresh_derived)
+        # The site class also decides whether the §11.4.3 checkbox applies.
+        self._asce_site_class.currentIndexChanged.connect(self._on_target_kind_changed)
         self._table_btn = QPushButton("Import &table…")
         self._table_btn.clicked.connect(self._on_import_table)
         form.addRow("", self._table_btn)
+        self._case_btn = QPushButton("Use as &case spectrum")
+        self._case_btn.setToolTip(
+            "Add the spectrum this form describes to the project as a tabulated response "
+            "spectrum, so a response-spectrum analysis case can point at it (a case reads "
+            "Sa in the project's acceleration unit; the design spectrum here is in g)."
+        )
+        self._case_btn.clicked.connect(self._on_use_as_case)
+        form.addRow("", self._case_btn)
         self._set_target_btn = QPushButton("Set &target")
         self._set_target_btn.clicked.connect(self._on_set_target)
         form.addRow("", self._set_target_btn)
@@ -363,19 +405,32 @@ class GroundMotionsDialog(FittedDialog):
 
     def _on_target_kind_changed(self, *_: object) -> None:
         kind = self._target_kind.currentData()
-        direct, site = kind == "tbdy2018", kind == "tbdy2018_site"
-        for widget in (self._sds, self._sd1):
+        direct = kind in ("tbdy2018", "asce7_16")
+        site = kind in ("tbdy2018_site", "asce7_16_site")
+        asce = kind in ("asce7_16", "asce7_16_site")
+        direct_widgets: tuple[QWidget, ...] = (self._sds, self._sd1)
+        site_widgets: tuple[QWidget, ...] = (self._ss, self._s1, self._site_class, self._level)
+        asce_widgets: tuple[QWidget, ...] = (
+            self._asce_site_class,
+            self._asce_d_default,
+            self._tl,
+        )
+        for widget in direct_widgets:
             widget.setEnabled(direct)
-        for widget in (self._ss, self._s1, self._site_class, self._level):
-            widget.setEnabled(site)
-        self._vertical.setEnabled(direct or site)
+        for widget in site_widgets:
+            widget.setEnabled(kind == "tbdy2018_site")
+        for widget in asce_widgets:
+            widget.setEnabled(asce)
+        self._asce_d_default.setEnabled(asce and self._asce_site_class.currentData() == "D")
+        self._vertical.setEnabled(kind in ("tbdy2018", "tbdy2018_site"))
         self._table_btn.setEnabled(kind == "user")
         self._set_target_btn.setEnabled(direct or site)
         self._refresh_derived()
 
     def _derived_values(self) -> tuple[float, float] | str:
         """``(SDS, SD1)`` for the current form, or the refusal text."""
-        if self._target_kind.currentData() == "tbdy2018_site":
+        kind = self._target_kind.currentData()
+        if kind == "tbdy2018_site":
             try:
                 d = tbdy2018_design_accelerations(
                     self._ss.value(), self._s1.value(), self._site_class.currentData()
@@ -383,7 +438,32 @@ class GroundMotionsDialog(FittedDialog):
             except ValueError as exc:
                 return str(exc)
             return d.sds, d.sd1
+        if kind == "asce7_16_site":
+            try:
+                values = asce7_design_values(
+                    self._ss.value(),
+                    self._s1.value(),
+                    self._asce_site_class.currentData(),
+                    site_class_d_is_default=self._asce_d_default.isChecked(),
+                )
+            except ValueError as exc:
+                return str(exc)
+            return values.sds, values.sd1
         return self._sds.value(), self._sd1.value()
+
+    def asce_values(self) -> ASCEDesignValues | None:
+        """The ASCE 7-16 derived values for the current form, or None."""
+        if self._target_kind.currentData() != "asce7_16_site":
+            return None
+        try:
+            return asce7_design_values(
+                self._ss.value(),
+                self._s1.value(),
+                self._asce_site_class.currentData(),
+                site_class_d_is_default=self._asce_d_default.isChecked(),
+            )
+        except ValueError:
+            return None
 
     def _refresh_derived(self, *_: object) -> None:
         """Read-only SDS, SD1 and corner periods for the current target form."""
@@ -395,8 +475,16 @@ class GroundMotionsDialog(FittedDialog):
             self._derived_label.setText(derived)
             return
         sds, sd1 = derived
+        kind = self._target_kind.currentData()
         text = f"SDS = {sds:.4f} g, SD1 = {sd1:.4f} g"
-        if self._target_kind.currentData() == "tbdy2018_site":
+        if kind in ("asce7_16", "asce7_16_site"):
+            values = self.asce_values()
+            if values is not None:
+                text += f" (Fa = {values.fa:g}, Fv = {values.fv:g})"
+            t0, ts, tl = asce7_corner_periods(sds, sd1, self._tl.value())
+            self._derived_label.setText(f"{text}; T0 = {t0:.4f} s, Ts = {ts:.4f} s, TL = {tl:g} s")
+            return
+        if kind == "tbdy2018_site":
             d = tbdy2018_design_accelerations(
                 self._ss.value(), self._s1.value(), self._site_class.currentData()
             )
@@ -697,7 +785,18 @@ class GroundMotionsDialog(FittedDialog):
     # ---- target spectrum -----------------------------------------------------
     def _on_set_target(self) -> None:
         vertical = self._vertical.isChecked()
-        if self._target_kind.currentData() == "tbdy2018_site":
+        kind = self._target_kind.currentData()
+        if kind == "asce7_16_site":
+            self.set_target_asce_site(
+                self._ss.value(),
+                self._s1.value(),
+                self._asce_site_class.currentData(),
+                self._asce_d_default.isChecked(),
+                self._tl.value(),
+            )
+        elif kind == "asce7_16":
+            self.set_target_asce_direct(self._sds.value(), self._sd1.value(), self._tl.value())
+        elif kind == "tbdy2018_site":
             self.set_target_tbdy_site(
                 self._ss.value(),
                 self._s1.value(),
@@ -739,6 +838,91 @@ class GroundMotionsDialog(FittedDialog):
             lambda: self._catalog.build_target_tbdy_site(
                 ss, s1, site_class, earthquake_level, vertical=vertical
             )
+        )
+
+    def set_target_asce_site(
+        self,
+        ss: float,
+        s1: float,
+        site_class: str,
+        site_class_is_default: bool = False,
+        tl: float = TL_DEFAULT,
+    ) -> bool:
+        """Make an ASCE 7-16 spectrum from Ss, S1, the site class and TL (undoable)."""
+        return self._apply_target(
+            lambda: self._catalog.build_target_asce(
+                ss=ss,
+                s1=s1,
+                site_class=site_class,
+                tl=tl,
+                site_class_is_default=site_class_is_default,
+            )
+        )
+
+    def set_target_asce_direct(self, sds: float, sd1: float, tl: float = TL_DEFAULT) -> bool:
+        """Make an ASCE 7-16 spectrum from SDS, SD1 and TL the user already has."""
+        return self._apply_target(lambda: self._catalog.build_target_asce(sds=sds, sd1=sd1, tl=tl))
+
+    def current_target(self) -> TargetSpectrum | None:
+        """The target spectrum the form describes right now, or None if it refuses.
+
+        Built without touching the project: it is what the *case spectrum* button
+        converts, and what the derivation line describes.
+        """
+        kind = self._target_kind.currentData()
+        try:
+            if kind == "asce7_16_site":
+                return self._catalog.build_target_asce(
+                    ss=self._ss.value(),
+                    s1=self._s1.value(),
+                    site_class=self._asce_site_class.currentData(),
+                    tl=self._tl.value(),
+                    site_class_is_default=self._asce_d_default.isChecked(),
+                )
+            if kind == "asce7_16":
+                return self._catalog.build_target_asce(
+                    sds=self._sds.value(), sd1=self._sd1.value(), tl=self._tl.value()
+                )
+            if kind == "tbdy2018_site":
+                return self._catalog.build_target_tbdy_site(
+                    self._ss.value(),
+                    self._s1.value(),
+                    self._site_class.currentData(),
+                    self._level.currentData(),
+                    vertical=self._vertical.isChecked(),
+                )
+            if kind == "tbdy2018":
+                return self._catalog.build_target_tbdy(
+                    self._sds.value(), self._sd1.value(), vertical=self._vertical.isChecked()
+                )
+        except ValueError:
+            return None
+        return self._catalog.active_target()
+
+    def _on_use_as_case(self) -> None:
+        """Turn the spectrum on screen into the project's case spectrum."""
+        target = self.current_target()
+        if target is None:
+            QMessageBox.warning(
+                self,
+                "Case spectrum",
+                "This form does not describe a spectrum yet: check the values, or import "
+                "a table first.",
+            )
+            return
+        project = self._vm.project
+        if project is None:  # pragma: no cover - the dialog needs a project to exist
+            return
+        spectrum = target_to_case_spectrum(
+            target,
+            project.next_spectrum_id(),
+            units=project.meta.units,
+            name=target.name,
+        )
+        self._vm.apply_command(AddSpectrumCommand(self._vm, spectrum))
+        self._set_status(
+            f"Case spectrum #{spectrum.id} added: {len(spectrum.periods)} points, Sa in the "
+            "project's acceleration unit."
         )
 
     def _on_import_table(self) -> None:

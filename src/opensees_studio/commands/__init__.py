@@ -76,6 +76,7 @@ __all__ = [
     "AddNodalLoadsCommand",
     "AddNodesCommand",
     "AddSectionsCommand",
+    "AddSpectrumCommand",
     "AddTimeSeriesCommand",
     "AssignElementFieldsCommand",
     "AssignMaterialCommand",

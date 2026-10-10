@@ -382,6 +382,48 @@ you asked the recorder for.
         "define.ground_motions",
         "display.time_history",
     ),
+    "mechanics.spectra": _t(
+        "Design spectra: user table, ASCE 7-16 and TBDY 2018",
+        "Mechanics",
+        "Where a response spectrum comes from, and how a case ends up using it.",
+        """
+Three kinds of spectrum meet in this application, and they are not the same
+object:
+
+- a **target spectrum** (Ground Motions → Target spectrum) is a *design*
+  spectrum in g: the dialog plots it and the record-scaling reads it;
+- a **case response spectrum** (``project.spectra``) is the tabulated curve a
+  response-spectrum *analysis* reads, with Sa in the project's acceleration unit;
+- a **record spectrum** is computed from one ground motion, to compare with the
+  design curve.
+
+# Defining one
+- **User table** — a period/Sa file (period in s, Sa in g). It is copied point for
+  point into the case spectrum: resampling a table somebody typed would change
+  the numbers they meant.
+- **ASCE 7-16** — from the mapped MCER ``Ss`` and ``S1`` and the site class, or
+  from ``SDS`` and ``SD1`` directly, with ``TL`` from the maps (4 s to 16 s).
+  The site coefficients come from Tables 11.4-1 and 11.4-2 and the design values
+  from Eqs. (11.4-1) to (11.4-4): ``SDS = 2/3 Fa Ss``, ``SD1 = 2/3 Fv S1``.
+  - **Site class F is a site-specific study** (§11.4.8), and so is class E beyond
+    ``Ss = 0.75`` or ``S1 = 0.1``: the dialog says so and refuses to extrapolate
+    a table the standard leaves blank. Use your own site spectrum instead.
+  - Where class **D is assumed** because the soil is unknown, §11.4.3 forbids
+    ``Fa`` below 1.2; the checkbox applies that floor.
+- **TBDY 2018** — the same machinery with the Turkish site coefficients, ``TL``
+  fixed at 6 s.
+
+# Using one
+"Use as case spectrum" turns the spectrum on screen into the tabulated curve a
+case reads, sampling the code's own corner periods (T0, Ts, TL) so the plateau
+and both decay branches survive, and converting g into the project's acceleration
+unit. A response-spectrum *case* then points at it by id (Analyze → Cases), and
+the modal combination (SRSS or CQC) does the rest.
+""",
+        "define.ground_motions",
+        "mechanics.response_spectrum",
+        "display.response_spectrum",
+    ),
     "mechanics.response_spectrum": _t(
         "Response spectrum: modes, damping and combination",
         "Mechanics",
@@ -1228,6 +1270,7 @@ about a record is computed once, here.
 - **Scaling** — by PGA or by Sa(T1) of a chosen period; a response-spectrum case
   can also compute the factors that match a target spectrum over a period range.
 """,
+            "mechanics.spectra",
             "mechanics.ground_motions",
             "define.linear_ts",
         ),

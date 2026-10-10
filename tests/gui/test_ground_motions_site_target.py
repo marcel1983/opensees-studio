@@ -146,3 +146,108 @@ def test_vertical_target_plot_stops_at_tld_and_scaling_refuses_beyond(qtbot, tmp
     # within the domain it runs
     dlg._t1.setValue(1.0)
     assert dlg.preview_scaling() is not None
+
+
+# ──────────────────────────── ASCE 7-16 ────────────────────────────
+ASCE_SS, ASCE_S1 = 1.0, 0.4  # Fa 1.2, Fv 1.5, SDS 0.8 g, SD1 0.4 g, site class C
+
+
+@pytest.mark.gui
+def test_asce_form_derives_fa_fv_and_corners(qtbot, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from PySide6.QtWidgets import QMessageBox
+
+    monkeypatch.setattr(
+        QMessageBox, "warning", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Ok)
+    )
+    _mw, dlg = _open(qtbot)
+    kind = dlg._target_kind
+    kind.setCurrentIndex(kind.findData("asce7_16_site"))
+    assert dlg._asce_site_class.isEnabled() and dlg._tl.isEnabled()
+    assert not dlg._site_class.isEnabled()  # the TBDY classes are not the ASCE ones
+    dlg._ss.setValue(ASCE_SS)
+    dlg._s1.setValue(ASCE_S1)
+    dlg._asce_site_class.setCurrentIndex(dlg._asce_site_class.findData("C"))
+    dlg._tl.setValue(8.0)
+
+    text = dlg.derived_text()
+    assert "SDS = 0.8000 g, SD1 = 0.4000 g" in text
+    assert "Fa = 1.2" in text and "Fv = 1.5" in text
+    assert "T0 = 0.1000 s" in text and "Ts = 0.5000 s" in text and "TL = 8 s" in text
+
+    assert dlg.set_target_asce_site(ASCE_SS, ASCE_S1, "C", False, 8.0)
+    target = _mw._vm.project.target_spectra[0]
+    assert target.kind == "asce7_16" and target.from_site
+    assert (target.fa, target.fv) == (1.2, 1.5)
+    assert target.sds == pytest.approx(0.8) and target.tl == 8.0
+
+
+@pytest.mark.gui
+def test_asce_direct_form_takes_sds_sd1_and_tl(qtbot, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from PySide6.QtWidgets import QMessageBox
+
+    monkeypatch.setattr(
+        QMessageBox, "warning", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Ok)
+    )
+    mw, dlg = _open(qtbot)
+    kind = dlg._target_kind
+    kind.setCurrentIndex(kind.findData("asce7_16"))
+    assert dlg._sds.isEnabled() and not dlg._ss.isEnabled()
+
+    assert dlg.set_target_asce_direct(0.8, 0.4, 8.0)
+    target = mw._vm.project.target_spectra[0]
+    assert target.kind == "asce7_16" and not target.from_site
+    assert target.corner_periods() == (pytest.approx(0.1), pytest.approx(0.5), 8.0)
+
+
+@pytest.mark.gui
+def test_asce_site_class_f_is_refused_and_nothing_is_stored(qtbot, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """ASCE 7-16 §11.4.8: class F needs a site-specific study, not this table."""
+    from PySide6.QtWidgets import QMessageBox
+
+    seen: list[str] = []
+    monkeypatch.setattr(
+        QMessageBox,
+        "warning",
+        staticmethod(lambda _p, _t, text, *a, **k: seen.append(text)),
+    )
+    mw, dlg = _open(qtbot)
+    kind = dlg._target_kind
+    kind.setCurrentIndex(kind.findData("asce7_16_site"))
+    dlg._ss.setValue(ASCE_SS)
+    dlg._s1.setValue(ASCE_S1)
+    dlg._asce_site_class.setCurrentIndex(dlg._asce_site_class.findData("F"))
+
+    assert "site-specific" in dlg.derived_text()
+    assert dlg.set_target_asce_site(ASCE_SS, ASCE_S1, "F", False, 8.0) is False
+    assert mw._vm.project.target_spectra == []
+    assert seen and "site-specific" in seen[0]
+
+
+@pytest.mark.gui
+def test_use_as_case_spectrum_tabulates_the_design_spectrum(qtbot, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """What makes the spectrum usable: a case reads `project.spectra`, in project units."""
+    from opensees_studio.core import asce7_design_spectrum
+
+    mw, dlg = _open(qtbot)
+    kind = dlg._target_kind
+    kind.setCurrentIndex(kind.findData("asce7_16_site"))
+    dlg._ss.setValue(ASCE_SS)
+    dlg._s1.setValue(ASCE_S1)
+    dlg._asce_site_class.setCurrentIndex(dlg._asce_site_class.findData("C"))
+    dlg._tl.setValue(8.0)
+
+    dlg._on_use_as_case()
+
+    spectrum = mw._vm.project.spectra[0]
+    assert spectrum.id == 1 and len(spectrum.periods) > 100
+    # g turned into the project's acceleration unit (SI metres: 9.80665 m/s²).
+    assert max(spectrum.accelerations) == pytest.approx(0.8 * 9.80665, rel=1e-3)
+    # The entries are on the standard's curve, not a resampled approximation of it.
+    at_plateau = spectrum.accelerations[
+        spectrum.periods.index(min(spectrum.periods, key=lambda p: abs(p - 0.5)))
+    ]
+    expected = float(asce7_design_spectrum(0.5, 0.8, 0.4, 8.0)[0]) * 9.80665
+    assert at_plateau == pytest.approx(expected, rel=1e-6)
+
+    mw._vm.undo_stack.undo()  # the button's command is undoable, like everything else
+    assert mw._vm.project.spectra == []

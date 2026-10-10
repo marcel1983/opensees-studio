@@ -99,6 +99,24 @@ refused instead of silently downgraded).
   rather than a shortcut, because the interesting case — a menu is open and the
   popup owns the keyboard — is one only a filter sees.
 
+- **A response spectrum defined by the user or by ASCE/SEI 7-16.** The Ground
+  Motions dialog already built a TBDY 2018 target and read a user table; it now
+  also builds the ASCE 7-16 design spectrum, from the mapped `Ss` and `S1` with a
+  site class (Tables 11.4-1 and 11.4-2, straight-line interpolation as the tables
+  require) or from `SDS`, `SD1` and `TL` directly, and a single button turns
+  whatever the form describes into the **tabulated curve a response-spectrum case
+  reads** (`target_to_case_spectrum`: sampled at the code's own corner periods so
+  the plateau and both decay branches survive, and g converted to the project's
+  acceleration unit — a user table is copied point for point, because resampling
+  a table somebody typed changes the numbers they meant).
+  Two rules of the standard are enforced rather than assumed: **Site Class F**
+  (and class E beyond `Ss = 0.75` or `S1 = 0.1`) is a site-specific study
+  (§11.4.8) and is refused by name, and where class **D is assumed** because the
+  soil is unknown, §11.4.3's `Fa >= 1.2` floor is applied by an explicit
+  checkbox. Both tables, the equations and the four branches are pinned by tests,
+  and every value was checked against the standard's own text before being
+  committed.
+
 ### Fixed
 
 - **The failure report of a run crashed the application when the report had

@@ -69,6 +69,15 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   pushover, transient time-history with Rayleigh damping. Chained workflows:
   gravity preload → `loadConst -time 0.0` → pushover or transient. Numberer
   and system options per case.
+- **Response spectra, by hand or by code** — in Ground Motions → Target
+  spectrum: a **user table** (period in s, Sa in g), a spectrum from **ASCE/SEI
+  7-16** (the mapped Ss and S1 with a site class, using Tables 11.4-1 and 11.4-2
+  and Eqs. 11.4-1 to 11.4-4, or SDS, SD1 and TL directly) or the TBDY 2018
+  spectrum. "Use as case spectrum" tabulates it — corners included, g turned
+  into the project's acceleration unit — for a response-spectrum analysis case
+  to read. The tables are transcribed from the standard and pinned by tests; a
+  site class F, or class E beyond the tables, is refused by name because ASCE
+  7-16 sends those to a site-specific study (§11.4.8).
 - **Ground motions** — a project catalog with relative, hash-checked record
   references; AT2, two-column and single-column readers; PGA / PGV / PGD /
   Arias / D5-95 metadata; scaling by PGA, Sa(T1) or a period range;

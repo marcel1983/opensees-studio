@@ -15,10 +15,18 @@ import pytest
 
 pytest.importorskip("openseespy.opensees")
 
-from opensees_studio.core import ModalCase, ResponseSpectrumCase
+from opensees_studio.core import (
+    ModalCase,
+    ResponseSpectrumCase,
+    TargetSpectrum,
+    UnitSystem,
+    asce7_design_spectrum,
+    gravity,
+    target_to_case_spectrum,
+)
 from opensees_studio.services import load_project
 from opensees_studio.services.opensees_runner import OpenSeesRunner
-from opensees_studio.services.results import ModalResults
+from opensees_studio.services.results import ModalResults, ResponseSpectrumResults
 from opensees_studio.services.spectrum import (
     combine_modal_response,
     mass_participation,
@@ -189,3 +197,40 @@ def test_cqc_agrees_between_the_dense_and_the_arpack_basis_and_srss_does_not() -
     dense, arpack = by_solver["fullGenLapack"], by_solver["genBandArpack"]
     assert _max_rel_diff(dense["CQC"], arpack["CQC"]) < 1e-9
     assert _max_rel_diff(dense["SRSS"], arpack["SRSS"]) > 1e-3
+
+
+# ──────────────── an ASCE 7-16 spectrum driving a real case ────────────────
+def test_an_asce_716_spectrum_drives_a_response_spectrum_case(tmp_path: Path) -> None:
+    """The whole path: the standard's spectrum, tabulated, read by a real case.
+
+    The check is against the *standard's curve*, not against the application's own
+    output: every mode's Sa must be ``asce7_design_spectrum`` at that mode's
+    period, in the project's acceleration unit.
+    """
+    project, saved = _space_frame()
+    # Ss = 1.0, S1 = 0.4, Site Class C: Fa 1.2, Fv 1.5 -> SDS 0.8 g, SD1 0.4 g.
+    target = TargetSpectrum(id=1, kind="asce7_16", ss=1.0, s1=0.4, asce_site_class="C", tl=8.0)
+    assert project.meta.units is UnitSystem.SI_M_N
+    spectrum = target_to_case_spectrum(
+        target, project.next_spectrum_id(), units=project.meta.units, name="ASCE 7-16 C"
+    )
+    project.spectra.append(spectrum)
+    case = ResponseSpectrumCase(
+        id=99,
+        modal_case_id=saved.modal_case_id,
+        spectrum_id=spectrum.id,
+        direction=1,
+        combination="CQC",
+    )
+
+    results = OpenSeesRunner(project).run(case, results_dir=tmp_path / "asce")
+
+    assert isinstance(results, ResponseSpectrumResults)
+    peaks = np.array([float(np.linalg.norm(v)) for v in results.combined_disp.values()])
+    assert peaks.size and np.all(np.isfinite(peaks)) and peaks.max() > 0.0
+
+    g = gravity(project.meta.units)
+    assert len(results.modes) >= 1
+    for contribution in results.modes:
+        expected = float(asce7_design_spectrum(contribution.period, 0.8, 0.4, 8.0)[0]) * g
+        assert contribution.sa_at_period == pytest.approx(expected, rel=2e-3)

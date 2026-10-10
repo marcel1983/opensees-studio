@@ -359,6 +359,48 @@ class GroundMotionCatalogViewModel:
                 )
             ) from exc
 
+    def build_target_asce(
+        self,
+        *,
+        ss: float | None = None,
+        s1: float | None = None,
+        site_class: str | None = None,
+        sds: float | None = None,
+        sd1: float | None = None,
+        tl: float | None = None,
+        site_class_is_default: bool = False,
+        name: str = "",
+    ) -> TargetSpectrum:
+        """An ASCE/SEI 7-16 target, from the mapped Ss and S1 or from SDS and SD1.
+
+        Raises:
+            ValueError: a combination ASCE 7-16 leaves to a site-specific study
+                (site class F, or class E beyond the tables), or bad values.
+        """
+        if site_class is not None:
+            label = f"ASCE 7-16 Ss={ss:g} S1={s1:g} {site_class}"
+        else:
+            label = f"ASCE 7-16 SDS={sds:g} SD1={sd1:g}"
+        try:
+            return TargetSpectrum(
+                id=self._target_id(),
+                name=name or label,
+                kind="asce7_16",
+                ss=ss,
+                s1=s1,
+                asce_site_class=site_class,  # type: ignore[arg-type]
+                asce_site_class_is_default=site_class_is_default,
+                sds=sds,
+                sd1=sd1,
+                tl=tl,
+            )
+        except ValidationError as exc:
+            raise ValueError(
+                "; ".join(
+                    str(err.get("msg", "")).removeprefix("Value error, ") for err in exc.errors()
+                )
+            ) from exc
+
     def build_target_user(self, path: str | Path, name: str = "") -> TargetSpectrum:
         """A user-table target parsed from ``path`` (period, Sa in g)."""
         periods, sa = read_user_spectrum_table(path)
