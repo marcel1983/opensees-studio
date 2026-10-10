@@ -226,13 +226,14 @@ forces are newtons and stresses megapascals. The solver adds and multiplies
 numbers and never checks them, so the only thing that matters is that one system
 is used throughout.
 
-- The project records a **unit system** (Options → Set Display Units); it is a
-label for how results are shown and for the few places where a value arrives
-from outside (an AISC shape, a ground-motion record).
+- The project records two things: the **model units** its values are typed in,
+  and the **display units** results are shown in (Options → Set Display Units).
+  Changing the display units converts the numbers on diagrams, tables and plots
+  — it never rewrites the model, and never re-interprets what you typed.
 - **g** is 9.80665 m/s² in SI, 9806.65 mm/s² in millimetres, 32.174 ft/s² in US
-customary — the app picks the one matching your system when a dialog needs it.
+  customary — the app picks the one matching your system when a dialog needs it.
 - When a value is converted (an imperial shape into an SI project, for instance)
-the dialog shows both the published and the converted value, and says so.
+  the dialog shows both the published and the converted value, and says so.
 
 The classic mistake is mixing them: a mass in kg with a stiffness in N/mm gives
 a period that is wrong by a factor of 1000. There is no unit checking to catch
@@ -2049,12 +2050,16 @@ transparently. Two things become visible that are hard to see otherwise:
             "Options",
             "The unit system results are shown in.",
             """
-Chooses the label and the conversion used for displayed numbers (reactions,
+Chooses the unit system displayed numbers are converted to (reactions,
 diagrams, tables, plots). It does **not** change the model: the solver works with
 the numbers you typed, in whatever system they are consistent with.
 
 - Change it to read a result in another system (a kN·m moment as kip·ft, for
-  instance) without touching the model.
+  instance) without touching the model. Every open result view is refreshed on
+  the spot: diagram values, displacement tables and curves all move together
+  with their unit labels.
+- Forces, moments (force × length) and stresses (force / length²) each convert
+  with the factors their combination implies, so the numbers stay physical.
 - It is also the system used when a dialog converts a value that arrives from
   outside (an imperial shape into the project).
 - See **Units and the solver** for why the application never converts the numbers

@@ -21,6 +21,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
 
+from opensees_studio.core._base import omit_when_default
 from opensees_studio.core.analysis import AnalysisCase
 from opensees_studio.core.constraints import EqualDOFConstraint
 from opensees_studio.core.friction import FrictionModel
@@ -45,11 +46,24 @@ class ProjectMeta(BaseModel):
     """Project-level metadata."""
 
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
+    # A project that never changed its display system dumps exactly as before.
+    serialize_without_defaults = omit_when_default("display_units")
 
     name: str = "Untitled"
     description: str = ""
     author: str = ""
     units: UnitSystem = UnitSystem.SI_M_N
+    """The unit system the model is built in — the units of every value the
+    engineer typed. Never rewritten by a display change."""
+
+    display_units: UnitSystem | None = None
+    """The system results are *shown* in (SAP2000 "Set Display Units").
+
+    ``None`` — the default, and what every file written before this field
+    existed means — shows results in :attr:`units`. Setting it converts the
+    numbers the analysis produced (diagrams, displacements, tables, curves)
+    for display only; the model and its inputs are untouched.
+    """
 
 
 class Project(BaseModel):

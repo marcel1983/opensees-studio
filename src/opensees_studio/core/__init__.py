@@ -238,7 +238,17 @@ from opensees_studio.core.tbdy_site import (
     tbdy2018_f1,
     tbdy2018_fs,
 )
-from opensees_studio.core.units import UnitLabels, UnitSystem, gravity, labels_for
+from opensees_studio.core.units import (
+    UnitConverter,
+    UnitLabels,
+    UnitSystem,
+    force_scale,
+    gravity,
+    labels_for,
+    length_scale,
+    moment_scale,
+    stress_scale,
+)
 
 __all__ = [  # noqa: RUF022 - grouped by domain under section comments, not alphabetical
     # Project + meta
@@ -246,7 +256,12 @@ __all__ = [  # noqa: RUF022 - grouped by domain under section comments, not alph
     "ProjectMeta",
     "UnitSystem",
     "UnitLabels",
+    "UnitConverter",
     "labels_for",
+    "length_scale",
+    "force_scale",
+    "moment_scale",
+    "stress_scale",
     "gravity",
     # Geometry
     "Node",

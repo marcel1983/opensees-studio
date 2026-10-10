@@ -48,6 +48,16 @@ class ForceComponent(Enum):
     M2 = "M2"  # moment about local y
     M3 = "M3"  # moment about local z (in-plane moment for 2D)
 
+    @property
+    def is_moment(self) -> bool:
+        """True for the moment components (M2, M3, torsion), whose unit is force × length."""
+        return self in (ForceComponent.T, ForceComponent.M2, ForceComponent.M3)
+
+    @property
+    def quantity_kind(self) -> str:
+        """The :class:`UnitConverter` quantity this component is measured in."""
+        return "moment" if self.is_moment else "force"
+
 
 # Map (component, end) → index into the local-force vector for 3D and 2D.
 _INDEX_3D = {

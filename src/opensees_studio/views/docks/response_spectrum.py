@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from opensees_studio.core import ResponseSpectrum
+from opensees_studio.core import ResponseSpectrum, UnitConverter
 from opensees_studio.services.results import ResponseSpectrumResults
 from opensees_studio.views.plot_style import add_legend, axis_label, readable_plot
 
@@ -33,18 +33,36 @@ class ResponseSpectrumView(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self._results: ResponseSpectrumResults | None = None
+        self._spectrum: ResponseSpectrum | None = None
+        self._converter = UnitConverter()
         self._build_ui()
+
+    # ── public API ──────────────────────────────────────────────────
+    def set_units(self, converter: UnitConverter) -> None:
+        """Re-plot and re-fill the table in ``converter``'s display units."""
+        self._converter = converter
+        if self._results is not None:
+            self.set_results(self._results, self._spectrum)
 
     def set_results(
         self,
         results: ResponseSpectrumResults | None,
         spectrum: ResponseSpectrum | None,
     ) -> None:
+        self._results = results
+        self._spectrum = spectrum
         self._plot.clear()
         self._table.setRowCount(0)
         if results is None:
             self._info.setText("No response-spectrum results loaded.")
             return
+
+        # Spectral accelerations are accelerations: only the length unit differs,
+        # so Sa converts with the length factor (and the axis says so).
+        accel_unit = f"{self._converter.labels.length}/s²"
+        self._plot.setLabel("left", axis_label("Sa", accel_unit))
+        self._table.setHorizontalHeaderItem(6, QTableWidgetItem(f"Sa(T) [{accel_unit}]"))
 
         # ── Spectrum curve ──
         if spectrum is not None:
@@ -53,7 +71,7 @@ class ResponseSpectrumView(QWidget):
             # Dense interpolation so the spectrum shape reads clearly
             # even with few control points.
             p_arr = np.asarray(spectrum.periods)
-            a_arr = np.asarray(spectrum.accelerations)
+            a_arr = np.asarray(spectrum.accelerations) * self._converter.length
             p_dense = np.linspace(p_arr[0], p_arr[-1], 300)
             a_dense = np.interp(p_dense, p_arr, a_arr)
             pen = pg.mkPen("#1f77b4", width=2)
@@ -61,7 +79,7 @@ class ResponseSpectrumView(QWidget):
             # Original control points.
             self._plot.plot(
                 list(spectrum.periods),
-                list(spectrum.accelerations),
+                list(a_arr),
                 pen=None,
                 symbol="s",
                 symbolSize=7,
@@ -76,14 +94,15 @@ class ResponseSpectrumView(QWidget):
             for m in results.modes:
                 if m.angular_frequency <= 0.0:
                     continue
+                sa = m.sa_at_period * self._converter.length
                 t_key = round(m.period, 6)
                 count = seen_t.get(t_key, 0)
                 seen_t[t_key] = count + 1
                 # Slight vertical jitter for duplicate periods
-                y_offset = count * m.sa_at_period * 0.04
+                y_offset = count * sa * 0.04
                 self._plot.plot(
                     [m.period],
-                    [m.sa_at_period + y_offset],
+                    [sa + y_offset],
                     pen=None,
                     symbol="o",
                     symbolSize=12,
@@ -97,7 +116,7 @@ class ResponseSpectrumView(QWidget):
                     color="#d62728",
                     anchor=(0.0, 0.5),
                 )
-                txt.setPos(m.period, m.sa_at_period + y_offset)
+                txt.setPos(m.period, sa + y_offset)
                 self._plot.addItem(txt)
 
         total_mass_ratio = sum(m.mass_ratio for m in results.modes)
@@ -124,7 +143,7 @@ class ResponseSpectrumView(QWidget):
                 f"{m.participation_factor:+.4g}",
                 f"{m.effective_mass:.4g}",
                 f"{m.mass_ratio * 100:.2f}",
-                f"{m.sa_at_period:.4g}",
+                f"{m.sa_at_period * self._converter.length:.4g}",
             ]
             for col, txt in enumerate(cells):
                 item = QTableWidgetItem(txt)
@@ -142,7 +161,7 @@ class ResponseSpectrumView(QWidget):
 
         pg.setConfigOptions(antialias=True)
         self._plot = readable_plot()
-        self._plot.setLabel("left", "Sa")
+        self._plot.setLabel("left", axis_label("Sa", f"{self._converter.labels.length}/s²"))
         self._plot.setLabel("bottom", axis_label("Period", "s"))
         add_legend(self._plot)
         splitter.addWidget(self._plot)
@@ -159,6 +178,7 @@ class ResponseSpectrumView(QWidget):
                 "Sa(T)",
             ]
         )
+        # The Sa(T) header carries the display unit, refreshed by `set_results`.
         self._table.horizontalHeader().setSectionResizeMode(
             QHeaderView.ResizeMode.Stretch,
         )

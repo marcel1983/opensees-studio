@@ -171,3 +171,18 @@ def linear_static_auto_scale(project: Project, results: StaticResults) -> float:
     if max_disp <= 0:
         return 1.0
     return (bbox * 0.05) / max_disp
+
+
+def peak_static_displacement(project: Project, results: StaticResults) -> float:
+    """Largest nodal translation magnitude of the final step, in model length units.
+
+    Translations only: a rotation is not a length, and the magnitude of the
+    translation vector is what the deformed-shape panel reports. The value is
+    in the units of ``project.meta.units``; a view converts it for display.
+    """
+    ndm = max(1, min(3, int(project.ndm)))
+    peak = 0.0
+    for history in results.node_disp.values():
+        vector = np.asarray(history[-1], dtype=float)[:ndm]
+        peak = max(peak, float(np.linalg.norm(vector)))
+    return peak

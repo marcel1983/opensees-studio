@@ -29,7 +29,7 @@ from typing import Any
 import numpy as np
 import pyvista as pv
 
-from opensees_studio.core import Project
+from opensees_studio.core import Project, UnitConverter
 from opensees_studio.services.element_forces import DiagramData, ForceComponent
 
 _LOG = logging.getLogger("opensees_studio.diagram")
@@ -142,6 +142,16 @@ class DiagramRenderer:
         if not polys:
             return
 
+        # Values reach the colour bar and the point labels in *display* units:
+        # the geometry above is a visual multiplier on the raw model values, so
+        # converting the drawn offsets too would resize the ribbon every time
+        # the user switched units. Only what is read off the diagram converts.
+        converter = UnitConverter.of(project.meta)
+        kind = data.component.quantity_kind
+        factor = converter.factor(kind)
+        unit = converter.labels.moment if kind == "moment" else converter.labels.force
+        scaled = [value * factor for value in scalars]
+
         # Assemble all polygons into a single PolyData (one quad per element).
         all_pts = np.vstack(polys)
         # vtkPolyData face encoding: [n_pts_in_face, p0, p1, p2, p3, ...]
@@ -154,10 +164,10 @@ class DiagramRenderer:
             offset += n
         faces_arr = np.asarray(faces, dtype=np.int64)
         mesh = pv.PolyData(all_pts, faces_arr)
-        mesh.cell_data["value"] = np.asarray(scalars, dtype=float)
+        mesh.cell_data["value"] = np.asarray(scaled, dtype=float)
 
         # Symmetric color range so zero stays at the colormap mid-point.
-        vmax = float(np.max(np.abs(scalars))) or 1.0
+        vmax = float(np.max(np.abs(scaled))) or 1.0
         # Defensive: accept either ForceComponent enum or its name string.
         comp_label = (
             data.component.value if hasattr(data.component, "value") else str(data.component)
@@ -168,7 +178,7 @@ class DiagramRenderer:
             cmap="coolwarm",
             clim=(-vmax, vmax),
             show_scalar_bar=True,
-            scalar_bar_args={"title": comp_label, "n_labels": 5},
+            scalar_bar_args={"title": f"{comp_label} [{unit}]", "n_labels": 5},
             opacity=0.85,
             edge_color="#222222",
             show_edges=True,
@@ -221,7 +231,11 @@ class DiagramRenderer:
         # If max == min (all equal) just one label; skip the dup.
         unique_indices = [idx_max] if idx_max == idx_min else [idx_max, idx_min]
         positions = np.vstack([candidates[i][1] for i in unique_indices])
-        labels = [self._format_value(candidates[i][0]) for i in unique_indices]
+        # Positions stay in model units (they belong to the geometry); the text
+        # reads in display units, like the colour bar above it. Ordering is
+        # unaffected: a unit change is a positive factor on every value.
+        factor = UnitConverter.of(project.meta).factor(data.component.quantity_kind)
+        labels = [self._format_value(candidates[i][0] * factor) for i in unique_indices]
 
         try:
             return self._plotter.add_point_labels(

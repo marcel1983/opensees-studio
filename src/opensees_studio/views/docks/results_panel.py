@@ -102,6 +102,7 @@ class ResultsPanel(QWidget):
         self._models: list[ResultTableModel] = []
         self._transient: TransientResults | None = None
         self._project: Project | None = None
+        self._results: Any | None = None
         self._build_ui()
 
     def _build_ui(self) -> None:
@@ -132,10 +133,24 @@ class ResultsPanel(QWidget):
         layout.addWidget(self._tabs)
 
     # ── public API ───────────────────────────────────────────────────
+    def refresh(self, project: Project | None = None) -> None:
+        """Rebuild every table from the same results, e.g. after a display-unit change.
+
+        Values and headers are both regenerated from the project's current
+        display units, so they can never disagree. The selected tab survives.
+        """
+        if self._results is None:
+            return
+        index = self._tabs.currentIndex()
+        self.show_results(self._results, project if project is not None else self._project)
+        if 0 <= index < self._tabs.count():
+            self._tabs.setCurrentIndex(index)
+
     def show_results(self, results: Any, project: Project | None = None) -> None:
         self._tabs.clear()
         self._models = []
         self._transient = None
+        self._results = results
         self._project = project
         if isinstance(results, StaticResults):
             self._title.setText(

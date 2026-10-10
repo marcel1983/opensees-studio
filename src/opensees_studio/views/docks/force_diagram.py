@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from opensees_studio.core import UnitConverter
 from opensees_studio.services.element_forces import ForceComponent
 from opensees_studio.views.float_field import FloatField
 
@@ -37,9 +38,27 @@ class ForceDiagramView(QWidget):
         super().__init__(parent)
         self._scale_base = max(suggested_scale, 1e-12)
         self._pending_component_change = False
+        self._converter = UnitConverter()
         self._build_ui(suggested_scale)
+        self._refresh_units_label()
 
     # ── public API ──────────────────────────────────────────────────
+    def set_units(self, converter: UnitConverter) -> None:
+        """Show the diagram's numbers in ``converter``'s display units.
+
+        The drawn ribbon keeps its size — the scale is a geometric multiplier
+        on the model values — but the colour bar and the point labels are
+        converted by the renderer, so the panel says which units it reads.
+        """
+        self._converter = converter
+        self._refresh_units_label()
+
+    def _refresh_units_label(self) -> None:
+        component = self.current_component()
+        labels = self._converter.labels
+        unit = labels.moment if component.is_moment else labels.force
+        self._units_label.setText(f"Values in <b>{unit}</b>.")
+
     def set_scale_base(self, suggested: float) -> None:
         """Replace the slider's reference scale (called when the host
         recomputes auto-scale after a component change). The slider is
@@ -60,6 +79,11 @@ class ForceDiagramView(QWidget):
 
     def current_component(self) -> ForceComponent:
         return self._component.currentData()
+
+    @property
+    def current_scale(self) -> float:
+        """The geometric multiplier the renderer is currently using."""
+        return self._scale_spin.value()
 
     # ── UI build ────────────────────────────────────────────────────
     def _build_ui(self, suggested_scale: float) -> None:
@@ -87,6 +111,10 @@ class ForceDiagramView(QWidget):
         form.addRow("", self._slider)
 
         root.addWidget(group)
+
+        # Which units the numbers on the diagram (colour bar, end labels) read in.
+        self._units_label = QLabel("")
+        root.addWidget(self._units_label)
 
         info = QLabel(
             "Scale auto-adjusts when you switch components. The slider "
@@ -116,6 +144,7 @@ class ForceDiagramView(QWidget):
     # ── slots ───────────────────────────────────────────────────────
     def _on_component_changed(self, _idx: int) -> None:
         comp = self._component.currentData()
+        self._refresh_units_label()
         # Mark "we just changed component" so set_scale_base() (called by
         # the host in response) knows it is the authoritative emitter and
         # we don't need the defensive fallback below to also fire.

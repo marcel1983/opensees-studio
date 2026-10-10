@@ -21,7 +21,11 @@ from opensees_studio.core import (  # noqa: E402
     make_grid_lines,
 )
 from opensees_studio.core.geometry.grid import GridSystem  # noqa: E402
-from opensees_studio.services.deformation import DeformationSource  # noqa: E402
+from opensees_studio.services.deformation import (  # noqa: E402
+    DeformationSource,
+    peak_static_displacement,
+)
+from opensees_studio.services.results import StaticResults  # noqa: E402
 from opensees_studio.views.canvas3d.model_renderer import (  # noqa: E402
     ModelRenderer,
     RendererMode,
@@ -334,3 +338,30 @@ def test_grid_helpers_use_their_own_coord_system() -> None:
     # Each one is transformed by its own origin.
     assert global_pts[:, 0].min() == 0.0 and global_pts[:, 0].max() == 1.0
     assert shifted_pts[:, 0].min() == 10.0 and shifted_pts[:, 0].max() == 11.0
+
+
+# ──────────────────── peak displacement (display units) ────────────────────
+def test_peak_static_displacement_is_the_largest_node_translation() -> None:
+    """The number the deformed-shape panel reports, in model units."""
+    project = Project(
+        ndm=2,
+        ndf=3,
+        nodes=[Node(id=1, coords=(0, 0, 0)), Node(id=2, coords=(3, 0, 0))],
+    )
+    results = StaticResults(
+        case_id=1,
+        case_name="t",
+        n_steps=1,
+        node_disp={
+            1: np.array([[0.0, 0.0, 0.0], [0.003, 0.004, 9.0]]),  # 5 mm translation
+            2: np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.25]]),  # rotation only
+        },
+    )
+    # 3-4-5 triangle: the magnitude of (3 mm, 4 mm) is 5 mm, not 4 mm.
+    assert peak_static_displacement(project, results) == pytest.approx(0.005)
+
+
+def test_peak_displacement_is_zero_without_results() -> None:
+    project = Project(ndm=3, nodes=[Node(id=1, coords=(0, 0, 0))])
+    empty = StaticResults(case_id=1, case_name="t", n_steps=1)
+    assert peak_static_displacement(project, empty) == 0.0

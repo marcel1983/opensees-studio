@@ -9,7 +9,7 @@ Adds on top of Phase 3:
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -59,6 +59,8 @@ from opensees_studio.core import (
     ElasticMembranePlateSection,
     Project,
     ShellMITC4Element,
+    UnitConverter,
+    UnitSystem,
     build_portal_frame,
     frame_grid,
     labels_for,
@@ -70,6 +72,7 @@ from opensees_studio.services import PROJECT_FILE_SUFFIX
 from opensees_studio.services.deformation import (
     linear_static_auto_scale,
     modal_to_deformation,
+    peak_static_displacement,
     static_to_deformation,
 )
 from opensees_studio.services.element_forces import (
@@ -165,6 +168,7 @@ class MainWindow(QMainWindow):
         self._analysis_error_box: QMessageBox | None = None  # last failure report
         self._run_dialog: RunAnalysisDialog | None = None  # open while a Run dialog is shown
         self._post_dock = None  # the active post-processing dock
+        self._post_units_refresh: Callable[[], None] | None = None  # re-show the dock in new units
         self._diagram_renderer: DiagramRenderer | None = None  # built lazily once canvas exists
         self._show_node_labels = False
         self._show_element_labels = False
@@ -517,12 +521,10 @@ class MainWindow(QMainWindow):
         # SAP2000-style bottom-right unit picker. Drives the same state
         # as Options → Set Display Units — changes here are instantly
         # reflected in the menu dialog (and vice-versa).
-        from opensees_studio.core import UnitSystem
-
         self._units_combo = QComboBox()
         self._units_combo.setToolTip(
-            "Display units — consistent with the values you type. "
-            "OpenSees never converts; labels follow this pick."
+            "Display units — results, diagrams and tables convert to this "
+            "system. The model keeps the units its values were entered in."
         )
         for u in UnitSystem:
             self._units_combo.addItem(u.value, u)
@@ -535,40 +537,108 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Ready")
 
     def _on_units_combo_changed(self, _idx: int) -> None:
-        """Status-bar unit picker → project.meta.units.
+        """Status-bar unit picker → ``project.meta.display_units``.
 
         Qt stores the userData as a bare string (UnitSystem inherits
         from str), so we re-cast to the enum before writing through
-        and logging.
+        and logging. The model's own system is untouched, and every view
+        that shows a number is refreshed with the new conversion.
         """
         if self._vm.project is None:
             return
-        from opensees_studio.core import UnitSystem
 
         raw = self._units_combo.currentData()
         if raw is None:
             return
         chosen = raw if isinstance(raw, UnitSystem) else UnitSystem(str(raw))
-        if chosen == self._vm.project.meta.units:
+        if chosen is self._current_display_units():
             return
-        self._vm.project.meta.units = chosen
+        self._set_display_units(chosen)
+
+    def _current_display_units(self) -> UnitSystem:
+        """The system results are shown in (the model's own when none was picked)."""
+        if self._vm.project is None:
+            return UnitSystem.SI_M_N
+        meta = self._vm.project.meta
+        return meta.display_units if meta.display_units is not None else meta.units
+
+    def _set_display_units(self, chosen: UnitSystem) -> None:
+        """Change the display system and refresh everything that shows a number."""
+        if self._vm.project is None:
+            return
+        self._vm.project.meta.display_units = chosen
         self._vm.mark_dirty()
+        self._sync_units_combo()
         self._log(f"Display units set to {chosen.value}.")
+        self._apply_display_units()
 
-    def _sync_units_combo(self) -> None:
-        """Reflect the project's current units in the status-bar combo.
+    def _apply_display_units(self) -> None:
+        """Re-render every result view in the project's current display units.
 
-        Called after project load / menu-based unit change so the
-        status-bar widget stays consistent with the model state.
+        The model is untouched — OpenSees numbers do not move — but each number
+        read off a diagram, table or curve is converted, so a unit change is
+        visible without re-running anything.
         """
         if self._vm.project is None:
             return
-        target = self._vm.project.meta.units
+        converter = UnitConverter.of(self._vm.project.meta)
+        # Results panel: displacements, reactions, element forces, curves.
+        self._results_panel.refresh(self._vm.project)
+        # Active post-processing dock (diagram, deformed shape, plots).
+        if self._post_units_refresh is not None:
+            self._post_units_refresh()
+        elif self._latest_results is not None:
+            self._canvas.render()
+        self._log(
+            f"Displayed values converted to {converter.target.value} (model units unchanged).",
+        )
+
+    def _register_units_refresh(
+        self,
+        view: Any,
+        after: Callable[[], None] | None = None,
+    ) -> None:
+        """Remember how to re-show ``view`` when the display units change.
+
+        ``view`` must expose ``set_units(UnitConverter)``; ``after`` re-applies
+        whatever the dock draws (a diagram overlay, a deformed shape). The dock
+        being torn down, or another project being opened, drops the callback.
+        """
+        project = self._vm.project
+
+        def _refresh() -> None:
+            if self._post_dock is None or self._vm.project is not project:
+                return
+            view.set_units(UnitConverter.of(project.meta))
+            if after is not None:
+                after()
+
+        self._post_units_refresh = _refresh
+
+    def _sync_units_combo(self) -> None:
+        """Reflect the project's current display units in the status-bar combo.
+
+        Called after project load / menu-based unit change so the
+        status-bar widget stays consistent with the model state. When the
+        display system differs from the model's, the tooltip says so — the
+        typed values are in the model's system, not in the picker's.
+        """
+        if self._vm.project is None:
+            return
+        target = self._current_display_units()
         idx = self._units_combo.findData(target)
         if idx >= 0 and idx != self._units_combo.currentIndex():
             self._units_combo.blockSignals(True)
             self._units_combo.setCurrentIndex(idx)
             self._units_combo.blockSignals(False)
+        model = self._vm.project.meta.units
+        tooltip = (
+            "Display units — results, diagrams and tables convert to this "
+            "system. The model keeps the units its values were entered in."
+        )
+        if target is not model:
+            tooltip += f"  Model units: {model.value} — typed values are unchanged."
+        self._units_combo.setToolTip(tooltip)
 
     def _wire(self) -> None:
         # File
@@ -2177,7 +2247,12 @@ class MainWindow(QMainWindow):
 
         view.scaleChanged.connect(_apply)
         view.closed.connect(self._on_back_to_model)
+        view.set_units(UnitConverter.of(self._vm.project.meta))
+        view.set_peak_displacement(
+            peak_static_displacement(self._vm.project, self._latest_results),
+        )
         _apply(suggested)  # initial frame at the suggested scale
+        self._register_units_refresh(view, after=lambda: _apply(view.current_scale))
 
     def _on_show_mode_shape(self) -> None:
         if not isinstance(self._latest_results, ModalResults) or self._vm.project is None:
@@ -2323,9 +2398,14 @@ class MainWindow(QMainWindow):
         view.componentChanged.connect(_on_component_changed)
         view.changed.connect(_render)
         view.closed.connect(self._on_back_to_model)
+        view.set_units(UnitConverter.of(self._vm.project.meta))
 
         # Force the first render now that everything is wired.
         view._emit_changed()
+        self._register_units_refresh(
+            view,
+            after=lambda: _render(view.current_component(), view.current_scale),
+        )
 
     def _best_initial_component(self):
         """Return the (component, data) pair with the largest |force|.
@@ -2367,6 +2447,8 @@ class MainWindow(QMainWindow):
         dock.resize(700, 500)
         self._post_dock = dock
         view.closed.connect(self._on_back_to_model)
+        view.set_units(UnitConverter.of(self._vm.project.meta))
+        self._register_units_refresh(view)
 
     def _on_export_th_animation(self) -> None:
         """Export the deformed shape evolution over a transient analysis."""
@@ -2471,6 +2553,8 @@ class MainWindow(QMainWindow):
         dock.resize(700, 500)
         self._post_dock = dock
         view.closed.connect(self._on_back_to_model)
+        view.set_units(UnitConverter.of(self._vm.project.meta))
+        self._register_units_refresh(view)
 
     def _on_show_pushover(self) -> None:
         if not isinstance(self._latest_results, PushoverResults):
@@ -2481,14 +2565,13 @@ class MainWindow(QMainWindow):
             )
             return
         self._tear_down_post_dock()
-        # Plot axes use the model's declared unit system and ndf so
-        # a kip-in / ndf=3 Moment-Curvature model shows "in" / "kip·in"
-        # (or "1/in") rather than hard-coded SI m / N.
-        from opensees_studio.core import UnitSystem
-
+        # Plot axes follow the project's units and ndf so a kip-in / ndf=3
+        # Moment-Curvature model shows "in" / "kip·in" (or "1/in") rather than
+        # hard-coded SI m / N. The display conversion is applied by the view.
         units = self._vm.project.meta.units if self._vm.project is not None else UnitSystem.SI_M_N
+        display = self._vm.project.meta.display_units if self._vm.project is not None else None
         ndf = self._vm.project.ndf if self._vm.project is not None else 6
-        view = PushoverCurveView(units=units, ndf=ndf)
+        view = PushoverCurveView(units=units, ndf=ndf, display_units=display)
         view.set_results(self._latest_results)
         dock = QDockWidget("Pushover Curve", self)
         dock.setWidget(view)
@@ -2496,6 +2579,7 @@ class MainWindow(QMainWindow):
         dock.resize(700, 500)
         self._post_dock = dock
         view.closed.connect(self._on_back_to_model)
+        self._register_units_refresh(view)
 
     def _on_show_response_spectrum(self) -> None:
         if (
@@ -2524,6 +2608,8 @@ class MainWindow(QMainWindow):
         dock.resize(800, 600)
         self._post_dock = dock
         view.closed.connect(self._on_back_to_model)
+        view.set_units(UnitConverter.of(self._vm.project.meta))
+        self._register_units_refresh(view)
 
     def _on_back_to_model(self) -> None:
         self._tear_down_post_dock()
@@ -2537,6 +2623,7 @@ class MainWindow(QMainWindow):
             self.removeDockWidget(self._post_dock)
             self._post_dock.deleteLater()
             self._post_dock = None
+        self._post_units_refresh = None
 
     def _on_toggle_parallel(self, on: bool) -> None:
         cam = self._canvas.camera
@@ -2674,14 +2761,12 @@ class MainWindow(QMainWindow):
     def _on_set_units(self) -> None:
         """Options → Set Display Units — SAP2000 parity.
 
-        The selection is stored in ``project.meta.units`` and drives
-        labels on result views (pushover curve, force diagram, …).
-        Values are never auto-converted — the engineer is expected to
-        input consistent values for whichever system they pick.
+        The selection is stored in ``project.meta.display_units`` and converts
+        every number a result view shows (force diagrams, displacements,
+        tables, curves). The model keeps ``project.meta.units``: the values an
+        engineer typed are never rewritten.
         """
         from PySide6.QtWidgets import QInputDialog
-
-        from opensees_studio.core import UnitSystem
 
         if self._vm.project is None:
             QMessageBox.information(
@@ -2691,7 +2776,7 @@ class MainWindow(QMainWindow):
             )
             return
         choices = [u.value for u in UnitSystem]
-        current_value = self._vm.project.meta.units.value
+        current_value = self._current_display_units().value
         current_idx = choices.index(current_value)
         choice, ok = QInputDialog.getItem(
             self,
@@ -2704,12 +2789,9 @@ class MainWindow(QMainWindow):
         if not ok:
             return
         new_units = next(u for u in UnitSystem if u.value == choice)
-        if new_units == self._vm.project.meta.units:
+        if new_units is self._current_display_units():
             return
-        self._vm.project.meta.units = new_units
-        self._vm.mark_dirty()
-        self._sync_units_combo()
-        self._log(f"Display units set to {new_units.value}.")
+        self._set_display_units(new_units)
 
     # ── helpers ──────────────────────────────────────────────────────
     def _refresh_tree(self, project: Project | None) -> None:
