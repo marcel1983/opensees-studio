@@ -1,4 +1,4 @@
-"""Commands that apply nodal loads.
+"""Commands that apply nodal, distributed and point element loads.
 
 If the project has no time series and no plain pattern yet, this
 module ensures a default pair (LinearTimeSeries id=1 +
@@ -7,13 +7,15 @@ PlainLoadPattern id=1) gets created as part of the same undoable step.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from opensees_studio.commands.base import ProjectCommand
 from opensees_studio.core import (
     DEFAULT_PATTERN_NAME,
+    FRAME_ELEMENT_CLASSES,
     NodalLoad,
     PlainLoadPattern,
+    PointElementLoad,
     TimeSeries,
     UniformElementLoad,
     find_plain_pattern,
@@ -113,31 +115,23 @@ class AddNodalLoadsCommand(ProjectCommand):
         self._notify()
 
 
-class AddElementLoadsCommand(ProjectCommand):
-    """Apply a uniform distributed load (wy, wz, wx) to a set of elements.
+class _ElementLoadCommand(ProjectCommand):
+    """Shared pattern handling for the element-load commands.
 
     Same pattern-resolution strategy as :class:`AddNodalLoadsCommand`:
-    reuses an existing plain pattern, or creates a default one.
+    reuses an existing plain pattern, or creates a default one, and undo
+    rolls that infrastructure back together with the loads.
     """
 
-    def __init__(
-        self,
-        vm: ProjectViewModel,
-        element_ids: set[int],
-        wy: float = 0.0,
-        wz: float = 0.0,
-        wx: float = 0.0,
-        pattern_id: int | None = None,
-    ) -> None:
-        super().__init__(vm, f"Apply distributed load to {len(element_ids)} element(s)")
-        self._element_ids = set(element_ids)
-        self._wy = wy
-        self._wz = wz
-        self._wx = wx
+    #: Name of the ``PlainLoadPattern`` list the subclass appends to.
+    _list_name: str
+
+    def __init__(self, vm: ProjectViewModel, text: str, pattern_id: int | None) -> None:
+        super().__init__(vm, text)
         self._pattern_id = pattern_id
         self._created_ts: TimeSeries | None = None
         self._created_pattern: PlainLoadPattern | None = None
-        self._added_loads: list[tuple[int, UniformElementLoad]] = []
+        self._added_loads: list[tuple[int, Any]] = []
 
     def _resolve_pattern(self) -> PlainLoadPattern:
         if self._pattern_id is not None:
@@ -156,16 +150,15 @@ class AddElementLoadsCommand(ProjectCommand):
         self.project.load_patterns.append(self._created_pattern)
         return self._created_pattern
 
+    def _make_loads(self) -> list[Any]:
+        raise NotImplementedError
+
     def redo(self) -> None:
+        loads = self._make_loads()
         pattern = self._resolve_pattern()
-        for eid in self._element_ids:
-            load = UniformElementLoad(
-                element_id=eid,
-                wy=self._wy,
-                wz=self._wz,
-                wx=self._wx,
-            )
-            pattern.element_loads.append(load)
+        target = getattr(pattern, self._list_name)
+        for load in loads:
+            target.append(load)
             self._added_loads.append((pattern.id, load))
         self._notify()
 
@@ -173,8 +166,9 @@ class AddElementLoadsCommand(ProjectCommand):
         for pid, load in self._added_loads:
             for pat in self.project.load_patterns:
                 if pat.id == pid and isinstance(pat, PlainLoadPattern):
-                    if load in pat.element_loads:
-                        pat.element_loads.remove(load)
+                    target = getattr(pat, self._list_name)
+                    # By identity: two loads on the same element can be equal.
+                    target[:] = [x for x in target if x is not load]
                     break
         self._added_loads.clear()
         if (
@@ -187,3 +181,73 @@ class AddElementLoadsCommand(ProjectCommand):
             self.project.time_series.remove(self._created_ts)
             self._created_ts = None
         self._notify()
+
+
+class AddElementLoadsCommand(_ElementLoadCommand):
+    """Apply a uniform distributed load (wy, wz, wx) to a set of elements."""
+
+    _list_name = "element_loads"
+
+    def __init__(
+        self,
+        vm: ProjectViewModel,
+        element_ids: set[int],
+        wy: float = 0.0,
+        wz: float = 0.0,
+        wx: float = 0.0,
+        pattern_id: int | None = None,
+    ) -> None:
+        super().__init__(vm, f"Apply distributed load to {len(element_ids)} element(s)", pattern_id)
+        self._element_ids = set(element_ids)
+        self._wy = wy
+        self._wz = wz
+        self._wx = wx
+
+    def _make_loads(self) -> list[Any]:
+        return [
+            UniformElementLoad(element_id=eid, wy=self._wy, wz=self._wz, wx=self._wx)
+            for eid in self._element_ids
+        ]
+
+
+class AddPointElementLoadsCommand(_ElementLoadCommand):
+    """Apply a concentrated load (py, pz, px) inside a set of frame elements.
+
+    ``positions`` maps each element id to the load position as a fraction of
+    that element's length from end i, so an absolute distance can be turned
+    into a different fraction on each member by the caller. Only beam-column
+    elements (``FRAME_ELEMENT_CLASSES``) take the load; any other id is refused
+    before anything is changed.
+    """
+
+    _list_name = "point_loads"
+
+    def __init__(
+        self,
+        vm: ProjectViewModel,
+        positions: dict[int, float],
+        py: float = 0.0,
+        pz: float = 0.0,
+        px: float = 0.0,
+        pattern_id: int | None = None,
+    ) -> None:
+        super().__init__(vm, f"Apply point load to {len(positions)} element(s)", pattern_id)
+        self._positions = dict(positions)
+        self._py = py
+        self._pz = pz
+        self._px = px
+
+    def _make_loads(self) -> list[Any]:
+        by_id = {el.id: el for el in self.project.elements}
+        not_frames = sorted(
+            eid for eid in self._positions if not isinstance(by_id.get(eid), FRAME_ELEMENT_CLASSES)
+        )
+        if not_frames:
+            raise ValueError(
+                "A point load needs a frame (beam-column) element; not one: "
+                + ", ".join(str(eid) for eid in not_frames)
+            )
+        return [
+            PointElementLoad(element_id=eid, py=self._py, pz=self._pz, px=self._px, x=x)
+            for eid, x in sorted(self._positions.items())
+        ]

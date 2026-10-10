@@ -43,6 +43,7 @@ from opensees_studio.views.dialogs.model_check import ModelCheckDialog
 from opensees_studio.views.dialogs.move import MoveDialog
 from opensees_studio.views.dialogs.path_time_series import PathTimeSeriesDialog
 from opensees_studio.views.dialogs.plain_pattern import PlainPatternDialog
+from opensees_studio.views.dialogs.point_element_load import AssignPointElementLoadDialog
 from opensees_studio.views.dialogs.quick_grid_lines import QuickGridLinesDialog
 from opensees_studio.views.dialogs.replicate import ReplicateDialog
 from opensees_studio.views.dialogs.run_analysis import RunAnalysisDialog
@@ -63,6 +64,7 @@ __all__ = [
     "AssignLoadDialog",
     "AssignMassesDialog",
     "AssignMaterialDialog",
+    "AssignPointElementLoadDialog",
     "AssignSectionDialog",
     "AssignSupportDialog",
     "AssignZeroLengthSectionDialog",

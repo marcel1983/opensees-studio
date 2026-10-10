@@ -36,6 +36,15 @@ refused instead of silently downgraded).
   an independently built compatibility matrix on truss grids of up to 3280 free
   DOF, and all 31 shipped examples pass without a finding.
 
+- **Point loads inside frame elements** (Assign → Frame → Point Load…). A
+  concentrated force (Px, Py, Pz in the element's local axes) at a distance from
+  end i, given as a fraction of the length or as an absolute length, emitted as
+  `eleLoad -beamPoint`. Only beam-column elements take it; trusses and other
+  elements in the selection are skipped. The load is drawn on the canvas, is
+  copied by Replicate, follows the piece it falls on when a member is meshed, and
+  is handed over (measured from the right end) when a repeated member is
+  removed. A pattern without point loads saves byte-identical to before.
+
 ## [0.0.8] — 2026-10-10
 
 The release that makes the drawing tools work on a model that already has
