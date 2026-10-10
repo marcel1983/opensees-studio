@@ -85,7 +85,7 @@ def test_a_case_adds_its_setup_and_its_step_protocol() -> None:
 
     source = export_script(project, case)
 
-    assert "# ── Analysis: case #1 Static 'Tip' ──" in source
+    assert "# --- Analysis: case #1 Static 'Tip' ---" in source
     for command in ("ops.system(", "ops.numberer(", "ops.constraints(", "ops.test("):
         assert command in source, command
     assert "ops.analysis('Static')" in source
@@ -134,3 +134,18 @@ def test_a_transient_case_carries_its_timestep() -> None:
 
     assert "for _step in range(3):" in source
     assert "ops.analyze(1, 0.01)" in source
+
+
+# ─────────────────────── encodable everywhere ───────────────────────
+def test_the_exported_script_is_pure_ascii() -> None:
+    """A downloaded script must not depend on the writer's default encoding.
+
+    The analysis-parity test writes the script to disk. On Windows that used to
+    be cp1252, and a box-drawing rule in the analysis banner made the write
+    raise `UnicodeEncodeError` — CI, Windows, 2026-10-10. Plain ASCII cannot
+    fail that way, in any editor or on any console.
+    """
+    source = export_script(_cantilever(), _cantilever().analyses[0])
+    offenders = sorted({ch for ch in source if ord(ch) > 127})
+    assert offenders == []
+    assert source.isascii()

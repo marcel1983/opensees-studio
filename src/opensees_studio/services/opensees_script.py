@@ -183,7 +183,11 @@ def export_script(
         block = _analysis_block(project, case)
         lines += [
             "",
-            f"# ── Analysis: case {case_label(case)} ──",
+            # ASCII only: the script is downloaded, opened in whatever editor
+            # the user has and written by tools whose default encoding on
+            # Windows is cp1252 — a box-drawing rule here made `write_text`
+            # raise UnicodeEncodeError there (CI, Windows, 2026-10-10).
+            f"# --- Analysis: case {case_label(case)} ---",
             "# Setup and step protocol as the application runs them.",
             *block,
         ]

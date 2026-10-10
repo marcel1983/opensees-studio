@@ -91,7 +91,12 @@ def _export(tmp_path: Path, example: str, case_id: int) -> tuple[Path, object]:
     project = load_project(EXAMPLES / f"{example}.osmodel")
     case = next(c for c in project.analyses if c.id == case_id)
     script = tmp_path / f"{example}_{case_id}.py"
-    script.write_text(export_script(project, case, version="test", filename=script.name))
+    # Explicit UTF-8, as the application does: the platform default is cp1252 on
+    # Windows, and a script is a downloaded artefact, not a locale-bound file.
+    script.write_text(
+        export_script(project, case, version="test", filename=script.name),
+        encoding="utf-8",
+    )
     return script, (project, case)
 
 
