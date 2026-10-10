@@ -139,7 +139,9 @@ class OpenSeesRunner:
         """
         if ops_module is None:
             import openseespy.opensees as ops_module  # local import for testability
-        self._ops = ops_module
+        # The solver module is duck-typed at runtime (and a mock in the tests):
+        # `Any` is the honest type, and `None` never survives this line.
+        self._ops: Any = ops_module
         self._on_progress = on_progress
         self.project = project
         self._dof_idx: tuple[int, ...] = _dof_indices(project.ndm, project.ndf)
@@ -983,6 +985,34 @@ class OpenSeesRunner:
                 "Singular stiffness matrix — the solve cannot run.\n" + "\n".join(problems) + hint
             )
 
+    #: Components of one point of ``eleResponse(tag, "stresses")``: the section
+    #: stress resultants N11, N22, N12, M11, M22, M12, V13, V23. A ShellMITC4
+    #: reports four gauss points of these; they are averaged per element.
+    STRESS_RESULTANTS = 8
+
+    def _element_stress_resultants(self, element_id: int) -> np.ndarray | None:
+        """One element's section stress resultants, averaged over its gauss points.
+
+        Returns ``None`` for element types that do not answer — bars, trusses
+        and zero-length elements have no section resultants — and for anything
+        whose vector does not divide into whole resultants.
+
+        OpenSees leaves this response at zero when the case ran with the
+        ``Linear`` algorithm: it advances the time without the section state
+        being readable. The zeros are recorded as they come; the contour view
+        says "not reported" rather than drawing a field of zeros.
+        """
+        try:
+            raw = self._ops.eleResponse(element_id, "stresses")
+        except Exception:
+            return None
+        if not raw:
+            return None
+        values = np.asarray(raw, dtype=float)
+        if values.size == 0 or values.size % self.STRESS_RESULTANTS:
+            return None
+        return values.reshape(-1, self.STRESS_RESULTANTS).mean(axis=0)
+
     def _run_static(self, case: StaticCase) -> StaticResults:
         ops = self._ops
         self._emit_patterns_for_case(case.pattern_ids)
@@ -992,6 +1022,7 @@ class OpenSeesRunner:
         node_disp = {n.id: np.zeros((case.n_steps, ndf)) for n in self.project.nodes}
         node_reaction = {n.id: np.zeros((case.n_steps, ndf)) for n in self.project.nodes}
         element_forces: dict[int, np.ndarray] = {}
+        element_stresses: dict[int, np.ndarray] = {}
 
         for step in range(case.n_steps):
             status = ops.analyze(1)
@@ -1019,6 +1050,14 @@ class OpenSeesRunner:
                 if el.id not in element_forces:
                     element_forces[el.id] = np.zeros((case.n_steps, len(forces)))
                 element_forces[el.id][step, :] = forces
+                stresses = self._element_stress_resultants(el.id)
+                if stresses is not None:
+                    if el.id not in element_stresses:
+                        element_stresses[el.id] = np.zeros(
+                            (case.n_steps, self.STRESS_RESULTANTS),
+                            dtype=float,
+                        )
+                    element_stresses[el.id][step, :] = stresses
             self._progress(step + 1, case.n_steps)
 
         return StaticResults(
@@ -1028,6 +1067,7 @@ class OpenSeesRunner:
             node_disp=node_disp,
             node_reaction=node_reaction,
             element_forces=element_forces,
+            element_stresses=element_stresses,
         )
 
     def _run_pushover(self, case: PushoverCase) -> PushoverResults:
@@ -1135,6 +1175,7 @@ class OpenSeesRunner:
         base_shear = np.zeros(n_steps + 1)
         node_disp = {n.id: np.zeros((n_steps + 1, ndf)) for n in self.project.nodes}
         element_forces: dict[int, np.ndarray] = {}
+        element_stresses: dict[int, np.ndarray] = {}
 
         def _snapshot(step: int) -> None:
             ops.reactions()
@@ -1166,6 +1207,14 @@ class OpenSeesRunner:
                         dtype=float,
                     )
                 element_forces[el.id][step, :] = forces
+                stresses = self._element_stress_resultants(el.id)
+                if stresses is not None:
+                    if el.id not in element_stresses:
+                        element_stresses[el.id] = np.zeros(
+                            (n_steps + 1, self.STRESS_RESULTANTS),
+                            dtype=float,
+                        )
+                    element_stresses[el.id][step, :] = stresses
 
         # Step 0: initial state (all zeros in the linear case, but we
         # still record so the curve starts at the origin cleanly).
@@ -1196,6 +1245,8 @@ class OpenSeesRunner:
                     node_disp[nid] = node_disp[nid][:step]
                 for eid in element_forces:
                     element_forces[eid] = element_forces[eid][:step]
+                for eid in element_stresses:
+                    element_stresses[eid] = element_stresses[eid][:step]
                 break
             _snapshot(step)
             self._progress(step, n_steps)
@@ -1210,6 +1261,7 @@ class OpenSeesRunner:
             base_shear=base_shear,
             node_disp=node_disp,
             element_forces=element_forces,
+            element_stresses=element_stresses,
         )
 
     def _run_response_spectrum(self, case: ResponseSpectrumCase) -> ResponseSpectrumResults:

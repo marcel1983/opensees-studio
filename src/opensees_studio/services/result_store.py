@@ -112,6 +112,9 @@ def write_results(results: AnyResults, out_dir: str | Path) -> dict[str, Any]:
             _write_int_dict(f, "node_disp", results.node_disp)
             _write_int_dict(f, "node_reaction", results.node_reaction)
             _write_int_dict(f, "element_forces", results.element_forces)
+            # Shell section resultants; absent in a file written before the
+            # field existed, which `_read_int_dict` reads back as empty.
+            _write_int_dict(f, "element_stresses", results.element_stresses)
         elif isinstance(results, PushoverResults):
             entry["completed_steps"] = results.n_steps
             entry["control_node"] = results.control_node
@@ -120,6 +123,7 @@ def write_results(results: AnyResults, out_dir: str | Path) -> dict[str, Any]:
             f.create_dataset("base_shear", data=np.asarray(results.base_shear, dtype=float))
             _write_int_dict(f, "node_disp", results.node_disp)
             _write_int_dict(f, "element_forces", results.element_forces)
+            _write_int_dict(f, "element_stresses", results.element_stresses)
         elif isinstance(results, ModalResults):
             entry["completed_steps"] = len(results.eigenvalues)
             entry["solver"] = results.solver
@@ -190,6 +194,7 @@ def load_results(entry: dict[str, Any], out_dir: str | Path) -> AnyResults:
                 node_disp=_read_int_dict(f, "node_disp"),
                 node_reaction=_read_int_dict(f, "node_reaction"),
                 element_forces=_read_int_dict(f, "element_forces"),
+                element_stresses=_read_int_dict(f, "element_stresses"),
             )
         if kind == "PushoverResults":
             return PushoverResults(
@@ -202,6 +207,7 @@ def load_results(entry: dict[str, Any], out_dir: str | Path) -> AnyResults:
                 base_shear=f["base_shear"][()],
                 node_disp=_read_int_dict(f, "node_disp"),
                 element_forces=_read_int_dict(f, "element_forces"),
+                element_stresses=_read_int_dict(f, "element_stresses"),
             )
         if kind == "ModalResults":
             shapes = f["mode_shapes"]

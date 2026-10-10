@@ -167,3 +167,61 @@ def test_manifest_round_trip(tmp_path: Path) -> None:
     assert manifest["project"] == "proj.run-snapshot.osmodel"
     assert [c["case_id"] for c in manifest["cases"]] == [1]
     assert manifest["cases"][0]["result_type"] == "StaticResults"
+
+
+# ───────────────── shell resultants (0.0.7) ─────────────────
+def test_static_stress_resultants_survive_the_round_trip(tmp_path: Path) -> None:
+    """A ShellMITC4's 8 resultants per step, exactly as the solver reported them."""
+    stresses = {
+        20: np.array(
+            [
+                [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                [2000.0, -3.5, 1.25, -0.5, 0.25, 0.125, 7.5, -8.25],
+            ]
+        ),
+        21: np.array([[1e-9, 2e-9, 3e-9, 4e-9, 5e-9, 6e-9, 7e-9, 8e-9]]),
+    }
+    src = StaticResults(
+        case_id=1,
+        case_name="shell",
+        n_steps=2,
+        node_disp={1: _arr(2, 6)},
+        element_stresses=stresses,
+    )
+    entry = write_results(src, tmp_path)
+    back = load_results(entry, tmp_path)
+
+    assert isinstance(back, StaticResults)
+    assert set(back.element_stresses) == {20, 21}
+    for eid, expected in stresses.items():
+        assert np.array_equal(back.element_stresses[eid], expected)
+    # Full precision: these are the solver's numbers, not a rounded copy.
+    assert back.element_stresses[20][1, 0] == 2000.0
+    assert back.element_stresses[21][0, 0] == 1e-9
+
+
+def test_a_result_file_without_stresses_still_loads(tmp_path: Path) -> None:
+    """Results written before the field existed read back as empty, not as an error."""
+    src = StaticResults(case_id=2, case_name="old", n_steps=1, node_disp={1: _arr(1, 3)})
+    entry = write_results(src, tmp_path)
+    back = load_results(entry, tmp_path)
+    assert isinstance(back, StaticResults)
+    assert back.element_stresses == {}
+
+
+def test_pushover_stress_resultants_survive_the_round_trip(tmp_path: Path) -> None:
+    stresses = {20: np.array([[0.0] * 8, [10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0]])}
+    src = PushoverResults(
+        case_id=3,
+        case_name="push",
+        n_steps=1,
+        control_node=2,
+        control_dof=1,
+        control_disp=np.array([0.0, 0.01]),
+        base_shear=np.array([0.0, 100.0]),
+        element_stresses=stresses,
+    )
+    entry = write_results(src, tmp_path)
+    back = load_results(entry, tmp_path)
+    assert isinstance(back, PushoverResults)
+    assert np.array_equal(back.element_stresses[20], stresses[20])

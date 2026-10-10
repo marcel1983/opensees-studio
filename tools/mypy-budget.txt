@@ -18,5 +18,8 @@
 # and `diagram_renderer.py` now report no errors at all: 375 -> 373. Giving the
 # copy loops in `commands/transforms.py` their own variable names — one name for
 # a node and for an element in the same scope defeats the narrowing — left that
-# module clean too: 373 -> 367.
-367
+# module clean too: 373 -> 367. Typing the runner's solver module as `Any`
+# (`self._ops`, which is duck-typed at runtime and a mock in the tests) removed
+# the `union-attr` errors every one of its call sites produced: 367 -> 243.
+#   services/opensees_runner.py       3  (was 127)
+243

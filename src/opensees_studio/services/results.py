@@ -36,6 +36,19 @@ class StaticResults:
     """node_id → array of shape (n_steps, ndf), reaction forces."""
     element_forces: dict[int, np.ndarray] = field(default_factory=dict)
     """element_id → array of shape (n_steps, n_force_components)."""
+    element_stresses: dict[int, np.ndarray] = field(default_factory=dict)
+    """element_id → shape (n_steps, 8) section stress resultants of a shell.
+
+    In the order OpenSees reports them, averaged over the element's gauss
+    points: ``N11, N22, N12`` (membrane, force per unit length), ``M11, M22,
+    M12`` (bending, moment per unit length) and ``V13, V23`` (transverse shear,
+    force per unit length), in the element's local frame. Empty for element
+    types that do not report them (bars, trusses, zero-length).
+
+    One caveat travels with these numbers: OpenSees leaves them at zero when the
+    static case used the ``Linear`` algorithm, so a field of zeros means "not
+    reported", not "no force".
+    """
 
     def disp(self, node_id: int, dof: int, step: int = -1) -> float:
         """Convenience: scalar displacement at ``node_id``/``dof``/``step``."""
@@ -62,6 +75,9 @@ class PushoverResults:
     """node_id → shape (n_steps + 1, ndf) displacement history."""
     element_forces: dict[int, np.ndarray] = field(default_factory=dict)
     """element_id → shape (n_steps + 1, n_components) local-force history."""
+    element_stresses: dict[int, np.ndarray] = field(default_factory=dict)
+    """element_id → shape (n_steps + 1, 8) shell stress resultants, as in
+    :attr:`StaticResults.element_stresses`."""
 
 
 @dataclass
