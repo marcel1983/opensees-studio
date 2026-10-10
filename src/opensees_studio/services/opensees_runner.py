@@ -19,6 +19,7 @@ correctness.
 Command order (enforced; reordering is a runtime error in OpenSees):
 
     wipe → model → node × N → fix × N
+    → equalDOF / rigidDiaphragm / rigidLink → mass × N
     → uniaxialMaterial / nDMaterial × M
     → frictionModel × F
     → section × S
@@ -76,7 +77,13 @@ from opensees_studio.core import (
     ZeroLengthElement,
     ZeroLengthSectionElement,
 )
+from opensees_studio.core.diaphragms import (
+    auto_fixed_slots,
+    constrained_node_ids,
+    retained_in_plane_slots,
+)
 from opensees_studio.core.geometry.local_axes import frame_vecxz
+from opensees_studio.core.mass_source import effective_nodal_masses
 from opensees_studio.core.modal import (
     dof_indices,
     free_dof_count,
@@ -86,6 +93,7 @@ from opensees_studio.core.modal import (
 )
 from opensees_studio.core.modal_combination import DEFAULT_MODAL_DAMPING, closely_spaced_pairs
 from opensees_studio.core.self_weight import self_weight_loads, shell_self_weight_nodal_loads
+from opensees_studio.core.storey_results import cut_force, storey_cuts
 from opensees_studio.services.catalog_emitters import emit_catalog_material
 from opensees_studio.services.material_emitters import emit_material
 from opensees_studio.services.opensees_io import (
@@ -149,6 +157,7 @@ class OpenSeesRunner:
         self._dof_idx: tuple[int, ...] = _dof_indices(project.ndm, project.ndf)
         self._geom_transf_tags: dict[str, int] = {}
         self._element_geom_transf_tag: dict[int, int] = {}
+        self._node_mass: dict[int, np.ndarray] = {}
 
     # ─────────────────────── public API ───────────────────────
     def _progress(self, completed: int, total: int) -> None:
@@ -165,15 +174,28 @@ class OpenSeesRunner:
 
         for node in self.project.nodes:
             self._emit_node(node)
+        # A diaphragm's floating retained node has no stiffness out of its
+        # plane: those DOFs are fixed together with the node's own restraint.
+        auto_fixed = auto_fixed_slots(self.project)
         for node in self.project.nodes:
-            if node.is_restrained:
-                self._emit_fix(node)
+            extra = auto_fixed.get(node.id, set())
+            if node.is_restrained or extra:
+                self._emit_fix(node, extra)
         for mp in self.project.mp_constraints:
             self._emit_mp_constraint(mp)
+        for diaphragm in self.project.diaphragms:
+            self._ops.rigidDiaphragm(
+                diaphragm.perp_dirn,
+                diaphragm.retained_node,
+                *constrained_node_ids(self.project, diaphragm),
+            )
+        for link in self.project.rigid_links:
+            self._ops.rigidLink(link.kind, link.retained_node, link.constrained_node)
 
-        # Mass: emit only if any non-zero
+        # Mass: the typed nodal mass plus the mass source; emit only if any non-zero
+        self._node_mass = effective_nodal_masses(self.project)
         for node in self.project.nodes:
-            if any(node.mass):
+            if np.any(self._node_mass[node.id]):
                 self._emit_mass(node)
 
         for material in self.project.materials:
@@ -243,13 +265,27 @@ class OpenSeesRunner:
         coords = node.coords[: self.project.ndm]
         self._ops.node(node.id, *coords)
 
-    def _emit_fix(self, node: Any) -> None:
-        flags = tuple(int(node.restraint[i]) for i in self._dof_idx)
+    def _emit_fix(self, node: Any, extra: set[int] | None = None) -> None:
+        extra = extra or set()
+        flags = tuple(int(node.restraint[i] or i in extra) for i in self._dof_idx)
         self._ops.fix(node.id, *flags)
 
     def _emit_mass(self, node: Any) -> None:
-        m = tuple(node.mass[i] for i in self._dof_idx)
+        mass = self._node_mass[node.id]
+        m = tuple(float(mass[i]) for i in self._dof_idx)
         self._ops.mass(node.id, *m)
+
+    def _constraints_handler(self, case: Any) -> str:
+        """The case's constraint handler, Transformation where Plain cannot work.
+
+        ``Plain`` only enforces constraints whose matrix is the identity
+        (``equalDOF``); it drops a rigid diaphragm or rigid link with a warning
+        and then solves a singular system without reporting failure, so a model
+        with either runs with ``Transformation`` instead.
+        """
+        if case.constraints == "Plain" and (self.project.diaphragms or self.project.rigid_links):
+            return "Transformation"
+        return case.constraints
 
     def _emit_mp_constraint(self, mp: Any) -> None:
         self._ops.equalDOF(mp.retained_node, mp.constrained_node, *mp.dofs)
@@ -981,7 +1017,7 @@ class OpenSeesRunner:
         ops = self._ops
         ops.system(case.system, *case.system_args)
         ops.numberer(case.numberer)
-        ops.constraints(case.constraints)
+        ops.constraints(self._constraints_handler(case))
         ops.test(case.test, case.tolerance, case.max_iter)
         ops.algorithm(case.algorithm)
         if isinstance(case, StaticCase):
@@ -1052,6 +1088,21 @@ class OpenSeesRunner:
                 if nid in active:
                     active[nid].update(contributed)
 
+        # Constraints carry stiffness too: a diaphragm's retained node gets its
+        # in-plane DOFs from the floor (the rest the runner fixes), a rigid link
+        # gives its retained node what the constrained one has (and back).
+        for nid, slots in retained_in_plane_slots(self.project).items():
+            if nid in active:
+                active[nid].update(slots)
+        for nid, slots in auto_fixed_slots(self.project).items():
+            if nid in active:
+                active[nid].update(slots)
+        for link in self.project.rigid_links:
+            shared = {0, 1, 2, 3, 4, 5} if link.kind == "beam" else {0, 1, 2}
+            for nid in (link.retained_node, link.constrained_node):
+                if nid in active:
+                    active[nid].update(shared)
+
         problems: list[str] = []
         for node in self.project.nodes:
             for slot in self._dof_idx:
@@ -1116,6 +1167,10 @@ class OpenSeesRunner:
         node_reaction = {n.id: np.zeros((case.n_steps, ndf)) for n in self.project.nodes}
         element_forces: dict[int, np.ndarray] = {}
         element_stresses: dict[int, np.ndarray] = {}
+        cuts = storey_cuts(self.project) if self.project.storeys else []
+        element_nodes = {el.id: el.nodes for el in self.project.elements}
+        ndm = self.project.ndm
+        storey_shear = {cut.storey_id: np.zeros((case.n_steps, ndm)) for cut in cuts}
 
         correct = self._needs_correction_solve(case, case.pattern_ids)
         for step in range(case.n_steps):
@@ -1152,6 +1207,16 @@ class OpenSeesRunner:
                             dtype=float,
                         )
                     element_stresses[el.id][step, :] = stresses
+            # Storey shears from the global end forces of the members each
+            # storey cut crosses (``eleForce`` is global, ``localForce`` is not).
+            global_forces: dict[int, Any] = {}
+            for cut in cuts:
+                for element_id, _lower in cut.members:
+                    if element_id not in global_forces:
+                        global_forces[element_id] = ops.eleForce(element_id)
+                storey_shear[cut.storey_id][step, :] = cut_force(
+                    cut, element_nodes, global_forces, ndm
+                )
             self._progress(step + 1, case.n_steps)
 
         return StaticResults(
@@ -1162,6 +1227,7 @@ class OpenSeesRunner:
             node_reaction=node_reaction,
             element_forces=element_forces,
             element_stresses=element_stresses,
+            storey_shear=storey_shear,
         )
 
     def _run_pushover(self, case: PushoverCase) -> PushoverResults:
@@ -1231,7 +1297,7 @@ class OpenSeesRunner:
                 self._emit_patterns_for_case(const_ids)
                 ops.system(case.system, *case.system_args)
                 ops.numberer(case.numberer)
-                ops.constraints(case.constraints)
+                ops.constraints(self._constraints_handler(case))
                 ops.test(case.test, case.tolerance, case.max_iter)
                 ops.algorithm(case.algorithm)
                 ops.integrator("LoadControl", 0.0)
@@ -1253,7 +1319,7 @@ class OpenSeesRunner:
         # Configure analysis — DisplacementControl integrator.
         ops.system(case.system, *case.system_args)
         ops.numberer(case.numberer)
-        ops.constraints(case.constraints)
+        ops.constraints(self._constraints_handler(case))
         ops.test(case.test, case.tolerance, case.max_iter)
         ops.algorithm(case.algorithm)
         ops.integrator(
@@ -1478,7 +1544,7 @@ class OpenSeesRunner:
                 for node in self.project.nodes
             }
         node_mass = {
-            node.id: np.array([node.mass[i] for i in self._dof_idx], dtype=float)
+            node.id: np.array([self._node_mass[node.id][i] for i in self._dof_idx], dtype=float)
             for node in self.project.nodes
         }
         # A repeated eigenvalue gives an arbitrary, with the dense solver even
