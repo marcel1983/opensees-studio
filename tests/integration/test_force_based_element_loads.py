@@ -1,11 +1,12 @@
 """Element loads on force-based frames, solved with the default StaticCase.
 
 A force-based frame (``forceBeamColumn``, ``beamWithHinges``) only takes an
-element load into its resisting force at its next state determination, so a
-lone Linear solve lags one load increment behind: a simply supported beam
-reports the fixed-end reactions and no end rotation. The runner follows each
-such Linear step with a zero-increment correction solve; these tests pin the
-result to the lever rule and to the converged Newton answer.
+element load into its resisting force at its next state determination, so the
+first solve of a step moves nothing: Linear stops there, and Newton with an
+increment test (NormDispIncr, EnergyIncr) takes it as convergence. Either way a
+simply supported beam reports the fixed-end reactions and no end rotation. The
+runner follows each such step with a zero-increment correction solve; these
+tests pin the result to the lever rule and to the converged Newton answer.
 """
 
 from __future__ import annotations
@@ -148,19 +149,79 @@ def test_every_step_carries_its_own_share_of_the_load(load: str, tmp_path: Path)
         assert float(results.node_reaction[2][step][1]) == pytest.approx(factor * r2, rel=1e-9)
 
 
+def _with_solver(project: Project, algorithm: str, test: str) -> Project:
+    project.analyses[0] = project.analyses[0].model_copy(
+        update={"algorithm": algorithm, "test": test}
+    )
+    return project
+
+
+@pytest.mark.parametrize(
+    ("algorithm", "test"),
+    [
+        ("Newton", "NormDispIncr"),
+        ("Newton", "EnergyIncr"),
+        ("ModifiedNewton", "NormDispIncr"),
+        ("KrylovNewton", "EnergyIncr"),
+        ("BFGS", "NormDispIncr"),
+    ],
+)
+@pytest.mark.parametrize("load", ["uniform", "point"])
+def test_an_iterating_case_with_an_increment_test_converges_on_the_load(
+    algorithm: str, test: str, load: str, tmp_path: Path
+) -> None:
+    # The first iteration of such a step moves nothing, which an increment
+    # test would take as convergence on the lagging answer.
+    n_steps = 3
+    project = _with_solver(_beam("force", load, n_steps=n_steps), algorithm, test)
+    reference = _with_solver(_beam("force", load, n_steps=n_steps), "Newton", "NormUnbalance")
+
+    results = _solve(project, tmp_path / "case")
+    converged = _solve(reference, tmp_path / "reference")
+
+    r1, r2 = _lever_rule(load)
+    for step in range(n_steps):
+        factor = (step + 1) / n_steps
+        assert float(results.node_reaction[1][step][1]) == pytest.approx(factor * r1, rel=1e-7)
+        assert float(results.node_reaction[2][step][1]) == pytest.approx(factor * r2, rel=1e-7)
+        assert float(results.node_disp[1][step][2]) == pytest.approx(
+            float(converged.node_disp[1][step][2]), rel=1e-7
+        )
+
+
+def test_a_relative_test_solves_a_single_step(tmp_path: Path) -> None:
+    project = _with_solver(_beam("force", "point"), "Newton", "RelativeNormDispIncr")
+
+    results = _solve(project, tmp_path)
+
+    r1, _ = _lever_rule("point")
+    assert float(results.node_reaction[1][0][1]) == pytest.approx(r1, rel=1e-7)
+
+
+def test_a_relative_test_over_several_steps_is_refused_with_a_reason(tmp_path: Path) -> None:
+    project = _with_solver(_beam("force", "point", n_steps=2), "Newton", "RelativeNormDispIncr")
+
+    with pytest.raises(ValueError, match="RelativeNormDispIncr test cannot converge"):
+        _solve(project, tmp_path)
+
+
 def test_only_force_based_element_loads_take_the_correction_solve() -> None:
     elastic = _beam("elastic", "uniform")
     force = _beam("force", "uniform")
-    newton = _beam("force", "uniform")
-    newton.analyses[0] = newton.analyses[0].model_copy(update={"algorithm": "Newton"})
+    newton = _with_solver(_beam("force", "uniform"), "Newton", "NormDispIncr")
+    newton_unbalance = _with_solver(_beam("force", "uniform"), "Newton", "NormUnbalance")
+    linear_unbalance = _with_solver(_beam("force", "uniform"), "Linear", "NormUnbalance")
     no_loads = _beam("force", "uniform")
     no_loads.load_patterns[0].element_loads.clear()
 
     def needs(project: Project) -> bool:
         case = project.analyses[0]
-        return OpenSeesRunner(project)._needs_linear_correction(case, case.pattern_ids)
+        return OpenSeesRunner(project)._needs_correction_solve(case, case.pattern_ids)
 
     assert needs(force)
+    assert needs(newton)
+    # Linear ignores its test, so a force test does not spare it the correction.
+    assert needs(linear_unbalance)
+    assert not needs(newton_unbalance)
     assert not needs(elastic)
-    assert not needs(newton)
     assert not needs(no_loads)
