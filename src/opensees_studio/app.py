@@ -9,6 +9,7 @@ from __future__ import annotations
 from PySide6.QtCore import QLocale, Qt
 from PySide6.QtWidgets import QApplication
 
+from opensees_studio.platform_env import prefer_xwayland_on_wayland
 from opensees_studio.views.main_window import MainWindow
 
 
@@ -29,6 +30,10 @@ def run(argv: list[str]) -> int:
     Returns:
         The Qt exit code.
     """
+    # Before QApplication exists: pick a platform plugin that delivers mouse
+    # events to the VTK canvas (see `platform_env.prefer_xwayland_on_wayland`).
+    prefer_xwayland_on_wayland()
+
     _configure_qt()
 
     # Force the C locale app-wide so every QDoubleSpinBox parses "." as
