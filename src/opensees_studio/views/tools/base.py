@@ -124,6 +124,9 @@ class ToolController(QObject):
         self._canvas.nodePicked.connect(self._on_node_picked)
         self._canvas.elementPicked.connect(self._on_element_picked)
         self._canvas.emptyClicked.connect(self._on_empty_clicked)
+        # A drag while a tool is armed places nothing; say so, because silence
+        # is exactly what made the drawing tools feel broken.
+        self._canvas.dragNotAClick.connect(self._on_drag_not_a_click)
 
     @property
     def active(self) -> CanvasTool | None:
@@ -153,6 +156,14 @@ class ToolController(QObject):
     def _on_element_picked(self, element_id: int) -> None:
         if self._active is not None:
             self._active.on_element_picked(element_id)
+
+    def _on_drag_not_a_click(self) -> None:
+        if self._active is None:
+            return
+        self._active.statusChanged.emit(
+            f"{self._active.name}: that was a drag (the view moved), so nothing was "
+            "placed. Click without moving the pointer.",
+        )
 
     def _on_empty_clicked(self, x: float, y: float, z: float, snapped: bool) -> None:
         if self._active is not None:

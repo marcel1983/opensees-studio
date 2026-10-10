@@ -83,14 +83,50 @@ def test_a_click_that_drifts_leaves_the_camera_untouched(canvas) -> None:  # typ
     assert after == pytest.approx(before, abs=1e-9)
 
 
-def test_a_large_jitter_without_camera_movement_is_a_drag(canvas) -> None:  # type: ignore[no-untyped-def]
-    """The pixel bound stays as a guard: 20 px is a drag even if the camera held still."""
+def test_the_select_tool_keeps_the_tighter_budget(canvas) -> None:  # type: ignore[no-untyped-def]
+    """With no draw tool armed, 25 px is a drag: the user was orbiting."""
     from opensees_studio.views.canvas3d.model_canvas import CLICK_MAX_DRIFT_PX
 
-    assert CLICK_MAX_DRIFT_PX < 20.0
+    assert CLICK_MAX_DRIFT_PX == 20.0
     seen = _clicks(canvas)
-    _press_release(canvas, QPoint(400, 300), QPoint(420, 310))
+    _press_release(canvas, QPoint(400, 300), QPoint(425, 300))
     assert seen == []
+
+
+def test_a_draw_tool_gets_the_benefit_of_the_doubt(canvas) -> None:  # type: ignore[no-untyped-def]
+    """The same 25 px drift *is* a click while a tool is armed.
+
+    Misreading it costs the user the click — the whole complaint — while
+    misreading a small drag as a click only places one node, one undo away.
+    """
+    from opensees_studio.views.canvas3d.model_canvas import TOOL_CLICK_MAX_DRIFT_PX
+
+    assert TOOL_CLICK_MAX_DRIFT_PX > 25.0
+    canvas.set_default_selection_enabled(False)  # a pick-consuming tool is armed
+    seen = _clicks(canvas)
+    _press_release(canvas, QPoint(400, 300), QPoint(425, 300))
+    assert len(seen) == 1
+
+
+def test_a_drag_while_a_tool_is_armed_says_so(canvas) -> None:  # type: ignore[no-untyped-def]
+    """Silence is what made the tool feel dead: a swallowed click explains itself."""
+    canvas.set_default_selection_enabled(False)
+    seen = _clicks(canvas)
+    messages: list[str] = []
+    canvas.dragNotAClick.connect(lambda: messages.append("drag"))
+
+    _press_release(canvas, QPoint(400, 300), QPoint(470, 340))
+
+    assert seen == []
+    assert messages == ["drag"]
+
+
+def test_a_drag_with_the_select_tool_says_nothing(canvas) -> None:  # type: ignore[no-untyped-def]
+    """Orbiting with the select tool is normal; it must not nag."""
+    messages: list[str] = []
+    canvas.dragNotAClick.connect(lambda: messages.append("drag"))
+    _press_release(canvas, QPoint(400, 300), QPoint(470, 340))
+    assert messages == []
 
 
 def test_a_drifting_click_draws_a_node_end_to_end(qtbot) -> None:  # type: ignore[no-untyped-def]

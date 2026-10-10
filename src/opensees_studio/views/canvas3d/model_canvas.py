@@ -31,11 +31,17 @@ _PICK_DEBUG = os.environ.get("OSS_PICK_DEBUG") == "1"
 
 #: How far the pointer may travel between press and release and still count as a
 #: click. The old bound was 3 px, and a hand that drifts more than that — a
-#: trackpad, a fast mouse, a trembling one — had every click swallowed as a bogus
-#: camera drag: "no se puede dibujar". 8 px is the usual click/drag threshold of
-#: a desktop, a deliberate orbit travels much further, and the camera is put back
-#: where it was whenever a click is accepted so the drift leaves no trace.
-CLICK_MAX_DRIFT_PX = 8.0
+#: trackpad, a fast mouse, a trembling one, a remote desktop that quantises
+#: motion — had every click swallowed as a bogus camera drag: "no se puede
+#: dibujar". A deliberate orbit travels much further, and the camera is put back
+#: where it was whenever a click is accepted, so drift leaves no trace.
+CLICK_MAX_DRIFT_PX = 20.0
+
+#: The budget while a pick-consuming tool (Draw Node / Frame / Truss) is armed.
+#: Misreading a click as a drag costs the user the click — the complaint this
+#: constant exists for — while misreading a small drag as a click only places one
+#: node, which is one undo away. The tool therefore gets the benefit of the doubt.
+TOOL_CLICK_MAX_DRIFT_PX = 40.0
 
 
 class ModelCanvas(QtInteractor):  # type: ignore[misc]
@@ -44,6 +50,9 @@ class ModelCanvas(QtInteractor):  # type: ignore[misc]
     # Convenience signals re-emitted from SelectionState.
     nodePicked = Signal(int)
     elementPicked = Signal(int)
+    #: Emitted when a press/release moved too far to be a click while a
+    #: pick-consuming tool was armed, so the user learns why nothing happened.
+    dragNotAClick = Signal()
     #: Emitted when the user clicks an empty area of the viewport.
     #: Payload: world-space (x, y, z) obtained by unprojecting the click
     #: onto the Z=0 plane. Tools use this to place new geometry.
@@ -116,13 +125,26 @@ class ModelCanvas(QtInteractor):  # type: ignore[misc]
                 dx = release_pos.x() - press.x()
                 dy = release_pos.y() - press.y()
                 drift = (dx * dx + dy * dy) ** 0.5
-                if drift <= CLICK_MAX_DRIFT_PX:
+                budget = (
+                    CLICK_MAX_DRIFT_PX
+                    if self._default_selection_enabled
+                    else TOOL_CLICK_MAX_DRIFT_PX
+                )
+                if drift <= budget:
                     # A click: undo the sub-threshold rotation VTK applied while
                     # the pointer drifted, so the view does not creep.
                     self._restore_camera(getattr(self, "_press_camera", None))
                     self._handle_click(release_pos.x(), release_pos.y())
-                elif _PICK_DEBUG:
-                    print(f"[pick] press/release treated as a drag (drift {drift:.1f}px)")
+                else:
+                    if _PICK_DEBUG:
+                        print(
+                            f"[pick] press/release treated as a drag "
+                            f"(drift {drift:.1f}px > {budget:.0f})",
+                        )
+                    if not self._default_selection_enabled:
+                        # A tool is armed and the user expected a pick: say so
+                        # instead of leaving them clicking at a dead canvas.
+                        self.dragNotAClick.emit()
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
         """Live snap-target preview — hover highlight on the closest grid
@@ -316,13 +338,21 @@ class ModelCanvas(QtInteractor):  # type: ignore[misc]
         grid_tol_px = 15.0 * dpr
         snapped = self._nearest_grid_intersection_px(cx, cy, grid_tol_px)
         if snapped is not None:
+            if _PICK_DEBUG:
+                print(f"[pick] empty click snapped to the grid at {snapped}")
             self.emptyClicked.emit(float(snapped[0]), float(snapped[1]), float(snapped[2]), True)
             return
         free = self.world_on_working_plane(cx, cy)
         if free is not None:
+            if _PICK_DEBUG:
+                print(f"[pick] empty click resolved on the working plane at {free}")
             self.emptyClicked.emit(float(free[0]), float(free[1]), float(free[2]), False)
-        elif _PICK_DEBUG:
-            print("[pick] off-plane click — the view ray never meets the working plane")
+        else:
+            # Never silent: this is the "I click and nothing happens" case.
+            print(
+                "[pick] empty click could not be resolved: the view ray is parallel "
+                "to the working plane (rotate the view, or clear the level).",
+            )
 
     def _grid_intersections_world(self) -> np.ndarray | None:
         """Return an (N, 3) array of every snappable grid intersection.
