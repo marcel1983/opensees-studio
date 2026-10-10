@@ -27,4 +27,6 @@
 # QDockWidget to an attribute mypy had inferred as `None`): 243 -> 237.
 # Dropping the modal grid guard from the draw tools took the last three
 # `QMessageBox`/`_require_drawable_grid` errors with it: 237 -> 234.
+# The click-vs-drag helpers are fully annotated, so the draw-tool fix costs
+# no errors: the count stands at 234.
 234

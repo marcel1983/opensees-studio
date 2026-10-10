@@ -29,6 +29,14 @@ from opensees_studio.views.canvas3d.style import RenderStyle
 
 _PICK_DEBUG = os.environ.get("OSS_PICK_DEBUG") == "1"
 
+#: How far the pointer may travel between press and release and still count as a
+#: click. The old bound was 3 px, and a hand that drifts more than that — a
+#: trackpad, a fast mouse, a trembling one — had every click swallowed as a bogus
+#: camera drag: "no se puede dibujar". 8 px is the usual click/drag threshold of
+#: a desktop, a deliberate orbit travels much further, and the camera is put back
+#: where it was whenever a click is accepted so the drift leaves no trace.
+CLICK_MAX_DRIFT_PX = 8.0
+
 
 class ModelCanvas(QtInteractor):  # type: ignore[misc]
     """The central 3D viewport widget."""
@@ -87,22 +95,34 @@ class ModelCanvas(QtInteractor):  # type: ignore[misc]
         rotate/pan/zoom keep working.
         """
         if event.button() == Qt.MouseButton.LeftButton:
-            # Remember the press position. We only commit a pick if the user
-            # didn't drag (drags are camera rotation).
+            # Remember where the press started and what the camera looked like:
+            # whether this becomes a click or a drag depends on how far the
+            # pointer travels (see CLICK_MAX_DRIFT_PX), and an accepted click
+            # restores the camera VTK turned during the drift.
             self._press_pos = event.position()
             self._press_modifiers = event.modifiers()
+            self._press_camera = self._camera_state()
         super().mousePressEvent(event)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
+        # VTK finishes its interaction inside `super()` and may still apply the
+        # rotation as the button goes up, so the pick is handled afterwards:
+        # anything restored before that would be overwritten.
+        super().mouseReleaseEvent(event)
         if event.button() == Qt.MouseButton.LeftButton:
             release_pos = event.position()
             press = getattr(self, "_press_pos", None)
             if press is not None:
                 dx = release_pos.x() - press.x()
                 dy = release_pos.y() - press.y()
-                if dx * dx + dy * dy <= 9.0:  # ≤ 3 px movement → click
+                drift = (dx * dx + dy * dy) ** 0.5
+                if drift <= CLICK_MAX_DRIFT_PX:
+                    # A click: undo the sub-threshold rotation VTK applied while
+                    # the pointer drifted, so the view does not creep.
+                    self._restore_camera(getattr(self, "_press_camera", None))
                     self._handle_click(release_pos.x(), release_pos.y())
-        super().mouseReleaseEvent(event)
+                elif _PICK_DEBUG:
+                    print(f"[pick] press/release treated as a drag (drift {drift:.1f}px)")
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
         """Live snap-target preview — hover highlight on the closest grid
@@ -171,6 +191,41 @@ class ModelCanvas(QtInteractor):  # type: ignore[misc]
         if eid != self._tooltip_element:
             self._tooltip_element = eid
             QToolTip.showText(self.mapToGlobal(QPoint(int(qt_x), int(qt_y))), text, self)
+
+    def _camera_state(
+        self,
+    ) -> tuple[tuple[float, ...], tuple[float, ...], tuple[float, ...]] | None:
+        """Position, focal point and up vector — what a click must leave alone."""
+        camera = self.camera
+        if camera is None:
+            return None
+        return (
+            tuple(float(value) for value in camera.position),
+            tuple(float(value) for value in camera.focal_point),
+            tuple(float(value) for value in camera.up),
+        )
+
+    def _restore_camera(
+        self,
+        state: tuple[tuple[float, ...], tuple[float, ...], tuple[float, ...]] | None,
+    ) -> None:
+        """Put the camera back where it was when the button went down.
+
+        Only used for a gesture accepted as a click: it removes the
+        sub-threshold rotation VTK applied while the pointer drifted inside the
+        click budget. A click never zooms, so the scale and angle are untouched.
+        """
+        if state is None:
+            return
+        camera = self.camera
+        if camera is None:
+            return
+        position, focal_point, up = state
+        if tuple(camera.position) == position and tuple(camera.focal_point) == focal_point:
+            return  # nothing moved: leave it alone
+        camera.position = position
+        camera.focal_point = focal_point
+        camera.up = up
 
     def _handle_click(self, qt_x: float, qt_y: float) -> None:
         """Run our screen-space picking from Qt-coordinate (top-left origin).
