@@ -9,6 +9,12 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.6] — 2026-10-09
+
+The release that stops asking you to type numbers it could look up: a library of
+typical construction materials, each row tied to the clause it comes from. It
+also carries the two fixes the first full CI matrix on Windows turned up.
+
 ### Added
 
 - **A library of typical construction materials** (Material Library → From
@@ -25,8 +31,19 @@ refused instead of silently downgraded).
   regenerates it, and the tests verify every value against its code equation
   (ACI's two `Ec` expressions, which agree at 2320 kg/m³), the exact
   psi/ksi/lb·ft³ conversions, and — through the real solver — the
-  Kent-Scott-Park parabola of the library's concrete and the Menegotto-Pinto
-  curve of its A992 steel.
+  Kent-Scott-Park parabola of the library's concrete (0.585786 mm against a
+  linear-`E0` 0.500000 mm) and the Menegotto-Pinto curve of its A992 steel
+  (10.344830 mm against an elastic line of 1.896552 mm).
+
+### Fixed
+
+- **The exported OpenSees script could not be written on Windows.** The banner
+  above the analysis block was ruled with U+2500 BOX DRAWINGS LIGHT HORIZONTAL,
+  which cp1252 — the default encoding of `Path.write_text` there — has no byte
+  for, so a tool or test that wrote the script with the platform default raised
+  `UnicodeEncodeError`. The exporter emits ASCII now, the writer is explicit
+  about UTF-8, and a regression test asserts the script stays ASCII. The
+  application itself always wrote UTF-8, so no shipped model was affected.
 
 ## [0.0.5] — 2026-10-09
 
