@@ -37,11 +37,15 @@ _PICK_DEBUG = os.environ.get("OSS_PICK_DEBUG") == "1"
 #: where it was whenever a click is accepted, so drift leaves no trace.
 CLICK_MAX_DRIFT_PX = 20.0
 
-#: The budget while a pick-consuming tool (Draw Node / Frame / Truss) is armed.
-#: Misreading a click as a drag costs the user the click — the complaint this
-#: constant exists for — while misreading a small drag as a click only places one
-#: node, which is one undo away. The tool therefore gets the benefit of the doubt.
-TOOL_CLICK_MAX_DRIFT_PX = 40.0
+#: How much the *view* must turn before a gesture is called an orbit. Pixels are
+#: a proxy — a trembling hand or a tap-and-move on a trackpad drifts tens of
+#: pixels while barely turning the camera, and rejecting those made drawing feel
+#: broken. Three degrees is visible; jitter is two orders of magnitude below it.
+CAMERA_DRAG_ANGLE_DEG = 3.0
+
+#: A pan does not turn the camera, so it is measured on the focal point: moving
+#: it more than this share of the viewing distance is a deliberate pan.
+CAMERA_DRAG_PAN_FRACTION = 0.05
 
 
 class ModelCanvas(QtInteractor):  # type: ignore[misc]
@@ -125,15 +129,18 @@ class ModelCanvas(QtInteractor):  # type: ignore[misc]
                 dx = release_pos.x() - press.x()
                 dy = release_pos.y() - press.y()
                 drift = (dx * dx + dy * dy) ** 0.5
-                budget = (
-                    CLICK_MAX_DRIFT_PX
-                    if self._default_selection_enabled
-                    else TOOL_CLICK_MAX_DRIFT_PX
-                )
-                # A gesture is a click unless the camera actually moved: if the
-                # view is identical to what it was at press, nothing was orbited
-                # and the pointer was just unsteady, however far it travelled.
-                if drift <= budget or not self._camera_moved_since_press():
+                if self._default_selection_enabled:
+                    # Selecting: the tighter budget, and a camera that did not
+                    # move at all also counts as a click.
+                    clicked = drift <= CLICK_MAX_DRIFT_PX or not self._camera_moved_since_press()
+                else:
+                    # A tool is armed and the user meant to place something. The
+                    # only alternative a gesture has is orbiting, so the question
+                    # is exactly "did the view move?" — pixels are a poor proxy, a
+                    # trackpad tap drifts a lot while turning the camera almost
+                    # not at all, and a fast flick turns it without drifting far.
+                    clicked = not self._camera_moved_visibly()
+                if clicked:
                     # A click: undo the sub-threshold rotation VTK applied while
                     # the pointer drifted, so the view does not creep.
                     self._restore_camera(getattr(self, "_press_camera", None))
@@ -142,7 +149,7 @@ class ModelCanvas(QtInteractor):  # type: ignore[misc]
                     if _PICK_DEBUG:
                         print(
                             f"[pick] press/release treated as a drag "
-                            f"(drift {drift:.1f}px > {budget:.0f})",
+                            f"(drift {drift:.1f}px, view turned or panned)",
                         )
                     if not self._default_selection_enabled:
                         # A tool is armed and the user expected a pick: say so
@@ -230,6 +237,32 @@ class ModelCanvas(QtInteractor):  # type: ignore[misc]
             tuple(float(value) for value in camera.up),
         )
 
+    def _camera_moved_visibly(self) -> bool:
+        """True when the view visibly turned or panned since the press.
+
+        The question a click/drag decision is really asking: did the user orbit?
+        A rotation smaller than :data:`CAMERA_DRAG_ANGLE_DEG`, or a focal point
+        that barely moved, is hand tremor rather than intent.
+        """
+        before = getattr(self, "_press_camera", None)
+        after = self._camera_state()
+        if before is None or after is None:
+            return False
+        position0, focal0, _up0 = before
+        position1, focal1, _up1 = after
+        direction0 = np.asarray(focal0) - np.asarray(position0)
+        direction1 = np.asarray(focal1) - np.asarray(position1)
+        distance = float(np.linalg.norm(direction0)) or 1.0
+        norm0 = float(np.linalg.norm(direction0))
+        norm1 = float(np.linalg.norm(direction1))
+        if norm0 > 0.0 and norm1 > 0.0:
+            cosine = float(np.dot(direction0, direction1) / (norm0 * norm1))
+            angle = float(np.degrees(np.arccos(np.clip(cosine, -1.0, 1.0))))
+            if angle > CAMERA_DRAG_ANGLE_DEG:
+                return True
+        pan = float(np.linalg.norm(np.asarray(focal1) - np.asarray(focal0)))
+        return pan > CAMERA_DRAG_PAN_FRACTION * distance
+
     def _camera_moved_since_press(self) -> bool:
         """True when the camera is not where it was when the button went down."""
         before = getattr(self, "_press_camera", None)
@@ -308,7 +341,13 @@ class ModelCanvas(QtInteractor):  # type: ignore[misc]
                     return
 
         # ── Otherwise try frames (point-to-segment distance on screen). ──
-        frame_pd = self._renderer._frame_pd
+        # Only the select tool picks members. While a draw tool is armed a member
+        # is not a target — and treating it as one swallowed the click silently,
+        # which is what made drawing on a model that already has members (a
+        # portal frame, say) look broken: every click near a column or a rafter
+        # hit the member and nothing happened. Nodes stay pickable, so an
+        # existing node can still be reused.
+        frame_pd = self._renderer._frame_pd if self._default_selection_enabled else None
         frame_ids = self._renderer._frame_ids_ordered
         if frame_pd is not None and frame_ids:
             pts = np.asarray(frame_pd.points)
