@@ -58,7 +58,7 @@ def test_exporting_can_include_a_case(qtbot, window_with_project, monkeypatch, t
     window_with_project._on_export_script()
 
     source = target.read_text(encoding="utf-8")
-    assert f"# ── Analysis: case {case_label(case)} ──" in source
+    assert f"# --- Analysis: case {case_label(case)} ---" in source
     assert "ops.analysis('Static')" in source
 
 
