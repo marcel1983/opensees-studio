@@ -740,6 +740,17 @@ class OpenSeesRunner:
                         ops.eleLoad(
                             "-ele", el.element_id, "-type", "-beamUniform", el.wy, el.wz, el.wx
                         )
+                for pl in pat.point_loads:
+                    # eleLoad -ele N -type -beamPoint Py <Pz> xL Px
+                    # 2D: (Py, xL, Px); 3D: (Py, Pz, xL, Px).
+                    if self.project.ndm == 2:
+                        ops.eleLoad(
+                            "-ele", pl.element_id, "-type", "-beamPoint", pl.py, pl.x, pl.px
+                        )
+                    else:
+                        ops.eleLoad(
+                            "-ele", pl.element_id, "-type", "-beamPoint", pl.py, pl.pz, pl.x, pl.px
+                        )
             case UniformExcitationPattern():
                 args: list[Any] = [pat.direction, "-accel", pat.accel_series_id]
                 if pat.vel_series_id is not None:

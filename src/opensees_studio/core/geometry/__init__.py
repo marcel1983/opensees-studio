@@ -22,6 +22,7 @@ from opensees_studio.core.geometry.bearings import (
 )
 from opensees_studio.core.geometry.elements import (
     BEAM_INTEGRATION_RULES,
+    FRAME_ELEMENT_CLASSES,
     GEOM_TRANSF_TYPES,
     BeamWithHingesElement,
     CorotTrussElement,
@@ -49,6 +50,7 @@ __all__ = [
     "BEAM_INTEGRATION_RULES",
     "BEARING_CLASSES",
     "ELASTOMERIC_BEARING_CLASSES",
+    "FRAME_ELEMENT_CLASSES",
     "GEOM_TRANSF_TYPES",
     "SLIDING_BEARING_CLASSES",
     "BeamWithHingesElement",

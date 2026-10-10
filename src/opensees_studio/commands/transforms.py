@@ -20,7 +20,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 
 from opensees_studio.commands.base import ProjectCommand
-from opensees_studio.core import NodalLoad, PlainLoadPattern, UniformElementLoad
+from opensees_studio.core import NodalLoad, PlainLoadPattern, PointElementLoad, UniformElementLoad
 
 if TYPE_CHECKING:
     from opensees_studio.viewmodels import ProjectViewModel
@@ -82,6 +82,7 @@ class ReplicateCommand(ProjectCommand):
         self._added_element_ids: set[int] = set()
         self._added_nodal_loads: list[tuple[PlainLoadPattern, NodalLoad]] = []
         self._added_element_loads: list[tuple[PlainLoadPattern, UniformElementLoad]] = []
+        self._added_point_loads: list[tuple[PlainLoadPattern, PointElementLoad]] = []
 
     def redo(self) -> None:
         dx, dy, dz = self._offset
@@ -98,6 +99,7 @@ class ReplicateCommand(ProjectCommand):
         self._added_element_ids.clear()
         self._added_nodal_loads.clear()
         self._added_element_loads.clear()
+        self._added_point_loads.clear()
 
         for k in range(1, self._n_copies + 1):
             mapping: dict[int, int] = {}
@@ -163,6 +165,13 @@ class ReplicateCommand(ProjectCommand):
                     )
                     pattern.element_loads.append(copied_element_load)
                     self._added_element_loads.append((pattern, copied_element_load))
+            for point_load in list(pattern.point_loads):
+                if point_load.element_id in element_mapping:
+                    copied_point_load = point_load.model_copy(
+                        update={"element_id": element_mapping[point_load.element_id]}
+                    )
+                    pattern.point_loads.append(copied_point_load)
+                    self._added_point_loads.append((pattern, copied_point_load))
 
     def undo(self) -> None:
         self.project.nodes[:] = [n for n in self.project.nodes if n.id not in self._added_node_ids]
@@ -174,10 +183,13 @@ class ReplicateCommand(ProjectCommand):
             pattern.nodal_loads[:] = [x for x in pattern.nodal_loads if x is not nodal_load]
         for pattern, element_load in self._added_element_loads:
             pattern.element_loads[:] = [x for x in pattern.element_loads if x is not element_load]
+        for pattern, point_load in self._added_point_loads:
+            pattern.point_loads[:] = [x for x in pattern.point_loads if x is not point_load]
         self._added_node_ids.clear()
         self._added_element_ids.clear()
         self._added_nodal_loads.clear()
         self._added_element_loads.clear()
+        self._added_point_loads.clear()
         self._notify()
 
 

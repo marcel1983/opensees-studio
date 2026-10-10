@@ -263,6 +263,7 @@ class Project(BaseModel):
             ValueError: with a single combined message listing all problems.
         """
         node_ids = {n.id for n in self.nodes}
+        element_ids = {e.id for e in self.elements}
         material_ids = {m.id for m in self.materials}
         section_ids = {s.id for s in self.sections}
         ts_ids = {ts.id for ts in self.time_series}
@@ -345,6 +346,11 @@ class Project(BaseModel):
             for nl in getattr(pat, "nodal_loads", []):
                 if nl.node_id not in node_ids:
                     problems.append(f"Pattern {pat.id} loads missing node {nl.node_id}.")
+            for pl in getattr(pat, "point_loads", []):
+                if pl.element_id not in element_ids:
+                    problems.append(
+                        f"Pattern {pat.id} has a point load on missing element {pl.element_id}."
+                    )
             for nid in getattr(pat, "node_ids", []):
                 if nid not in node_ids:
                     problems.append(f"Pattern {pat.id} drives missing node {nid}.")

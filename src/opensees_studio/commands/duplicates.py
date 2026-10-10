@@ -247,6 +247,32 @@ class FixDuplicatesCommand(ProjectCommand):
                 self.report.repointed_loads += 1
                 kept.append(load.model_copy(update={"element_id": to_id}))
             pattern.element_loads[:] = kept
+            self._move_point_loads(project, pattern, from_id, to_id)
+
+    def _move_point_loads(
+        self, project: Project, pattern: PlainLoadPattern, from_id: int, to_id: int
+    ) -> None:
+        # A duplicate may run the other way (j to i); its x is then measured from
+        # the keeper's end j.
+        by_id = {element.id: element for element in project.elements}
+        reversed_ = tuple(by_id[from_id].nodes) != tuple(by_id[to_id].nodes)
+        seen = {
+            (load.element_id, load.py, load.pz, load.px, load.x) for load in pattern.point_loads
+        }
+        kept = []
+        for load in pattern.point_loads:
+            if load.element_id != from_id:
+                kept.append(load)
+                continue
+            x = 1.0 - load.x if reversed_ else load.x
+            key = (to_id, load.py, load.pz, load.px, x)
+            if key in seen:
+                self.report.dropped_copy_loads += 1
+                continue
+            seen.add(key)
+            self.report.repointed_loads += 1
+            kept.append(load.model_copy(update={"element_id": to_id, "x": x}))
+        pattern.point_loads[:] = kept
 
     def _drop_element_loads(self, project: Project, element_id: int) -> None:
         for pattern in project.load_patterns:
@@ -255,3 +281,6 @@ class FixDuplicatesCommand(ProjectCommand):
             kept = [load for load in pattern.element_loads if load.element_id != element_id]
             self.report.dropped_copy_loads += len(pattern.element_loads) - len(kept)
             pattern.element_loads[:] = kept
+            kept_points = [load for load in pattern.point_loads if load.element_id != element_id]
+            self.report.dropped_copy_loads += len(pattern.point_loads) - len(kept_points)
+            pattern.point_loads[:] = kept_points

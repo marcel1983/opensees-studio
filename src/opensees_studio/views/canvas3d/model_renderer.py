@@ -27,6 +27,7 @@ from opensees_studio.core import (
     ForceBeamColumn,
     NodalLoad,
     PlainLoadPattern,
+    PointElementLoad,
     Project,
     QuadElement,
     ShellMITC4Element,
@@ -758,30 +759,11 @@ class ModelRenderer:
             for eload in pattern.element_loads:
                 if not isinstance(eload, UniformElementLoad):
                     continue
-                elem = next((e for e in project.elements if e.id == eload.element_id), None)
-                if elem is None:
+                frame = self._element_local_frame(project, eload.element_id)
+                if frame is None:
                     continue
-                n_i, n_j = elem.nodes
-                node_i = next((n for n in project.nodes if n.id == n_i), None)
-                node_j = next((n for n in project.nodes if n.id == n_j), None)
-                if node_i is None or node_j is None:
-                    continue
-
-                pi = np.asarray(node_i.coords, dtype=float)
-                pj = np.asarray(node_j.coords, dtype=float)
-                axis = pj - pi
+                pi, axis, (x_local, y_local, z_local) = frame
                 L = float(np.linalg.norm(axis))
-                if L < 1e-9:
-                    continue
-                x_local = axis / L
-
-                # Build local y (same convention as diagram renderer).
-                z_global = np.array([0.0, 0.0, 1.0])
-                y_local = np.cross(z_global, x_local)
-                if float(np.linalg.norm(y_local)) < 1e-6:
-                    y_local = np.cross(np.array([0.0, 1.0, 0.0]), x_local)
-                y_local = y_local / float(np.linalg.norm(y_local))
-                z_local = np.cross(x_local, y_local)
 
                 # Load vector in global = wx·x_local + wy·y_local + wz·z_local.
                 load_vec = eload.wx * x_local + eload.wy * y_local + eload.wz * z_local
@@ -807,6 +789,59 @@ class ModelRenderer:
                         lighting=True,
                     )
                     self._aux_actors.append(actor)
+
+            # ── Point loads inside frame elements ──
+            # One full-size arrow ending at the load point, in the element's
+            # local frame (same axes as the distributed loads above).
+            point_load_color = (0.85, 0.2, 0.75)  # magenta
+            for pload in pattern.point_loads:
+                if not isinstance(pload, PointElementLoad):
+                    continue
+                frame = self._element_local_frame(project, pload.element_id)
+                if frame is None:
+                    continue
+                pi, axis, (x_local, y_local, z_local) = frame
+                load_vec = pload.px * x_local + pload.py * y_local + pload.pz * z_local
+                mag = float(np.linalg.norm(load_vec))
+                if mag < 1e-12:
+                    continue
+                direction = load_vec / mag
+                pt = pi + pload.x * axis
+                arrow = pv.Arrow(
+                    start=tuple(pt - direction * scale),
+                    direction=tuple(direction),
+                    scale=scale,
+                )
+                actor = self._plotter.add_mesh(
+                    arrow, color=point_load_color, pickable=False, lighting=True
+                )
+                self._aux_actors.append(actor)
+
+    @staticmethod
+    def _element_local_frame(
+        project: Project, element_id: int
+    ) -> tuple[np.ndarray, np.ndarray, tuple[np.ndarray, np.ndarray, np.ndarray]] | None:
+        """``(p_i, p_j - p_i, (x, y, z))`` of a two-node element, None if it has none."""
+        elem = next((e for e in project.elements if e.id == element_id), None)
+        if elem is None or len(elem.nodes) != 2:
+            return None
+        node_i = next((n for n in project.nodes if n.id == elem.nodes[0]), None)
+        node_j = next((n for n in project.nodes if n.id == elem.nodes[1]), None)
+        if node_i is None or node_j is None:
+            return None
+        pi = np.asarray(node_i.coords, dtype=float)
+        axis = np.asarray(node_j.coords, dtype=float) - pi
+        length = float(np.linalg.norm(axis))
+        if length < 1e-9:
+            return None
+        x_local = axis / length
+        # Same convention as the distributed loads and the diagram renderer.
+        y_local = np.cross(np.array([0.0, 0.0, 1.0]), x_local)
+        if float(np.linalg.norm(y_local)) < 1e-6:
+            y_local = np.cross(np.array([0.0, 1.0, 0.0]), x_local)
+        y_local = y_local / float(np.linalg.norm(y_local))
+        z_local = np.cross(x_local, y_local)
+        return pi, axis, (x_local, y_local, z_local)
 
     # ── mode update ─────────────────────────────────────────────────
     def _apply_mode_to_points(self) -> None:

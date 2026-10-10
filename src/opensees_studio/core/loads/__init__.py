@@ -4,7 +4,7 @@ OpenSees load model:
 - ``timeSeries``: scalar function of time (Linear, Constant, Path, …)
 - ``pattern``: applies a time series to a collection of loads
 - ``load``: nodal force vector
-- ``eleLoad``: distributed element load
+- ``eleLoad``: distributed (``-beamUniform``) or point (``-beamPoint``) element load
 
 Hierarchy here mirrors that. Patterns own their child loads — when a
 pattern is deleted, its loads go with it.
@@ -16,7 +16,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt
 
-from opensees_studio.core._base import Entity
+from opensees_studio.core._base import Entity, omit_when_default
 
 
 # ──────────────────────────── Time series ────────────────────────────
@@ -206,6 +206,26 @@ class UniformElementLoad(BaseModel):
     wx: float = 0.0
 
 
+class PointElementLoad(BaseModel):
+    """Concentrated load inside a frame element — ``eleLoad -ele N -type -beamPoint Py Pz xL Px``.
+
+    Conventions (OpenSees):
+    - ``py``, ``pz`` are transverse forces in the element's **local** y / z
+      axes, ``px`` an optional axial force along local x.
+    - ``x`` is the position as a fraction of the element length, measured
+      from end i (0 = node i, 1 = node j).
+    Only beam-column elements take it (see ``FRAME_ELEMENT_CLASSES``).
+    """
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    element_id: PositiveInt
+    py: float = 0.0
+    pz: float = 0.0
+    px: float = 0.0
+    x: float = Field(default=0.5, ge=0.0, le=1.0, description="Relative position x/L from end i.")
+
+
 # ──────────────────────────── Patterns ────────────────────────────
 class PlainLoadPattern(Entity):
     """``pattern Plain`` — links a time series to a set of nodal and element loads."""
@@ -214,6 +234,9 @@ class PlainLoadPattern(Entity):
     time_series_id: PositiveInt
     nodal_loads: list[NodalLoad] = Field(default_factory=list)
     element_loads: list[UniformElementLoad] = Field(default_factory=list)
+    point_loads: list[PointElementLoad] = Field(default_factory=list)
+
+    serialize_without_defaults = omit_when_default("point_loads")
 
 
 class UniformExcitationPattern(Entity):

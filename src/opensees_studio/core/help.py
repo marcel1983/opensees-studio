@@ -1685,6 +1685,34 @@ moment, which is what Display → Force Diagram draws.
 """,
             "define.plain_pattern",
             "display.force_diagram",
+            "assign.frame_point_load",
+        ),
+        "assign.frame_point_load": _t(
+            "Assign → Frame → Point Load",
+            "Assign — frame",
+            "A concentrated force inside a member, in the element's local axes.",
+            """
+# Values
+- **Px, Py, Pz** — the force along the element's **local** x (axial), y and z
+  axes. As for a distributed load, gravity on a horizontal member is usually a
+  negative Py.
+- **Distance from end i** — where the load acts, either **relative** (a
+  fraction of the length, 0 at node i, 1 at node j) or **absolute** (a length).
+  An absolute distance becomes a different fraction on members of different
+  length; a member shorter than the distance is skipped and named in the log.
+- Only frame (beam-column) elements take it: trusses, zero-length elements,
+  bearings and faces in the selection are skipped.
+
+# Mechanics
+It is emitted as `eleLoad -beamPoint`. An elastic beam-column takes the exact
+fixed-end forces; a force- or displacement-based element resolves the load
+through its integration points, so the end forces are approximate unless the
+member is split at the load (Edit → Mesh keeps the load on the piece it falls
+on). A force-based element only takes an element load into account once it
+iterates: run its case with Newton and the NormUnbalance test.
+""",
+            "assign.distributed_load",
+            "define.plain_pattern",
         ),
         "assign.hinge": _t(
             "Assign → Frame → Hinge",
@@ -2209,6 +2237,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_assign_geom_transf": "assign.geom_transf",
     "_act_assign_integration": "assign.integration",
     "_act_assign_distributed_load": "assign.distributed_load",
+    "_act_assign_frame_point_load": "assign.frame_point_load",
     "_act_assign_hinge": "assign.hinge",
     # ── Analyze ─────────────────────────────────────────────────────
     "_act_case_manager": "analyze.cases",

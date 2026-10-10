@@ -264,3 +264,8 @@ Element = Annotated[
     | SingleFPBearingElement,
     Field(discriminator="type"),
 ]
+
+#: Beam-column elements: the ones that take an element load along their span
+#: (``eleLoad -beamUniform`` / ``-beamPoint``). Trusses, zero-length elements,
+#: bearings and faces do not.
+FRAME_ELEMENT_CLASSES = (ElasticBeamColumn, ForceBeamColumn, DispBeamColumn, BeamWithHingesElement)

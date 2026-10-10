@@ -9,6 +9,7 @@ Adds on top of Phase 3:
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
@@ -39,6 +40,7 @@ from opensees_studio.commands import (
     AddEqualDOFConstraintCommand,
     AddNodalLoadsCommand,
     AddNodesCommand,
+    AddPointElementLoadsCommand,
     AddSectionsCommand,
     AssignMaterialCommand,
     AssignSectionCommand,
@@ -108,6 +110,7 @@ from opensees_studio.views.dialogs import (
     AssignLoadDialog,
     AssignMassesDialog,
     AssignMaterialDialog,
+    AssignPointElementLoadDialog,
     AssignSectionDialog,
     AssignSupportDialog,
     AssignZeroLengthSectionDialog,
@@ -322,6 +325,7 @@ class MainWindow(QMainWindow):
         self._act_assign_zls = QAction("&Zero-Length Section…", self)
         self._act_assign_bearing = QAction("&Bearing…", self)
         self._act_assign_distributed_load = QAction("&Distributed Load…", self)
+        self._act_assign_frame_point_load = QAction("&Point Load…", self)
         self._act_assign_hinge = QAction("Plastic &Hinge…", self)
         self._act_assign_section = QAction("S&ection…", self)
         self._act_assign_material = QAction("&Material…", self)
@@ -444,6 +448,7 @@ class MainWindow(QMainWindow):
         m_frame.addAction(self._act_assign_integration)
         m_frame.addSeparator()
         m_frame.addAction(self._act_assign_distributed_load)
+        m_frame.addAction(self._act_assign_frame_point_load)
         m_frame.addAction(self._act_assign_hinge)
 
         m_analyze = mb.addMenu("&Analyze")
@@ -703,6 +708,7 @@ class MainWindow(QMainWindow):
         self._act_assign_zls.triggered.connect(self._on_assign_zls)
         self._act_assign_bearing.triggered.connect(self._on_assign_bearing)
         self._act_assign_distributed_load.triggered.connect(self._on_assign_distributed_load)
+        self._act_assign_frame_point_load.triggered.connect(self._on_assign_frame_point_load)
         self._act_assign_hinge.triggered.connect(self._on_assign_hinge)
         self._act_assign_section.triggered.connect(self._on_assign_section)
         self._act_assign_material.triggered.connect(self._on_assign_material)
@@ -1873,6 +1879,71 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, "Assign Distributed Load failed", str(exc))
 
+    def _on_assign_frame_point_load(self) -> None:
+        """Assign → Frame → Point Load: a concentrated load inside each selected frame."""
+        from opensees_studio.core import FRAME_ELEMENT_CLASSES
+        from opensees_studio.views.dialogs.point_element_load import RELATIVE
+
+        project = self._vm.project
+        selected = set(self._canvas.selection.elements)
+        if project is None or not selected:
+            QMessageBox.information(
+                self, "Assign Frame Point Load", "Select one or more frame elements first."
+            )
+            return
+        frames = [
+            el
+            for el in project.elements
+            if el.id in selected and isinstance(el, FRAME_ELEMENT_CLASSES)
+        ]
+        if not frames:
+            QMessageBox.information(
+                self,
+                "Assign Frame Point Load",
+                "None of the selected elements is a frame (beam-column) element.",
+            )
+            return
+        dlg = AssignPointElementLoadDialog(len(frames), self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        py, pz, px = dlg.values()
+
+        positions: dict[int, float] = {}
+        too_short: list[int] = []
+        coords = {node.id: node.coords for node in project.nodes}
+        for el in frames:
+            if dlg.mode() == RELATIVE:
+                positions[el.id] = dlg.distance()
+                continue
+            length = math.dist(coords[el.nodes[0]], coords[el.nodes[1]])
+            if length <= 0.0 or dlg.distance() > length:
+                too_short.append(el.id)
+                continue
+            positions[el.id] = dlg.distance() / length
+        if not positions:
+            QMessageBox.warning(
+                self,
+                "Assign Frame Point Load",
+                "The distance is longer than every selected element.",
+            )
+            return
+        try:
+            self._vm.apply_command(
+                AddPointElementLoadsCommand(self._vm, positions, py=py, pz=pz, px=px),
+            )
+        except Exception as exc:
+            QMessageBox.critical(self, "Assign Frame Point Load failed", str(exc))
+            return
+        skipped = len(selected) - len(frames)
+        message = f"Assigned a point load to {len(positions)} frame element(s)."
+        if skipped:
+            message += f" Skipped {skipped} element(s) that are not frames."
+        if too_short:
+            message += " Skipped element(s) shorter than the distance: " + ", ".join(
+                str(eid) for eid in too_short
+            )
+        self._log(message)
+
     def _on_assign_hinge(self) -> None:
         from opensees_studio.core import BeamWithHingesElement
 
@@ -2957,6 +3028,7 @@ class MainWindow(QMainWindow):
         self._act_assign_zls.setEnabled(has_project and n_sel == 2)
         self._act_assign_bearing.setEnabled(has_project and n_sel == 2)
         self._act_assign_distributed_load.setEnabled(has_project and has_selected_elements)
+        self._act_assign_frame_point_load.setEnabled(has_project and has_selected_elements)
         self._act_assign_hinge.setEnabled(has_project and has_selected_elements)
         self._act_assign_geom_transf.setEnabled(has_project and has_selected_elements)
         self._act_assign_integration.setEnabled(has_project and has_selected_elements)
