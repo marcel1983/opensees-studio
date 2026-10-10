@@ -1708,8 +1708,11 @@ It is emitted as `eleLoad -beamPoint`. An elastic beam-column takes the exact
 fixed-end forces; a force- or displacement-based element resolves the load
 through its integration points, so the end forces are approximate unless the
 member is split at the load (Edit → Mesh keeps the load on the piece it falls
-on). A force-based element only takes an element load into account once it
-iterates: run its case with Newton and the NormUnbalance test.
+on). A force-based element only takes an element load into its forces after
+a solve, so the runner follows each static step that loads one with a second
+solve at the same load; any algorithm and test then gives the converged answer,
+except a test relative to the first iteration (RelativeNormDispIncr), which is
+refused for more than one step.
 """,
             "assign.distributed_load",
             "define.plain_pattern",

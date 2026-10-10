@@ -22,14 +22,19 @@ refused instead of silently downgraded).
 
 ### Fixed
 
-- **Element loads on force-based frames lagged one step in a Linear static
-  case.** A `forceBeamColumn` or `beamWithHinges` only takes a uniform or point
-  element load into its resisting force after the solve, so the default static
-  case reported the fixed-end reactions (8.42 / 1.58 instead of 7.5 / 2.5 for a
-  point load at a quarter span) and no end rotation. Such a step is now followed
-  by a second Linear solve at the same load, which gives the exact answer for
-  elastic sections without a convergence tolerance. Cases without element loads
-  on those elements, and every non-Linear case, run as before; no file changes.
+- **Element loads on force-based frames lagged one step in a static case.** A
+  `forceBeamColumn` or `beamWithHinges` only takes a uniform or point element
+  load into its resisting force after the solve, so the first solve of a step
+  moved nothing: the default Linear case stopped there, and Newton (or Modified
+  / Krylov Newton) with NormDispIncr or EnergyIncr took the zero increment as
+  convergence. Both reported the fixed-end reactions (8.42 / 1.58 instead of
+  7.5 / 2.5 for a point load at a quarter span) and no end rotation. Such a step
+  is now followed by a second solve at the same load with the case's own
+  algorithm and test, which gives the converged answer (for Linear and elastic
+  sections the exact one, with no tolerance involved). RelativeNormDispIncr
+  cannot converge there past the first step and is refused with the reason.
+  Cases without element loads on those elements, and Newton with NormUnbalance,
+  run as before; no file changes.
 
 ## [0.0.8] — 2026-10-10
 

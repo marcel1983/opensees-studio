@@ -892,7 +892,7 @@ class OpenSeesRunner:
             self._emit_patterns_for_case(preload_case.pattern_ids)
             applied_ids.extend(preload_case.pattern_ids)
             self._setup_analysis(preload_case)
-            correct = self._needs_linear_correction(preload_case, applied_ids)
+            correct = self._needs_correction_solve(preload_case, applied_ids)
             for step in range(preload_case.n_steps):
                 if self._analyze_static_step(preload_case, correct) != 0:
                     raise RuntimeError(
@@ -902,18 +902,35 @@ class OpenSeesRunner:
         ops.loadConst("-time", 0.0)
         ops.wipeAnalysis()
 
-    def _needs_linear_correction(self, case: StaticCase, pattern_ids: list[int]) -> bool:
-        """Whether a Linear step must be followed by a zero-increment correction solve.
+    #: Convergence tests that measure the force unbalance: an iterating
+    #: algorithm with one of these already sees a hidden element load.
+    _FORCE_TESTS = frozenset({"NormUnbalance"})
+    #: Tests relative to the first iteration, which is zero in such a step.
+    _RELATIVE_TESTS = frozenset({"RelativeNormDispIncr", "RelativeEnergyIncr"})
+
+    def _needs_correction_solve(self, case: StaticCase, pattern_ids: list[int]) -> bool:
+        """Whether each step must be followed by a zero-increment correction solve.
 
         A force-based frame (``forceBeamColumn``, ``beamWithHinges``) only takes
         an element load (``-beamUniform``, ``-beamPoint``) into its resisting
         force at its next state determination, which comes after the solve.
-        A single Linear solve therefore lags by one load increment: a simply
-        supported beam reports the fixed-end reactions and no rotation after
-        the first step. The elastic and displacement-based frames put the load
-        straight into their resisting force and are exact as they are.
+        The first solve of a step therefore sees no unbalance from it and moves
+        nothing: Linear stops there, and an iterating algorithm whose test
+        measures the displacement or energy increment (NormDispIncr, EnergyIncr)
+        takes that zero increment as convergence. Either way the step lags one
+        load increment: a simply supported beam reports the fixed-end reactions
+        and no rotation after the first step. A force test (NormUnbalance) sees
+        the unbalance after the update and iterates on it, so Newton with
+        NormUnbalance is already right. The elastic and displacement-based
+        frames put the load straight into their resisting force.
+
+        Raises ``ValueError`` for a test relative to the first iteration with
+        more than one step: from the second step on that first increment is
+        exactly zero, so the relative reduction can never be met.
         """
-        if case.algorithm != "Linear" or case.integrator != "LoadControl":
+        if case.integrator != "LoadControl":
+            return False
+        if case.algorithm != "Linear" and case.test in self._FORCE_TESTS:
             return False
         force_based = {
             el.id
@@ -928,19 +945,29 @@ class OpenSeesRunner:
                 continue
             loads = [*getattr(pat, "element_loads", ()), *getattr(pat, "point_loads", ())]
             if any(load.element_id in force_based for load in loads):
-                return True
-        return False
+                break
+        else:
+            return False
+        if case.algorithm != "Linear" and case.test in self._RELATIVE_TESTS and case.n_steps > 1:
+            raise ValueError(
+                f"StaticCase {case.id}: the {case.test} test cannot converge over "
+                f"{case.n_steps} steps here: a force-based frame carries an element "
+                "load, so the first iteration of every step after the first moves "
+                "nothing. Use NormDispIncr, EnergyIncr or NormUnbalance."
+            )
+        return True
 
     def _analyze_static_step(self, case: StaticCase, correct: bool) -> int:
-        """One static step; with ``correct``, a second Linear solve at the same load.
+        """One static step; with ``correct``, a second solve at the same load.
 
-        The second solve runs with a zero load increment, so it moves neither
-        the load factor nor pseudo-time and only removes the unbalance the
-        force-based elements report once updated (see
-        :meth:`_needs_linear_correction`). For linear sections that is the
-        exact answer, with no convergence tolerance involved; Newton with a
-        force test gets the same result but needs a tolerance that suits the
-        model's force units.
+        The second solve runs the case's own algorithm and test with a zero
+        load increment, so it moves neither the load factor nor pseudo-time and
+        only removes the unbalance the force-based elements report once updated
+        (see :meth:`_needs_correction_solve`). For Linear and linear sections
+        that is the exact answer, with no convergence tolerance involved; an
+        iterating algorithm converges on it from the state the first solve
+        committed (the previous displacements, with the new load inside the
+        elements).
         """
         ops = self._ops
         status = ops.analyze(1)
@@ -1091,7 +1118,7 @@ class OpenSeesRunner:
         element_forces: dict[int, np.ndarray] = {}
         element_stresses: dict[int, np.ndarray] = {}
 
-        correct = self._needs_linear_correction(case, case.pattern_ids)
+        correct = self._needs_correction_solve(case, case.pattern_ids)
         for step in range(case.n_steps):
             status = self._analyze_static_step(case, correct)
             if status != 0:
