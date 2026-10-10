@@ -156,6 +156,18 @@ from opensees_studio.core.loads import (
     UniformElementLoad,
     UniformExcitationPattern,
 )
+from opensees_studio.core.material_catalog import (
+    TypicalMaterial,
+)
+from opensees_studio.core.material_catalog import (
+    families as material_families,
+)
+from opensees_studio.core.material_catalog import (
+    load_materials as material_catalog,
+)
+from opensees_studio.core.material_catalog import (
+    to_material as typical_material_to_model,
+)
 from opensees_studio.core.materials import (
     Concrete01,
     Concrete02,
@@ -354,6 +366,10 @@ __all__ = [  # noqa: RUF022 - grouped by domain under section comments, not alph
     "ElasticIsotropic",
     "ElasticUniaxial",
     "Steel01",
+    "TypicalMaterial",
+    "material_catalog",
+    "material_families",
+    "typical_material_to_model",
     "Steel02",
     "Concrete01",
     "Concrete02",

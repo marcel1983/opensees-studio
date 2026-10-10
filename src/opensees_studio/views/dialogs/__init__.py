@@ -46,6 +46,7 @@ from opensees_studio.views.dialogs.quick_grid_lines import QuickGridLinesDialog
 from opensees_studio.views.dialogs.replicate import ReplicateDialog
 from opensees_studio.views.dialogs.run_analysis import RunAnalysisDialog
 from opensees_studio.views.dialogs.section_library import SectionLibraryDialog
+from opensees_studio.views.dialogs.typical_materials import TypicalMaterialsDialog
 from opensees_studio.views.dialogs.uniform_excitation import UniformExcitationDialog
 
 __all__ = [
@@ -88,6 +89,7 @@ __all__ = [
     "ReplicateDialog",
     "RunAnalysisDialog",
     "SectionLibraryDialog",
+    "TypicalMaterialsDialog",
     "UniformExcitationDialog",
     "member_sections",
 ]

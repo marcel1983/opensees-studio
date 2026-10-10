@@ -166,6 +166,42 @@ def stress_scale(source: UnitSystem, target: UnitSystem) -> float:
     return force_scale(source, target) / length_scale(source, target) ** 2
 
 
+def mass_scale(source: UnitSystem, target: UnitSystem) -> float:
+    """Factor taking a *mass* from ``source`` units to ``target`` units.
+
+    The coherent mass unit of a force/length system is ``force·s²/length``: the
+    unit that makes ``F = m·a`` come out in the system's own force unit. For the
+    US systems that is ``kip·s²/ft`` (1000 slug) and ``kip·s²/in``. Densities —
+    what a material library carries — scale with mass over length cubed.
+    """
+    return force_scale(source, target) / length_scale(source, target)
+
+
+def density_scale(source: UnitSystem, target: UnitSystem) -> float:
+    """Factor taking a mass density (mass / length³) from ``source`` to ``target``.
+
+    ``1 kg/m³`` is ``1e-12 t/mm³`` and ``9.3575e-11 kip·s²/in⁴``; the ASCE 7
+    tabulated 150 lb/ft³ of reinforced concrete becomes 2402.77 kg/m³.
+    """
+    return mass_scale(source, target) / length_scale(source, target) ** 3
+
+
+#: The coherent mass-density unit of each system — mass over length cubed, with
+#: mass = force·s²/length so that a density times a volume gives a mass whose
+#: weight comes out in the system's own force unit.
+_MASS_DENSITY_LABEL: dict[UnitSystem, str] = {
+    UnitSystem.SI_M_N: "kg/m³",
+    UnitSystem.SI_MM_N: "t/mm³",
+    UnitSystem.US_FT_KIP: "kip·s²/ft⁴",
+    UnitSystem.US_IN_KIP: "kip·s²/in⁴",
+}
+
+
+def mass_density_label(units: UnitSystem) -> str:
+    """The unit a mass density is expressed in for ``units``."""
+    return _MASS_DENSITY_LABEL[units]
+
+
 #: Quantity kinds a result view can declare, mapped to their factor name.
 #: Velocities and accelerations are lengths per time power: only the length
 #: changes between systems, since both systems share the second.

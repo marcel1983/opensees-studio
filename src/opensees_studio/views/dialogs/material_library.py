@@ -10,6 +10,7 @@ from __future__ import annotations
 from pydantic import ValidationError
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QDialog,
     QDialogButtonBox,
     QHBoxLayout,
     QInputDialog,
@@ -63,10 +64,17 @@ class MaterialLibraryDialog(FittedDialog):
 
         btn_row = QHBoxLayout()
         self._add_btn = QPushButton("Add…")
+        self._library_btn = QPushButton("From library…")
+        self._library_btn.setToolTip(
+            "Typical construction materials — concrete, reinforcing and structural "
+            "steel, and masonry — each with the clause its values come from.",
+        )
         self._delete_btn = QPushButton("Delete")
         self._add_btn.clicked.connect(self._on_add)
+        self._library_btn.clicked.connect(self._on_add_from_library)
         self._delete_btn.clicked.connect(self._on_delete)
         btn_row.addWidget(self._add_btn)
+        btn_row.addWidget(self._library_btn)
         btn_row.addWidget(self._delete_btn)
         left.addLayout(btn_row)
 
@@ -171,6 +179,30 @@ class MaterialLibraryDialog(FittedDialog):
             return
         self._vm.apply_command(AddMaterialsCommand(self._vm, [new_material]))
         self._select_by_id(new_id)
+
+    def _on_add_from_library(self) -> None:
+        """Insert a typical construction material, converted to this project's units.
+
+        One undoable step, like every other change this dialog makes: nothing is
+        committed until the picker's Insert button is pressed.
+        """
+        if self._vm.project is None:
+            return
+        from opensees_studio.views.dialogs.typical_materials import TypicalMaterialsDialog
+
+        units = self._vm.project.meta.units
+        picker = TypicalMaterialsDialog(
+            units=units,
+            next_id=self._vm.project.next_material_id(),
+            parent=self,
+        )
+        if picker.exec() != QDialog.DialogCode.Accepted:
+            return
+        material = picker.result_material()
+        if material is None:
+            return
+        self._vm.apply_command(AddMaterialsCommand(self._vm, [material]))
+        self._select_by_id(material.id)
 
     def _select_by_id(self, target_id: int) -> None:
         for i in range(self._list.count()):

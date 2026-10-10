@@ -1232,6 +1232,15 @@ whether to restrain the out-of-plane DOF.
             """
 Materials are the constitutive laws the elements and fibre sections point at.
 
+- **From library…** inserts a *typical construction material*: specified concrete
+  strengths (f'c from 17 MPa up, with ACI's 0.002 and 0.003 strains), the
+  reinforcing grades ACI permits (280, 420, 550 and A706's 690), the structural
+  steels AISC tabulates (A992, A36, A572 Gr. 50, A500 Gr. B) and masonry at its
+  usual specified strengths (Em = 700 f'm for clay masonry, 900 f'm for concrete
+  block). Each row names the clause it comes from, and the picker shows the
+  published value beside the one that will be inserted, converted to this
+  project's units. Masonry enters as an elastic material: an existing wall's
+  nonlinear backbone is a per-building decision, not a table lookup.
 - **Uniaxial** (used by trusses, zero-length elements and fibre sections):
   `Elastic`, `ElasticPP`, `Hardening`, `Steel01`, `Steel02`, `Concrete01`,
   `Concrete02`, `Concrete04`, `Hysteretic`, `HystereticSM`.
