@@ -118,6 +118,16 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   zero-length element or a bearing, nodes tied by `equalDOF` — are listed with
   their reason and left alone; the repair merges the rest, repoints the loads
   and constraints, and is one undoable step.
+- **Review before running** — Analyze → Check Model (F6) finds, without running
+  anything, the nodes nothing connects, elements that point at a deleted node or
+  have zero length, parts of the model with no support, and **static
+  instability**: groups of nodes that can move without deforming any element (a
+  square of bars with no diagonal, a beam pinned at one end, a truss modelled with
+  free rotations). Each finding names the nodes and elements involved, says what
+  to look at, and can be selected in the canvas. Run performs the same check on
+  its way in: errors stop at the list with *Run anyway* offered (Cancel is the
+  default), warnings go to the console. Stability is a linear, small-displacement
+  test of the connectivity, independent of units and of member stiffness.
 - **Copying geometry** — Edit → Move, Replicate (an offset applied N times,
   which carries the loads of the copied nodes and elements with it) and Mirror
   across a global plane.

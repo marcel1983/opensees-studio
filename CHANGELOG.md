@@ -9,6 +9,33 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Added
+
+- **Analyze → Check Model (F6): review the model before it runs.** OpenSees does
+  not explain a model it cannot solve — a node nobody connects, a member that
+  points at a deleted node or a frame missing one support all end as a singular
+  stiffness matrix and displacements that are really the load vector. The check
+  reports, without running anything: free nodes that no element or constraint
+  reaches (an error; a fully restrained one is a warning), elements that refer to
+  a missing node, repeat a node or have zero length, zero-length elements whose
+  nodes are apart, parts of the model with no support, several supported parts
+  (with the pair of nodes sitting at the same point when there is one, since that
+  is nearly always a node that was never merged), and **static instability** —
+  groups of nodes that can move without deforming any element, reported with the
+  nodes and the DOF (Ux, Rz …) that are free and the number of independent
+  motions. Every finding can be selected in the canvas.
+  Stability is decided on an idealised model, one unit-stiffness spring per
+  deformation mode of each element (a bar has one, a 3D frame six, a shell
+  eighteen), so the answer does not depend on units or on how stiff one member is
+  next to another, and needs no OpenSees. It is a linear, small-displacement test:
+  it does not see gaps, cables or sliders, and a part above 3000 free DOF is
+  skipped with a note (`OPENSEES_STUDIO_STABILITY_MAX_DOF` raises the limit).
+  **Run now does the same check on its way in**: errors stop at the list with
+  *Run anyway* (Cancel is the default button), and warnings are written to the
+  console without interrupting. Mechanism counts were checked against the rank of
+  an independently built compatibility matrix on truss grids of up to 3280 free
+  DOF, and all 31 shipped examples pass without a finding.
+
 ## [0.0.8] — 2026-10-10
 
 The release that makes the drawing tools work on a model that already has

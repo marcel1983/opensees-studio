@@ -68,6 +68,7 @@ from opensees_studio.core import (
 )
 from opensees_studio.core.geometry.ordering import QuadOrderError, order_quad_nodes
 from opensees_studio.core.help import ACTION_TOPICS, TOPIC_PROPERTY
+from opensees_studio.core.model_check import check_model
 from opensees_studio.services import PROJECT_FILE_SUFFIX
 from opensees_studio.services.deformation import (
     linear_static_auto_scale,
@@ -123,6 +124,7 @@ from opensees_studio.views.dialogs import (
     MaterialTesterDialog,
     MeshDialog,
     MirrorDialog,
+    ModelCheckDialog,
     MoveDialog,
     PathTimeSeriesDialog,
     PlainPatternDialog,
@@ -343,6 +345,7 @@ class MainWindow(QMainWindow):
 
         # Analyze
         self._act_case_manager = QAction("&Cases…", self, shortcut="Ctrl+Shift+A")
+        self._act_check_model = QAction("Check &Model…", self, shortcut="F6")
         self._act_run = QAction("&Run…", self, shortcut="F5")
 
         # View
@@ -449,6 +452,7 @@ class MainWindow(QMainWindow):
         m_analyze = mb.addMenu("&Analyze")
         m_analyze.addAction(self._act_case_manager)
         m_analyze.addSeparator()
+        m_analyze.addAction(self._act_check_model)
         m_analyze.addAction(self._act_run)
 
         m_display = mb.addMenu("&Display")
@@ -711,6 +715,7 @@ class MainWindow(QMainWindow):
 
         # Analyze
         self._act_case_manager.triggered.connect(self._on_case_manager)
+        self._act_check_model.triggered.connect(self._on_check_model)
         self._act_run.triggered.connect(self._on_run_analysis)
 
         # Display
@@ -2067,6 +2072,52 @@ class MainWindow(QMainWindow):
             self._on_new()
         AnalysisCaseManagerDialog(self._vm, self).exec()
 
+    def _on_check_model(self) -> None:
+        """Analyze → Check Model: loose nodes, unconnected elements, mechanisms."""
+        project = self._vm.project
+        if project is None:
+            QMessageBox.information(self, "Check Model", "Open or create a project first.")
+            return
+        report = check_model(project)
+        dlg = ModelCheckDialog(
+            project, report=report, on_select=self._select_report_row, parent=self
+        )
+        try:
+            dlg.exec()
+        finally:
+            dlg.deleteLater()
+        self._log(report.summary())
+
+    def _review_model_before_run(self) -> bool:
+        """Check the model on the way into Run; ``False`` means the run was called off.
+
+        Errors stop at a dialog that offers *Run anyway* (the check is a linear,
+        small-displacement test, so the person may know better). Warnings are
+        written to the console and do not interrupt: a modeller who has seen
+        "two separate parts" once does not want to click through it on every run.
+        """
+        project = self._vm.project
+        if project is None:
+            return True
+        report = check_model(project)
+        if report.has_errors:
+            dlg = ModelCheckDialog(
+                project,
+                report=report,
+                pre_run=True,
+                on_select=self._select_report_row,
+                parent=self,
+            )
+            try:
+                proceed = dlg.exec() == QDialog.DialogCode.Accepted
+            finally:
+                dlg.deleteLater()
+            self._log(report.summary() + (" Running anyway." if proceed else " Run cancelled."))
+            return proceed
+        for finding in report.warnings:
+            self._log(finding.summary())
+        return True
+
     def _on_run_analysis(self) -> None:
         if self._vm.project is None:
             QMessageBox.information(self, "Run Analysis", "Open or create a project first.")
@@ -2077,6 +2128,8 @@ class MainWindow(QMainWindow):
                 "Run Analysis",
                 "No analysis cases defined. Open Analyze → Cases…",
             )
+            return
+        if not self._review_model_before_run():
             return
         dlg = RunAnalysisDialog(self._vm, self._runner, self)
         self._run_dialog = dlg
@@ -2948,6 +3001,7 @@ class MainWindow(QMainWindow):
         self._act_create_shell.setEnabled(has_project)
         self._act_frame_wizard.setEnabled(has_project)
         self._act_check_duplicates.setEnabled(has_project)
+        self._act_check_model.setEnabled(has_project)
         self._act_mesh.setEnabled(has_project)
         self._act_assign_support.setEnabled(has_project and has_selected_nodes)
         self._act_assign_masses.setEnabled(has_project and has_selected_nodes)
