@@ -70,10 +70,10 @@ class ShellContourRenderer:
 
         ``scale`` warps the mesh by the displacements; the caller passes the
         displacement scale for a deformation field and 0 for an undeformed
-        force contour. Nothing is drawn (and :attr:`range` stays ``None``) when
-        the model has no shell with a value for that field — a frame model, or a
-        case solved with the ``Linear`` algorithm, which OpenSees leaves at zero
-        and this renderer draws as the flat zero it is.
+        force contour. Nothing is drawn — and :attr:`range` stays ``None`` —
+        when the model has no shell with a value for that field, which is the
+        case for a frame model and for a result object whose elements have no
+        section response.
         """
         self.clear()
         field = field_by_key(field_key)

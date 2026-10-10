@@ -22,4 +22,7 @@
 # (`self._ops`, which is duck-typed at runtime and a mock in the tests) removed
 # the `union-attr` errors every one of its call sites produced: 367 -> 243.
 #   services/opensees_runner.py       3  (was 127)
-243
+# Annotating `MainWindow._post_dock` as `QDockWidget | None` removed the
+# assignment errors every post-processing dock added (they all assigned a
+# QDockWidget to an attribute mypy had inferred as `None`): 243 -> 237.
+237

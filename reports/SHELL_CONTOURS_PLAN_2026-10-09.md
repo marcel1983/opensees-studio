@@ -41,11 +41,23 @@ Three facts that decide the implementation:
    (`stresses` and `strains` share the layout: slots 0–2 membrane, 3–5 bending,
    6–7 transverse shear. In the probe only slot 0 of each 8 was non-zero, with a
    stride of exactly 8.)
-3. **A `Linear` static algorithm reports zeros.** Newton, ModifiedNewton and
-   KrylovNewton report the correct resultants; `Linear` solves and advances
-   without the element/section state being readable. The feature must therefore
-   say so rather than draw a field of zeros — and the analysis case used by the
-   verification test must not be `Linear`.
+3. **Read the response *after* ``ops.reactions()``.** Asking
+   ``eleResponse(tag, "stresses")`` straight after ``ops.analyze(1)`` on a
+   `Linear` case returns zeros; after ``ops.reactions()`` — a state query — the
+   same call returns the real resultants, and Newton-shaped algorithms return
+   them either way.
+
+   ```
+   algorithm        N11 straight after analyze   after reactions()
+   Linear                                   0                 2000
+   Newton                                2000                 2000
+   ModifiedNewton                        2000                 2000
+   ```
+
+   The runner calls ``ops.reactions()`` before reading any element response, so
+   a `Linear` case is *not* a special case in the application; an earlier draft
+   of this note (and a view warning built on it) was wrong, and
+   ``tests/integration/test_shell_contour_reference.py`` pins the correction.
 
 OpenSees reports the resultants in the **element's local frame**. The principal
 quantities are frame-independent, so the principal view needs no transformation;
@@ -88,7 +100,7 @@ Integration: a plate strip in pure bending (`M = qL²/8`), the uniform-tension
 probe above (`N11 = P/b` exactly), and a pure shear case (`N12 = V/b`) — plus the
 existing `tests/integration/test_shell_plate.py` solution as a cross-check. GUI:
 the dock lists the fields, renders an actor and a scalar bar, and reports the
-`Linear`-algorithm limitation instead of drawing zeros.
+"no shells in this model" message instead of an empty map.
 
 ## 3. Open questions for the implementation
 

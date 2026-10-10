@@ -45,9 +45,11 @@ class StaticResults:
     force per unit length), in the element's local frame. Empty for element
     types that do not report them (bars, trusses, zero-length).
 
-    One caveat travels with these numbers: OpenSees leaves them at zero when the
-    static case used the ``Linear`` algorithm, so a field of zeros means "not
-    reported", not "no force".
+    A model that reports no resultants at all (bars, or a case whose element
+    types have no section response) leaves this empty; an element that does
+    report them always does, whatever the solution algorithm — the runner reads
+    the response after ``ops.reactions()``, which is what makes OpenSees
+    materialise the section state of a `Linear` solve.
     """
 
     def disp(self, node_id: int, dof: int, step: int = -1) -> float:

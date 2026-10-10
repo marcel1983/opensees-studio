@@ -90,10 +90,12 @@ from opensees_studio.services.results import (
     StaticResults,
     TransientResults,
 )
+from opensees_studio.services.shell_fields import shell_elements
 from opensees_studio.viewmodels import AnalysisRunner, ProjectViewModel
 from opensees_studio.views.canvas3d import ModelCanvas
 from opensees_studio.views.canvas3d.diagram_renderer import DiagramRenderer
 from opensees_studio.views.canvas3d.model_renderer import RendererMode
+from opensees_studio.views.canvas3d.shell_contour_renderer import ShellContourRenderer
 from opensees_studio.views.dialogs import (
     AddNodeDialog,
     AnalysisCaseManagerDialog,
@@ -139,6 +141,7 @@ from opensees_studio.views.docks import (
     PushoverCurveView,
     ResponseSpectrumView,
     ResultsPanel,
+    ShellContourView,
     TimeHistoryView,
 )
 from opensees_studio.views.help_window import HelpController
@@ -167,7 +170,7 @@ class MainWindow(QMainWindow):
         self._latest_results: object = None  # last analysis output (any kind)
         self._analysis_error_box: QMessageBox | None = None  # last failure report
         self._run_dialog: RunAnalysisDialog | None = None  # open while a Run dialog is shown
-        self._post_dock = None  # the active post-processing dock
+        self._post_dock: QDockWidget | None = None  # the active post-processing dock
         self._post_units_refresh: Callable[[], None] | None = None  # re-show the dock in new units
         self._diagram_renderer: DiagramRenderer | None = None  # built lazily once canvas exists
         self._show_node_labels = False
@@ -198,6 +201,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self._canvas)
         # Diagram overlay paints onto the same plotter as the model.
         self._diagram_renderer = DiagramRenderer(self._canvas)
+        self._contour_renderer = ShellContourRenderer(self._canvas)
 
     def _build_docks(self) -> None:
         # Model tree (left)
@@ -328,6 +332,7 @@ class MainWindow(QMainWindow):
         self._act_show_deformed = QAction("Show &Deformed Shape", self)
         self._act_show_mode_shape = QAction("&Animate Mode Shape", self)
         self._act_show_force_diagram = QAction("Show &Force Diagram…", self)
+        self._act_shell_contours = QAction("Show Shell &Contours…", self)
         self._act_show_time_history = QAction("&Time-History Plot…", self)
         self._act_export_th_animation = QAction("Export Time-History &Animation…", self)
         self._act_show_hysteresis = QAction("&Hysteresis Plot…", self)
@@ -449,6 +454,7 @@ class MainWindow(QMainWindow):
         m_display = mb.addMenu("&Display")
         m_display.addActions([self._act_show_deformed, self._act_show_mode_shape])
         m_display.addAction(self._act_show_force_diagram)
+        m_display.addAction(self._act_shell_contours)
         m_display.addSeparator()
         m_display.addAction(self._act_show_time_history)
         m_display.addAction(self._act_export_th_animation)
@@ -711,6 +717,7 @@ class MainWindow(QMainWindow):
         self._act_show_deformed.triggered.connect(self._on_show_deformed)
         self._act_show_mode_shape.triggered.connect(self._on_show_mode_shape)
         self._act_show_force_diagram.triggered.connect(self._on_show_force_diagram)
+        self._act_shell_contours.triggered.connect(self._on_show_shell_contours)
         self._act_show_time_history.triggered.connect(self._on_show_time_history)
         self._act_export_th_animation.triggered.connect(self._on_export_th_animation)
         self._act_show_hysteresis.triggered.connect(self._on_show_hysteresis)
@@ -2407,6 +2414,70 @@ class MainWindow(QMainWindow):
             after=lambda: _render(view.current_component(), view.current_scale),
         )
 
+    def _on_show_shell_contours(self) -> None:
+        """Display → Show Shell Contours: colour the shell faces by a field.
+
+        The dock is the control; the canvas overlay is the renderer, and the two
+        talk through `ShellContourView.changed`. The scale box starts at 0 (the
+        undeformed model) because a force or moment contour is read on the
+        geometry it belongs to, and warping is what makes a deformation contour
+        legible.
+        """
+        if not isinstance(self._latest_results, StaticResults) or self._vm.project is None:
+            QMessageBox.information(
+                self,
+                "Shell Contours",
+                "Run a Static analysis first: the contour shows its displacements and "
+                "its shell section resultants.",
+            )
+            return
+        if not shell_elements(self._vm.project):
+            QMessageBox.information(
+                self,
+                "Shell Contours",
+                "This model has no shell elements. A contour paints shell faces "
+                "(ShellMITC4 or quad elements).",
+            )
+            return
+
+        self._tear_down_post_dock()
+        view = ShellContourView(n_steps=self._latest_results.n_steps)
+        dock = QDockWidget("Shell Contours", self)
+        dock.setWidget(view)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
+        dock.resize(700, 500)
+        self._post_dock = dock
+
+        def _render(field_key: str, step: int, scale: float, directions: bool) -> None:
+            if not isinstance(self._latest_results, StaticResults):
+                return
+            self._contour_renderer.render(
+                self._vm.project,
+                self._latest_results,
+                field_key,
+                step=step,
+                scale=scale,
+                show_directions=directions,
+                units=view.target_units,
+            )
+            self._canvas.render()
+
+        view.changed.connect(_render)
+        view.closed.connect(self._on_back_to_model)
+        view.set_units(UnitConverter.of(self._vm.project.meta))
+        # The colour bar carries a unit, so a display-unit change repaints.
+        view.unitsChanged.connect(
+            lambda: _render(
+                view.current_field(),
+                view.current_step(),
+                view.current_scale(),
+                view.directions_wanted(),
+            ),
+        )
+        view._field.setFocus()
+        view.emit_changed()
+        self._register_units_refresh(view)
+
     def _best_initial_component(self):
         """Return the (component, data) pair with the largest |force|.
 
@@ -2615,6 +2686,7 @@ class MainWindow(QMainWindow):
         self._tear_down_post_dock()
         if self._diagram_renderer is not None:
             self._diagram_renderer.clear()
+        self._contour_renderer.clear()
         self._canvas._renderer.set_mode(RendererMode.MODEL)
         self._canvas.render()
 
@@ -2923,6 +2995,9 @@ class MainWindow(QMainWindow):
         self._act_show_deformed.setEnabled(has_static)
         self._act_show_mode_shape.setEnabled(has_modal)
         self._act_show_force_diagram.setEnabled(has_static)
+        self._act_shell_contours.setEnabled(
+            has_static and bool(shell_elements(self._vm.project)) if self._vm.project else False,
+        )
         self._act_show_time_history.setEnabled(has_transient)
         self._act_export_th_animation.setEnabled(has_transient)
         self._act_show_hysteresis.setEnabled(has_transient)

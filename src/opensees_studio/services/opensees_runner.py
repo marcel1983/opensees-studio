@@ -997,10 +997,13 @@ class OpenSeesRunner:
         and zero-length elements have no section resultants — and for anything
         whose vector does not divide into whole resultants.
 
-        OpenSees leaves this response at zero when the case ran with the
-        ``Linear`` algorithm: it advances the time without the section state
-        being readable. The zeros are recorded as they come; the contour view
-        says "not reported" rather than drawing a field of zeros.
+        This is only meaningful once the element has updated its section state,
+        which happens when the analysis commits the step. `_run_static` and the
+        pushover snapshot call ``ops.reactions()`` before reading, and that
+        query is what materialises the state of a `Linear` solve as well: asking
+        ``eleResponse`` straight after ``analyze`` on a `Linear` case returns
+        zeros, asking it after ``reactions()`` returns the real resultants
+        (measured — see `reports/SHELL_CONTOURS_PLAN_2026-10-09.md`).
         """
         try:
             raw = self._ops.eleResponse(element_id, "stresses")
