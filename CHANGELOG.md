@@ -117,6 +117,34 @@ refused instead of silently downgraded).
   and every value was checked against the standard's own text before being
   committed.
 
+- **Meshing** (Edit → Mesh, `core/mesh.py`). Three operations a structural
+  modeller expects to be automatic:
+  - **members** longer than a target size are split into equal pieces that
+    inherit the section, the material and the element's own fields, and whose
+    distributed loads follow them (a bar cut in three carries the same `q` on each
+    third, not a third of it);
+  - **shells** larger than the target are subdivided `m x n` by bilinear
+    interpolation in their own natural coordinates, so a general quadrilateral
+    meshes without leaving its own edges, the winding a shell's normal depends on
+    is preserved, the corners are the nodes that were already there, and two
+    meshed shells share their common edge because every new node goes through one
+    shared node table;
+  - **the joins**: a bar is split at every node lying on it (a column whose top
+    lands mid-span of a beam, a frame drawn across a slab edge) and at its
+    crossings with other bars, so a crossing becomes a shared node instead of two
+    members passing by. A new node created on a shell's *supported edge* inherits
+    the DOFs both of that edge's corners have restrained — meshing a slab must not
+    quietly unsupport the middle of its edge — while interior mesh nodes and
+    crossing nodes stay free, because a crossing is not a support.
+  The dialog takes the target size, the scope (selection or the whole model) and
+  which of the four operations to run, and shows what the mesh will add and
+  replace before it is applied. One command applies the plan in one undo step.
+  Verified against closed forms rather than against itself: splitting a
+  cantilever into eight pieces leaves its tip deflection unchanged to 1e-9, and a
+  uniformly loaded beam split into sixteen keeps its mid-span deflection; meshing
+  a 2x2 slab into 4x4 and rebuilding the pressure loads reproduces the
+  hand-built 4x4 model to 1e-6 (and the 0.2169 mm of the plate convergence table).
+
 ### Fixed
 
 - **The failure report of a run crashed the application when the report had

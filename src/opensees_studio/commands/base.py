@@ -12,7 +12,8 @@ duplicate ids, no dangling references). For a full re-validation
 from __future__ import annotations
 
 import weakref
-from typing import TYPE_CHECKING
+from copy import deepcopy
+from typing import TYPE_CHECKING, Any
 
 from PySide6.QtGui import QUndoCommand
 
@@ -56,3 +57,28 @@ class ProjectCommand(QUndoCommand):
         vm = self.vm
         vm.mark_dirty()
         vm.modelMutated.emit()
+
+
+def snapshot_project(project: Project) -> dict[str, Any]:
+    """Every project field except the frozen schema version.
+
+    For a command whose edit touches many places at once, taking the model's
+    fields before and putting them back on undo is simpler — and safer — than
+    tracking each change, and it keeps the identity of the model's lists so the
+    commands that hold a reference to them keep working.
+    """
+    return {
+        name: deepcopy(getattr(project, name))
+        for name, field in project.__class__.model_fields.items()
+        if not field.frozen
+    }
+
+
+def restore_project(project: Project, snapshot: dict[str, Any]) -> None:
+    """Put a snapshot back, refilling lists in place."""
+    for name, value in snapshot.items():
+        current = getattr(project, name)
+        if isinstance(current, list) and isinstance(value, list):
+            current[:] = value
+        else:
+            setattr(project, name, value)

@@ -42,6 +42,7 @@ from opensees_studio.commands.materials import (
     DeleteMaterialsCommand,
     UpdateMaterialCommand,
 )
+from opensees_studio.commands.mesh import MeshCommand
 from opensees_studio.commands.nodes import (
     AddNodesCommand,
     DeleteNodesCommand,
@@ -89,6 +90,7 @@ __all__ = [
     "DeleteNodesCommand",
     "DeleteSectionsCommand",
     "FixDuplicatesCommand",
+    "MeshCommand",
     "MirrorCommand",
     "MoveNodesCommand",
     "Plane",

@@ -45,6 +45,7 @@ from opensees_studio.commands import (
     DeleteElementsCommand,
     DeleteNodesCommand,
     FixDuplicatesCommand,
+    MeshCommand,
     MirrorCommand,
     MoveNodesCommand,
     ReplaceElementsCommand,
@@ -115,6 +116,7 @@ from opensees_studio.views.dialogs import (
     LinearTimeSeriesDialog,
     MaterialLibraryDialog,
     MaterialTesterDialog,
+    MeshDialog,
     MirrorDialog,
     MoveDialog,
     PathTimeSeriesDialog,
@@ -273,6 +275,7 @@ class MainWindow(QMainWindow):
         self._act_move = QAction("&Move…", self, shortcut="Ctrl+M")
         self._act_replicate = QAction("&Replicate…", self, shortcut="Ctrl+Shift+R")
         self._act_check_duplicates = QAction("Check Model for &Duplicates…", self)
+        self._act_mesh = QAction("&Mesh…", self)
         self._act_mirror = QAction("Mirr&or…", self)
 
         # Tools (exclusive)
@@ -392,6 +395,7 @@ class MainWindow(QMainWindow):
         m_edit.addActions([self._act_move, self._act_replicate, self._act_mirror])
         m_edit.addSeparator()
         m_edit.addAction(self._act_check_duplicates)
+        m_edit.addAction(self._act_mesh)
 
         m_define = mb.addMenu("&Define")
         m_define.addAction(self._act_grid)
@@ -588,6 +592,7 @@ class MainWindow(QMainWindow):
         self._act_move.triggered.connect(self._on_move)
         self._act_replicate.triggered.connect(self._on_replicate)
         self._act_check_duplicates.triggered.connect(self._on_check_duplicates)
+        self._act_mesh.triggered.connect(self._on_mesh)
         self._act_mirror.triggered.connect(self._on_mirror)
 
         # Tools
@@ -1229,6 +1234,39 @@ class MainWindow(QMainWindow):
         drawing = dialog.drawing()
         if drawing is not None and drawing.skipped_summary():
             self._log(drawing.skipped_summary())
+
+    def _on_mesh(self) -> None:
+        """Edit → Mesh: subdivide members and shells, and join the mesh up.
+
+        The plan comes from ``core.mesh`` (pure geometry, tested on its own) and
+        is applied by one command, so a mesh is a single undo step.
+        """
+        project = self._vm.project
+        if project is None:
+            QMessageBox.information(self, "Mesh", "Open or create a project first.")
+            return
+        selected = set(self._canvas.selection.elements)
+        dialog = MeshDialog(
+            project,
+            selected_element_ids=selected,
+            has_selection=bool(selected),
+            parent=self,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        plan = dialog.plan()
+        if plan.is_empty:
+            return
+        try:
+            self._vm.apply_command(MeshCommand(self._vm, plan))
+        except Exception as exc:
+            QMessageBox.critical(self, "Could not mesh the model", str(exc))
+            return
+        self._canvas.selection.clear()
+        for node in plan.new_nodes:
+            self._canvas.selection.select_node(node.id, additive=True)
+        self._canvas.render()
+        self._log(f"Mesh: {plan.summary()}")
 
     def _on_frame_wizard(self) -> None:
         """Define → Create Portal Frame: a parametric 2D frame, one undo step.
@@ -2781,6 +2819,7 @@ class MainWindow(QMainWindow):
         self._act_create_shell.setEnabled(has_project)
         self._act_frame_wizard.setEnabled(has_project)
         self._act_check_duplicates.setEnabled(has_project)
+        self._act_mesh.setEnabled(has_project)
         self._act_assign_support.setEnabled(has_project and has_selected_nodes)
         self._act_assign_masses.setEnabled(has_project and has_selected_nodes)
         self._act_assign_equal_dof.setEnabled(has_project and n_sel == 2)

@@ -103,6 +103,15 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
 - **Export** — the model, with or without one analysis case, as a plain
   OpenSeesPy script generated from the same command sequence the solver
   receives, so it reproduces the application's numbers.
+- **Meshing** — Edit → Mesh: split members into pieces no longer than a target
+  size (their section, material and distributed loads follow them), subdivide
+  shells `m x n` in their own natural coordinates (a general quadrilateral meshes
+  inside its own edges, and two meshed shells share their common edge), and join
+  it all up: a bar is split at every node lying on it and where it crosses
+  another bar, so a frame that meets a slab edge is connected there. A new node
+  on a supported shell edge inherits the DOFs both of that edge's corners have
+  restrained, so meshing a slab does not quietly unsupport it. One undo step, and
+  the dialog shows what it will add before you accept it.
 - **Model health** — Edit → Check Model for Duplicates: coincident nodes and
   elements that describe the same member twice, with a tolerance that follows
   the size of the model. Pairs that are deliberate — the two nodes of a

@@ -24,11 +24,10 @@ the safe one:
 
 from __future__ import annotations
 
-from copy import deepcopy
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from opensees_studio.commands.base import ProjectCommand
+from opensees_studio.commands.base import ProjectCommand, restore_project, snapshot_project
 from opensees_studio.core.duplicates import NodeCluster, check_duplicates, find_element_clusters
 from opensees_studio.core.loads import ImposedSupportMotionPattern, PlainLoadPattern
 from opensees_studio.core.project import Project
@@ -78,31 +77,6 @@ class RepairReport:
         return any(vars(self).values())
 
 
-# ──────────────────────────── snapshot ────────────────────────────
-def _snapshot(project: Project) -> dict[str, Any]:
-    """Every project field except the frozen schema version."""
-    return {
-        name: deepcopy(getattr(project, name))
-        for name, field in Project.model_fields.items()
-        if not field.frozen
-    }
-
-
-def _restore(project: Project, snapshot: dict[str, Any]) -> None:
-    """Put a snapshot back, keeping the identity of the model's lists.
-
-    Commands that hold a reference to (say) ``project.elements`` must keep
-    working after this one is undone, so the lists are refilled instead of
-    replaced.
-    """
-    for name, value in snapshot.items():
-        current = getattr(project, name)
-        if isinstance(current, list) and isinstance(value, list):
-            current[:] = value
-        else:
-            setattr(project, name, value)
-
-
 class FixDuplicatesCommand(ProjectCommand):
     """Merge coincident nodes and remove the elements that repeat a member."""
 
@@ -115,7 +89,7 @@ class FixDuplicatesCommand(ProjectCommand):
     # ── lifecycle ───────────────────────────────────────────────────
     def redo(self) -> None:
         project = self.project
-        self._before = _snapshot(project)
+        self._before = snapshot_project(project)
         self.report = RepairReport()
 
         found = check_duplicates(project, tolerance=self._tolerance)
@@ -127,7 +101,7 @@ class FixDuplicatesCommand(ProjectCommand):
 
     def undo(self) -> None:
         if self._before is not None:
-            _restore(self.project, self._before)
+            restore_project(self.project, self._before)
         self._notify()
 
     # ── nodes ───────────────────────────────────────────────────────
