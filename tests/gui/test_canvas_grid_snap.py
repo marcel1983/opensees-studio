@@ -308,9 +308,14 @@ def test_the_fallback_point_follows_the_active_level(qtbot) -> None:  # type: ig
     assert point[2] == pytest.approx(3.5, abs=1e-9)
 
 
-def test_an_empty_click_emits_unsnapped_when_nothing_is_near(qtbot) -> None:  # type: ignore[no-untyped-def]
+def test_an_empty_click_lands_on_the_nearest_grid_crossing(qtbot) -> None:  # type: ignore[no-untyped-def]
+    """A grid exists, so the click belongs on it — SAP2000 draws on the grid.
+
+    Landing at the pointer's own coordinates instead produced nodes at
+    (-0.0074, 1.9923): geometry that reads as broken, not as free.
+    """
     canvas = _sized_canvas(qtbot)
-    # A grid that is nowhere near the centre of the view.
+    # A grid nowhere near the centre of the view: the nearest crossing wins.
     canvas.show_project(
         Project(
             coord_systems=[
@@ -333,8 +338,24 @@ def test_an_empty_click_emits_unsnapped_when_nothing_is_near(qtbot) -> None:  # 
 
     assert seen, "an empty click must always resolve to a point"
     x, y, z, snapped = seen[-1]
+    assert snapped is True
+    assert (x, y, z) == pytest.approx((40.0, 40.0, 0.0), abs=1e-6)
+
+
+def test_a_grid_less_project_still_places_the_point(qtbot) -> None:  # type: ignore[no-untyped-def]
+    """No grid, nothing to snap to: the click lands where the ray meets the plane."""
+    canvas = _sized_canvas(qtbot)
+    canvas.show_project(Project())  # the default Global system has no lines
+    _look_down_at(canvas, (4.0, -2.0, 0.0))
+    seen: list[tuple] = []
+    canvas.emptyClicked.connect(lambda *args: seen.append(args))
+
+    canvas._handle_click(canvas.width() / 2.0, canvas.height() / 2.0)
+
+    assert seen
+    x, y, z, snapped = seen[-1]
     assert snapped is False
-    assert (x, y, z) == pytest.approx((0.0, 0.0, 0.0), abs=1e-6)
+    assert (x, y, z) == pytest.approx((4.0, -2.0, 0.0), abs=1e-6)
 
 
 def test_a_click_on_an_intersection_is_reported_as_snapped(qtbot) -> None:  # type: ignore[no-untyped-def]

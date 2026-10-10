@@ -174,9 +174,10 @@ class ModelCanvas(QtInteractor):  # type: ignore[misc]
         tol_px = 15.0 * dpr
         target = self._nearest_grid_intersection_px(cx, cy, tol_px)
         if target is None:
-            # Off the grid: preview the point on the working plane instead, so
-            # the highlight and the click agree.
-            target = self.world_on_working_plane(cx, cy)
+            # Off the intersection: preview where the click would actually land
+            # — the nearest grid crossing, or the working plane without a grid.
+            free = self.world_on_working_plane(cx, cy)
+            target = self._nearest_grid_crossing(free) if free is not None else None
         self._renderer.set_hover_snap(target)
         self.render()
 
@@ -397,8 +398,20 @@ class ModelCanvas(QtInteractor):  # type: ignore[misc]
             return
         free = self.world_on_working_plane(cx, cy)
         if free is not None:
+            # A grid exists? Then the click belongs on it: snap to the nearest
+            # crossing of a line per in-plane axis. SAP2000 draws on the grid,
+            # and a node at (-0.0074, 1.9923) — where the pointer happened to
+            # land — reads as broken geometry, not as freedom.
+            crossing = self._nearest_grid_crossing(free)
+            if crossing is not None:
+                if _PICK_DEBUG:
+                    print(f"[pick] empty click snapped to the grid crossing {crossing}")
+                self.emptyClicked.emit(
+                    float(crossing[0]), float(crossing[1]), float(crossing[2]), True
+                )
+                return
             if _PICK_DEBUG:
-                print(f"[pick] empty click resolved on the working plane at {free}")
+                print(f"[pick] no grid: empty click resolved on the working plane at {free}")
             self.emptyClicked.emit(float(free[0]), float(free[1]), float(free[2]), False)
         else:
             # Never silent: this is the "I click and nothing happens" case.
@@ -445,6 +458,42 @@ class ModelCanvas(QtInteractor):  # type: ignore[misc]
             if len(pts) == 0:
                 return None
         return pts
+
+    def _nearest_grid_crossing(
+        self,
+        point: tuple[float, float, float],
+    ) -> tuple[float, float, float] | None:
+        """Snap a world point to the nearest crossing of the visible grids.
+
+        The in-plane coordinates each move to their closest grid line (in that
+        system's own frame), and the perpendicular one stays on the working
+        plane. ``None`` when no visible system has any line — a project with no
+        grid draws where the pointer is, which is the only thing it can do.
+        """
+        project = self._renderer._project
+        if project is None:
+            return None
+        plane = self._working_plane[0] if self._working_plane is not None else "XY"
+        in_plane = {"XY": (0, 1), "XZ": (0, 2), "YZ": (1, 2)}[plane]
+        best: tuple[float, float, float] | None = None
+        best_d2 = float("inf")
+        for system in getattr(project, "coord_systems", []) or []:
+            grid = system.grid
+            if not grid.visible or grid.hide_all:
+                continue
+            if not (grid.x_lines or grid.y_lines or grid.z_lines):
+                continue
+            local = system.coord.world_to_local(point)
+            lines = (grid.x_lines, grid.y_lines, grid.z_lines)
+            snapped = list(local)
+            for axis in in_plane:
+                if lines[axis]:
+                    snapped[axis] = min(lines[axis], key=lambda c: abs(c - local[axis]))
+            candidate = system.coord.local_to_world(tuple(snapped))
+            d2 = sum((candidate[i] - point[i]) ** 2 for i in range(3))
+            if d2 < best_d2:
+                best, best_d2 = candidate, d2
+        return best
 
     def _nearest_grid_intersection_px(
         self,
