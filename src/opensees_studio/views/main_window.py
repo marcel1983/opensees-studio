@@ -38,6 +38,7 @@ from opensees_studio.commands import (
     AddElementLoadsCommand,
     AddElementsCommand,
     AddEqualDOFConstraintCommand,
+    AddMaterialsCommand,
     AddNodalLoadsCommand,
     AddNodesCommand,
     AddPointElementLoadsCommand,
@@ -67,7 +68,9 @@ from opensees_studio.core import (
     frame_grid,
     labels_for,
     make_default_section,
+    make_default_truss_material,
 )
+from opensees_studio.core import selection as selection_queries
 from opensees_studio.core.geometry.ordering import QuadOrderError, order_quad_nodes
 from opensees_studio.core.help import ACTION_TOPICS, TOPIC_PROPERTY
 from opensees_studio.services import PROJECT_FILE_SUFFIX
@@ -282,6 +285,17 @@ class MainWindow(QMainWindow):
         self._act_clear_selection = QAction("Clear &selection", self, shortcut="Esc")
         self._act_select_all = QAction("Select &all", self, shortcut="Ctrl+A")
 
+        # Select menu: queries that add to (or invert) the current selection.
+        self._act_invert_selection = QAction("&Invert Selection", self, shortcut="Ctrl+I")
+        self._act_previous_selection = QAction("Get &Previous Selection", self, shortcut="Ctrl+P")
+        self._act_select_all_joints = QAction("All &Joints", self)
+        self._act_select_all_elements = QAction("All &Elements", self)
+        self._act_select_supports = QAction("&Supported Joints", self)
+        self._act_select_joints_with_mass = QAction("Joints with &Mass", self)
+        self._act_select_joints_of_elements = QAction("Joints of Selected Elements", self)
+        self._act_select_elements_within_joints = QAction("Elements between Selected Joints", self)
+        self._act_select_weighted = QAction("Elements with Self &Weight", self)
+
         # Edit → transforms
         self._act_move = QAction("&Move…", self, shortcut="Ctrl+M")
         self._act_replicate = QAction("&Replicate…", self, shortcut="Ctrl+Shift+R")
@@ -306,6 +320,7 @@ class MainWindow(QMainWindow):
         self._act_add_node = QAction("Add &Node…", self, shortcut="Ctrl+N")
         self._act_create_shell = QAction("Create S&hell from 4 Nodes…", self)
         self._act_frame_wizard = QAction("Create Portal &Frame…", self)
+        self._act_truss_wizard = QAction("Create &Truss…", self)
         self._act_material_library = QAction("&Material Library…", self, shortcut="Ctrl+Shift+M")
         self._act_friction_library = QAction("&Friction Models…", self)
         self._act_material_tester = QAction("Material &Tester…", self, shortcut="Ctrl+Shift+T")
@@ -410,11 +425,14 @@ class MainWindow(QMainWindow):
         m_edit.addAction(self._act_check_duplicates)
         m_edit.addAction(self._act_mesh)
 
+        self._build_select_menu(mb.addMenu("&Select"))
+
         m_define = mb.addMenu("&Define")
         m_define.addAction(self._act_grid)
         m_define.addAction(self._act_add_node)
         m_define.addAction(self._act_create_shell)
         m_define.addAction(self._act_frame_wizard)
+        m_define.addAction(self._act_truss_wizard)
         m_define.addSeparator()
         m_define.addActions(
             [
@@ -670,6 +688,25 @@ class MainWindow(QMainWindow):
         self._act_delete.triggered.connect(self._on_delete)
         self._act_clear_selection.triggered.connect(self._on_clear_selection)
         self._act_select_all.triggered.connect(self._on_select_all)
+        self._act_invert_selection.triggered.connect(self._on_invert_selection)
+        self._act_previous_selection.triggered.connect(self._on_previous_selection)
+        q = selection_queries
+        for action, query in (
+            (self._act_select_all_joints, lambda p, sel: ({n.id for n in p.nodes}, set())),
+            (self._act_select_all_elements, lambda p, sel: (set(), {e.id for e in p.elements})),
+            (self._act_select_supports, lambda p, sel: (q.restrained_nodes(p), set())),
+            (self._act_select_joints_with_mass, lambda p, sel: (q.nodes_with_mass(p), set())),
+            (self._act_select_weighted, lambda p, sel: (set(), q.weighted_elements(p))),
+            (
+                self._act_select_joints_of_elements,
+                lambda p, sel: (q.nodes_of_elements(p, sel.elements), set()),
+            ),
+            (
+                self._act_select_elements_within_joints,
+                lambda p, sel: (set(), q.elements_within_nodes(p, sel.nodes)),
+            ),
+        ):
+            action.triggered.connect(lambda _=False, query=query: self._select_from(query))
         self._act_move.triggered.connect(self._on_move)
         self._act_replicate.triggered.connect(self._on_replicate)
         self._act_check_duplicates.triggered.connect(self._on_check_duplicates)
@@ -688,6 +725,7 @@ class MainWindow(QMainWindow):
         self._act_add_node.triggered.connect(self._on_add_node)
         self._act_create_shell.triggered.connect(self._on_create_shell)
         self._act_frame_wizard.triggered.connect(self._on_frame_wizard)
+        self._act_truss_wizard.triggered.connect(self._on_truss_wizard)
         self._act_material_library.triggered.connect(self._on_material_library)
         self._act_friction_library.triggered.connect(self._on_friction_library)
         self._act_material_tester.triggered.connect(self._on_material_tester)
@@ -766,7 +804,7 @@ class MainWindow(QMainWindow):
     def _on_new(self) -> None:
         if not self._confirm_discard_changes("Creating a new project"):
             return
-        self._vm.new_project()
+        self._vm.new_project(dead_case=True)
 
     def _on_new_2d(self) -> None:
         """Planar frame model — (ndm=2, ndf=3): Ux, Uy, Rz per joint, then the wizard.
@@ -781,7 +819,7 @@ class MainWindow(QMainWindow):
         """
         if not self._confirm_discard_changes("Creating a new 2D frame"):
             return
-        self._vm.new_project(ndm=2, ndf=3)
+        self._vm.new_project(ndm=2, ndf=3, dead_case=True)
         self._log("New 2D frame project (ndm = 2, ndf = 3).")
         self._create_portal_frame(with_grid=True)
 
@@ -794,7 +832,7 @@ class MainWindow(QMainWindow):
         """
         if not self._confirm_discard_changes("Creating a new project"):
             return
-        self._vm.new_project(ndm=2, ndf=2)
+        self._vm.new_project(ndm=2, ndf=2, dead_case=True)
         self._log("New empty project.")
 
     def _on_open(self) -> None:
@@ -1002,6 +1040,170 @@ class MainWindow(QMainWindow):
         node_ids = {n.id for n in self._vm.project.nodes}
         elem_ids = {e.id for e in self._vm.project.elements}
         self._canvas.selection.set_selection(node_ids, elem_ids)
+
+    # ── slots: select menu ──────────────────────────────────────────
+    def _build_select_menu(self, menu: Any) -> None:
+        """Select: everything, by property, by load pattern, inverted or the previous one.
+
+        The "By …" submenus list what the model holds when the menu opens, and
+        every query *adds* to the current selection (SAP2000 style), so "frames
+        of section A" then "frames of section B" selects both.
+        """
+        menu.addActions([self._act_select_all, self._act_clear_selection])
+        menu.addActions([self._act_invert_selection, self._act_previous_selection])
+        menu.addSeparator()
+        menu.addActions([self._act_select_all_joints, self._act_select_all_elements])
+        self._menu_select_by_type = menu.addMenu("By Element &Type")
+        self._menu_select_by_section = menu.addMenu("By Se&ction")
+        self._menu_select_by_material = menu.addMenu("By Mate&rial")
+        self._menu_select_by_pattern = menu.addMenu("By &Load Pattern")
+        menu.addSeparator()
+        menu.addActions(
+            [
+                self._act_select_supports,
+                self._act_select_joints_with_mass,
+                self._act_select_weighted,
+            ]
+        )
+        menu.addSeparator()
+        menu.addActions(
+            [self._act_select_joints_of_elements, self._act_select_elements_within_joints]
+        )
+        for submenu, fill in (
+            (self._menu_select_by_type, self._fill_select_by_type),
+            (self._menu_select_by_section, self._fill_select_by_section),
+            (self._menu_select_by_material, self._fill_select_by_material),
+            (self._menu_select_by_pattern, self._fill_select_by_pattern),
+        ):
+            submenu.aboutToShow.connect(lambda submenu=submenu, fill=fill: fill(submenu))
+        menu.aboutToShow.connect(self._refresh_select_menu)
+
+    def _refresh_select_menu(self) -> None:
+        project = self._vm.project
+        has = project is not None
+        self._act_invert_selection.setEnabled(has)
+        self._act_previous_selection.setEnabled(has and any(self._canvas.selection.previous))
+        sel = self._canvas.selection
+        self._act_select_joints_of_elements.setEnabled(has and bool(sel.elements))
+        self._act_select_elements_within_joints.setEnabled(has and bool(sel.nodes))
+        for submenu in (
+            self._menu_select_by_type,
+            self._menu_select_by_section,
+            self._menu_select_by_material,
+            self._menu_select_by_pattern,
+        ):
+            submenu.setEnabled(has)
+
+    def _fill_submenu(self, submenu: Any, entries: list[tuple[str, Callable[[], None]]]) -> None:
+        submenu.clear()
+        if not entries:
+            submenu.addAction("(none in the model)").setEnabled(False)
+            return
+        for label, callback in entries:
+            # ``triggered`` passes ``checked``; keep it away from the callback.
+            submenu.addAction(label).triggered.connect(lambda _checked=False, cb=callback: cb())
+
+    def _fill_select_by_type(self, submenu: Any) -> None:
+        project = self._vm.project
+        if project is None:
+            return
+        entries = []
+        for element_type in selection_queries.element_types(project):
+            ids = selection_queries.elements_of_type(project, element_type)
+            entries.append(
+                (
+                    f"{element_type} ({len(ids)})",
+                    lambda ids=ids: self._add_to_selection(elements=ids),
+                )
+            )
+        self._fill_submenu(submenu, entries)
+
+    def _fill_select_by_section(self, submenu: Any) -> None:
+        project = self._vm.project
+        if project is None:
+            return
+        entries = []
+        for section in selection_queries.sections_in_use(project):
+            ids = selection_queries.elements_with_section(project, section.id)
+            entries.append(
+                (
+                    f"#{section.id} {section.name or section.type} ({len(ids)})",
+                    lambda ids=ids: self._add_to_selection(elements=ids),
+                )
+            )
+        self._fill_submenu(submenu, entries)
+
+    def _fill_select_by_material(self, submenu: Any) -> None:
+        project = self._vm.project
+        if project is None:
+            return
+        entries = []
+        for material in selection_queries.materials_in_use(project):
+            ids = selection_queries.elements_with_material(project, material.id)
+            entries.append(
+                (
+                    f"#{material.id} {material.name or material.type} ({len(ids)})",
+                    lambda ids=ids: self._add_to_selection(elements=ids),
+                )
+            )
+        self._fill_submenu(submenu, entries)
+
+    def _fill_select_by_pattern(self, submenu: Any) -> None:
+        project = self._vm.project
+        if project is None:
+            return
+        entries = []
+        for pattern in project.load_patterns:
+            nodes, elements = selection_queries.loaded_by_pattern(project, pattern.id)
+            if not nodes and not elements:
+                continue
+            entries.append(
+                (
+                    f"#{pattern.id} {pattern.name or pattern.type} "
+                    f"({len(nodes)} joint(s), {len(elements)} element(s))",
+                    lambda nodes=nodes, elements=elements: self._add_to_selection(
+                        nodes=nodes, elements=elements
+                    ),
+                )
+            )
+        self._fill_submenu(submenu, entries)
+
+    def _select_from(self, query: Callable[[Project, Any], tuple[set[int], set[int]]]) -> None:
+        """Add what ``query(project, selection)`` returns to the selection."""
+        if self._vm.project is None:
+            return
+        nodes, elements = query(self._vm.project, self._canvas.selection)
+        self._add_to_selection(nodes=nodes, elements=elements)
+
+    def _add_to_selection(
+        self, *, nodes: set[int] | None = None, elements: set[int] | None = None
+    ) -> None:
+        """Add ``nodes`` / ``elements`` to what is selected and report the count."""
+        if self._vm.project is None:
+            return
+        sel = self._canvas.selection
+        new_nodes = set(sel.nodes) | set(nodes or ())
+        new_elements = set(sel.elements) | set(elements or ())
+        sel.set_selection(new_nodes, new_elements)
+        self.statusBar().showMessage(
+            f"Selected {len(new_nodes)} joint(s), {len(new_elements)} element(s).", 4000
+        )
+
+    def _on_invert_selection(self) -> None:
+        if self._vm.project is None:
+            return
+        sel = self._canvas.selection
+        nodes, elements = selection_queries.invert(self._vm.project, sel.nodes, sel.elements)
+        sel.set_selection(nodes, elements)
+
+    def _on_previous_selection(self) -> None:
+        nodes, elements = self._canvas.selection.previous
+        if self._vm.project is None:
+            return
+        # Drop ids deleted since (the previous selection can outlive them).
+        node_ids = {n.id for n in self._vm.project.nodes}
+        element_ids = {e.id for e in self._vm.project.elements}
+        self._canvas.selection.set_selection(set(nodes) & node_ids, set(elements) & element_ids)
 
     def _on_clear_selection(self) -> None:
         """Esc: clear selection AND reset any in-progress tool gesture."""
@@ -1414,6 +1616,66 @@ class MainWindow(QMainWindow):
                 # A 2D model has one plane: show it face on, with the frame's
                 # heights available as the working-plane levels.
                 self._on_view_top()
+
+    def _on_truss_wizard(self) -> None:
+        """Define → Create Truss: a parametric plane truss, one undo step.
+
+        The geometry comes from ``core.trusses``; this collects it, resolves the
+        material (creating the default truss steel *inside* the macro when the
+        project has no uniaxial material) and inserts the result.
+        """
+        from opensees_studio.core import TRUSS_NDF, ElasticIsotropic, build_truss
+        from opensees_studio.views.dialogs.truss_wizard import TrussWizard
+
+        project = self._vm.project
+        if project is None:
+            QMessageBox.information(self, "Truss", "Open or create a project first.")
+            return
+        if (project.ndm, project.ndf) not in TRUSS_NDF:
+            QMessageBox.information(
+                self,
+                "Truss",
+                "A plane truss needs ndm = 2 (ndf 2 or 3) or ndm = 3 (ndf 3 or 6); "
+                f"this project is ndm = {project.ndm}, ndf = {project.ndf}.",
+            )
+            return
+        materials = [m for m in project.materials if not isinstance(m, ElasticIsotropic)]
+        wizard = TrussWizard(
+            materials,
+            ndm=project.ndm,
+            ndf=project.ndf,
+            length_unit=labels_for(project.meta.units).length,
+            parent=self,
+        )
+        if wizard.exec() != QDialog.DialogCode.Accepted:
+            return
+        material_id = wizard.material_choice()
+
+        self._vm.undo_stack.beginMacro("Create truss")
+        try:
+            if material_id is None:
+                material = make_default_truss_material(project.next_material_id())
+                self._vm.apply_command(AddMaterialsCommand(self._vm, [material]))
+                material_id = material.id
+            truss = build_truss(
+                wizard.spec(material_id=material_id),
+                ndm=project.ndm,
+                ndf=project.ndf,
+                first_node_id=project.next_node_id(),
+                first_element_id=project.next_element_id(),
+            )
+            self._vm.apply_command(AddNodesCommand(self._vm, truss.nodes))
+            self._vm.apply_command(AddElementsCommand(self._vm, truss.elements))
+        except Exception as exc:
+            QMessageBox.critical(self, "Cannot create the truss", str(exc))
+            return
+        finally:
+            self._vm.undo_stack.endMacro()
+
+        self._canvas.selection.set_selection(
+            {node.id for node in truss.nodes}, {element.id for element in truss.elements}
+        )
+        self._log(f"{truss.summary()} Left selected.")
 
     def _on_add_node(self) -> None:
         if self._vm.project is None:
@@ -3018,6 +3280,7 @@ class MainWindow(QMainWindow):
         self._act_add_node.setEnabled(True)
         self._act_create_shell.setEnabled(has_project)
         self._act_frame_wizard.setEnabled(has_project)
+        self._act_truss_wizard.setEnabled(has_project)
         self._act_check_duplicates.setEnabled(has_project)
         self._act_mesh.setEnabled(has_project)
         self._act_assign_support.setEnabled(has_project and has_selected_nodes)

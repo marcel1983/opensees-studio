@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from opensees_studio.core import (
+    DEFAULT_UNIT_WEIGHT,
     ElasticMembranePlateSection,
     ElasticSection,
     FiberSection,
@@ -77,6 +78,12 @@ class ElasticSectionForm(SectionFormBase):
         self._iy = _spin(8.33e-6, step=1e-7)
         self._g = _spin(80e9, step=1e9)
         self._j = _spin(1e-6, step=1e-7)
+        self._unit_weight = _spin(0.0, minimum=0.0, step=1e3)
+        self._unit_weight.setToolTip(
+            "Weight per unit volume (force / length³). A load pattern with a self "
+            "weight applies gamma * A per unit length; 0 = weightless."
+        )
+        self._shape = None
         for label, w in (
             ("E:", self._e),
             ("A:", self._a),
@@ -84,6 +91,7 @@ class ElasticSectionForm(SectionFormBase):
             ("Iy:", self._iy),
             ("G:", self._g),
             ("J:", self._j),
+            ("Unit weight γ:", self._unit_weight),
         ):
             self._layout.addRow(label, w)
         self._layout.addRow(QLabel("<i>Iy, G, J required for 3D models.</i>"))
@@ -98,6 +106,8 @@ class ElasticSectionForm(SectionFormBase):
             self._g.setValue(s.G)
         if s.J is not None:
             self._j.setValue(s.J)
+        self._unit_weight.setValue(s.unit_weight)
+        self._shape = s.shape
 
     def _read_specific(self, sid: int) -> ElasticSection:
         return ElasticSection(
@@ -109,6 +119,8 @@ class ElasticSectionForm(SectionFormBase):
             Iy=self._iy.value(),
             G=self._g.value(),
             J=self._j.value(),
+            unit_weight=self._unit_weight.value(),
+            shape=self._shape,
         )
 
 
@@ -202,11 +214,17 @@ class ElasticMembranePlateSectionForm(SectionFormBase):
         self._nu = _spin(0.3, minimum=-1.0, maximum=0.5, step=0.05)
         self._h = _spin(0.2, minimum=1e-9, step=0.01)
         self._rho = _spin(7850.0, minimum=0.0, step=100.0)
+        self._unit_weight = _spin(DEFAULT_UNIT_WEIGHT, minimum=0.0, step=1e3)
+        self._unit_weight.setToolTip(
+            "Weight per unit volume (force / length³). A load pattern with a self "
+            "weight applies gamma * h per unit area; 0 = weightless."
+        )
         for label, widget in (
             ("E:", self._e),
             ("Nu:", self._nu),
             ("Thickness h:", self._h),
             ("Density rho:", self._rho),
+            ("Unit weight γ:", self._unit_weight),
         ):
             self._layout.addRow(label, widget)
         self._layout.addRow(
@@ -218,6 +236,7 @@ class ElasticMembranePlateSectionForm(SectionFormBase):
         self._nu.setValue(s.nu)
         self._h.setValue(s.h)
         self._rho.setValue(s.rho)
+        self._unit_weight.setValue(s.unit_weight)
 
     def _read_specific(self, section_id: int) -> ElasticMembranePlateSection:
         return ElasticMembranePlateSection(
@@ -227,6 +246,7 @@ class ElasticMembranePlateSectionForm(SectionFormBase):
             nu=self._nu.value(),
             h=self._h.value(),
             rho=self._rho.value(),
+            unit_weight=self._unit_weight.value(),
         )
 
 

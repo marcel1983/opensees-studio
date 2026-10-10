@@ -19,6 +19,32 @@ refused instead of silently downgraded).
   copied by Replicate, follows the piece it falls on when a member is meshed, and
   is handed over (measured from the right end) when a repeated member is
   removed. A pattern without point loads saves byte-identical to before.
+- **Self weight and a DEAD case in every new model.** A section can carry a
+  unit weight γ (force per volume; Section Library), and a Plain pattern a
+  self-weight multiplier (Define → Add Plain Load Pattern): the pattern then
+  loads every frame with γ·A per unit length, downward (-Z in 3D, -Y in 2D),
+  split over the member's local axes. File → New (3D frame, 2D frame and 2D
+  truss) starts with a `DEAD` time series, pattern and linear static case, and
+  the default section is steel (γ = 77 kN/m³), so a frame drawn on a fresh model
+  has a gravity result straight away. A plate section (shell) has a unit weight
+  too: each ShellMITC4 takes γ·h per unit area as consistent nodal forces,
+  integrated over the real quadrilateral (a rectangle gives a quarter to each
+  corner). Fiber and aggregated sections, BeamWithHinges and trusses carry no
+  self weight yet. Sections without a unit weight and patterns without a self
+  weight save byte-identical.
+- **Truss wizard** (Define → Create Truss…). A simply supported plane truss —
+  Pratt, Howe, Warren or Warren with verticals — with parallel chords, a
+  pitched top chord or closed at the supports (triangular), from the span, the
+  number of panels and the depth; one material and an area for the chords and
+  one for the web (a default steel is created when the project has none), in
+  any plane, pinned at the left and on a roller at the right, as one undo step.
+  In a frame model the rotations of the truss nodes are restrained.
+- **Select menu.** Invert Selection (Ctrl+I), Get Previous Selection (Ctrl+P),
+  all joints or all elements, by element type, by section, by material (also
+  through the fibres of a section), by load pattern, supported joints, joints
+  with mass, elements with self weight, the joints of the selected elements and
+  the elements between the selected joints. Every query adds to the current
+  selection.
 
 ### Fixed
 

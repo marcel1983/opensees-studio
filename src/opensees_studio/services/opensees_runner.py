@@ -76,6 +76,7 @@ from opensees_studio.core import (
     ZeroLengthElement,
     ZeroLengthSectionElement,
 )
+from opensees_studio.core.geometry.local_axes import frame_vecxz
 from opensees_studio.core.modal import (
     dof_indices,
     free_dof_count,
@@ -84,6 +85,7 @@ from opensees_studio.core.modal import (
     resolve_modal_solver,
 )
 from opensees_studio.core.modal_combination import DEFAULT_MODAL_DAMPING, closely_spaced_pairs
+from opensees_studio.core.self_weight import self_weight_loads, shell_self_weight_nodal_loads
 from opensees_studio.services.catalog_emitters import emit_catalog_material
 from opensees_studio.services.material_emitters import emit_material
 from opensees_studio.services.opensees_io import (
@@ -417,21 +419,7 @@ class OpenSeesRunner:
                 continue
 
             # 3D: pick vecxz orthogonal to the element axis.
-            p0 = node_coords[el.nodes[0]]
-            p1 = node_coords[el.nodes[1]]
-            axis = p1 - p0
-            length = float(np.linalg.norm(axis))
-            if length < 1e-12:
-                # Degenerate element; fall back to horizontal default.
-                vecxz = (0.0, 0.0, 1.0)
-            else:
-                axis_unit = axis / length
-                # If the axis is closer to global Z than to global X,
-                # use vecxz = (1, 0, 0). Otherwise (0, 0, 1).
-                if abs(axis_unit[2]) > abs(axis_unit[0]):
-                    vecxz = (1.0, 0.0, 0.0)
-                else:
-                    vecxz = (0.0, 0.0, 1.0)
+            vecxz = frame_vecxz(node_coords[el.nodes[0]], node_coords[el.nodes[1]])
 
             key = (el.geom_transf, vecxz)
             if key not in combo_to_tag:
@@ -730,8 +718,15 @@ class OpenSeesRunner:
                 for nl in pat.nodal_loads:
                     forces = tuple(nl.forces[i] for i in self._dof_idx)
                     ops.load(nl.node_id, *forces)
-                for el in pat.element_loads:
+                # The shells' self weight: consistent nodal forces (translations only).
+                for node_id, force in shell_self_weight_nodal_loads(
+                    self.project, pat.self_weight
+                ).items():
+                    full = (*(float(f) for f in force), 0.0, 0.0, 0.0)
+                    ops.load(node_id, *(full[i] for i in self._dof_idx))
+                for el in [*pat.element_loads, *self_weight_loads(self.project, pat.self_weight)]:
                     # eleLoad -ele N -type -beamUniform wy wz wx
+                    # (the pattern's self weight is a uniform load per frame).
                     # 2D: only (wy, wx) are emitted (wz drops).
                     # 3D: (wy, wz, wx).
                     if self.project.ndm == 2:
@@ -943,7 +938,11 @@ class OpenSeesRunner:
         for pat in self.project.load_patterns:
             if pat.id not in ids:
                 continue
-            loads = [*getattr(pat, "element_loads", ()), *getattr(pat, "point_loads", ())]
+            loads = [
+                *getattr(pat, "element_loads", ()),
+                *getattr(pat, "point_loads", ()),
+                *self_weight_loads(self.project, getattr(pat, "self_weight", 0.0)),
+            ]
             if any(load.element_id in force_based for load in loads):
                 break
         else:

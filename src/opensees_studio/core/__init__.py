@@ -32,14 +32,18 @@ from opensees_studio.core.asce7 import (
 from opensees_studio.core.catalog_material import CatalogMaterial, catalog_names, catalog_spec
 from opensees_studio.core.constraints import EqualDOFConstraint
 from opensees_studio.core.defaults import (
+    DEAD_CASE_NAME,
     DEFAULT_PATTERN_NAME,
     DEFAULT_TRUSS_AREA,
+    DEFAULT_UNIT_WEIGHT,
+    ensure_dead_load_case,
     ensure_default_section,
     ensure_default_timeseries_and_pattern,
     ensure_default_truss_material,
     find_default_section,
     find_default_truss_material,
     find_plain_pattern,
+    make_dead_load_case,
     make_default_pattern,
     make_default_section,
     make_default_time_series,
@@ -225,6 +229,7 @@ from opensees_studio.core.sections import (
     StraightLayer,
     w_shape_patches,
 )
+from opensees_studio.core.self_weight import self_weight_loads, total_self_weight
 from opensees_studio.core.shell_results import (
     FIELD_NAMES as SHELL_FIELD_NAMES,
 )
@@ -281,6 +286,15 @@ from opensees_studio.core.tbdy_site import (
     tbdy2018_design_accelerations,
     tbdy2018_f1,
     tbdy2018_fs,
+)
+from opensees_studio.core.trusses import (
+    TRUSS_NDF,
+    TRUSS_TYPE_LABELS,
+    Truss,
+    TrussError,
+    TrussSpec,
+    TrussType,
+    build_truss,
 )
 from opensees_studio.core.units import (
     UnitConverter,
@@ -345,6 +359,19 @@ __all__ = [  # noqa: RUF022 - grouped by domain under section comments, not alph
     "ensure_default_section",
     "ensure_default_truss_material",
     "ensure_default_timeseries_and_pattern",
+    "DEAD_CASE_NAME",
+    "DEFAULT_UNIT_WEIGHT",
+    "ensure_dead_load_case",
+    "make_dead_load_case",
+    "self_weight_loads",
+    "TRUSS_NDF",
+    "TRUSS_TYPE_LABELS",
+    "Truss",
+    "TrussError",
+    "TrussSpec",
+    "TrussType",
+    "build_truss",
+    "total_self_weight",
     "Element",
     "TrussElement",
     "CorotTrussElement",

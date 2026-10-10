@@ -235,8 +235,16 @@ class PlainLoadPattern(Entity):
     nodal_loads: list[NodalLoad] = Field(default_factory=list)
     element_loads: list[UniformElementLoad] = Field(default_factory=list)
     point_loads: list[PointElementLoad] = Field(default_factory=list)
+    self_weight: float = Field(
+        default=0.0,
+        description=(
+            "Self-weight multiplier: the pattern also carries this factor times the "
+            "weight of every frame whose section has a unit weight, acting "
+            "downward (-Z in 3D, -Y in 2D). 0 = no self weight."
+        ),
+    )
 
-    serialize_without_defaults = omit_when_default("point_loads")
+    serialize_without_defaults = omit_when_default("point_loads", "self_weight")
 
 
 class UniformExcitationPattern(Entity):

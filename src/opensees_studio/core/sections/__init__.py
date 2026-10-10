@@ -20,7 +20,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt
 
-from opensees_studio.core._base import Entity
+from opensees_studio.core._base import Entity, omit_when_default
 
 
 # ──────────────────────────── Section shape hint ────────────────────────────
@@ -90,6 +90,16 @@ class ElasticSection(Entity):
             "result; absent ⇒ a viewer back-solves an equivalent rectangle from A/Iz."
         ),
     )
+    unit_weight: float = Field(
+        default=0.0,
+        ge=0.0,
+        description=(
+            "Weight per unit volume (force / length³). Only the self weight of a "
+            "load pattern reads it (gamma * A per unit length); it is not a mass."
+        ),
+    )
+
+    serialize_without_defaults = omit_when_default("unit_weight")
 
 
 # ──────────────────────────── Fiber primitives ────────────────────────────
@@ -266,6 +276,16 @@ class ElasticMembranePlateSection(Entity):
     nu: float = Field(..., ge=-1.0, le=0.5, description="Poisson's ratio.")
     h: PositiveFloat = Field(..., description="Plate thickness.")
     rho: float = Field(default=0.0, ge=0.0, description="Mass density per unit volume.")
+    unit_weight: float = Field(
+        default=0.0,
+        ge=0.0,
+        description=(
+            "Weight per unit volume (force / length³). Only the self weight of a "
+            "load pattern reads it (gamma * h per unit area); it is not a mass."
+        ),
+    )
+
+    serialize_without_defaults = omit_when_default("unit_weight")
 
 
 # ──────────────────────────── Aggregator ────────────────────────────

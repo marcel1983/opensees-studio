@@ -930,6 +930,35 @@ a restraint) needs. On a large model this also means every glyph changes state;
 the canvas redraws once.
 """,
             "edit.clear_selection",
+            "select.menu",
+        ),
+        "select.menu": _t(
+            "Select menu",
+            "Edit and tools",
+            "Select by element type, section, material or load pattern, invert, or go back.",
+            """
+Every entry **adds** to the current selection, so two queries in a row select
+both sets: the frames of section A, then those of section B. Start from Clear
+Selection (Esc) to pick one set alone.
+
+# Entries
+- **Invert Selection** (Ctrl+I) — selects every joint and element that is not
+  selected, and drops the ones that are.
+- **Get Previous Selection** (Ctrl+P) — goes back to what was selected before
+  the last change; pressing it again swaps back.
+- **All Joints / All Elements** — one kind only; Select All (Ctrl+A) takes both.
+- **By Element Type / Section / Material** — the submenus list what the model
+  uses, with a count. A material is found wherever an element reaches it: its
+  own material fields, or the fibres, patches and layers of its section.
+- **By Load Pattern** — the joints and elements a pattern loads. A pattern with
+  a self weight loads every frame whose section has a unit weight.
+- **Supported Joints**, **Joints with Mass**, **Elements with Self Weight** (frames and shells).
+- **Joints of Selected Elements** — the end joints of what is selected;
+  **Elements between Selected Joints** — the elements whose every joint is
+  selected.
+""",
+            "edit.select_all",
+            "edit.clear_selection",
         ),
         "edit.move": _t(
             "Edit → Move",
@@ -1224,6 +1253,39 @@ whether to restrain the out-of-plane DOF.
 """,
             "file.new_2d_frame",
             "mechanics.static",
+            "define.truss",
+        ),
+        "define.truss": _t(
+            "Define → Create Truss",
+            "Define",
+            "A simply supported plane truss from a few numbers.",
+            """
+Builds the nodes and the `truss` bars of a plane truss into the open project,
+as one undoable step, and leaves it selected.
+
+# Values
+- **Type** — **Pratt** (verticals, diagonals running down towards mid-span:
+  in tension under gravity), **Howe** (diagonals running up: in compression),
+  **Warren** (no verticals, diagonals zig-zag to top nodes at mid-panel) or
+  **Warren with verticals**.
+- **Span**, **Panels** and **Depth at mid-span**.
+- **Top chord** — parallel to the bottom chord, **pitched** to a ridge at
+  mid-span (with its own depth at the supports), or **triangular** (closed at
+  the supports). A pitched truss needs an even number of panels so a panel
+  point sits at the ridge; a pitched Warren an odd number, so a top node does.
+- **Material** and the **chord** and **web** areas. With no uniaxial material
+  in the project, a default elastic steel is created with the truss.
+- **Plane**, **Origin**, and whether to restrain the out-of-plane translation.
+
+# Mechanics
+The left end is pinned and the right end on a roller, so the truss is
+statically determinate externally. A truss bar has no bending stiffness, so in
+a frame model (ndf 3 or 6) the rotations of every truss node are restrained;
+connect it to frames afterwards only through nodes you free again. Truss bars
+carry no self weight in the DEAD case yet.
+""",
+            "define.portal_frame",
+            "mechanics.static",
         ),
         "define.material_library": _t(
             "Define → Material Library",
@@ -1398,6 +1460,20 @@ reference patterns by id, so the same loads can be used by several cases.
   arrangement: a static case can then combine them, and a transient can apply
   gravity first and the earthquake after `loadConst`.
 - A load pattern with no loads is legal but does nothing.
+
+# Self weight
+- **Self-weight multiplier** — 1 adds the weight of every frame whose section
+  has a **unit weight** (gamma, force per volume, set in the Section Library):
+  gamma times A per unit length, downward (-Z in 3D, -Y in 2D), split over the
+  member's local axes, so a column takes it axially and a sloped rafter partly
+  axially. 0 leaves it out.
+- A new project starts with a **DEAD** case: a time series, a pattern with a
+  self-weight multiplier of 1 and a linear static analysis that runs it. The
+  default section is steel (gamma = 77 kN/m³), so a frame drawn on a fresh
+  model already has a gravity result. A **plate section** (shell) has a unit
+  weight too: each ShellMITC4 takes gamma times h per unit area as consistent
+  nodal forces over its real shape. Fiber and aggregated sections,
+  BeamWithHinges members and trusses carry no self weight yet.
 """,
             "assign.load",
             "assign.distributed_load",
@@ -2204,6 +2280,15 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_delete": "edit.delete",
     "_act_clear_selection": "edit.clear_selection",
     "_act_select_all": "edit.select_all",
+    "_act_invert_selection": "select.menu",
+    "_act_previous_selection": "select.menu",
+    "_act_select_all_joints": "select.menu",
+    "_act_select_all_elements": "select.menu",
+    "_act_select_supports": "select.menu",
+    "_act_select_joints_with_mass": "select.menu",
+    "_act_select_joints_of_elements": "select.menu",
+    "_act_select_elements_within_joints": "select.menu",
+    "_act_select_weighted": "select.menu",
     "_act_move": "edit.move",
     "_act_replicate": "edit.replicate",
     "_act_check_duplicates": "edit.check_duplicates",
@@ -2218,6 +2303,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_add_node": "define.add_node",
     "_act_create_shell": "define.create_shell",
     "_act_frame_wizard": "define.portal_frame",
+    "_act_truss_wizard": "define.truss",
     "_act_material_library": "define.material_library",
     "_act_friction_library": "define.friction_library",
     "_act_material_tester": "define.material_tester",
