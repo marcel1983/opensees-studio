@@ -20,6 +20,17 @@ refused instead of silently downgraded).
   is handed over (measured from the right end) when a repeated member is
   removed. A pattern without point loads saves byte-identical to before.
 
+### Fixed
+
+- **Element loads on force-based frames lagged one step in a Linear static
+  case.** A `forceBeamColumn` or `beamWithHinges` only takes a uniform or point
+  element load into its resisting force after the solve, so the default static
+  case reported the fixed-end reactions (8.42 / 1.58 instead of 7.5 / 2.5 for a
+  point load at a quarter span) and no end rotation. Such a step is now followed
+  by a second Linear solve at the same load, which gives the exact answer for
+  elastic sections without a convergence tolerance. Cases without element loads
+  on those elements, and every non-Linear case, run as before; no file changes.
+
 ## [0.0.8] — 2026-10-10
 
 The release that makes the drawing tools work on a model that already has

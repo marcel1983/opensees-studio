@@ -871,6 +871,8 @@ class OpenSeesRunner:
         ops = self._ops
         if not preload_ids:
             return
+        # Every preload pattern keeps ramping through the later preload cases.
+        applied_ids: list[int] = []
         for preload_id in preload_ids:
             preload_case = next(
                 (c for c in self.project.analyses if c.id == preload_id),
@@ -888,15 +890,66 @@ class OpenSeesRunner:
                     f"{type(preload_case).__name__}."
                 )
             self._emit_patterns_for_case(preload_case.pattern_ids)
+            applied_ids.extend(preload_case.pattern_ids)
             self._setup_analysis(preload_case)
+            correct = self._needs_linear_correction(preload_case, applied_ids)
             for step in range(preload_case.n_steps):
-                if ops.analyze(1) != 0:
+                if self._analyze_static_step(preload_case, correct) != 0:
                     raise RuntimeError(
                         f"Preload StaticCase {preload_case.id} failed at "
                         f"step {step + 1}/{preload_case.n_steps}."
                     )
         ops.loadConst("-time", 0.0)
         ops.wipeAnalysis()
+
+    def _needs_linear_correction(self, case: StaticCase, pattern_ids: list[int]) -> bool:
+        """Whether a Linear step must be followed by a zero-increment correction solve.
+
+        A force-based frame (``forceBeamColumn``, ``beamWithHinges``) only takes
+        an element load (``-beamUniform``, ``-beamPoint``) into its resisting
+        force at its next state determination, which comes after the solve.
+        A single Linear solve therefore lags by one load increment: a simply
+        supported beam reports the fixed-end reactions and no rotation after
+        the first step. The elastic and displacement-based frames put the load
+        straight into their resisting force and are exact as they are.
+        """
+        if case.algorithm != "Linear" or case.integrator != "LoadControl":
+            return False
+        force_based = {
+            el.id
+            for el in self.project.elements
+            if isinstance(el, (ForceBeamColumn, BeamWithHingesElement))
+        }
+        if not force_based:
+            return False
+        ids = set(pattern_ids)
+        for pat in self.project.load_patterns:
+            if pat.id not in ids:
+                continue
+            loads = [*getattr(pat, "element_loads", ()), *getattr(pat, "point_loads", ())]
+            if any(load.element_id in force_based for load in loads):
+                return True
+        return False
+
+    def _analyze_static_step(self, case: StaticCase, correct: bool) -> int:
+        """One static step; with ``correct``, a second Linear solve at the same load.
+
+        The second solve runs with a zero load increment, so it moves neither
+        the load factor nor pseudo-time and only removes the unbalance the
+        force-based elements report once updated (see
+        :meth:`_needs_linear_correction`). For linear sections that is the
+        exact answer, with no convergence tolerance involved; Newton with a
+        force test gets the same result but needs a tolerance that suits the
+        model's force units.
+        """
+        ops = self._ops
+        status = ops.analyze(1)
+        if status != 0 or not correct:
+            return status
+        ops.integrator(case.integrator, 0.0)
+        status = ops.analyze(1)
+        ops.integrator(case.integrator, case.load_factor_increment)
+        return status
 
     def _setup_analysis(self, case: Any) -> None:
         ops = self._ops
@@ -1038,8 +1091,9 @@ class OpenSeesRunner:
         element_forces: dict[int, np.ndarray] = {}
         element_stresses: dict[int, np.ndarray] = {}
 
+        correct = self._needs_linear_correction(case, case.pattern_ids)
         for step in range(case.n_steps):
-            status = ops.analyze(1)
+            status = self._analyze_static_step(case, correct)
             if status != 0:
                 raise RuntimeError(
                     f"Static analysis failed at step {step + 1}/{case.n_steps} "
