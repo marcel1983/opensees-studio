@@ -9,6 +9,14 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.5] — 2026-10-09
+
+The release that works on the model rather than on the input file: a portal
+frame wizard that writes its own grid, duplicate detection and repair, a DXF
+import for bar layouts, contextual help on F1, a response spectrum built by hand
+or from ASCE/SEI 7-16, automatic meshing of members and shells — and display
+units that finally convert what they show, in every open view, without a re-run.
+
 ### Added
 
 - **A portal frame wizard** (Define → Create Portal Frame): the geometry of a
@@ -184,6 +192,25 @@ refused instead of silently downgraded).
   builds a frame into the project that is already open and touches nothing else.
   Cancelling the wizard still leaves the empty project, which is the right start
   for drawing by hand.
+
+- **Set Display Units now converts the results instead of only relabelling
+  them**, and every open view follows the change without a re-run. A project
+  carries two systems: `meta.units`, the units its values were typed in, and
+  `meta.display_units`, the units results are *shown* in (`null` — the default,
+  and what every file written before the field means — is the model's own). The
+  model is never rewritten, so changing what you look at can no longer
+  re-interpret what you typed. Force diagrams read their colour bar and their end
+  labels in the new system, with the unit in the colour-bar title, while the
+  drawn ribbon keeps its size — the scale is a geometric multiplier on the model
+  values, and converting it too would resize the diagram on every unit change.
+  Result tables (displacements, reactions, element forces, pushover curve, node
+  histories, response-spectrum peaks), the pushover, time-history, hysteresis and
+  response-spectrum plots and the deformed shape's peak displacement all convert
+  value and label from one converter, so the two cannot disagree. Rotations stay
+  in rad and time in s; curvature, being the inverse of a length, converts the
+  other way. Factors come from exact definitions (1 in = 25.4 mm,
+  1 lbf = 4.4482216152605 N): 10 000 N·m reads as 88.51 kip·in, 6 mm as
+  0.2362 in.
 
 ## [0.0.4] — 2026-10-06
 
