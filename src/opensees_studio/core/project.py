@@ -23,6 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
 
 from opensees_studio.core._base import omit_when_default
 from opensees_studio.core.analysis import AnalysisCase
+from opensees_studio.core.combinations import LoadCombination
 from opensees_studio.core.constraints import EqualDOFConstraint
 from opensees_studio.core.friction import FrictionModel
 from opensees_studio.core.geometry import (
@@ -71,6 +72,8 @@ class Project(BaseModel):
     """The root aggregate. Serializable to/from JSON via ``model_dump_json``."""
 
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
+    # A project without load combinations saves byte-identical to before they existed.
+    serialize_without_defaults = omit_when_default("combinations")
 
     # 1 = pre ground-motion catalog (records embedded in PathTimeSeries),
     # 2 = ground_motions catalog with record-backed time series.
@@ -155,6 +158,10 @@ class Project(BaseModel):
         description="Design/target spectra in g for record scaling (additive, schema 2).",
     )
     analyses: list[AnalysisCase] = Field(default_factory=list)
+    combinations: list[LoadCombination] = Field(
+        default_factory=list,
+        description="Load combinations of analysis-case results (additive, schema 2).",
+    )
 
     # ─────────────────── invariants ───────────────────
     @model_validator(mode="after")
@@ -180,6 +187,7 @@ class Project(BaseModel):
             ("ground motion", self.ground_motions),
             ("target spectrum", self.target_spectra),
             ("analysis", self.analyses),
+            ("load combination", self.combinations),
         ):
             ids = [it.id for it in items]
             if len(ids) != len(set(ids)):
@@ -227,6 +235,9 @@ class Project(BaseModel):
     def next_analysis_id(self) -> int:
         return self._next_id(self.analyses)
 
+    def next_combination_id(self) -> int:
+        return self._next_id(self.combinations)
+
     # ─────────────────── lookups ───────────────────
     def node(self, node_id: PositiveInt) -> Node:
         return self._get(self.nodes, node_id, "node")
@@ -248,6 +259,9 @@ class Project(BaseModel):
 
     def target_spectrum(self, spectrum_id: PositiveInt) -> TargetSpectrum:
         return self._get(self.target_spectra, spectrum_id, "target spectrum")
+
+    def combination(self, combination_id: PositiveInt) -> LoadCombination:
+        return self._get(self.combinations, combination_id, "load combination")
 
     @staticmethod
     def _get(items: list[Any], target_id: int, label: str) -> Any:

@@ -208,6 +208,50 @@ class ResponseSpectrumResults:
     """Closely spaced modes under SRSS, damping substitutions."""
 
 
+@dataclass
+class CombinationResults:
+    """A load combination evaluated from stored case results (no solver run).
+
+    ``max`` and ``min`` are ordinary one-step :class:`StaticResults`, so every
+    static view (deformed shape, force diagram, shell contours, tables) can show
+    either bound. A single-valued combination (Linear Add of static cases) has
+    the same numbers in both.
+
+    Element forces are bounded as *internal* forces, the sign a force diagram
+    draws (OpenSees ``localForce`` with the end-j half reversed): the diagram of
+    ``max`` is the upper envelope, that of ``min`` the lower one. The tables
+    turn them back into per-component ``localForce`` bounds.
+    """
+
+    combination_id: int
+    combination_name: str
+    combination_type: str
+    """One of ``core.combinations.COMBINATION_TYPES``."""
+    max: StaticResults
+    min: StaticResults
+    single_valued: bool
+    case_ids: list[int] = field(default_factory=list)
+    """Analysis cases whose results went in, nested combinations included."""
+    missing_fields: list[str] = field(default_factory=list)
+    """Result fields left out because some included case does not provide them."""
+    warnings: list[str] = field(default_factory=list)
+
+    @property
+    def case_id(self) -> int:
+        """The combination id (a result title reads ``#id`` like a case's)."""
+        return self.combination_id
+
+    @property
+    def case_name(self) -> str:
+        return self.combination_name
+
+    def bound(self, which: str) -> StaticResults:
+        """``"max"`` or ``"min"``."""
+        if which not in ("max", "min"):
+            raise ValueError(f"Unknown bound {which!r}: use 'max' or 'min'.")
+        return self.max if which == "max" else self.min
+
+
 def eigen_solver_note(results: object) -> str | None:
     """Run log line naming the eigen solver a modal or spectrum result used, else ``None``."""
     from opensees_studio.core.modal import dense_eigen_max_free_dof

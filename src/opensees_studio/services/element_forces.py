@@ -209,6 +209,31 @@ def extract_diagram_data(
     )
 
 
+def envelope_diagram_data(
+    project: Project,
+    upper: StaticResults,
+    lower: StaticResults,
+    component: ForceComponent,
+) -> DiagramData:
+    """The max and the min diagram of an envelope, as one :class:`DiagramData`.
+
+    Each element appears twice, once per bound, so a renderer draws both
+    ribbons and labels the largest value of the max diagram and the smallest of
+    the min one. ``upper`` and ``lower`` are the bounds of a
+    :class:`~opensees_studio.services.results.CombinationResults`, whose forces
+    are bounded in the diagram's sign convention.
+    """
+    a = extract_diagram_data(project, upper, component)
+    b = extract_diagram_data(project, lower, component)
+    return DiagramData(
+        component=component,
+        element_ids=np.concatenate([a.element_ids, b.element_ids]),
+        values_i=np.concatenate([a.values_i, b.values_i]),
+        values_j=np.concatenate([a.values_j, b.values_j]),
+        abs_max=max(a.abs_max, b.abs_max),
+    )
+
+
 def auto_scale(project: Project, data: DiagramData, target_fraction: float = 0.08) -> float:
     """Suggested geometric scale so the max diagram draws at ``target_fraction``
     of the model's bounding box diagonal.
