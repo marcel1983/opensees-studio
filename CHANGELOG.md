@@ -9,6 +9,12 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.9] — 2026-10-10
+
+The modelling release: loads inside a member, the weight of the structure as a
+load case from the first click, a truss in three pages, and a Select menu to
+work on what was built.
+
 ### Added
 
 - **Point loads inside frame elements** (Assign → Frame → Point Load…). A
@@ -61,6 +67,12 @@ refused instead of silently downgraded).
   cannot converge there past the first step and is refused with the reason.
   Cases without element loads on those elements, and Newton with NormUnbalance,
   run as before; no file changes.
+- **An empty click on a grid placed a node wherever the pointer happened to
+  be** (for example at (-0.0074, 1.9923)). With a visible grid, a click that
+  hits no node and no intersection now lands on the nearest grid crossing, in
+  the grid's own frame and on the working plane, and the hover preview follows
+  the same rule. A project with no grid still places the point where the ray
+  meets the plane.
 
 ## [0.0.8] — 2026-10-10
 
