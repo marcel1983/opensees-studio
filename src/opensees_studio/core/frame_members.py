@@ -189,12 +189,12 @@ class MemberLayout:
     @property
     def face_i(self) -> np.ndarray:
         """Start of the flexible part, where the end-i forces are reported."""
-        return self.joint_i + self.offset_i
+        return np.asarray(self.joint_i + self.offset_i, dtype=float)
 
     @property
     def face_j(self) -> np.ndarray:
         """End of the flexible part, where the end-j forces are reported."""
-        return self.joint_j + self.offset_j
+        return np.asarray(self.joint_j + self.offset_j, dtype=float)
 
     def has_offset(self, end: str) -> bool:
         """The flexible part does not start (``"i"``) or end (``"j"``) at the joint."""
@@ -212,7 +212,7 @@ class MemberLayout:
 
     def point_at(self, distance: float) -> np.ndarray:
         """Point on the member line ``distance`` from joint i, measured along the member."""
-        return self.joint_i + self.transverse + distance * self.x
+        return np.asarray(self.joint_i + self.transverse + distance * self.x, dtype=float)
 
 
 def member_layout(project: Project, element: Any) -> MemberLayout | None:
@@ -226,7 +226,7 @@ def member_layout(project: Project, element: Any) -> MemberLayout | None:
     p_j = np.asarray(coords[element.nodes[1]], dtype=float)
     if project.ndm == 2:
         p_i[2] = p_j[2] = 0.0
-    axes = frame_local_axes(project.ndm, p_i, p_j)
+    axes = frame_local_axes(project.ndm, p_i.tolist(), p_j.tolist())
     if axes is None:
         return None
     x, y, z = axes
@@ -312,7 +312,7 @@ GAUSS3 = (
 
 def _interp(w_a: np.ndarray, w_b: np.ndarray, d_a: float, d_b: float, d: float) -> np.ndarray:
     t = 0.0 if d_b == d_a else (d - d_a) / (d_b - d_a)
-    return w_a + t * (w_b - w_a)
+    return np.asarray(w_a + t * (w_b - w_a), dtype=float)
 
 
 def _joint_load(

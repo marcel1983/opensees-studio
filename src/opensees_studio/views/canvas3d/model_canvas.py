@@ -48,7 +48,7 @@ CAMERA_DRAG_ANGLE_DEG = 3.0
 CAMERA_DRAG_PAN_FRACTION = 0.05
 
 
-class ModelCanvas(QtInteractor):  # type: ignore[misc]
+class ModelCanvas(QtInteractor):
     """The central 3D viewport widget."""
 
     # Convenience signals re-emitted from SelectionState.
@@ -95,7 +95,7 @@ class ModelCanvas(QtInteractor):  # type: ignore[misc]
         self.selection.selectionChanged.connect(self._renderer.update_selection)
 
     # ── Qt event override: this is the actual entry point for picking. ──
-    def mousePressEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
+    def mousePressEvent(self, event: QMouseEvent) -> None:
         """Catch left-clicks for picking; let everything else pass through.
 
         We deliberately override at the Qt level rather than going through
@@ -117,7 +117,7 @@ class ModelCanvas(QtInteractor):  # type: ignore[misc]
             self._press_camera = self._camera_state()
         super().mousePressEvent(event)
 
-    def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         # VTK finishes its interaction inside `super()` and may still apply the
         # rotation as the button goes up, so the pick is handled afterwards:
         # anything restored before that would be overwritten.
@@ -156,7 +156,7 @@ class ModelCanvas(QtInteractor):  # type: ignore[misc]
                         # instead of leaving them clicking at a dead canvas.
                         self.dragNotAClick.emit()
 
-    def mouseMoveEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
         """Live snap-target preview — hover highlight on the closest grid
         intersection within pixel tolerance. Skipped entirely when the
         default selection tool is active (no need to hint at snap there).

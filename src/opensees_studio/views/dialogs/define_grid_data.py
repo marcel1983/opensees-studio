@@ -183,17 +183,17 @@ class _AxisGridTable(QWidget):
                     id=(id_item.text().strip() if id_item else f"{self.axis}{row + 1}"),
                     ordinate=ords[row] if row < len(ords) else 0.0,
                     line_type=(
-                        line_type_widget.currentText()  # type: ignore[union-attr]
+                        line_type_widget.currentText()
                         if isinstance(line_type_widget, QComboBox)
                         else "Primary"
                     ),
                     visible=(
-                        visible_widget.isChecked()  # type: ignore[union-attr]
+                        visible_widget.isChecked()
                         if isinstance(visible_widget, QCheckBox)
                         else True
                     ),
                     bubble_loc=(
-                        bubble_widget.currentText()  # type: ignore[union-attr]
+                        bubble_widget.currentText()
                         if isinstance(bubble_widget, QComboBox)
                         else "End"
                     ),

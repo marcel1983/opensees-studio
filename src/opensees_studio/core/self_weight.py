@@ -53,7 +53,7 @@ def weight_per_length(project: Project, element: object) -> float:
     section = next((s for s in project.sections if s.id == section_id), None)
     if not isinstance(section, ElasticSection):
         return 0.0
-    return section.unit_weight * section.A * element.modifiers.weight  # type: ignore[attr-defined]
+    return section.unit_weight * section.A * element.modifiers.weight
 
 
 def self_weight_loads(project: Project, multiplier: float = 1.0) -> list[UniformElementLoad]:

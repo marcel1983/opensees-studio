@@ -40,6 +40,7 @@ modifiers) pair, or scaled inline properties for ``beamWithHinges``.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -148,7 +149,7 @@ def _rotation_dofs(ndm: int) -> tuple[int, ...]:
     return (3,) if ndm == 2 else (4, 5, 6)
 
 
-def _kept_rotation_dofs(layout: MemberLayout, kept: list[str]) -> tuple[int, ...] | None:
+def _kept_rotation_dofs(layout: MemberLayout, kept: Sequence[str]) -> tuple[int, ...] | None:
     """Global rotation DOFs equivalent to keeping ``kept`` local rotations, None if skewed."""
     if layout.ndm == 2:
         return (3,) if "M3" in kept else ()

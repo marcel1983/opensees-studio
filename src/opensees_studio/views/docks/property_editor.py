@@ -217,7 +217,7 @@ class PropertyEditorDock(QScrollArea):
                     f"#{s.id} {s.name or s.type}",
                     s.id,
                 )
-            idx = sec_cb.findData(el.section_id)  # type: ignore[attr-defined]
+            idx = sec_cb.findData(el.section_id)
             if idx >= 0:
                 sec_cb.setCurrentIndex(idx)
 
@@ -241,7 +241,7 @@ class PropertyEditorDock(QScrollArea):
             mat_cb = QComboBox()
             for m in self._project.materials:
                 mat_cb.addItem(f"#{m.id} {m.name or m.type}", m.id)
-            idx = mat_cb.findData(el.material_id)  # type: ignore[attr-defined]
+            idx = mat_cb.findData(el.material_id)
             if idx >= 0:
                 mat_cb.setCurrentIndex(idx)
 
@@ -259,12 +259,8 @@ class PropertyEditorDock(QScrollArea):
         if hasattr(el, "area") and self.on_change_element_fields is not None:
             area_spin = FloatField()
             area_spin.setRange(1e-12, 1e6)
-            area_spin.setValue(float(el.area))  # type: ignore[attr-defined]
-            area_spin.setSingleStep(
-                float(el.area) * 0.1  # type: ignore[attr-defined]
-                if el.area
-                else 0.001
-            )  # type: ignore[attr-defined]
+            area_spin.setValue(float(el.area))
+            area_spin.setSingleStep(float(el.area) * 0.1 if el.area else 0.001)
 
             # Commit on editingFinished so we don't dispatch a command on
             # every keystroke (which would spam the undo stack).

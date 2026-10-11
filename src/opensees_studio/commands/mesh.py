@@ -92,7 +92,9 @@ class MeshCommand(ProjectCommand):
         w0, w1 = np.asarray(load.start()), np.asarray(load.end())
 
         def value_at(t: float) -> np.ndarray:
-            return w0 + (t - load.x_start) / (load.x_end - load.x_start) * (w1 - w0)
+            return np.asarray(
+                w0 + (t - load.x_start) / (load.x_end - load.x_start) * (w1 - w0), dtype=float
+            )
 
         carried: list[TrapezoidalElementLoad] = []
         for piece_id in self._plan.replacements.get(load.element_id, []):

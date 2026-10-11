@@ -147,7 +147,9 @@ class OpenSeesRunner:
                 progress lines.
         """
         if ops_module is None:
-            import openseespy.opensees as ops_module  # local import for testability
+            import openseespy.opensees as _default_ops  # local import for testability
+
+            ops_module = _default_ops
         # The solver module is duck-typed at runtime (and a mock in the tests):
         # `Any` is the honest type, and `None` never survives this line.
         self._ops: Any = ops_module
@@ -437,7 +439,7 @@ class OpenSeesRunner:
 
         # Allocate (transf_type, vecxz_tuple, joint offsets) → tag, lazily.
         combo_to_tag: dict[tuple[Any, ...], int] = {}
-        self._element_geom_transf_tag: dict[int, int] = {}
+        self._element_geom_transf_tag = {}
         next_tag = 1
 
         for el in self.project.elements:

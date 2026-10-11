@@ -172,7 +172,7 @@ class SectionLibraryDialog(FittedDialog):
             return
         new_id = self._vm.project.next_section_id()
         form = FORM_REGISTRY[kind]()
-        form._section_id = new_id  # type: ignore[attr-defined]
+        form._section_id = new_id
         try:
             new_section = form.read()
         except (ValidationError, ValueError) as exc:

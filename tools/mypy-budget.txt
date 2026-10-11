@@ -29,4 +29,8 @@
 # `QMessageBox`/`_require_drawable_grid` errors with it: 237 -> 234.
 # The click-vs-drag helpers are fully annotated, so the draw-tool fix costs
 # no errors: the count stands at 234.
-234
+# Measured again on 2026-10-11 (mypy 2.4.0): the count had drifted to 245 on
+# main (the 0.0.9 CI run was red on this step). Removing the 27 `type: ignore`
+# comments mypy reports as unused and typing the new frame-member code brought
+# it to 214.
+214

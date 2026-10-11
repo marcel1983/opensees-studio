@@ -149,7 +149,7 @@ class TransientResults:
         import h5py
 
         with h5py.File(self.h5_path, "r") as f:
-            return f["time"][:]  # type: ignore[index]
+            return f["time"][:]
 
     def node_disp_history(self, node_id: int) -> np.ndarray:
         """Return shape-(n_steps, ndf) displacement history for ``node_id``."""
@@ -173,14 +173,14 @@ class TransientResults:
                     f"No '{kind}' history recorded for node {node_id}. "
                     f"Re-run the analysis with the current OpenSeesRunner.",
                 )
-            return f[key][:]  # type: ignore[index]
+            return f[key][:]
 
     def element_force_history(self, element_id: int) -> np.ndarray:
         """Return shape-(n_steps, n_force_components) force history."""
         import h5py
 
         with h5py.File(self.h5_path, "r") as f:
-            return f[f"elements/{element_id}/forces"][:]  # type: ignore[index]
+            return f[f"elements/{element_id}/forces"][:]
 
 
 @dataclass

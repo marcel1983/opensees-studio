@@ -81,7 +81,7 @@ class AssignSectionCommand(ProjectCommand):
                 continue
             if not hasattr(el, "section_id"):
                 continue
-            self._previous[el.id] = el.section_id  # type: ignore[attr-defined]
+            self._previous[el.id] = el.section_id
             self.project.elements[i] = el.model_copy(update={"section_id": self._section_id})
         self._notify()
 
@@ -154,11 +154,11 @@ class ConvertElementTypeCommand(ProjectCommand):
             }
             # Preserve compatible fields where possible.
             if hasattr(el, "material_id") and "material_id" not in kwargs:
-                kwargs["material_id"] = el.material_id  # type: ignore[attr-defined]
+                kwargs["material_id"] = el.material_id
             if hasattr(el, "section_id") and "section_id" not in kwargs:
-                kwargs["section_id"] = el.section_id  # type: ignore[attr-defined]
+                kwargs["section_id"] = el.section_id
             if hasattr(el, "area") and "area" not in kwargs:
-                kwargs["area"] = el.area  # type: ignore[attr-defined]
+                kwargs["area"] = el.area
             # Drop kwargs the target class doesn't accept.
             accepted = cls.model_fields.keys()
             kwargs = {k: v for k, v in kwargs.items() if k in accepted}
@@ -267,7 +267,7 @@ class AssignMaterialCommand(ProjectCommand):
                 continue
             if not hasattr(el, "material_id"):
                 continue
-            self._previous[el.id] = el.material_id  # type: ignore[attr-defined]
+            self._previous[el.id] = el.material_id
             self.project.elements[i] = el.model_copy(update={"material_id": self._material_id})
         self._notify()
 

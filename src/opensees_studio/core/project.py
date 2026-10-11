@@ -231,16 +231,16 @@ class Project(BaseModel):
     def node(self, node_id: PositiveInt) -> Node:
         return self._get(self.nodes, node_id, "node")
 
-    def material(self, material_id: PositiveInt) -> Material:  # type: ignore[valid-type]
+    def material(self, material_id: PositiveInt) -> Material:
         return self._get(self.materials, material_id, "material")
 
-    def section(self, section_id: PositiveInt) -> Section:  # type: ignore[valid-type]
+    def section(self, section_id: PositiveInt) -> Section:
         return self._get(self.sections, section_id, "section")
 
-    def friction_model(self, friction_model_id: PositiveInt) -> FrictionModel:  # type: ignore[valid-type]
+    def friction_model(self, friction_model_id: PositiveInt) -> FrictionModel:
         return self._get(self.friction_models, friction_model_id, "friction model")
 
-    def element(self, element_id: PositiveInt) -> Element:  # type: ignore[valid-type]
+    def element(self, element_id: PositiveInt) -> Element:
         return self._get(self.elements, element_id, "element")
 
     def ground_motion(self, record_id: PositiveInt) -> GroundMotionRecord:

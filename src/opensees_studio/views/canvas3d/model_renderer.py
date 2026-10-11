@@ -773,10 +773,10 @@ class ModelRenderer:
             actor = self._plotter.add_mesh(glyphs, color=color, pickable=False, lighting=True)
             self._aux_actors.append(actor)
         if arms:
-            points = np.asarray([p for arm in arms for p in arm], dtype=float)
+            arm_points = np.asarray([p for arm in arms for p in arm], dtype=float)
             lines = np.hstack([[2, 2 * k, 2 * k + 1] for k in range(len(arms))])
             actor = self._plotter.add_mesh(
-                pv.PolyData(points, lines=lines),
+                pv.PolyData(arm_points, lines=lines),
                 color=(0.35, 0.35, 0.35),
                 line_width=6.0,
                 pickable=False,
@@ -799,7 +799,7 @@ class ModelRenderer:
                 if node is None:
                     continue
                 f = np.asarray(nload.forces[:3], dtype=float)
-                mag = np.linalg.norm(f)
+                mag = float(np.linalg.norm(f))
                 if mag < 1e-12:
                     continue
                 direction = f / mag
