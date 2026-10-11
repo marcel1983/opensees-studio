@@ -34,6 +34,8 @@ from typing import Any
 
 import numpy as np
 
+from opensees_studio.core.geometry.elements import FrameMember
+from opensees_studio.core.geometry.frame_options import EndRelease
 from opensees_studio.core.geometry.node import Node, Restraint6
 from opensees_studio.core.project import Project
 
@@ -177,8 +179,26 @@ class _Working:
     def replace(self, element: Any, chunks: list[list[int]]) -> None:
         """Replace ``element`` with one element per chunk of nodes."""
         self.removed.add(element.id)
-        for nodes in chunks:
-            new = element.model_copy(update={"id": self.next_element, "nodes": tuple(nodes)})
+        for k, nodes in enumerate(chunks):
+            update: dict[str, Any] = {"id": self.next_element, "nodes": tuple(nodes)}
+            if isinstance(element, FrameMember):
+                # End releases and end offsets stay at the member's two ends:
+                # the new interior joints are continuous.
+                first, last = k == 0, k == len(chunks) - 1
+                releases, offsets = element.releases, element.end_offsets
+                update["releases"] = releases.model_copy(
+                    update={
+                        "i": releases.i if first else EndRelease(),
+                        "j": releases.j if last else EndRelease(),
+                    }
+                )
+                update["end_offsets"] = offsets.model_copy(
+                    update={
+                        "length_i": offsets.length_i if first else 0.0,
+                        "length_j": offsets.length_j if last else 0.0,
+                    }
+                )
+            new = element.model_copy(update=update)
             self.next_element += 1
             self.elements.append(new)
             self.added_elements[new.id] = new

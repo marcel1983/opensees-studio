@@ -27,8 +27,11 @@ from PySide6.QtWidgets import (
 from opensees_studio.core import (
     BEAM_INTEGRATION_RULES,
     BEARING_CLASSES,
+    CARDINAL_POINT_NAMES,
     GEOM_TRANSF_TYPES,
     SLIDING_BEARING_CLASSES,
+    FrameEndOffsets,
+    FrameMember,
     Project,
 )
 from opensees_studio.views.float_field import FloatField
@@ -214,7 +217,7 @@ class PropertyEditorDock(QScrollArea):
                     f"#{s.id} {s.name or s.type}",
                     s.id,
                 )
-            idx = sec_cb.findData(el.section_id)  # type: ignore[attr-defined]
+            idx = sec_cb.findData(el.section_id)
             if idx >= 0:
                 sec_cb.setCurrentIndex(idx)
 
@@ -238,7 +241,7 @@ class PropertyEditorDock(QScrollArea):
             mat_cb = QComboBox()
             for m in self._project.materials:
                 mat_cb.addItem(f"#{m.id} {m.name or m.type}", m.id)
-            idx = mat_cb.findData(el.material_id)  # type: ignore[attr-defined]
+            idx = mat_cb.findData(el.material_id)
             if idx >= 0:
                 mat_cb.setCurrentIndex(idx)
 
@@ -256,12 +259,8 @@ class PropertyEditorDock(QScrollArea):
         if hasattr(el, "area") and self.on_change_element_fields is not None:
             area_spin = FloatField()
             area_spin.setRange(1e-12, 1e6)
-            area_spin.setValue(float(el.area))  # type: ignore[attr-defined]
-            area_spin.setSingleStep(
-                float(el.area) * 0.1  # type: ignore[attr-defined]
-                if el.area
-                else 0.001
-            )  # type: ignore[attr-defined]
+            area_spin.setValue(float(el.area))
+            area_spin.setSingleStep(float(el.area) * 0.1 if el.area else 0.001)
 
             # Commit on editingFinished so we don't dispatch a command on
             # every keystroke (which would spam the undo stack).
@@ -306,12 +305,96 @@ class PropertyEditorDock(QScrollArea):
         elif integration is not None:
             points = getattr(el, "integration_points", None)
             form.addRow("Integration:", QLabel(f"{integration}, {points} points"))
+        if isinstance(el, FrameMember):
+            self._add_frame_option_rows(form, el)
         if isinstance(el, SLIDING_BEARING_CLASSES):
             self._add_sliding_bearing_rows(form, el, self._project)
         elif isinstance(el, BEARING_CLASSES):
             self._add_bearing_rows(form, el)
         self._layout.addLayout(form)
         self._layout.addStretch(1)
+
+    @staticmethod
+    def _release_text(el: Any) -> str:
+        parts = []
+        for end in ("i", "j"):
+            release = el.releases.end(end)
+            if not release.released:
+                continue
+            items = [
+                f"{d} (k={release.spring(d):g})" if release.spring(d) else d
+                for d in release.released
+            ]
+            parts.append(f"{end}: {', '.join(items)}")
+        return "; ".join(parts) or "none"
+
+    @staticmethod
+    def _modifier_text(el: Any) -> str:
+        mods = el.modifiers
+        changed = [
+            f"{name}={getattr(mods, name):g}"
+            for name in type(mods).model_fields
+            if getattr(mods, name) != 1.0
+        ]
+        return ", ".join(changed) or "none"
+
+    def _add_frame_option_rows(self, form: QFormLayout, el: Any) -> None:
+        """Frame assignments: releases and modifiers as text, offsets and insertion editable."""
+        form.addRow("Releases:", QLabel(self._release_text(el)))
+        form.addRow("Modifiers:", QLabel(self._modifier_text(el)))
+        offsets = el.end_offsets
+        insertion = el.insertion
+        if self.on_change_element_fields is None:
+            form.addRow(
+                "End offsets:",
+                QLabel(
+                    f"i {offsets.length_i:g}, j {offsets.length_j:g}, "
+                    f"rigid factor {offsets.rigid_factor:g}"
+                ),
+            )
+            form.addRow("Insertion:", QLabel(f"cardinal point {insertion.cardinal_point}"))
+            return
+        fields: dict[str, FloatField] = {}
+        for name, label, hi in (
+            ("length_i", "Offset i:", 1e12),
+            ("length_j", "Offset j:", 1e12),
+            ("rigid_factor", "Rigid-zone factor:", 1.0),
+        ):
+            field = FloatField()
+            field.setRange(0.0, hi)
+            field.setValue(getattr(offsets, name))
+            fields[name] = field
+            form.addRow(label, field)
+
+        def _commit_offsets(_eid: int = el.id, _old: Any = offsets) -> None:
+            values = {name: field.value() for name, field in fields.items()}
+            if values == _old.model_dump() or self.on_change_element_fields is None:
+                return
+            try:
+                new = FrameEndOffsets(**values)
+            except ValueError:
+                return
+            self.on_change_element_fields(_eid, {"end_offsets": new})
+
+        for field in fields.values():
+            field.editingFinished.connect(_commit_offsets)
+
+        cardinal = QComboBox()
+        for point, name in CARDINAL_POINT_NAMES.items():
+            cardinal.addItem(f"{point} ({name})", point)
+        cardinal.setCurrentIndex(cardinal.findData(insertion.cardinal_point))
+
+        def _commit_cardinal(_i: int, _eid: int = el.id, _old: Any = insertion) -> None:
+            point = cardinal.currentData()
+            if point != _old.cardinal_point and self.on_change_element_fields is not None:
+                self.on_change_element_fields(
+                    _eid, {"insertion": _old.model_copy(update={"cardinal_point": point})}
+                )
+
+        cardinal.currentIndexChanged.connect(_commit_cardinal)
+        form.addRow("Cardinal point:", cardinal)
+        self._frame_offset_fields = fields
+        self._cardinal_point = cardinal
 
     def _add_integration_rows(self, form: QFormLayout, el: Any) -> None:
         """Editable beam integration rule and point count (force/disp beam-columns)."""

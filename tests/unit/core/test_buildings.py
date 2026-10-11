@@ -365,16 +365,18 @@ def test_runner_emits_the_diaphragm_its_fix_and_transformation() -> None:
     from opensees_studio.services.opensees_runner import OpenSeesRunner
 
     project = _loaded_floor((3.0, 2.0), lump=True)
-    project.rigid_links.append(RigidLink(kind="beam", retained_node=5, constrained_node=1))
+    project.rigid_links.append(RigidLink(kind="beam", retained_node=1, constrained_node=2))
     project.analyses.append(StaticCase(id=1, pattern_ids=[1]))
     ops = MagicMock()
     ops.analyze.return_value = 0
     ops.eleForce.return_value = [0.0] * 12
+    ops.nodeDisp.return_value = 0.0
+    ops.nodeReaction.return_value = 0.0
     ops.eleResponse.return_value = []
     OpenSeesRunner(project, ops_module=ops).run(project.analyses[0])
     assert call.fix(9, 0, 0, 1, 1, 1, 0) in ops.mock_calls
     assert call.rigidDiaphragm(3, 9, 5, 6, 7, 8) in ops.mock_calls
-    assert call.rigidLink("beam", 5, 1) in ops.mock_calls
+    assert call.rigidLink("beam", 1, 2) in ops.mock_calls
     assert call.mass(9, 4000.0, 4000.0, 0.0, 0.0, 0.0, pytest.approx(52_000.0)) in ops.mock_calls
     assert call.constraints("Transformation") in ops.mock_calls
     names = [c[0] for c in ops.mock_calls]
@@ -451,3 +453,24 @@ def test_mass_source_puts_no_mass_on_a_restrained_dof() -> None:
     )
     masses = effective_nodal_masses(project)
     assert masses[5][:2].tolist() == pytest.approx([0.0, 1000.0])
+
+
+def test_a_diaphragm_joint_cannot_retain_another_constraint() -> None:
+    """OpenSees' Transformation handler solves such a chain silently wrong."""
+    from opensees_studio.core.geometry.frame_options import EndRelease, FrameReleases
+
+    released = _one_storey()
+    released.elements[4] = released.elements[4].model_copy(
+        update={"releases": FrameReleases(i=EndRelease(released=("M3",)))}
+    )
+    problems = diaphragm_problems(released)
+    assert any("node 5 is the joint of a released end of element 5" in p for p in problems)
+
+    retaining = _one_storey()
+    retaining.nodes.append(Node(id=10, coords=(0.0, 0.0, 3.0)))
+    retaining.mp_constraints.append(
+        EqualDOFConstraint(retained_node=5, constrained_node=10, dofs=(3,))
+    )
+    assert any(
+        "node 5 is the retained node of an equalDOF" in p for p in diaphragm_problems(retaining)
+    )

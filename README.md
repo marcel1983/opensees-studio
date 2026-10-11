@@ -41,7 +41,14 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   displacement-based), trusses, corotational trusses, quads, `ShellMITC4`
   shells (Define → Create Shell from 4 Nodes derives the winding from the
   coordinates), zero-length elements and zero-length sections, restraints,
-  equalDOF constraints, distributed loads, imposed support motion.
+  equalDOF constraints, uniform, trapezoidal / partial-span and point loads on
+  frames, imposed support motion.
+- **SAP2000-style frame assignments** (Assign → Frame): end releases and
+  partial-fixity springs (T, M2, M3 per end), end (length) offsets with a
+  rigid-zone factor, cardinal-point insertion, and property modifiers
+  (A, J, I22, I33, mass, weight, e.g. 0.35 Ig for cracked beams). Releases are
+  drawn as dots near the member end and rigid zones as bars; force diagrams run
+  along the flexible length.
 - **Multi-storey buildings** — Define → Storeys (typed, or one per Z grid
   line), Assign → Joint → Diaphragm (OpenSees `rigidDiaphragm` over every joint
   of a storey or the selected joints, with a new retained node at the centre of
@@ -368,6 +375,23 @@ fails, the dialog shows the error message instead of a curve.
 - **Assign > Frame > Beam Integration...**: Lobatto, Legendre, NewtonCotes,
   Radau or Trapezoidal with 2 to 10 points for force and displacement
   beam-columns. Also in the Properties dock. Default Lobatto with 5 points.
+- **Assign > Frame > Releases/Partial Fixity...**: release torsion or either
+  bending moment at each end, optionally with a spring (moment per radian).
+  The end hangs off a hidden node tied to the joint with `equalDOF` (a
+  `zeroLength` carries the springs), so it works for elastic, force- and
+  displacement-based members alike, and the joint's reaction includes it.
+- **Assign > Frame > End (Length) Offsets...** and **Insertion Point...**:
+  rigid joint offsets (`geomTransf -jntOffset`). Loads on a rigid zone go to
+  the joint; a release at an offset end acts at the face (the model then runs
+  with the Transformation handler). Offsets, rigid-zone factor and cardinal
+  point are also editable in the Properties dock.
+- **Assign > Frame > Property Modifiers...**: multipliers on the elastic
+  section (a derived section per distinct combination), the mass and the self
+  weight.
+- **Assign > Frame > Trapezoidal Load...**: a load varying linearly over part
+  or all of a member. Elastic and displacement-based members take it as three
+  Gauss-point `-beamPoint` loads (exact end forces), force-based members as the
+  native partial `-beamUniform`.
 - **Analysis cases**: Static, Transient and Pushover forms have *Numberer*
   (Plain, RCM, AMD; default RCM) and *System* (BandGeneral, BandSPD,
   ProfileSPD, SparseGeneral, UmfPack, FullGeneral). SparseGeneral notes that

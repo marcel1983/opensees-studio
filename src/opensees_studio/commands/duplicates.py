@@ -282,6 +282,36 @@ class FixDuplicatesCommand(ProjectCommand):
                 kept.append(load.model_copy(update={"element_id": to_id}))
             pattern.element_loads[:] = kept
             self._move_point_loads(project, pattern, from_id, to_id)
+            self._move_distributed_loads(project, pattern, from_id, to_id)
+
+    def _move_distributed_loads(
+        self, project: Project, pattern: PlainLoadPattern, from_id: int, to_id: int
+    ) -> None:
+        # Like a point load: a reversed duplicate measures its span from the keeper's end j.
+        by_id = {element.id: element for element in project.elements}
+        reversed_ = tuple(by_id[from_id].nodes) != tuple(by_id[to_id].nodes)
+        kept = []
+        seen = {load.model_dump_json() for load in pattern.distributed_loads}
+        for load in pattern.distributed_loads:
+            if load.element_id != from_id:
+                kept.append(load)
+                continue
+            update: dict[str, Any] = {"element_id": to_id}
+            if reversed_:
+                update |= {
+                    "x_start": 1.0 - load.x_end,
+                    "x_end": 1.0 - load.x_start,
+                    **{f"{c}_start": getattr(load, f"{c}_end") for c in ("wx", "wy", "wz")},
+                    **{f"{c}_end": getattr(load, f"{c}_start") for c in ("wx", "wy", "wz")},
+                }
+            moved = load.model_copy(update=update)
+            if moved.model_dump_json() in seen:
+                self.report.dropped_copy_loads += 1
+                continue
+            seen.add(moved.model_dump_json())
+            self.report.repointed_loads += 1
+            kept.append(moved)
+        pattern.distributed_loads[:] = kept
 
     def _move_point_loads(
         self, project: Project, pattern: PlainLoadPattern, from_id: int, to_id: int
@@ -318,3 +348,8 @@ class FixDuplicatesCommand(ProjectCommand):
             kept_points = [load for load in pattern.point_loads if load.element_id != element_id]
             self.report.dropped_copy_loads += len(pattern.point_loads) - len(kept_points)
             pattern.point_loads[:] = kept_points
+            kept_distributed = [
+                load for load in pattern.distributed_loads if load.element_id != element_id
+            ]
+            self.report.dropped_copy_loads += len(pattern.distributed_loads) - len(kept_distributed)
+            pattern.distributed_loads[:] = kept_distributed

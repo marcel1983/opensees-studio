@@ -103,7 +103,7 @@ class DiagramRenderer:
                 # which takes the whole application down.
                 continue
             n_i, n_j = elem.nodes
-            pi, pj = node_pos.get(n_i), node_pos.get(n_j)
+            pi, pj = data.ends.get(int(eid)) or (node_pos.get(n_i), node_pos.get(n_j))
             if pi is None or pj is None:
                 continue
             v_i = data.values_i[k] * scale
@@ -210,7 +210,7 @@ class DiagramRenderer:
             if elem is None or len(elem.nodes) != 2:
                 continue  # same reason as in `render`: faces have no two ends
             n_i, n_j = elem.nodes
-            pi, pj = node_pos.get(n_i), node_pos.get(n_j)
+            pi, pj = data.ends.get(int(eid)) or (node_pos.get(n_i), node_pos.get(n_j))
             if pi is None or pj is None:
                 continue
             for end_pt, val in ((pi, data.values_i[k]), (pj, data.values_j[k])):

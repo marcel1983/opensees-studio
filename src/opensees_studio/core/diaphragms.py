@@ -134,6 +134,22 @@ def diaphragm_problems(project: Project) -> list[str]:
     others = {mp.constrained_node for mp in project.mp_constraints} | {
         link.constrained_node for link in project.rigid_links
     }
+    # OpenSees' Transformation handler cannot chain constraints: a node a
+    # diaphragm constrains must not retain another constraint. A frame end
+    # release (or partial fixity) hangs a hidden node off its joint with
+    # equalDOF / rigidLink, so a released end at a diaphragm joint is one.
+    retaining: dict[int, str] = {}
+    for mp in project.mp_constraints:
+        retaining.setdefault(mp.retained_node, "the retained node of an equalDOF")
+    for link in project.rigid_links:
+        retaining.setdefault(link.retained_node, "the retained node of a rigid link")
+    for element in project.elements:
+        releases = getattr(element, "releases", None)
+        if releases is None:
+            continue
+        for end, nid in zip(("i", "j"), element.nodes, strict=False):
+            if releases.end(end).released:
+                retaining.setdefault(nid, f"the joint of a released end of element {element.id}")
     for diaphragm in project.diaphragms:
         label = f"Diaphragm {diaphragm.id}" + (f" '{diaphragm.name}'" if diaphragm.name else "")
         retained = by_id.get(diaphragm.retained_node)
@@ -169,4 +185,15 @@ def diaphragm_problems(project: Project) -> list[str]:
                 problems.append(
                     f"{label}: node {nid} is already constrained by an equalDOF or rigid link."
                 )
+            if nid in retaining:
+                problems.append(
+                    f"{label}: node {nid} is {retaining[nid]}; OpenSees cannot chain that "
+                    "constraint through a diaphragm (it would solve without an error and give "
+                    "wrong results). Take the joint out of the diaphragm or remove that constraint."
+                )
+        if diaphragm.retained_node in others:
+            problems.append(
+                f"{label}: its retained node {diaphragm.retained_node} is constrained by an "
+                "equalDOF or rigid link."
+            )
     return problems

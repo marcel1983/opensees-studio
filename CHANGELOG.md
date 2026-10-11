@@ -47,6 +47,37 @@ refused instead of silently downgraded).
   diaphragm eliminates and the ones fixed on a floating retained node.
 - Projects without storeys, diaphragms, rigid links or a mass source save
   byte-identical to before.
+- A joint a diaphragm constrains may not also retain another constraint: a frame
+  end release at that joint (its hidden node hangs off the joint by `equalDOF`
+  or `rigidLink`) or an `equalDOF` / rigid link retained there is refused by the
+  model check. OpenSees' Transformation handler cannot chain such constraints and
+  solves them without an error into wrong results (a released-beam building came
+  out four times too stiff).
+
+## [0.0.10] — 2026-10-11
+
+The frame members release: the member-level options a SAP2000 user expects.
+
+### Added
+
+- **Frame end releases and partial fixity** (Assign → Frame → Releases/Partial
+  Fixity…): T, M2 and M3 per end, each with an optional rotational spring.
+  Realised with a hidden node per released end (`equalDOF` on the kept DOFs, a
+  `zeroLength` for springs, a penalty spring only for a kept rotation about an
+  axis skewed to the global axes), for every beam-column type. The joint's
+  reaction includes the force that crosses the release.
+- **End (length) offsets with a rigid-zone factor and cardinal-point insertion**
+  (Assign → Frame → End (Length) Offsets… / Insertion Point…), as
+  `geomTransf -jntOffset`. Loads on a rigid zone go to the joint, force
+  diagrams are drawn along the flexible length, and a release at an offset end
+  acts at the face through a `rigidLink` (the case then runs with the
+  Transformation handler). A 3D Corotational transformation with offsets is
+  refused: OpenSees 3.8 ignores them there.
+- **Property modifiers** (Assign → Frame → Property Modifiers…) on A, As2, As3,
+  J, I22, I33, mass and weight of members with an elastic section.
+- **Trapezoidal and partial-span distributed loads** (Assign → Frame →
+  Trapezoidal Load…), meshed, replicated and handed over with their member.
+- Projects that use none of these save byte-identical to before.
 
 ## [0.0.9] — 2026-10-10
 

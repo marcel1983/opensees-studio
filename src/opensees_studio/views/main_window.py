@@ -43,6 +43,7 @@ from opensees_studio.commands import (
     AddNodesCommand,
     AddPointElementLoadsCommand,
     AddSectionsCommand,
+    AddTrapezoidalElementLoadsCommand,
     AssignMaterialCommand,
     AssignSectionCommand,
     DeleteElementsCommand,
@@ -128,6 +129,10 @@ from opensees_studio.views.dialogs import (
     DisplayOptionsDialog,
     DuplicatesDialog,
     DxfImportDialog,
+    FrameEndOffsetsDialog,
+    FrameInsertionDialog,
+    FrameModifiersDialog,
+    FrameReleasesDialog,
     FrameWizard,
     FrictionLibraryDialog,
     GroundMotionsDialog,
@@ -142,6 +147,7 @@ from opensees_studio.views.dialogs import (
     ReplicateDialog,
     RunAnalysisDialog,
     SectionLibraryDialog,
+    TrapezoidalLoadDialog,
     UniformExcitationDialog,
     member_sections,
 )
@@ -364,6 +370,11 @@ class MainWindow(QMainWindow):
         self._act_assign_material = QAction("&Material…", self)
         self._act_assign_geom_transf = QAction("&Geometric Transformation…", self)
         self._act_assign_integration = QAction("Beam &Integration…", self)
+        self._act_assign_releases = QAction("&Releases/Partial Fixity…", self)
+        self._act_assign_end_offsets = QAction("&End (Length) Offsets…", self)
+        self._act_assign_insertion = QAction("I&nsertion Point…", self)
+        self._act_assign_modifiers = QAction("Property M&odifiers…", self)
+        self._act_assign_trapezoidal_load = QAction("&Trapezoidal Load…", self)
 
         # Display (post-processing)
         self._act_show_deformed = QAction("Show &Deformed Shape", self)
@@ -488,7 +499,13 @@ class MainWindow(QMainWindow):
         m_frame.addAction(self._act_assign_geom_transf)
         m_frame.addAction(self._act_assign_integration)
         m_frame.addSeparator()
+        m_frame.addAction(self._act_assign_releases)
+        m_frame.addAction(self._act_assign_end_offsets)
+        m_frame.addAction(self._act_assign_insertion)
+        m_frame.addAction(self._act_assign_modifiers)
+        m_frame.addSeparator()
         m_frame.addAction(self._act_assign_distributed_load)
+        m_frame.addAction(self._act_assign_trapezoidal_load)
         m_frame.addAction(self._act_assign_frame_point_load)
         m_frame.addAction(self._act_assign_hinge)
 
@@ -780,6 +797,11 @@ class MainWindow(QMainWindow):
         self._act_assign_material.triggered.connect(self._on_assign_material)
         self._act_assign_geom_transf.triggered.connect(self._on_assign_geom_transf)
         self._act_assign_integration.triggered.connect(self._on_assign_integration)
+        self._act_assign_releases.triggered.connect(self._on_assign_releases)
+        self._act_assign_end_offsets.triggered.connect(self._on_assign_end_offsets)
+        self._act_assign_insertion.triggered.connect(self._on_assign_insertion)
+        self._act_assign_modifiers.triggered.connect(self._on_assign_modifiers)
+        self._act_assign_trapezoidal_load.triggered.connect(self._on_assign_trapezoidal_load)
 
         # Analyze
         self._act_case_manager.triggered.connect(self._on_case_manager)
@@ -2488,6 +2510,86 @@ class MainWindow(QMainWindow):
             {"integration": dlg.rule(), "integration_points": dlg.points()},
         )
 
+    def _frame_option_dialog(self, title: str, field: str) -> tuple[set[int], Any] | None:
+        """Selected frame members and the value of ``field`` they share (None when they differ)."""
+        from opensees_studio.core import FrameMember
+
+        project = self._vm.project
+        selected = set(self._canvas.selection.elements)
+        frames = (
+            []
+            if project is None
+            else [
+                el for el in project.elements if el.id in selected and isinstance(el, FrameMember)
+            ]
+        )
+        if not frames:
+            QMessageBox.information(self, title, "Select one or more frame elements first.")
+            return None
+        values = [getattr(el, field) for el in frames]
+        shared = values[0] if all(v == values[0] for v in values) else None
+        return {el.id for el in frames}, shared
+
+    def _on_assign_releases(self) -> None:
+        """Assign > Frame > Releases/Partial Fixity."""
+        picked = self._frame_option_dialog("Frame Releases", "releases")
+        if picked is None or self._vm.project is None:
+            return
+        ids, current = picked
+        dlg = FrameReleasesDialog(len(ids), self._vm.project.ndm, current, self)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            self._assign_element_fields("Frame Releases", ids, {"releases": dlg.releases()})
+
+    def _on_assign_end_offsets(self) -> None:
+        """Assign > Frame > End (Length) Offsets."""
+        picked = self._frame_option_dialog("Frame End Offsets", "end_offsets")
+        if picked is None:
+            return
+        ids, current = picked
+        dlg = FrameEndOffsetsDialog(len(ids), current, self)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            self._assign_element_fields("Frame End Offsets", ids, {"end_offsets": dlg.offsets()})
+
+    def _on_assign_insertion(self) -> None:
+        """Assign > Frame > Insertion Point."""
+        picked = self._frame_option_dialog("Frame Insertion Point", "insertion")
+        if picked is None or self._vm.project is None:
+            return
+        ids, current = picked
+        dlg = FrameInsertionDialog(len(ids), self._vm.project.ndm, current, self)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            self._assign_element_fields(
+                "Frame Insertion Point", ids, {"insertion": dlg.insertion()}
+            )
+
+    def _on_assign_modifiers(self) -> None:
+        """Assign > Frame > Property Modifiers."""
+        picked = self._frame_option_dialog("Frame Property Modifiers", "modifiers")
+        if picked is None:
+            return
+        ids, current = picked
+        dlg = FrameModifiersDialog(len(ids), current, self)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            self._assign_element_fields(
+                "Frame Property Modifiers", ids, {"modifiers": dlg.modifiers()}
+            )
+
+    def _on_assign_trapezoidal_load(self) -> None:
+        """Assign > Frame > Trapezoidal Load: a linearly varying load over part of each member."""
+        picked = self._frame_option_dialog("Frame Trapezoidal Load", "releases")
+        if picked is None or self._vm.project is None:
+            return
+        ids, _ = picked
+        dlg = TrapezoidalLoadDialog(len(ids), self._vm.project.ndm, self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        try:
+            self._vm.apply_command(AddTrapezoidalElementLoadsCommand(self._vm, ids, dlg.values()))
+        except Exception as exc:
+            QMessageBox.critical(self, "Assign Frame Trapezoidal Load failed", str(exc))
+            return
+        self._log(f"Assigned a trapezoidal load to {len(ids)} frame element(s).")
+
     # ── slots: analyze ──────────────────────────────────────────────
     def _on_case_manager(self) -> None:
         if self._vm.project is None:
@@ -3394,6 +3496,14 @@ class MainWindow(QMainWindow):
         self._act_assign_hinge.setEnabled(has_project and has_selected_elements)
         self._act_assign_geom_transf.setEnabled(has_project and has_selected_elements)
         self._act_assign_integration.setEnabled(has_project and has_selected_elements)
+        for action in (
+            self._act_assign_releases,
+            self._act_assign_end_offsets,
+            self._act_assign_insertion,
+            self._act_assign_modifiers,
+            self._act_assign_trapezoidal_load,
+        ):
+            action.setEnabled(has_project and has_selected_elements)
         self._act_delete.setEnabled(has_project and has_selection)
         self._act_move.setEnabled(has_project and has_selected_nodes)
         self._act_replicate.setEnabled(has_project and has_selected_nodes)

@@ -28,6 +28,7 @@ from opensees_studio.core.diaphragms import diaphragm_problems
 from opensees_studio.core.friction import FrictionModel
 from opensees_studio.core.geometry import (
     BEARING_CLASSES,
+    FRAME_ELEMENT_CLASSES,
     SLIDING_BEARING_CLASSES,
     CoordinateGridSystem,
     Element,
@@ -260,16 +261,16 @@ class Project(BaseModel):
     def node(self, node_id: PositiveInt) -> Node:
         return self._get(self.nodes, node_id, "node")
 
-    def material(self, material_id: PositiveInt) -> Material:  # type: ignore[valid-type]
+    def material(self, material_id: PositiveInt) -> Material:
         return self._get(self.materials, material_id, "material")
 
-    def section(self, section_id: PositiveInt) -> Section:  # type: ignore[valid-type]
+    def section(self, section_id: PositiveInt) -> Section:
         return self._get(self.sections, section_id, "section")
 
-    def friction_model(self, friction_model_id: PositiveInt) -> FrictionModel:  # type: ignore[valid-type]
+    def friction_model(self, friction_model_id: PositiveInt) -> FrictionModel:
         return self._get(self.friction_models, friction_model_id, "friction model")
 
-    def element(self, element_id: PositiveInt) -> Element:  # type: ignore[valid-type]
+    def element(self, element_id: PositiveInt) -> Element:
         return self._get(self.elements, element_id, "element")
 
     def ground_motion(self, record_id: PositiveInt) -> GroundMotionRecord:
@@ -294,6 +295,7 @@ class Project(BaseModel):
         """
         node_ids = {n.id for n in self.nodes}
         element_ids = {e.id for e in self.elements}
+        elements_by_id = {e.id: e for e in self.elements}
         material_ids = {m.id for m in self.materials}
         section_ids = {s.id for s in self.sections}
         ts_ids = {ts.id for ts in self.time_series}
@@ -380,6 +382,17 @@ class Project(BaseModel):
                 if pl.element_id not in element_ids:
                     problems.append(
                         f"Pattern {pat.id} has a point load on missing element {pl.element_id}."
+                    )
+            for dl in getattr(pat, "distributed_loads", []):
+                if dl.element_id not in element_ids:
+                    problems.append(
+                        f"Pattern {pat.id} has a distributed load on missing element "
+                        f"{dl.element_id}."
+                    )
+                elif not isinstance(elements_by_id[dl.element_id], FRAME_ELEMENT_CLASSES):
+                    problems.append(
+                        f"Pattern {pat.id} has a distributed load on element {dl.element_id}, "
+                        "which is not a frame (beam-column) element."
                     )
             for nid in getattr(pat, "node_ids", []):
                 if nid not in node_ids:

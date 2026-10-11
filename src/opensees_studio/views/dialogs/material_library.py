@@ -171,7 +171,7 @@ class MaterialLibraryDialog(FittedDialog):
         # nothing (defaults shown in the form), then read with the new id.
         form_cls = FORM_REGISTRY[kind]
         form = form_cls()
-        form._material_id = new_id  # type: ignore[attr-defined]
+        form._material_id = new_id
         try:
             new_material = form.read()
         except (ValidationError, ValueError) as exc:
