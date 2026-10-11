@@ -28,10 +28,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from opensees_studio.core import Project
+from opensees_studio.core import COMBINATION_LABELS, Project
 from opensees_studio.services.result_tables import (
     HISTORY_KINDS,
     ResultTable,
+    combination_tables,
     display_text,
     modal_tables,
     node_history_table,
@@ -41,6 +42,7 @@ from opensees_studio.services.result_tables import (
     write_csv,
 )
 from opensees_studio.services.results import (
+    CombinationResults,
     ModalResults,
     PushoverResults,
     ResponseSpectrumResults,
@@ -196,6 +198,15 @@ class ResultsPanel(QWidget):
             combined, modes = response_spectrum_tables(results, project)
             self._add_table_tab(combined, "Combined displacements")
             self._add_table_tab(modes, "Modes")
+        elif isinstance(results, CombinationResults):
+            bounds = "" if results.single_valued else ", max and min"
+            cases = ", ".join(f"#{cid}" for cid in results.case_ids)
+            self._title.setText(
+                f"<b>Combination '{results.combination_name}'</b>  "
+                f"({COMBINATION_LABELS[results.combination_type]}{bounds}; cases {cases})"
+            )
+            for name, table in combination_tables(results, project):
+                self._add_table_tab(table, name)
         elif isinstance(results, TransientResults):
             self._title.setText(
                 f"<b>Transient — case #{results.case_id} '{results.case_name}'</b>  "
