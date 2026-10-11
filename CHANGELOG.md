@@ -67,6 +67,26 @@ refused instead of silently downgraded).
   hand-built OpenSeesPy (element releases, `ModElasticBeam3d`, and hidden nodes
   under the Lagrange handler): 1e-9 and 1e-6.
 
+### Fixed
+
+- A frame end release or partial fixity at a joint that is the constrained node
+  of a user `equalDOF` or rigid link no longer hangs off a hidden node
+  `equalDOF`'d to that joint. That is the same constraint chain as at a
+  diaphragm joint, and OpenSees' Transformation handler, which every eigen
+  analysis uses, solved it without an error into wrong results (a beam pinned at
+  a joint tied to a column top in U1 and U2 only: the sway of its far end 92 %
+  too small; hung off the column top by `rigidLink beam`: 2 % off; only an
+  `equalDOF` of every DOF happened to come out right). Such an end now takes
+  the diaphragm route: released inside an `elasticBeamColumn` (in 2D with
+  `-release`), or held by penalty springs. The springs act in series with the
+  member, so a mode the member's own axial stiffness governs comes out about
+  1e-5 too soft. Fibre members and spring-held ends with an end offset there are
+  refused with a remedy. A joint that only *retains* such a constraint plans as
+  before. Verified in 2D and 3D, pinned and partially fixed, at an `equalDOF`
+  and at a `rigidLink` joint against hand-built OpenSeesPy (element releases,
+  `ModElasticBeam2d` / `3d`, hidden nodes under the Lagrange handler): 1e-9 for
+  the pinned ends, 1e-6 (2e-5 for the eigenvalues) for the spring-held ones.
+
 ## [0.0.10] — 2026-10-11
 
 The frame members release: the member-level options a SAP2000 user expects.

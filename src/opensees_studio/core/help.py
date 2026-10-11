@@ -1580,6 +1580,10 @@ Tying DOF removes them from the unknowns: the constrained node's displacement is
 whatever the retained node's is. It does not add stiffness anywhere else — a
 rigid floor is also, physically, a constraint that distributes horizontal force,
 which is exactly what this does.
+
+A frame end released at the constrained node is made without a further
+constraint, as at a diaphragm joint (see Assign → Frame → Releases/Partial
+Fixity).
 """,
             "mechanics.constraints",
             "assign.support",
@@ -1827,10 +1831,10 @@ the face of the rigid zone, as in SAP2000: the hidden node hangs off the joint
 with `rigidLink beam`, and such a model runs with the Transformation constraint
 handler even if the case asks for Plain (Plain ignores a rigid link).
 
-At a joint a rigid diaphragm constrains, a hidden node tied by `equalDOF` would
-chain through the diaphragm, which OpenSees solves wrong; there the release is
-made inside the element or with penalty springs instead (see Assign → Joint →
-Diaphragm).
+At a joint that a rigid diaphragm, an equalDOF or a rigid link constrains, a
+hidden node tied by `equalDOF` would chain through that constraint, which
+OpenSees solves wrong without an error; there the release is made inside the
+element or with penalty springs instead (see Assign → Joint → Diaphragm).
 """,
             "assign.end_offsets",
             "assign.insertion_point",
@@ -2526,6 +2530,10 @@ Deleting the retained node deletes the diaphragm.
 # Mechanics
 Like a diaphragm, a rigid link is a constraint the Plain handler cannot enforce,
 so the case runs with Transformation. The canvas draws it as a thick orange bar.
+
+A frame end released at the constrained node is made without a further
+constraint, as at a diaphragm joint (see Assign → Frame → Releases/Partial
+Fixity).
 """,
             "mechanics.constraints",
             "assign.remove_constraints",
