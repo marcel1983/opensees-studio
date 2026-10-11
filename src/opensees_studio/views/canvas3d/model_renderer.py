@@ -25,16 +25,19 @@ from opensees_studio.core import (
     DispBeamColumn,
     ElasticBeamColumn,
     ForceBeamColumn,
+    FrameMember,
     NodalLoad,
     PlainLoadPattern,
     PointElementLoad,
     Project,
     QuadElement,
     ShellMITC4Element,
+    TrapezoidalElementLoad,
     TrussElement,
     UniformElementLoad,
     ZeroLengthElement,
 )
+from opensees_studio.core.frame_members import member_layout
 from opensees_studio.services.deformation import DeformationSource
 from opensees_studio.views.canvas3d.style import RenderStyle
 
@@ -162,6 +165,7 @@ class ModelRenderer:
         self._build_frame_polydata(project)
         self._build_surface_polydata(project)
         self._build_supports(project)
+        self._build_frame_assignments(project)
         self._build_loads(project)
         if self._show_section_extrusions:
             self._build_section_extrusions(project)
@@ -721,6 +725,65 @@ class ModelRenderer:
             actor = self._plotter.add_mesh(geom, color=support_color, pickable=False, lighting=True)
             self._aux_actors.append(actor)
 
+    def _build_frame_assignments(self, project: Project) -> None:
+        """SAP2000-style markers: a dot near each released member end, a bar per rigid offset.
+
+        A full release is a teal dot, a partial-fixity spring a yellow one, drawn
+        a short way in from the joint so two members meeting there stay apart.
+        The rigid part of an end offset (or an insertion-point offset) is a
+        thick grey bar from the joint to where the flexible part starts.
+        """
+        if self._node_original_points is None:
+            return
+        size = max(self._diag_of_points(self._node_original_points) * 0.006, 1e-6)
+        dots: dict[bool, list[np.ndarray]] = {False: [], True: []}
+        arms: list[tuple[np.ndarray, np.ndarray]] = []
+        for element in project.elements:
+            if not isinstance(element, FrameMember):
+                continue
+            if element.releases.is_default() and not (
+                element.end_offsets.rigid_i
+                or element.end_offsets.rigid_j
+                or not element.insertion.is_default()
+            ):
+                continue
+            try:
+                layout = member_layout(project, element)
+            except (ValueError, KeyError):
+                continue
+            if layout is None:
+                continue
+            for end, joint, face, inward in (
+                ("i", layout.joint_i, layout.face_i, layout.x),
+                ("j", layout.joint_j, layout.face_j, -layout.x),
+            ):
+                if layout.has_offset(end):
+                    arms.append((joint, face))
+                release = element.releases.end(end)
+                if release.released:
+                    step = min(0.08 * layout.clear_length, 6.0 * size)
+                    dots[bool(release.springs)].append(face + inward * step)
+        for partial, points in dots.items():
+            if not points:
+                continue
+            glyphs = pv.PolyData(np.asarray(points, dtype=float)).glyph(
+                geom=pv.Sphere(radius=size), scale=False, orient=False
+            )
+            color = (0.95, 0.85, 0.1) if partial else (0.0, 0.8, 0.8)
+            actor = self._plotter.add_mesh(glyphs, color=color, pickable=False, lighting=True)
+            self._aux_actors.append(actor)
+        if arms:
+            points = np.asarray([p for arm in arms for p in arm], dtype=float)
+            lines = np.hstack([[2, 2 * k, 2 * k + 1] for k in range(len(arms))])
+            actor = self._plotter.add_mesh(
+                pv.PolyData(points, lines=lines),
+                color=(0.35, 0.35, 0.35),
+                line_width=6.0,
+                pickable=False,
+                lighting=False,
+            )
+            self._aux_actors.append(actor)
+
     def _build_loads(self, project: Project) -> None:
         if not project.load_patterns or self._node_original_points is None:
             return
@@ -787,6 +850,42 @@ class ModelRenderer:
                         color=elem_load_color,
                         pickable=False,
                         lighting=True,
+                    )
+                    self._aux_actors.append(actor)
+
+            # ── Trapezoidal / partial distributed loads ──
+            # Arrows over the loaded part only, each as long as the load there
+            # relative to the largest end value, so the shape of the load shows.
+            for dload in pattern.distributed_loads:
+                if not isinstance(dload, TrapezoidalElementLoad):
+                    continue
+                frame = self._element_local_frame(project, dload.element_id)
+                if frame is None:
+                    continue
+                pi, axis, (x_local, y_local, z_local) = frame
+                L = float(np.linalg.norm(axis))
+                ends = [np.asarray(w, dtype=float) for w in (dload.start(), dload.end())]
+                peak = max(float(np.linalg.norm(w)) for w in ends)
+                if peak < 1e-12:
+                    continue
+                full_len = max(0.4 * scale, L / (n_arrows_per_elem * 4))
+                for k in range(n_arrows_per_elem):
+                    t = (k + 0.5) / n_arrows_per_elem
+                    wx, wy, wz = ends[0] + t * (ends[1] - ends[0])
+                    load_vec = wx * x_local + wy * y_local + wz * z_local
+                    mag = float(np.linalg.norm(load_vec))
+                    if mag < 1e-12 * peak:
+                        continue
+                    direction = load_vec / mag
+                    arrow_len = full_len * mag / peak
+                    pt = pi + (dload.x_start + t * (dload.x_end - dload.x_start)) * axis
+                    arrow = pv.Arrow(
+                        start=tuple(pt - direction * arrow_len),
+                        direction=tuple(direction),
+                        scale=arrow_len,
+                    )
+                    actor = self._plotter.add_mesh(
+                        arrow, color=elem_load_color, pickable=False, lighting=True
                     )
                     self._aux_actors.append(actor)
 

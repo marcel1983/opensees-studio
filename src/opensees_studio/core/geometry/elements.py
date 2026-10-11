@@ -21,6 +21,13 @@ from opensees_studio.core.geometry.bearings import (
     FlatSliderBearingElement,
     SingleFPBearingElement,
 )
+from opensees_studio.core.geometry.frame_options import (
+    FRAME_OPTION_FIELDS,
+    FrameEndOffsets,
+    FrameInsertion,
+    FrameModifiers,
+    FrameReleases,
+)
 
 GeomTransfType = Literal["Linear", "PDelta", "Corotational"]
 """``geomTransf`` of a frame element. All three take effect in OpenSeesPy 3.8.0, in 2D and
@@ -57,7 +64,22 @@ class CorotTrussElement(Entity):
     rho: float = Field(default=0.0, ge=0.0)
 
 
-class ElasticBeamColumn(Entity):
+class FrameMember(Entity):
+    """Base of the beam-column elements: the SAP2000 frame assignments they all take.
+
+    See :mod:`opensees_studio.core.geometry.frame_options`. Each option is left
+    out of the saved file while it holds its default.
+    """
+
+    releases: FrameReleases = Field(default_factory=FrameReleases)
+    end_offsets: FrameEndOffsets = Field(default_factory=FrameEndOffsets)
+    insertion: FrameInsertion = Field(default_factory=FrameInsertion)
+    modifiers: FrameModifiers = Field(default_factory=FrameModifiers)
+
+    serialize_without_defaults = omit_when_default(*FRAME_OPTION_FIELDS)
+
+
+class ElasticBeamColumn(FrameMember):
     """Linear-elastic frame element — ``element elasticBeamColumn``.
 
     Pure-section style: provide section_id; OpenSees pulls EA, EI from
@@ -80,7 +102,7 @@ class ElasticBeamColumn(Entity):
     )
 
 
-class ForceBeamColumn(Entity):
+class ForceBeamColumn(FrameMember):
     """Force-based fibre frame element — ``element forceBeamColumn``."""
 
     type: Literal["ForceBeamColumn"] = "ForceBeamColumn"
@@ -92,10 +114,10 @@ class ForceBeamColumn(Entity):
     max_iter: int = Field(default=10, ge=1)
     tolerance: float = Field(default=1e-12, gt=0.0)
 
-    serialize_without_defaults = omit_when_default("integration")
+    serialize_without_defaults = omit_when_default("integration", *FRAME_OPTION_FIELDS)
 
 
-class DispBeamColumn(Entity):
+class DispBeamColumn(FrameMember):
     """Displacement-based fibre frame element — ``element dispBeamColumn``."""
 
     type: Literal["DispBeamColumn"] = "DispBeamColumn"
@@ -105,7 +127,7 @@ class DispBeamColumn(Entity):
     integration: BeamIntegrationRule = "Lobatto"
     geom_transf: GeomTransfType = "Linear"
 
-    serialize_without_defaults = omit_when_default("integration")
+    serialize_without_defaults = omit_when_default("integration", *FRAME_OPTION_FIELDS)
 
 
 class ZeroLengthElement(Entity):
@@ -154,7 +176,7 @@ class ZeroLengthSectionElement(Entity):
     )
 
 
-class BeamWithHingesElement(Entity):
+class BeamWithHingesElement(FrameMember):
     """Force-based beam with lumped plasticity at both ends —
     ``element beamWithHinges``.
 

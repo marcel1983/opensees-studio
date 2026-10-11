@@ -9,6 +9,27 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Added
+
+- **Frame end releases and partial fixity** (Assign → Frame → Releases/Partial
+  Fixity…): T, M2 and M3 per end, each with an optional rotational spring.
+  Realised with a hidden node per released end (`equalDOF` on the kept DOFs, a
+  `zeroLength` for springs, a penalty spring only for a kept rotation about an
+  axis skewed to the global axes), for every beam-column type. The joint's
+  reaction includes the force that crosses the release.
+- **End (length) offsets with a rigid-zone factor and cardinal-point insertion**
+  (Assign → Frame → End (Length) Offsets… / Insertion Point…), as
+  `geomTransf -jntOffset`. Loads on a rigid zone go to the joint, force
+  diagrams are drawn along the flexible length, and a release at an offset end
+  acts at the face through a `rigidLink` (the case then runs with the
+  Transformation handler). A 3D Corotational transformation with offsets is
+  refused: OpenSees 3.8 ignores them there.
+- **Property modifiers** (Assign → Frame → Property Modifiers…) on A, As2, As3,
+  J, I22, I33, mass and weight of members with an elastic section.
+- **Trapezoidal and partial-span distributed loads** (Assign → Frame →
+  Trapezoidal Load…), meshed, replicated and handed over with their member.
+- Projects that use none of these save byte-identical to before.
+
 ## [0.0.9] — 2026-10-10
 
 The modelling release: loads inside a member, the weight of the structure as a

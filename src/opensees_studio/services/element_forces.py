@@ -29,12 +29,13 @@ includes everything a renderer needs without re-querying OpenSees.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 import numpy as np
 
-from opensees_studio.core import Project
+from opensees_studio.core import FrameMember, Project
+from opensees_studio.core.frame_members import member_layout
 from opensees_studio.services.results import StaticResults
 
 
@@ -114,6 +115,11 @@ class DiagramData:
     abs_max:
         Largest absolute value across all elements; used to normalize
         diagram heights so the largest force draws at the requested scale.
+    ends:
+        Element id → the two points the end forces act at, for a member whose
+        flexible part does not run joint to joint (rigid end zones, an
+        insertion point). The end forces are those of the flexible part, so
+        the diagram is drawn there. Every other element runs node to node.
     """
 
     component: ForceComponent
@@ -121,6 +127,7 @@ class DiagramData:
     values_i: np.ndarray
     values_j: np.ndarray
     abs_max: float
+    ends: dict[int, tuple[np.ndarray, np.ndarray]] = field(default_factory=dict)
 
 
 def extract_diagram_data(
@@ -140,6 +147,7 @@ def extract_diagram_data(
     ids: list[int] = []
     vi: list[float] = []
     vj: list[float] = []
+    ends: dict[int, tuple[np.ndarray, np.ndarray]] = {}
 
     # Local import to avoid a cycle (element classes live in core.geometry).
     from opensees_studio.core import CorotTrussElement, TrussElement
@@ -169,6 +177,13 @@ def extract_diagram_data(
         if idx_i is None or idx_j is None or idx_j >= n_components:
             continue
         ids.append(el.id)
+        if isinstance(el, FrameMember):
+            try:
+                layout = member_layout(project, el)
+            except ValueError:
+                layout = None
+            if layout is not None and (layout.has_offset("i") or layout.has_offset("j")):
+                ends[el.id] = (layout.face_i, layout.face_j)
         # OpenSees localForce returns dual-sign end forces: at end-j the
         # "internal" force is reported with the sign that points opposite
         # to end-i (equilibrium convention). For drawing continuous
@@ -190,6 +205,7 @@ def extract_diagram_data(
         values_i=vi_arr,
         values_j=vj_arr,
         abs_max=abs_max,
+        ends=ends,
     )
 
 

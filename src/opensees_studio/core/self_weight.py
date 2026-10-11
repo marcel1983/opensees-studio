@@ -46,14 +46,14 @@ def gravity_direction(ndm: int) -> np.ndarray:
 
 
 def weight_per_length(project: Project, element: object) -> float:
-    """``gamma * A`` of a frame, 0 when it has no section with a unit weight."""
+    """``gamma * A`` of a frame times its weight modifier, 0 when its section has no unit weight."""
     section_id = getattr(element, "section_id", None)
     if section_id is None or not isinstance(element, FRAME_ELEMENT_CLASSES):
         return 0.0
     section = next((s for s in project.sections if s.id == section_id), None)
     if not isinstance(section, ElasticSection):
         return 0.0
-    return section.unit_weight * section.A
+    return section.unit_weight * section.A * element.modifiers.weight  # type: ignore[attr-defined]
 
 
 def self_weight_loads(project: Project, multiplier: float = 1.0) -> list[UniformElementLoad]:

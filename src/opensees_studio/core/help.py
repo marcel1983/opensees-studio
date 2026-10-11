@@ -1793,6 +1793,129 @@ refused for more than one step.
             "assign.distributed_load",
             "define.plain_pattern",
         ),
+        "assign.frame_releases": _t(
+            "Assign → Frame → Releases/Partial Fixity",
+            "Assign — frame",
+            "Pin a member end about a local axis, or make it partially fixed.",
+            """
+# Values
+- **Torsion (T), M2, M3** at **end i** and **end j** — a released action carries
+  no force at that end. M3 is the moment about local 3 (local z), the in-plane
+  moment of a 2D frame; M2 the moment about local 2 (local y). A 2D frame
+  releases M3 only.
+- **Spring** — a partial-fixity stiffness (moment per radian) on a released
+  action; 0 is a full release. The end then carries `k × relative rotation`.
+- Torsion released at both ends leaves the member free to spin about its own
+  axis and is refused unless one end has a spring.
+- A joint where every member releases the same rotation and nothing restrains
+  it is unstable: the run stops and names the joint and DOF.
+
+# Mechanics
+OpenSees has no release option on force- or displacement-based elements, and
+the 3D elastic element's `-releasez/-releasey` gets the end moments of a
+`-beamPoint` load wrong, so the member end is connected to a hidden node at the
+joint instead: `equalDOF` ties the translations and every kept rotation, a
+`zeroLength` element along the member's axes carries the springs. A member whose
+local axes are skewed to the global axes and that keeps torsion while releasing
+both moments gets a penalty spring 10^8 times its own rotational stiffness for
+the torsion (an elastic member only; a fibre member is asked to release torsion
+too). The hidden nodes' reactions are added to the joint's.
+
+A release at an end that also has an end offset or an insertion point acts at
+the face of the rigid zone, as in SAP2000: the hidden node hangs off the joint
+with `rigidLink beam`, and such a model runs with the Transformation constraint
+handler even if the case asks for Plain (Plain ignores a rigid link).
+""",
+            "assign.end_offsets",
+            "assign.insertion_point",
+        ),
+        "assign.end_offsets": _t(
+            "Assign → Frame → End (Length) Offsets",
+            "Assign — frame",
+            "Rigid end zones at the joints, e.g. the part of a beam inside a column.",
+            """
+# Values
+- **End-I / End-J length** — the offset measured along the member from each
+  joint, typically half the depth of the member it frames into.
+- **Rigid-zone factor** — the part of each offset that is rigid (0 to 1). The
+  flexible length is `L - factor × (length i + length j)`.
+
+# Mechanics
+The rigid zones are `geomTransf ... -jntOffset`, so they add no DOF. The end
+forces, and the force diagrams, are those of the flexible part, at the faces of
+the rigid zones. Loads are still given along the whole joint-to-joint length:
+the part on a rigid zone goes straight to its joint as a force and the moment of
+that force about the joint. A 3D Corotational transformation ignores joint
+offsets in OpenSees 3.8, so the combination is refused.
+""",
+            "assign.insertion_point",
+            "assign.frame_releases",
+        ),
+        "assign.insertion_point": _t(
+            "Assign → Frame → Insertion Point",
+            "Assign — frame",
+            "Which point of the cross section sits on the line between the joints.",
+            """
+# Values
+- **Cardinal point** 1-11, as in SAP2000: 1-3 bottom left/center/right, 4-6
+  middle, 7-9 top, 10 centroid, 11 shear center (taken at the centroid). Bottom
+  and top are -/+ local 2 (local y), left and right -/+ local 3 (local z),
+  looking from end i towards end j. Point 8 puts the top of a 2D beam at the
+  joints.
+- **Offset along 2 / 3** — a further offset of the member at both ends; a 2D
+  frame cannot be offset along 3 (out of its plane).
+- The section size comes from an elastic section's shape (or the rectangle with
+  its A, Iz and Iy) or a fibre section's patches.
+
+# Mechanics
+Realised with the same rigid joint offsets as end offsets: the member's flexible
+length is unchanged, and an axial force along the offset axis bends it.
+""",
+            "assign.end_offsets",
+        ),
+        "assign.property_modifiers": _t(
+            "Assign → Frame → Property Modifiers",
+            "Assign — frame",
+            "Multipliers on a member's section properties, e.g. 0.35 Ig for cracked beams.",
+            """
+# Values
+- **Area, Torsional constant, I22, I33** — multiply A, J, Iy and Iz of the
+  member's elastic section (or the elastic interior of a BeamWithHinges). The
+  run builds a derived elastic section for every distinct combination.
+- **Shear areas 2 / 3** — kept for SAP2000 parity; the elastic sections here
+  have no shear deformation, so they do not change a result.
+- **Mass** — scales an elastic beam-column's mass per length.
+- **Weight** — scales the member's self weight.
+- A fibre section has no property to scale: stiffness modifiers other than 1 on
+  a fibre member stop the run with a message.
+""",
+            "assign.frame_releases",
+        ),
+        "assign.trapezoidal_load": _t(
+            "Assign → Frame → Trapezoidal Load",
+            "Assign — frame",
+            "A load varying linearly over part or all of a member.",
+            """
+# Values
+- **wx, wy, wz** at the **start** and the **end** — load per unit length in the
+  element's local axes, varying linearly in between.
+- **x/L start / end** — where the load starts and ends, as fractions of the
+  joint-to-joint length from end i. Equal start and end values give a partial
+  uniform load.
+
+# Mechanics
+On an elastic or displacement-based element each linear piece is emitted as
+three `-beamPoint` loads at its Gauss points, which give exactly the fixed-end
+forces of the linear load (OpenSees 3.8's 3D elastic element ignores the end
+values of a native trapezoidal load, and `dispBeamColumn` drops it with a
+warning). A force-based element takes the native
+`-beamUniform wa ... aL bL wb ...`, integrated at its integration points (exact
+for a full-length load on an elastic section). A part on a rigid end zone goes
+to the joint.
+""",
+            "assign.distributed_load",
+            "assign.end_offsets",
+        ),
         "assign.hinge": _t(
             "Assign → Frame → Hinge",
             "Assign — frame",
@@ -2327,6 +2450,11 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_assign_integration": "assign.integration",
     "_act_assign_distributed_load": "assign.distributed_load",
     "_act_assign_frame_point_load": "assign.frame_point_load",
+    "_act_assign_releases": "assign.frame_releases",
+    "_act_assign_end_offsets": "assign.end_offsets",
+    "_act_assign_insertion": "assign.insertion_point",
+    "_act_assign_modifiers": "assign.property_modifiers",
+    "_act_assign_trapezoidal_load": "assign.trapezoidal_load",
     "_act_assign_hinge": "assign.hinge",
     # ── Analyze ─────────────────────────────────────────────────────
     "_act_case_manager": "analyze.cases",
