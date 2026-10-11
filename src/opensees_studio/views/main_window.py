@@ -59,6 +59,13 @@ from opensees_studio.commands import (
     SetMassCommand,
     SetRestraintCommand,
 )
+from opensees_studio.commands.buildings import (
+    AddDiaphragmCommand,
+    AddRigidLinkCommand,
+    RemoveConstraintsCommand,
+    SetMassSourceCommand,
+    SetStoreysCommand,
+)
 from opensees_studio.core import (
     SUPPORTED_NDF,
     ElasticMembranePlateSection,
@@ -149,6 +156,12 @@ from opensees_studio.views.dialogs import (
     TrapezoidalLoadDialog,
     UniformExcitationDialog,
     member_sections,
+)
+from opensees_studio.views.dialogs.buildings import (
+    AssignDiaphragmDialog,
+    AssignRigidLinkDialog,
+    MassSourceDialog,
+    StoreysDialog,
 )
 from opensees_studio.views.dialogs.load_combinations import LoadCombinationsDialog
 from opensees_studio.views.docks import (
@@ -333,6 +346,8 @@ class MainWindow(QMainWindow):
         # Define
         self._act_grid = QAction("&Coordinate System/Grids…", self, shortcut="Ctrl+G")
         self._act_add_node = QAction("Add &Node…", self, shortcut="Ctrl+N")
+        self._act_storeys = QAction("Store&ys…", self)
+        self._act_mass_source = QAction("Mass S&ource…", self)
         self._act_create_shell = QAction("Create S&hell from 4 Nodes…", self)
         self._act_frame_wizard = QAction("Create Portal &Frame…", self)
         self._act_truss_wizard = QAction("Create &Truss…", self)
@@ -352,6 +367,9 @@ class MainWindow(QMainWindow):
         self._act_assign_support = QAction("&Restraints…", self, shortcut="Ctrl+R")
         self._act_assign_masses = QAction("&Masses…", self)
         self._act_assign_equal_dof = QAction("&EqualDOF…", self)
+        self._act_assign_diaphragm = QAction("&Diaphragm…", self)
+        self._act_assign_rigid_link = QAction("Rigid &Link…", self)
+        self._act_remove_constraints = QAction("Remove &Constraints", self)
         self._act_assign_load = QAction("&Point Loads…", self, shortcut="Ctrl+L")
         self._act_assign_zls = QAction("&Zero-Length Section…", self)
         self._act_assign_bearing = QAction("&Bearing…", self)
@@ -451,6 +469,8 @@ class MainWindow(QMainWindow):
 
         m_define = mb.addMenu("&Define")
         m_define.addAction(self._act_grid)
+        m_define.addAction(self._act_storeys)
+        m_define.addAction(self._act_mass_source)
         m_define.addAction(self._act_add_node)
         m_define.addAction(self._act_create_shell)
         m_define.addAction(self._act_frame_wizard)
@@ -479,6 +499,9 @@ class MainWindow(QMainWindow):
         m_joint.addAction(self._act_assign_support)
         m_joint.addAction(self._act_assign_masses)
         m_joint.addAction(self._act_assign_equal_dof)
+        m_joint.addAction(self._act_assign_diaphragm)
+        m_joint.addAction(self._act_assign_rigid_link)
+        m_joint.addAction(self._act_remove_constraints)
         m_joint.addAction(self._act_assign_load)
         m_joint.addAction(self._act_assign_zls)
         m_joint.addAction(self._act_assign_bearing)
@@ -775,6 +798,11 @@ class MainWindow(QMainWindow):
         self._act_assign_support.triggered.connect(self._on_assign_support)
         self._act_assign_masses.triggered.connect(self._on_assign_masses)
         self._act_assign_equal_dof.triggered.connect(self._on_assign_equal_dof)
+        self._act_assign_diaphragm.triggered.connect(self._on_assign_diaphragm)
+        self._act_assign_rigid_link.triggered.connect(self._on_assign_rigid_link)
+        self._act_remove_constraints.triggered.connect(self._on_remove_constraints)
+        self._act_storeys.triggered.connect(self._on_define_storeys)
+        self._act_mass_source.triggered.connect(self._on_define_mass_source)
         self._act_assign_load.triggered.connect(self._on_assign_load)
         self._act_assign_zls.triggered.connect(self._on_assign_zls)
         self._act_assign_bearing.triggered.connect(self._on_assign_bearing)
@@ -1897,6 +1925,72 @@ class MainWindow(QMainWindow):
             self._log(f"Added equalDOF constraint between nodes {sel[0]} and {sel[1]}.")
         except Exception as exc:
             QMessageBox.critical(self, "Assign EqualDOF failed", str(exc))
+
+    # ── building: storeys, mass source, diaphragms, rigid links ─────
+    def _on_define_storeys(self) -> None:
+        project = self._vm.project
+        if project is None:
+            return
+        dlg = StoreysDialog(project, self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        try:
+            self._vm.apply_command(SetStoreysCommand(self._vm, dlg.storeys()))
+            self._log(f"Storeys set: {len(project.storeys)}.")
+        except Exception as exc:
+            QMessageBox.critical(self, "Define Storeys failed", str(exc))
+
+    def _on_define_mass_source(self) -> None:
+        project = self._vm.project
+        if project is None:
+            return
+        dlg = MassSourceDialog(project, self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        try:
+            self._vm.apply_command(SetMassSourceCommand(self._vm, dlg.mass_source()))
+            self._log("Mass source updated.")
+        except Exception as exc:
+            QMessageBox.critical(self, "Define Mass Source failed", str(exc))
+
+    def _on_assign_diaphragm(self) -> None:
+        project = self._vm.project
+        if project is None:
+            return
+        dlg = AssignDiaphragmDialog(project, sorted(self._canvas.selection.nodes), self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        try:
+            diaphragm, retained = dlg.diaphragm()
+            self._vm.apply_command(AddDiaphragmCommand(self._vm, diaphragm, retained))
+            where = f"new node {retained.id}" if retained else f"node {diaphragm.retained_node}"
+            self._log(f"Added rigid diaphragm {diaphragm.name or diaphragm.id}, retained {where}.")
+        except Exception as exc:
+            QMessageBox.critical(self, "Assign Diaphragm failed", str(exc))
+
+    def _on_assign_rigid_link(self) -> None:
+        sel = sorted(self._canvas.selection.nodes)
+        if len(sel) != 2 or self._vm.project is None:
+            QMessageBox.information(self, "Assign Rigid Link", "Select exactly two nodes first.")
+            return
+        dlg = AssignRigidLinkDialog(sel, self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        try:
+            link = dlg.link()
+            self._vm.apply_command(AddRigidLinkCommand(self._vm, link))
+            self._log(
+                f"Added rigid {link.kind} link {link.retained_node} -> {link.constrained_node}."
+            )
+        except Exception as exc:
+            QMessageBox.critical(self, "Assign Rigid Link failed", str(exc))
+
+    def _on_remove_constraints(self) -> None:
+        sel = set(self._canvas.selection.nodes)
+        if not sel or self._vm.project is None:
+            return
+        self._vm.apply_command(RemoveConstraintsCommand(self._vm, sel))
+        self._log(f"Removed the constraints of {len(sel)} node(s).")
 
     def _on_assign_load(self) -> None:
         sel_nodes = set(self._canvas.selection.nodes)
@@ -3529,6 +3623,11 @@ class MainWindow(QMainWindow):
         self._act_assign_support.setEnabled(has_project and has_selected_nodes)
         self._act_assign_masses.setEnabled(has_project and has_selected_nodes)
         self._act_assign_equal_dof.setEnabled(has_project and n_sel == 2)
+        self._act_assign_diaphragm.setEnabled(has_project)
+        self._act_assign_rigid_link.setEnabled(has_project and n_sel == 2)
+        self._act_remove_constraints.setEnabled(has_project and has_selected_nodes)
+        self._act_storeys.setEnabled(has_project)
+        self._act_mass_source.setEnabled(has_project)
         self._act_assign_load.setEnabled(has_project and has_selected_nodes)
         # Zero-length section needs exactly two selected joints.
         self._act_assign_zls.setEnabled(has_project and n_sel == 2)

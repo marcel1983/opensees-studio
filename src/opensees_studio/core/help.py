@@ -634,6 +634,7 @@ without a matching velocity loses part of the input.
 """,
         "assign.equal_dof",
         "assign.support",
+        "assign.diaphragm",
     ),
     "mechanics.numberer_system": _t(
         "Numberer, system and solver",
@@ -2477,6 +2478,181 @@ page.
 )
 
 #: Menu action (attribute name on the main window) → topic.
+# ──────────────────────────── Buildings ────────────────────────────
+TOPICS.update(
+    {
+        "define.storeys": _t(
+            "Define → Storeys",
+            "Define",
+            "Name the floor levels of a building and their elevations.",
+            """
+A storey is a floor level: a name and an elevation along the vertical axis (Z in
+3D, Y in 2D). The storey table, the "every joint of storey N" diaphragm and the
+drift ratios all read them.
+
+# Values
+- **Name**, **Elevation** — one row per floor. Everything below the lowest
+  storey is the **base**, whose elevation is the lowest node of the model.
+- **From Z grid lines** — one storey per Z line of the chosen coordinate system,
+  the lowest line being the base (Story1, Story2... as ETABS names them). Rows
+  already there keep their ids, so diaphragms that follow a storey keep it.
+
+# Notes
+- A storey's **height** is the distance to the storey (or base) below it: the
+  inter-storey drift ratio divides by it.
+- A joint belongs to a storey when it lies on its elevation, to a millionth of
+  the model's height.
+- A storey used by a diaphragm cannot be removed; delete the diaphragm first
+  (Assign → Joint → Remove Constraints on its retained node).
+""",
+            "assign.diaphragm",
+            "mechanics.buildings",
+        ),
+        "define.mass_source": _t(
+            "Define → Mass Source",
+            "Define",
+            "Turn self weight and load patterns into nodal mass (W / g).",
+            """
+The mass source is SAP2000's and ETABS': instead of typing a mass at every
+joint, the solver gets **W / g** of what you choose. Masses typed with Assign →
+Joint → Masses always count on top.
+
+# Values
+- **Element self mass** — frames and shells whose section has a unit weight,
+  lumped half on each end of a frame and by tributary area on a shell's corners.
+- **Load patterns** — tick a pattern and give its factor (the usual D + 0.3 L
+  is DEAD 1.0, LIVE 0.3). Only the **downward** part of its nodal, uniform and
+  point loads counts, plus its self-weight multiplier; element loads go to the
+  element's ends. A node whose total comes out upward gets nothing.
+- **Also on the vertical translation** — by default the mass goes on the
+  lateral translations only, so the model has no vertical modes.
+- **Lump at the retained node** — each rigid diaphragm's in-plane mass and its
+  rotational inertia sum(m r²) move to the retained node, where the storey table
+  and mass participation report them.
+
+# Mechanics
+Lumping is exact only when the retained node sits at the centre of that mass;
+otherwise the rigid-body mass couples translation and rotation, which a lumped
+mass cannot express, so such a diaphragm keeps its mass on the joints (the
+constraint carries it exactly). The periods are the same either way. A restrained
+DOF gets no mass: it never moves, and it would only dilute the mass ratios.
+
+A pattern that carries self weight together with **Element self mass** counts
+the self weight twice; the dialog warns about it.
+""",
+            "assign.masses",
+            "mechanics.buildings",
+        ),
+        "assign.diaphragm": _t(
+            "Assign → Joint → Diaphragm",
+            "Assign — joints",
+            "A floor rigid in its own plane (OpenSees rigidDiaphragm).",
+            """
+Every constrained joint follows the **retained** node in the two in-plane
+translations and the rotation about the perpendicular axis; the out-of-plane
+DOF stay free, so slabs still bend and columns still shorten.
+
+# Values
+- **Joints** — every joint of a storey (resolved when the model is built, so
+  joints drawn later join the floor; supports in the plane are left out), or the
+  selected joints.
+- **Perpendicular axis** — Z for a floor; X or Y for a vertical rigid plane.
+- **Retained node** — a new node at the centre of mass of the joints (their
+  effective mass, the mass source included), or an existing selected node.
+
+# Mechanics
+A retained node that no element touches has no stiffness out of its plane: the
+runner fixes those three DOF itself, OpenSees' own recipe. A case left at the
+**Plain** constraint handler runs with **Transformation**: Plain drops a
+diaphragm with a warning and then solves a singular system without reporting
+failure. A joint can belong to one diaphragm only, and not also be the
+constrained node of an equalDOF or rigid link; a joint out of the plane is
+refused (OpenSees would silently drop it).
+
+A joint of the diaphragm may not **retain** another constraint either: no frame
+end release there (a release hangs a hidden node off the joint), and no equalDOF
+or rigid link retained by it. The Transformation handler cannot chain such
+constraints and gives wrong results without an error, so the model check refuses
+them; release the member at its other end, or leave that joint out of the floor.
+
+The canvas draws the diaphragm as spokes from the retained node (a small cube).
+Deleting the retained node deletes the diaphragm.
+""",
+            "define.storeys",
+            "define.mass_source",
+            "mechanics.constraints",
+            "assign.remove_constraints",
+        ),
+        "assign.rigid_link": _t(
+            "Assign → Joint → Rigid Link",
+            "Assign — joints",
+            "Tie two joints with OpenSees rigidLink (beam or bar).",
+            """
+# Values
+- **beam** — the constrained node moves with the retained one as a rigid body:
+  its translations include the rotation times the lever arm, and its rotations
+  equal the retained node's. Needs rotations (ndf 3 in 2D, 6 in 3D).
+- **bar** — only the translations are tied, as an inextensible bar would.
+- **Retained / constrained node** — the two selected joints.
+
+# Mechanics
+Like a diaphragm, a rigid link is a constraint the Plain handler cannot enforce,
+so the case runs with Transformation. The canvas draws it as a thick orange bar.
+""",
+            "mechanics.constraints",
+            "assign.remove_constraints",
+        ),
+        "assign.remove_constraints": _t(
+            "Assign → Joint → Remove Constraints",
+            "Assign — joints",
+            "Take the selected joints out of every equalDOF, rigid link and diaphragm.",
+            """
+Removes every equalDOF and rigid link that touches a selected joint, every
+diaphragm whose retained node is selected, and the selected joints from the
+diaphragms that list them (a diaphragm left without joints goes too). A storey
+diaphragm keeps following its storey: select its retained node to remove it.
+Undo puts everything back.
+""",
+            "assign.diaphragm",
+            "assign.rigid_link",
+        ),
+        "mechanics.buildings": _t(
+            "Buildings: storeys, diaphragms and the storey table",
+            "Mechanics",
+            "Storey displacement, drift ratio, storey shear and base shear.",
+            """
+With storeys defined, the Results panel shows a **Storeys** tab (exported to CSV
+at full precision like every table): top storey first, the base last.
+
+# What each column is
+- **U** — the storey's lateral displacement: the retained node of its diaphragm,
+  or the mean of its joints when it has none.
+- **Drift** — (U of the storey - U of the level below) / storey height.
+- **Shear** — static case: the force the members cut just above the level below
+  carry, from their global end forces. Base row: minus the sum of the lateral
+  reactions, the base shear.
+- **Response spectrum** — each mode's displacement, drift and storey shear (its
+  inertia forces w² m u above the cut) is combined by the case's SRSS or CQC
+  rule. A peak drift is not the difference of two peak displacements.
+- **Modal** — the storey values of each mode shape, as OpenSees normalises it.
+- **Pushover** — the last step's displacements and drifts.
+
+# Building a building
+Define → Storeys (from the Z grid lines), Assign → Joint → Diaphragm on each
+storey with a new node at the centre of mass, Define → Mass Source, then a
+modal and a response spectrum case. The example
+`building_3storey_diaphragm.osmodel` is all of this, checked against a
+hand-built OpenSeesPy model.
+""",
+            "define.storeys",
+            "assign.diaphragm",
+            "define.mass_source",
+            "mechanics.response_spectrum",
+        ),
+    }
+)
+
+
 ACTION_TOPICS: dict[str, str] = {
     # ── File ────────────────────────────────────────────────────────
     "_act_new": "file.new",
@@ -2515,6 +2691,8 @@ ACTION_TOPICS: dict[str, str] = {
     # ── Define ──────────────────────────────────────────────────────
     "_act_grid": "define.grid",
     "_act_add_node": "define.add_node",
+    "_act_storeys": "define.storeys",
+    "_act_mass_source": "define.mass_source",
     "_act_create_shell": "define.create_shell",
     "_act_frame_wizard": "define.portal_frame",
     "_act_truss_wizard": "define.truss",
@@ -2532,6 +2710,9 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_assign_support": "assign.support",
     "_act_assign_masses": "assign.masses",
     "_act_assign_equal_dof": "assign.equal_dof",
+    "_act_assign_diaphragm": "assign.diaphragm",
+    "_act_assign_rigid_link": "assign.rigid_link",
+    "_act_remove_constraints": "assign.remove_constraints",
     "_act_assign_load": "assign.load",
     "_act_assign_zls": "assign.zero_length_section",
     "_act_assign_bearing": "assign.bearing",

@@ -49,6 +49,18 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   (A, J, I22, I33, mass, weight, e.g. 0.35 Ig for cracked beams). Releases are
   drawn as dots near the member end and rigid zones as bars; force diagrams run
   along the flexible length.
+- **Multi-storey buildings** — Define → Storeys (typed, or one per Z grid
+  line), Assign → Joint → Diaphragm (OpenSees `rigidDiaphragm` over every joint
+  of a storey or the selected joints, with a new retained node at the centre of
+  mass whose out-of-plane DOF the runner fixes), Assign → Joint → Rigid Link
+  (`rigidLink beam`/`bar`) and Define → Mass Source (W / g of the element self
+  weight and of chosen load patterns with factors, e.g. D + 0.3 L, lumped at the
+  diaphragm's retained node with its rotational inertia). A case left at the
+  `Plain` constraint handler runs with `Transformation`, which these constraints
+  need. The Results panel gains a **Storeys** tab: storey displacement,
+  inter-storey drift ratio, storey shear and base shear, for static cases, mode
+  shapes, pushovers and response spectrum cases (each quantity combined over the
+  modes by SRSS or CQC). Checked against a hand-built OpenSeesPy model.
 - **A portal frame wizard** (Define → Create Portal Frame): bays and bay width,
   eave height, one slope / two slopes / flat, the column and rafter sections and
   fixed or pinned bases, in the XY, XZ or YZ plane. Column tops follow the roof
@@ -150,9 +162,10 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   mechanics behind it (what a slope does to a portal frame, why a fibre section
   yields, what Rayleigh damping is fitted to, why a plate mesh is stiff until it
   is refined).
-- **Examples** — 29 verified examples bundled, including the OpenSees Wiki
+- **Examples** — 30 verified examples bundled, including the OpenSees Wiki
   Examples-1 through Example-4 family, an RC frame pushover, isolated
-  frames and a moment-curvature workflow. See
+  frames, a 3-storey building with rigid diaphragms and a moment-curvature
+  workflow. See
   [`examples/README.md`](examples/README.md).
 
 ## Tech stack

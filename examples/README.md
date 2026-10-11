@@ -12,6 +12,7 @@ defining materials, sections, loads, and analysis cases.
 | `cantilever.osmodel` | 6 | 5 | Static × 2, Modal | Point & distributed loads, force diagrams, deformed shape, mode shapes |
 | `portal_frame.osmodel` | 4 | 3 | Static, Modal, Transient | All Display features, simplest 3D |
 | `space_frame_3d.osmodel` | 12 | 16 | Static, Modal, Transient (5% damping) | Realistic 3D rendering, multiple modes, damped EQ time-history |
+| `building_3storey_diaphragm.osmodel` | 39 | 63 | Static × 2, Modal, Response spectrum (CQC) | Storeys from the Z grid, a rigid diaphragm per floor with its retained node at the centre of mass, mass source D + 0.3 L, the Storeys results tab (drift, storey and base shear) |
 | `sdof_pushover.osmodel` | 2 | 1 | Pushover, Modal | Monotonic pushover curve, HystereticMaterial |
 | `portal_pushover.osmodel` | 4 | 3 | Pushover, Modal | Fiber sections, BeamWithHinges, nonlinear pushover with yielding |
 | `ex1a_canti2d.osmodel` | 2 | 1 | Static preload, Pushover, Transient EQ | Original OpenSees Ex 1a with shared gravity, push, and earthquake cases |

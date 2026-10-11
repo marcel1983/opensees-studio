@@ -36,7 +36,7 @@ from opensees_studio.core.combinations import (
     CombinationTerm,
     LoadCombination,
 )
-from opensees_studio.core.constraints import EqualDOFConstraint
+from opensees_studio.core.constraints import EqualDOFConstraint, RigidDiaphragm, RigidLink
 from opensees_studio.core.defaults import (
     DEAD_CASE_NAME,
     DEFAULT_PATTERN_NAME,
@@ -178,6 +178,7 @@ from opensees_studio.core.loads import (
     UniformElementLoad,
     UniformExcitationPattern,
 )
+from opensees_studio.core.mass_source import MassSource, MassSourcePattern
 from opensees_studio.core.material_catalog import (
     TypicalMaterial,
 )
@@ -276,6 +277,7 @@ from opensees_studio.core.shell_results import (
 from opensees_studio.core.shell_results import (
     principal as shell_principal,
 )
+from opensees_studio.core.storeys import Storey
 from opensees_studio.core.target_spectrum import (
     TBDY_KINDS,
     TBDY_TL,
@@ -340,6 +342,12 @@ __all__ = [  # noqa: RUF022 - grouped by domain under section comments, not alph
     # Geometry
     "Node",
     "EqualDOFConstraint",
+    "RigidDiaphragm",
+    "RigidLink",
+    # Buildings
+    "Storey",
+    "MassSource",
+    "MassSourcePattern",
     # ASCE/SEI 7-16 design spectrum
     "ASCE_SITE_CLASSES",
     "FA_TABLE",

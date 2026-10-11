@@ -24,7 +24,8 @@ from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
 from opensees_studio.core._base import omit_when_default
 from opensees_studio.core.analysis import AnalysisCase
 from opensees_studio.core.combinations import LoadCombination
-from opensees_studio.core.constraints import EqualDOFConstraint
+from opensees_studio.core.constraints import EqualDOFConstraint, RigidDiaphragm, RigidLink
+from opensees_studio.core.diaphragms import diaphragm_problems
 from opensees_studio.core.friction import FrictionModel
 from opensees_studio.core.geometry import (
     BEARING_CLASSES,
@@ -38,8 +39,10 @@ from opensees_studio.core.geometry import (
 )
 from opensees_studio.core.ground_motion import GroundMotionRecord
 from opensees_studio.core.loads import LoadPattern, ResponseSpectrum, TimeSeries
+from opensees_studio.core.mass_source import MassSource
 from opensees_studio.core.materials import Material
 from opensees_studio.core.sections import Section
+from opensees_studio.core.storeys import Storey
 from opensees_studio.core.target_spectrum import TargetSpectrum
 from opensees_studio.core.units import UnitSystem
 
@@ -72,8 +75,12 @@ class Project(BaseModel):
     """The root aggregate. Serializable to/from JSON via ``model_dump_json``."""
 
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
-    # A project without load combinations saves byte-identical to before they existed.
-    serialize_without_defaults = omit_when_default("combinations")
+    # The building fields and the load combinations are additive: a project
+    # without storeys, diaphragms, rigid links, a mass source or combinations
+    # saves byte-identical to before they existed.
+    serialize_without_defaults = omit_when_default(
+        "storeys", "diaphragms", "rigid_links", "mass_source", "combinations"
+    )
 
     # 1 = pre ground-motion catalog (records embedded in PathTimeSeries),
     # 2 = ground_motions catalog with record-backed time series.
@@ -87,6 +94,10 @@ class Project(BaseModel):
 
     coord_systems: list[CoordinateGridSystem] = Field(
         default_factory=lambda: [default_global_system()],
+    )
+    storeys: list[Storey] = Field(
+        default_factory=list,
+        description="Floor levels (elevation along Z in 3D, Y in 2D); additive.",
     )
     nodes: list[Node] = Field(default_factory=list)
     materials: list[Material] = Field(default_factory=list)
@@ -149,6 +160,16 @@ class Project(BaseModel):
     )
     elements: list[Element] = Field(default_factory=list)
     mp_constraints: list[EqualDOFConstraint] = Field(default_factory=list)
+    diaphragms: list[RigidDiaphragm] = Field(
+        default_factory=list, description="rigidDiaphragm constraints (additive)."
+    )
+    rigid_links: list[RigidLink] = Field(
+        default_factory=list, description="rigidLink beam/bar constraints (additive)."
+    )
+    mass_source: MassSource | None = Field(
+        default=None,
+        description="Mass derived from self weight and load patterns; None = typed masses only.",
+    )
     time_series: list[TimeSeries] = Field(default_factory=list)
     load_patterns: list[LoadPattern] = Field(default_factory=list)
     spectra: list[ResponseSpectrum] = Field(default_factory=list)
@@ -187,6 +208,8 @@ class Project(BaseModel):
             ("ground motion", self.ground_motions),
             ("target spectrum", self.target_spectra),
             ("analysis", self.analyses),
+            ("storey", self.storeys),
+            ("diaphragm", self.diaphragms),
             ("load combination", self.combinations),
         ):
             ids = [it.id for it in items]
@@ -237,6 +260,12 @@ class Project(BaseModel):
 
     def next_combination_id(self) -> int:
         return self._next_id(self.combinations)
+
+    def next_storey_id(self) -> int:
+        return self._next_id(self.storeys)
+
+    def next_diaphragm_id(self) -> int:
+        return self._next_id(self.diaphragms)
 
     # ─────────────────── lookups ───────────────────
     def node(self, node_id: PositiveInt) -> Node:
@@ -400,6 +429,26 @@ class Project(BaseModel):
                         f"MP constraint {mp.retained_node}->{mp.constrained_node} "
                         f"uses invalid DOF {dof} for ndf={self.ndf}."
                     )
+
+        for link in self.rigid_links:
+            for nid in (link.retained_node, link.constrained_node):
+                if nid not in node_ids:
+                    problems.append(f"Rigid link refers to missing node {nid}.")
+        if any(link.kind == "beam" for link in self.rigid_links) and (self.ndm, self.ndf) not in (
+            (2, 3),
+            (3, 6),
+        ):
+            problems.append(
+                "A rigid beam link needs rotations: ndf=3 in 2D or ndf=6 in 3D "
+                f"(this model has ndm={self.ndm}, ndf={self.ndf})."
+            )
+        problems.extend(diaphragm_problems(self))
+
+        if self.mass_source is not None:
+            pattern_ids = {p.id for p in self.load_patterns}
+            for entry in self.mass_source.patterns:
+                if entry.pattern_id not in pattern_ids:
+                    problems.append(f"Mass source refers to missing pattern {entry.pattern_id}.")
 
         if problems:
             raise ValueError("Reference validation failed:\n  - " + "\n  - ".join(problems))

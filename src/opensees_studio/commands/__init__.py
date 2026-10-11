@@ -6,6 +6,13 @@ from opensees_studio.commands.analysis import (
     UpdateAnalysisCaseCommand,
 )
 from opensees_studio.commands.base import ProjectCommand
+from opensees_studio.commands.buildings import (
+    AddDiaphragmCommand,
+    AddRigidLinkCommand,
+    RemoveConstraintsCommand,
+    SetMassSourceCommand,
+    SetStoreysCommand,
+)
 from opensees_studio.commands.combinations import (
     AddCombinationsCommand,
     DeleteCombinationsCommand,
@@ -76,6 +83,7 @@ from opensees_studio.commands.transforms import (
 __all__ = [
     "AddAnalysisCasesCommand",
     "AddCombinationsCommand",
+    "AddDiaphragmCommand",
     "AddElementLoadsCommand",
     "AddElementsCommand",
     "AddEqualDOFConstraintCommand",
@@ -85,6 +93,7 @@ __all__ = [
     "AddNodalLoadsCommand",
     "AddNodesCommand",
     "AddPointElementLoadsCommand",
+    "AddRigidLinkCommand",
     "AddSectionsCommand",
     "AddSpectrumCommand",
     "AddTimeSeriesCommand",
@@ -106,6 +115,7 @@ __all__ = [
     "MoveNodesCommand",
     "Plane",
     "ProjectCommand",
+    "RemoveConstraintsCommand",
     "RepairReport",
     "ReplaceElementsCommand",
     "ReplaceTimeSeriesCommand",
@@ -113,7 +123,9 @@ __all__ = [
     "SetCoordSystemsCommand",
     "SetGridSystemCommand",
     "SetMassCommand",
+    "SetMassSourceCommand",
     "SetRestraintCommand",
+    "SetStoreysCommand",
     "UpdateAnalysisCaseCommand",
     "UpdateCombinationCommand",
     "UpdateElementFieldsCommand",

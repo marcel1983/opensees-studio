@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from opensees_studio.core import Project, ResponseSpectrum
+from opensees_studio.core.mass_source import effective_nodal_masses
 from opensees_studio.core.modal import dof_indices
 from opensees_studio.core.modal_combination import combine_cqc, combine_srss, cqc_correlation
 from opensees_studio.services.results import ModalResults
@@ -59,11 +60,13 @@ def mass_participation(
     in another direction must get a small factor, not an inflated one.
     """
     dof_idx = dof_indices(project.ndm, project.ndf)
+    masses = effective_nodal_masses(project)
     node_mass: dict[int, np.ndarray] = {}
     total_mass = 0.0
     for n in project.nodes:
-        node_mass[n.id] = np.array([n.mass[i] for i in dof_idx], dtype=float)
-        total_mass += float(n.mass[dof_idx[direction - 1]]) if direction <= len(dof_idx) else 0.0
+        mass = masses[n.id]
+        node_mass[n.id] = np.array([mass[i] for i in dof_idx], dtype=float)
+        total_mass += float(mass[dof_idx[direction - 1]]) if direction <= len(dof_idx) else 0.0
 
     out: list[ModeContribution] = []
     for mode_number in sorted(modal.mode_shapes.keys()):

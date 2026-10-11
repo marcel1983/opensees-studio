@@ -207,6 +207,12 @@ def _exemption(project: Project, ids: list[int]) -> str | None:
     for constraint in project.mp_constraints:
         if {constraint.retained_node, constraint.constrained_node} <= members:
             return "tied together by an equalDOF constraint"
+    for link in project.rigid_links:
+        if {link.retained_node, link.constrained_node} <= members:
+            return "joined by a rigid link"
+    for diaphragm in project.diaphragms:
+        if diaphragm.retained_node in members:
+            return "holds the retained node of a rigid diaphragm"
     return None
 
 
