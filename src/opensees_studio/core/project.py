@@ -261,7 +261,10 @@ class Project(BaseModel):
         return self._get(self.target_spectra, spectrum_id, "target spectrum")
 
     def combination(self, combination_id: PositiveInt) -> LoadCombination:
-        return self._get(self.combinations, combination_id, "load combination")
+        for combo in self.combinations:
+            if combo.id == combination_id:
+                return combo
+        raise KeyError(f"Load combination with id={combination_id} not found.")
 
     @staticmethod
     def _get(items: list[Any], target_id: int, label: str) -> Any:

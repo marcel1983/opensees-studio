@@ -30,7 +30,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal, get_args
 
@@ -229,13 +229,8 @@ def nonlinear_reasons(project: Project, case: Any) -> list[str]:
         return reasons
     if case.algorithm != "Linear":
         reasons.append(f"it is solved with the {case.algorithm} algorithm")
-    transforms = sorted(
-        {
-            el.geom_transf
-            for el in project.elements
-            if getattr(el, "geom_transf", "Linear") != "Linear"
-        }
-    )
+    used = {str(getattr(el, "geom_transf", "Linear")) for el in project.elements}
+    transforms = sorted(used - {"Linear"})
     if transforms:
         reasons.append(f"the model has {' and '.join(transforms)} frame transformations")
     if any(getattr(el, "type", "") == "CorotTruss" for el in project.elements):
@@ -408,7 +403,39 @@ LOAD_ROLE_LABELS: dict[str, str] = {
 }
 
 
-def asce7_16_lrfd(roles: dict[str, Iterable[int]]) -> list[tuple[str, list[CombinationTerm]]]:
+_ROLE_NAMES: dict[str, tuple[str, ...]] = {
+    "D": ("D", "DL", "DEAD", "SW", "SDL", "SELF"),
+    "L": ("L", "LL", "LIVE"),
+    "Lr": ("LR", "ROOF"),
+    "S": ("S", "SNOW"),
+    "R": ("R", "RAIN"),
+    "W": ("W", "WL", "WIND"),
+    "E": ("E", "EQ", "EARTHQUAKE", "SEISMIC"),
+}
+
+
+def guess_load_role(name: str) -> str | None:
+    """The :data:`LOAD_ROLES` entry a case name suggests (``DEAD`` → ``D``, ``WX`` → ``W``).
+
+    Matches the whole name or its leading word (``EQ-X``, ``WIND 0deg``), case
+    insensitive; a trailing direction letter is ignored (``EX``, ``WY``).
+    ``None`` when nothing matches.
+    """
+    words = "".join(ch if ch.isalnum() else " " for ch in name.upper()).split()
+    if not words:
+        return None
+    for candidate in (words[0], words[0].rstrip("XYZ") or words[0]):
+        for role, names in _ROLE_NAMES.items():
+            if candidate in names:
+                return role
+    return None
+
+
+def asce7_16_lrfd(
+    roles: Mapping[str, Iterable[int]],
+    *,
+    peak_cases: Iterable[int] = (),
+) -> list[tuple[str, list[CombinationTerm]]]:
     """ASCE 7-16 Section 2.3.1 basic LRFD combinations, as ``(name, terms)`` pairs.
 
     ``roles`` maps a role of :data:`LOAD_ROLES` to the analysis cases carrying
@@ -418,7 +445,9 @@ def asce7_16_lrfd(roles: dict[str, Iterable[int]]) -> list[tuple[str, list[Combi
     combination is produced only when every load it names is present (and
     ``D`` is always required). The live-load factor 1.0 in combinations 3 to 5
     is used as is: the 0.5 reduction of the standard's exception depends on the
-    occupancy and is left to the engineer.
+    occupancy and is left to the engineer. A case of ``peak_cases`` (a response
+    spectrum, whose result is already ``±peak``) gets one combination, not one
+    per sign: the two would be identical.
 
     1. 1.4D
     2. 1.2D + 1.6L + 0.5(Lr or S or R)
@@ -434,8 +463,17 @@ def asce7_16_lrfd(roles: dict[str, Iterable[int]]) -> list[tuple[str, list[Combi
         return []
     live = by_role["L"]
     roof = [(r, cid) for r in ("Lr", "S", "R") for cid in by_role[r]]
-    lateral_w = [(sign, cid) for cid in by_role["W"] for sign in (1.0, -1.0)]
-    lateral_e = [(sign, cid) for cid in by_role["E"] for sign in (1.0, -1.0)]
+    peaks = set(peak_cases)
+
+    def both_ways(role: str) -> list[tuple[float, int]]:
+        return [
+            (sign, cid)
+            for cid in by_role[role]
+            for sign in ((1.0,) if cid in peaks else (1.0, -1.0))
+        ]
+
+    lateral_w = both_ways("W")
+    lateral_e = both_ways("E")
 
     out: list[tuple[str, list[CombinationTerm]]] = []
 

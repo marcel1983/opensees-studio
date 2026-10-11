@@ -26,6 +26,7 @@ from opensees_studio.core.combinations import (
     combination_problems,
     combinations_using_case,
     combine,
+    guess_load_role,
     model_fingerprint,
     required_case_ids,
     superposition_warnings,
@@ -452,3 +453,28 @@ def test_envelope_tables_give_local_force_max_and_min() -> None:
     np.testing.assert_allclose([r[5] for r in forces.rows], np.minimum(raw_a, raw_b))
     single = dict(combination_tables(combine_results(_combo_project(), 1, {1: a, 2: b}), project))
     assert single["Element forces"].columns == ["Element", "Type", "Component", "Unit", "Value"]
+
+
+def test_asce_spectrum_case_gets_one_sign() -> None:
+    combos = _as_dict(asce7_16_lrfd({"D": [1], "E": [7]}, peak_cases=[7]))
+    assert set(combos) == {"1.4D", "1.2D+E", "0.9D+E"}
+
+
+@pytest.mark.parametrize(
+    ("name", "role"),
+    [
+        ("DEAD", "D"),
+        ("dl", "D"),
+        ("Live", "L"),
+        ("ROOF LIVE", "Lr"),
+        ("Snow", "S"),
+        ("WX", "W"),
+        ("Wind 0deg", "W"),
+        ("EQ-X", "E"),
+        ("EY", "E"),
+        ("MODAL", None),
+        ("", None),
+    ],
+)
+def test_guess_load_role_from_case_names(name: str, role: str | None) -> None:
+    assert guess_load_role(name) == role
