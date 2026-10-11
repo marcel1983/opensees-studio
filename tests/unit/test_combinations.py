@@ -478,3 +478,20 @@ def test_asce_spectrum_case_gets_one_sign() -> None:
 )
 def test_guess_load_role_from_case_names(name: str, role: str | None) -> None:
     assert guess_load_role(name) == role
+
+
+def test_envelope_diagram_keeps_the_flexible_ends_of_offset_members() -> None:
+    from opensees_studio.core.geometry.frame_options import FrameEndOffsets
+
+    project = _combo_project("Envelope")
+    project.elements[0] = project.elements[0].model_copy(
+        update={"end_offsets": FrameEndOffsets(length_i=0.3, length_j=0.2)}
+    )
+    a = _static(1, [1.0, 2.0, 3.0, -1.0, -2.0, 4.0], [0.1, 0.2, 0.01])
+    b = _static(2, [5.0, -1.0, 0.0, -5.0, 1.0, -7.0], [0.3, -0.1, 0.0])
+    out = combine_results(project, 1, {1: a, 2: b})
+    both = envelope_diagram_data(project, out.max, out.min, ForceComponent.M3)
+    single = extract_diagram_data(project, a, ForceComponent.M3)
+    assert set(both.ends) == {1}
+    np.testing.assert_allclose(both.ends[1][0], single.ends[1][0])
+    np.testing.assert_allclose(both.ends[1][1], single.ends[1][1])

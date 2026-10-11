@@ -231,6 +231,8 @@ def envelope_diagram_data(
         values_i=np.concatenate([a.values_i, b.values_i]),
         values_j=np.concatenate([a.values_j, b.values_j]),
         abs_max=max(a.abs_max, b.abs_max),
+        # Both bounds act on the same flexible parts.
+        ends={**a.ends, **b.ends},
     )
 
 
