@@ -9,6 +9,10 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.10] — 2026-10-11
+
+The frame members release: the member-level options a SAP2000 user expects.
+
 ### Added
 
 - **Frame end releases and partial fixity** (Assign → Frame → Releases/Partial
