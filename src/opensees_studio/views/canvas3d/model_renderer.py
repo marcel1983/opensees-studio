@@ -35,6 +35,7 @@ from opensees_studio.core import (
     UniformElementLoad,
     ZeroLengthElement,
 )
+from opensees_studio.core.diaphragms import constrained_node_ids
 from opensees_studio.services.deformation import DeformationSource
 from opensees_studio.views.canvas3d.style import RenderStyle
 
@@ -162,6 +163,7 @@ class ModelRenderer:
         self._build_frame_polydata(project)
         self._build_surface_polydata(project)
         self._build_supports(project)
+        self._build_constraints(project)
         self._build_loads(project)
         if self._show_section_extrusions:
             self._build_section_extrusions(project)
@@ -720,6 +722,74 @@ class ModelRenderer:
             geom.translate(node.coords, inplace=True)
             actor = self._plotter.add_mesh(geom, color=support_color, pickable=False, lighting=True)
             self._aux_actors.append(actor)
+
+    #: Actor names of the constraint overlays (``plotter.actors`` keys).
+    DIAPHRAGM_ACTOR = "rigid_diaphragms"
+    RETAINED_ACTOR = "diaphragm_retained_nodes"
+    RIGID_LINK_ACTOR = "rigid_links"
+
+    def _build_constraints(self, project: Project) -> None:
+        """Rigid diaphragms as spokes from the retained node, rigid links as thick bars.
+
+        Static overlays like the supports: they mark the model, they are not
+        moved with a deformed shape.
+        """
+        if self._node_original_points is None:
+            return
+        coords = {n.id: np.asarray(n.coords, dtype=float) for n in project.nodes}
+
+        def lines(pairs: list[tuple[int, int]]) -> pv.PolyData | None:
+            pairs = [(a, b) for a, b in pairs if a in coords and b in coords]
+            if not pairs:
+                return None
+            points = np.array([coords[nid] for pair in pairs for nid in pair])
+            cells = np.hstack([[2, 2 * k, 2 * k + 1] for k in range(len(pairs))])
+            return pv.PolyData(points, lines=cells)
+
+        spokes = [
+            (d.retained_node, nid)
+            for d in project.diaphragms
+            for nid in constrained_node_ids(project, d)
+        ]
+        mesh = lines(spokes)
+        if mesh is not None:
+            self._aux_actors.append(
+                self._plotter.add_mesh(
+                    mesh,
+                    color=(0.85, 0.25, 0.85),
+                    line_width=1.0,
+                    opacity=0.6,
+                    pickable=False,
+                    name=self.DIAPHRAGM_ACTOR,
+                )
+            )
+        retained = [
+            coords[d.retained_node] for d in project.diaphragms if d.retained_node in coords
+        ]
+        if retained:
+            size = max(self._diag_of_points(self._node_original_points) * 0.012, 1e-6)
+            marker = pv.PolyData(np.array(retained)).glyph(
+                geom=pv.Cube(x_length=size, y_length=size, z_length=size), scale=False, orient=False
+            )
+            self._aux_actors.append(
+                self._plotter.add_mesh(
+                    marker,
+                    color=(0.85, 0.25, 0.85),
+                    pickable=False,
+                    name=self.RETAINED_ACTOR,
+                )
+            )
+        mesh = lines([(k.retained_node, k.constrained_node) for k in project.rigid_links])
+        if mesh is not None:
+            self._aux_actors.append(
+                self._plotter.add_mesh(
+                    mesh,
+                    color=(0.9, 0.35, 0.1),
+                    line_width=5.0,
+                    pickable=False,
+                    name=self.RIGID_LINK_ACTOR,
+                )
+            )
 
     def _build_loads(self, project: Project) -> None:
         if not project.load_patterns or self._node_original_points is None:

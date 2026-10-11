@@ -9,6 +9,45 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Added
+
+- **Storeys** (Define → Storeys…): named floor levels with an elevation, typed or
+  taken from the Z grid lines of a coordinate system.
+- **Rigid diaphragms** (Assign → Joint → Diaphragm…): OpenSees `rigidDiaphragm`
+  over every joint of a storey (resolved at build time, supports in the plane
+  left out) or over the selected joints, with the retained node either an
+  existing joint or a new node at the centre of mass. A retained node no element
+  touches gets its out-of-plane DOF fixed by the runner. Drawn on the canvas as
+  spokes from the retained node; deleting the retained node deletes it.
+- **Rigid links** (Assign → Joint → Rigid Link…): `rigidLink beam` or `bar`
+  between two joints, drawn as a thick bar. Assign → Joint → Remove Constraints
+  takes the selected joints out of every equalDOF, rigid link and diaphragm.
+- **Mass source** (Define → Mass Source…): nodal mass as W / g of the element
+  self weight and of chosen load patterns with factors (downward loads only,
+  lumped on the element ends), on the lateral translations or also the vertical
+  one, optionally lumped at each diaphragm's retained node with the floor's
+  rotational inertia (only where that node is at the centre of mass, the case in
+  which lumping is exact). Restrained DOF get no mass.
+- **Storey table** in the Results panel (a Storeys tab, CSV at full precision):
+  storey displacement, inter-storey drift ratio, storey shear and base shear for
+  static cases (shear from the global end forces of the members cut above the
+  level below, base shear from the reactions), mode shapes, pushovers and
+  response spectrum cases (drift and shear combined mode by mode with SRSS or
+  CQC, never derived from combined displacements).
+- Example `building_3storey_diaphragm` (3 storeys, 2 × 2 bays), verified against
+  a hand-built OpenSeesPy model with `rigidDiaphragm` (all periods) and with
+  `equalDOF` (the X-sway periods) to 1e-9.
+
+### Changed
+
+- A case left at the `Plain` constraint handler runs with `Transformation` when
+  the model has a rigid diaphragm or a rigid link: Plain drops such a constraint
+  with a warning and then solves a singular system while reporting success.
+- The free DOF count behind the eigen solver routing leaves out the DOF a
+  diaphragm eliminates and the ones fixed on a floating retained node.
+- Projects without storeys, diaphragms, rigid links or a mass source save
+  byte-identical to before.
+
 ## [0.0.9] — 2026-10-10
 
 The modelling release: loads inside a member, the weight of the structure as a

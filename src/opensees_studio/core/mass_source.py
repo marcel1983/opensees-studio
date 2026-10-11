@@ -16,7 +16,7 @@ mass from it. Note that a pattern carrying self weight *and*
 ``element_self_mass`` counts the self weight twice, as in ETABS.
 
 The mass goes on the lateral translations; ``include_vertical`` adds the
-vertical one. Masses typed on the nodes always count.
+vertical one; a restrained DOF gets none. Masses typed on the nodes always count.
 
 With ``lump_at_diaphragms`` the in-plane mass of every rigid diaphragm is
 moved to its retained node, together with the rotational inertia
@@ -32,12 +32,13 @@ No Qt, no OpenSees.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt
 
-from opensees_studio.core.diaphragms import IN_PLANE_SLOTS, constrained_node_ids
+from opensees_studio.core.diaphragms import IN_PLANE_SLOTS, centre_of_mass, constrained_node_ids
 from opensees_studio.core.geometry.local_axes import frame_local_axes
 from opensees_studio.core.loads import PlainLoadPattern
 from opensees_studio.core.self_weight import (
@@ -87,10 +88,10 @@ def _frame_end_shares(
     project: Project, coords: dict[int, np.ndarray], element: object
 ) -> tuple[np.ndarray, np.ndarray, float] | None:
     """``(x, y, z)`` local axes stacked as rows, and the length, or None."""
-    nodes = getattr(element, "nodes", ())
+    nodes: tuple[int, ...] = tuple(getattr(element, "nodes", ()))
     if len(nodes) != 2:
         return None
-    axes = frame_local_axes(project.ndm, coords[nodes[0]], coords[nodes[1]])
+    axes = frame_local_axes(project.ndm, coords[nodes[0]].tolist(), coords[nodes[1]].tolist())
     if axes is None:
         return None
     length = float(np.linalg.norm(coords[nodes[1]] - coords[nodes[0]]))
@@ -127,27 +128,27 @@ def pattern_weight_per_node(project: Project, pattern: PlainLoadPattern) -> dict
     def add(nid: int, value: float) -> None:
         out[nid] = out.get(nid, 0.0) + value
 
-    for load in pattern.nodal_loads:
-        add(load.node_id, float(np.asarray(load.forces[:3], dtype=float) @ down))
-    for load in pattern.element_loads:
-        element = elements.get(load.element_id)
+    for nodal in pattern.nodal_loads:
+        add(nodal.node_id, float(np.asarray(nodal.forces[:3], dtype=float) @ down))
+    for uniform in pattern.element_loads:
+        element = elements.get(uniform.element_id)
         frame = _frame_end_shares(project, coords, element) if element is not None else None
         if frame is None:
             continue
         axes, nodes, length = frame
         # Local (wx, wy, wz) per unit length to a global vector, then downward.
-        q = float((np.array([load.wx, load.wy, load.wz]) @ axes) @ down) * length
+        q = float((np.array([uniform.wx, uniform.wy, uniform.wz]) @ axes) @ down) * length
         add(int(nodes[0]), 0.5 * q)
         add(int(nodes[1]), 0.5 * q)
-    for load in pattern.point_loads:
-        element = elements.get(load.element_id)
+    for point in pattern.point_loads:
+        element = elements.get(point.element_id)
         frame = _frame_end_shares(project, coords, element) if element is not None else None
         if frame is None:
             continue
         axes, nodes, _length = frame
-        p = float((np.array([load.px, load.py, load.pz]) @ axes) @ down)
-        add(int(nodes[0]), (1.0 - load.x) * p)
-        add(int(nodes[1]), load.x * p)
+        p = float((np.array([point.px, point.py, point.pz]) @ axes) @ down)
+        add(int(nodes[0]), (1.0 - point.x) * p)
+        add(int(nodes[1]), point.x * p)
     for nid, value in self_weight_per_node(project, pattern.self_weight).items():
         add(nid, value)
     return out
@@ -189,10 +190,14 @@ def effective_nodal_masses(project: Project) -> dict[int, np.ndarray]:
         return masses
     g = gravity(project.meta.units)
     slots = _translation_slots(project.ndm, source.include_vertical)
+    restraint = {n.id: n.restraint for n in project.nodes}
     for nid, weight in source_weight_per_node(project, source).items():
         if nid in masses:
             for slot in slots:
-                masses[nid][slot] += weight / g
+                # A support carries its own weight: mass on a fixed DOF never
+                # moves and would only dilute the participating mass ratios.
+                if not restraint[nid][slot]:
+                    masses[nid][slot] += weight / g
     if source.lump_at_diaphragms and project.ndm == 3:
         _lump_at_diaphragms(project, masses)
     return masses
@@ -236,3 +241,23 @@ def total_translational_mass(project: Project) -> tuple[float, float, float]:
         return (0.0, 0.0, 0.0)
     total = np.sum(list(masses.values()), axis=0)
     return (float(total[0]), float(total[1]), float(total[2]))
+
+
+def diaphragm_centre_of_mass(
+    project: Project, node_ids: Sequence[int], perp_dirn: int = 3
+) -> tuple[float, float, float]:
+    """Where a new retained node goes: the centre of the in-plane mass of ``node_ids``.
+
+    Each node weighs the mean of its effective mass in the two in-plane
+    translations (the same masses :func:`effective_nodal_masses` hands the
+    solver, before any lumping onto this diaphragm); without mass it is the
+    centroid. The coordinate across the plane is the nodes' mean, so the node
+    lies in the floor.
+    """
+    a, b, _rot = IN_PLANE_SLOTS[perp_dirn]
+    masses = effective_nodal_masses(project)
+    coords = {n.id: n.coords for n in project.nodes}
+    weights = {
+        nid: 0.5 * float(masses[nid][a] + masses[nid][b]) for nid in node_ids if nid in masses
+    }
+    return centre_of_mass(coords, weights, node_ids)

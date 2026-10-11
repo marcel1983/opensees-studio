@@ -285,7 +285,7 @@ class OpenSeesRunner:
         """
         if case.constraints == "Plain" and (self.project.diaphragms or self.project.rigid_links):
             return "Transformation"
-        return case.constraints
+        return str(case.constraints)
 
     def _emit_mp_constraint(self, mp: Any) -> None:
         self._ops.equalDOF(mp.retained_node, mp.constrained_node, *mp.dofs)

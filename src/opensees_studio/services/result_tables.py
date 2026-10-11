@@ -27,6 +27,19 @@ from opensees_studio.core import (
     ForceBeamColumn,
     Project,
 )
+from opensees_studio.core.mass_source import effective_nodal_masses
+from opensees_studio.core.storey_results import (
+    BASE_NAME,
+    base_shear_from_reactions,
+    combine_storey_response,
+    storey_profile,
+)
+from opensees_studio.core.storeys import (
+    StoreyLevel,
+    base_elevation,
+    lateral_axes,
+    storey_levels,
+)
 from opensees_studio.core.units import UnitConverter, UnitLabels, UnitSystem
 from opensees_studio.services.results import (
     ModalResults,
@@ -288,6 +301,169 @@ def response_spectrum_tables(
             ]
         )
     return [combined, modes]
+
+
+# ─────────────────────────── storeys ───────────────────────────
+def _storey_columns(layout: Layout, *, leading: list[str]) -> list[str]:
+    labels = layout.labels
+    axes = ("X",) if layout.ndm == 2 else ("X", "Y")
+    return [
+        *leading,
+        "Storey",
+        f"Elevation [{labels.length}]",
+        f"Height [{labels.length}]",
+        *(f"U{a} [{labels.length}]" for a in axes),
+        *(f"Drift {a} [-]" for a in axes),
+        *(f"Shear {a} [{labels.force}]" for a in axes),
+    ]
+
+
+def _storey_rows(
+    profile_disp: np.ndarray,
+    profile_drift: np.ndarray,
+    shears: list[np.ndarray | None],
+    base_disp: np.ndarray,
+    base_shear: np.ndarray | None,
+    levels: tuple[StoreyLevel, ...],
+    base_z: float,
+    layout: Layout,
+    leading: list[Cell],
+) -> list[list[Cell]]:
+    """Top storey first, the base last, as ETABS lists them."""
+    length = layout.converter.factor("length")
+    force = layout.converter.factor("force")
+    n = profile_disp.shape[1] if profile_disp.ndim == 2 else len(base_disp)
+    blank: list[Cell] = [""] * n
+    rows: list[list[Cell]] = []
+    for k in reversed(range(len(levels))):
+        level = levels[k]
+        shear = shears[k]
+        rows.append(
+            [
+                *leading,
+                level.storey.name,
+                level.storey.elevation * length,
+                level.height * length,
+                *(float(v) * length for v in profile_disp[k]),
+                *(float(v) for v in profile_drift[k]),
+                *(blank if shear is None else [float(v) * force for v in shear[:n]]),
+            ]
+        )
+    rows.append(
+        [
+            *leading,
+            BASE_NAME,
+            base_z * length,
+            "",
+            *(float(v) * length for v in base_disp),
+            *blank,
+            *(blank if base_shear is None else [float(v) * force for v in base_shear[:n]]),
+        ]
+    )
+    return rows
+
+
+def storey_table(results: object, project: Project | None) -> ResultTable | None:
+    """Storey displacement, drift ratio and shear; ``None`` without storeys above the base.
+
+    Static: the last step, storey shears from the members cut above the level
+    below, base shear from the reactions. Pushover: the last step, no shears.
+    Modal: one block per mode (the mode shape, no shears). Response spectrum:
+    peaks combined per quantity by the case's rule.
+    """
+    if project is None or not project.storeys:
+        return None
+    levels = tuple(storey_levels(project))
+    if not levels:
+        return None
+    layout = Layout.of(project)
+    base_z = base_elevation(project)
+    lateral = len(lateral_axes(project.ndm))
+
+    def last(values: dict[int, np.ndarray]) -> dict[int, np.ndarray]:
+        return {nid: np.atleast_2d(v)[-1] for nid, v in values.items()}
+
+    if isinstance(results, StaticResults):
+        table = ResultTable("Storey response (final step)", _storey_columns(layout, leading=[]))
+        profile = storey_profile(project, last(results.node_disp))
+        shears = [
+            np.atleast_2d(results.storey_shear[lv.storey.id])[-1]
+            if lv.storey.id in results.storey_shear
+            else None
+            for lv in levels
+        ]
+        if any(v is None for v in shears):
+            table.notes.append(
+                "Storey shears need a re-run: the storeys changed after the analysis."
+            )
+        base = base_shear_from_reactions(project, last(results.node_reaction))
+        table.rows = _storey_rows(
+            profile.disp, profile.drift, shears, profile.base, base, levels, base_z, layout, []
+        )
+        return table
+    if isinstance(results, PushoverResults):
+        table = ResultTable("Storey response (final step)", _storey_columns(layout, leading=[]))
+        profile = storey_profile(project, last(results.node_disp))
+        table.rows = _storey_rows(
+            profile.disp,
+            profile.drift,
+            [None] * len(levels),
+            profile.base,
+            None,
+            levels,
+            base_z,
+            layout,
+            [],
+        )
+        return table
+    if isinstance(results, ModalResults):
+        table = ResultTable(
+            "Storey mode shapes", _storey_columns(layout, leading=["Mode", "T [s]"])
+        )
+        table.notes.append("Mode shapes as OpenSees normalises them; shears need a spectrum.")
+        for mode in sorted(results.mode_shapes):
+            profile = storey_profile(project, results.mode_shapes[mode])
+            table.rows += _storey_rows(
+                profile.disp,
+                profile.drift,
+                [None] * len(levels),
+                profile.base,
+                None,
+                levels,
+                base_z,
+                layout,
+                [mode, float(results.periods[mode - 1])],
+            )
+        return table
+    if isinstance(results, ResponseSpectrumResults):
+        modes = [m for m in results.modes if m.modal_peak_disp]
+        combined = combine_storey_response(
+            project,
+            [m.modal_peak_disp for m in modes],
+            [m.angular_frequency for m in modes],
+            effective_nodal_masses(project),
+            method=results.combination,
+            damping=results.damping_ratio,
+        )
+        table = ResultTable(
+            f"Storey response ({results.combination} peaks)",
+            _storey_columns(layout, leading=[]),
+            notes=list(results.warnings),
+        )
+        base_disp = np.zeros(lateral)
+        table.rows = _storey_rows(
+            combined.disp,
+            combined.drift,
+            list(combined.shear),
+            base_disp,
+            combined.base_shear,
+            levels,
+            base_z,
+            layout,
+            [],
+        )
+        return table
+    return None
 
 
 def node_history_table(

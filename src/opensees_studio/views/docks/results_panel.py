@@ -3,7 +3,7 @@
 One tab per table of :mod:`opensees_studio.services.result_tables`: static
 displacements, reactions and element forces; the pushover curve; modal
 frequencies; response spectrum peaks and modes; the time history of a chosen
-node. Cells keep the full double. The "Significant digits" setting (default
+node; a Storeys tab when the project defines storeys. Cells keep the full double. The "Significant digits" setting (default
 6, up to 15) changes the display only, and "Export CSV..." writes the current
 tab at full precision with a header naming the units.
 """
@@ -38,6 +38,7 @@ from opensees_studio.services.result_tables import (
     pushover_tables,
     response_spectrum_tables,
     static_tables,
+    storey_table,
     write_csv,
 )
 from opensees_studio.services.results import (
@@ -206,6 +207,9 @@ class ResultsPanel(QWidget):
             self._tabs.addTab(self._history_tab(project), "Node history")
         else:
             self._title.setText("<i>(unsupported result type)</i>")
+        storeys = storey_table(results, project)
+        if storeys is not None:
+            self._add_table_tab(storeys, "Storeys")
         self._export.setEnabled(bool(self.tables()))
 
     def tables(self) -> list[ResultTable]:

@@ -388,3 +388,66 @@ def test_exported_script_carries_the_diaphragm() -> None:
     script = export_script(project)
     assert "ops.rigidDiaphragm(3, 9, 5, 6, 7, 8)" in script
     assert "ops.fix(9, 0, 0, 1, 1, 1, 0)" in script
+
+
+# ─────────────────────────── result tables ───────────────────────────
+def test_storey_table_needs_storeys() -> None:
+    from opensees_studio.services.result_tables import storey_table
+    from opensees_studio.services.results import StaticResults
+
+    project = _one_storey()
+    project.storeys.clear()
+    assert storey_table(StaticResults(case_id=1, case_name="S", n_steps=1), project) is None
+
+
+def test_storey_table_for_modes_and_spectrum() -> None:
+    from opensees_studio.services.result_tables import storey_table
+    from opensees_studio.services.results import ModalResults, ResponseSpectrumResults
+    from opensees_studio.services.spectrum import ModeContribution
+
+    project = _loaded_floor((3.0, 2.0), lump=True)
+    shape = {nid: np.zeros(6) for nid in range(1, 10)}
+    shape[9] = np.array([0.006, 0.0, 0.0, 0.0, 0.0, 0.0])
+    modal = ModalResults(
+        case_id=1, case_name="M", eigenvalues=np.array([100.0]), mode_shapes={1: shape}
+    )
+    table = storey_table(modal, project)
+    assert table is not None
+    assert [row[:3] for row in table.rows] == [
+        [1, pytest.approx(2 * np.pi / 10.0), "Story1"],
+        [1, pytest.approx(2 * np.pi / 10.0), "Base"],
+    ]
+    assert table.rows[0][7] == pytest.approx(0.002)  # drift X of the mode shape
+
+    peak = {nid: np.zeros(3) for nid in range(1, 10)}
+    peak[9] = np.array([-0.01, 0.0, 0.0])
+    mode = ModeContribution(
+        mode_number=1,
+        period=0.6,
+        frequency=1 / 0.6,
+        angular_frequency=10.0,
+        participation_factor=1.0,
+        effective_mass=1.0,
+        mass_ratio=1.0,
+        sa_at_period=1.0,
+        modal_peak_disp=peak,
+    )
+    spectrum = ResponseSpectrumResults(
+        case_id=2, case_name="RS", direction=1, combination="SRSS", modes=[mode]
+    )
+    table = storey_table(spectrum, project)
+    assert table is not None
+    story, base = table.rows
+    # 4000 kg lumped at node 9, w^2 = 100: |100 * 4000 * -0.01| = 4000 N.
+    assert story[3] == pytest.approx(0.01)
+    assert story[7] == pytest.approx(4000.0)
+    assert base[0] == "Base" and base[7] == pytest.approx(4000.0)
+
+
+def test_mass_source_puts_no_mass_on_a_restrained_dof() -> None:
+    project = _loaded_floor((3.0, 2.0), lump=False)
+    project.nodes[4] = project.nodes[4].model_copy(
+        update={"restraint": (True, False, False, False, False, False)}
+    )
+    masses = effective_nodal_masses(project)
+    assert masses[5][:2].tolist() == pytest.approx([0.0, 1000.0])
