@@ -115,6 +115,8 @@ def write_results(results: AnyResults, out_dir: str | Path) -> dict[str, Any]:
             # Shell section resultants; absent in a file written before the
             # field existed, which `_read_int_dict` reads back as empty.
             _write_int_dict(f, "element_stresses", results.element_stresses)
+            if results.storey_shear:
+                _write_int_dict(f, "storey_shear", results.storey_shear)
         elif isinstance(results, PushoverResults):
             entry["completed_steps"] = results.n_steps
             entry["control_node"] = results.control_node
@@ -195,6 +197,7 @@ def load_results(entry: dict[str, Any], out_dir: str | Path) -> AnyResults:
                 node_reaction=_read_int_dict(f, "node_reaction"),
                 element_forces=_read_int_dict(f, "element_forces"),
                 element_stresses=_read_int_dict(f, "element_stresses"),
+                storey_shear=_read_int_dict(f, "storey_shear"),
             )
         if kind == "PushoverResults":
             return PushoverResults(

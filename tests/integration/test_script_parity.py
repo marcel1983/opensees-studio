@@ -126,6 +126,22 @@ def test_static_export_matches_every_node_and_dof(tmp_path: Path) -> None:
         )
 
 
+def test_static_export_reproduces_a_rigid_diaphragm_building(tmp_path: Path) -> None:
+    """Diaphragms, their auto-fixed retained nodes, the mass source and the
+    Plain -> Transformation promotion all reach the script."""
+    script, (project, case) = _export(tmp_path, "building_3storey_diaphragm", 2)
+    text = script.read_text(encoding="utf-8")
+    assert "ops.rigidDiaphragm(3, 37," in text
+    assert "ops.constraints('Transformation')" in text
+    reference = OpenSeesRunner(project).run(case)
+
+    probes = {f"n{node.id}": ["nodeDisp", [node.id]] for node in project.nodes}
+    got = _run_exported(script, probes)
+
+    for node in project.nodes:
+        assert np.allclose(got[f"n{node.id}"], reference.node_disp[node.id][-1], atol=0, rtol=0)
+
+
 # ─────────────────────── modal ───────────────────────
 def test_modal_export_reproduces_the_eigenvalues(tmp_path: Path) -> None:
     """The exported script's first eigen call is the one the GUI's dense solver makes."""

@@ -198,6 +198,40 @@ class FixDuplicatesCommand(ProjectCommand):
             kept.append(constraint)
         project.mp_constraints[:] = kept
 
+        links = []
+        for link in project.rigid_links:
+            link_retained = mapping.get(link.retained_node, link.retained_node)
+            link_constrained = mapping.get(link.constrained_node, link.constrained_node)
+            if link_retained == link_constrained:
+                self.report.merged_constraints += 1
+                continue
+            if (link_retained, link_constrained) != (link.retained_node, link.constrained_node):
+                link = link.model_copy(
+                    update={"retained_node": link_retained, "constrained_node": link_constrained}
+                )
+            links.append(link)
+        project.rigid_links[:] = links
+
+        diaphragms = []
+        for diaphragm in project.diaphragms:
+            centre = mapping.get(diaphragm.retained_node, diaphragm.retained_node)
+            members = tuple(
+                dict.fromkeys(
+                    n
+                    for n in (mapping.get(c, c) for c in diaphragm.constrained_nodes)
+                    if n != centre
+                )
+            )
+            if diaphragm.storey_id is None and not members:
+                self.report.merged_constraints += 1
+                continue
+            if centre != diaphragm.retained_node or members != diaphragm.constrained_nodes:
+                diaphragm = diaphragm.model_copy(
+                    update={"retained_node": centre, "constrained_nodes": members}
+                )
+            diaphragms.append(diaphragm)
+        project.diaphragms[:] = diaphragms
+
     def _repoint_nodal_loads(self, pattern: PlainLoadPattern, mapping: dict[int, int]) -> None:
         seen: set[tuple[int, tuple[float, ...]]] = set()
         kept = []

@@ -62,6 +62,9 @@ CASES = [
     ("rc_frame_earthquake", 1, TransientResults),
     ("isolated_portal2d_fp", 2, TransientResults),
     ("space_frame_3d", 4, ResponseSpectrumResults),
+    ("building_3storey_diaphragm", 2, StaticResults),
+    ("building_3storey_diaphragm", 3, ModalResults),
+    ("building_3storey_diaphragm", 4, ResponseSpectrumResults),
 ]
 
 
@@ -90,6 +93,7 @@ def compare(inproc, cli) -> float:  # type: ignore[no-untyped-def]
             _dict_diff(inproc.node_disp, cli.node_disp),
             _dict_diff(inproc.node_reaction, cli.node_reaction),
             _dict_diff(inproc.element_forces, cli.element_forces),
+            _dict_diff(inproc.storey_shear, cli.storey_shear),
         ]
     elif isinstance(inproc, PushoverResults):
         assert (inproc.n_steps, inproc.control_node, inproc.control_dof) == (
