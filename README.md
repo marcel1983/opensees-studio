@@ -76,6 +76,18 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   pushover, transient time-history with Rayleigh damping. Chained workflows:
   gravity preload → `loadConst -time 0.0` → pushover or transient. Numberer
   and system options per case.
+- **Load combinations and envelopes** (Define → Load Combinations…) — Linear
+  Add, Envelope (max/min), Absolute Add and SRSS of static and response spectrum
+  cases, or of other combinations, each with a scale factor. Combining is
+  post-processing on stored results: Analyze → Run runs only the cases a
+  combination still needs, then combines, and Display → Show Results Of…
+  switches between stored results. An envelope draws its max and min force
+  diagrams together, offers Max/Min in the deformed shape, and its tables (and
+  CSV export) list both. Adding a possibly nonlinear case warns that
+  superposition does not hold. **Generate ASCE 7-16 LRFD…** adds the Section
+  2.3.1 basic combinations (wind and static earthquake both ways) and their
+  envelope from cases tagged Dead, Live, Roof live, Snow, Rain, Wind and
+  Earthquake.
 - **Response spectra, by hand or by code** — in Ground Motions → Target
   spectrum: a **user table** (period in s, Sa in g), a spectrum from **ASCE/SEI
   7-16** (the mapped Ss and S1 with a site class, using Tables 11.4-1 and 11.4-2
