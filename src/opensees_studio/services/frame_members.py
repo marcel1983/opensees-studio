@@ -34,6 +34,31 @@ model runs with the Transformation handler (:attr:`FramePlan.needs_transformatio
 ``Corotational`` in 3D ignores ``-jntOffset`` in OpenSees 3.8 (it prints "rigid
 joint zones not implemented yet" and uses zero), so that combination is refused.
 
+**Releases at a rigid-diaphragm joint.** A joint a diaphragm constrains is
+already the constrained node of an MP constraint, and OpenSees 3.8's
+Transformation handler cannot chain constraints: it keeps one MP per
+constrained node and numbers a retained node that is itself constrained wrong,
+solving without a warning (Lagrange and Penalty do chain, but their eigen
+analysis is wrong: they put the constraint block into the mass matrix too). A
+hidden node tied to such a joint by ``equalDOF`` or ``rigidLink`` is therefore
+not an option, and no rearrangement of node-to-node constraints avoids the chain
+(the hidden node needs its in-plane DOFs from the diaphragm's retained node and
+the rest from the joint). So at a diaphragm joint:
+
+* an ``elasticBeamColumn`` with an elastic section releases M2 / M3 in the
+  element (``-releasey`` / ``-releasez``, condensed in its basic system, so at
+  the face of a rigid end zone) and T by a zero ``G J`` (a member released in
+  torsion at one end carries no torque). That is exact, but OpenSees condenses
+  only the full-length ``-beamUniform``: a member with a point, partial or
+  trapezoidal load, a consistent mass matrix, or a partial-fixity spring at that
+  end takes the next route instead;
+* any other member with elastic properties hangs the released end off a hidden
+  node joined to the joint by a ``zeroLength`` whose kept directions are
+  penalty springs, :data:`DIAPHRAGM_PENALTY_FACTOR` times the member's own
+  stiffness (results within about 1e-7 of the exact ones, measured; a stiffer
+  spring loses more to round-off than it gains). A fibre member, or such an end
+  with a rigid end zone, is refused with a remedy.
+
 **Modifiers** become a derived ``section Elastic`` per distinct (section,
 modifiers) pair, or scaled inline properties for ``beamWithHinges``.
 """
@@ -53,12 +78,25 @@ from opensees_studio.core import (
     FrameMember,
     Project,
 )
-from opensees_studio.core.frame_members import MemberLayout, member_layout
+from opensees_studio.core.diaphragms import constrained_node_ids, diaphragms_supported
+from opensees_studio.core.frame_members import MemberLayout, member_layout, split_member_loads
 from opensees_studio.core.geometry.frame_options import RELEASE_AXIS, RELEASE_DOFS
 
 #: Penalty spring for a kept rotation about a skewed axis, as a multiple of the
 #: member's largest rotational stiffness ``4 E I / L`` (or ``G J / L``).
 PENALTY_FACTOR = 1.0e8
+
+#: Penalty springs tying a released end's hidden node to a diaphragm joint, as a
+#: multiple of the member's own translational / rotational stiffness. Measured on
+#: the example building with partially fixed beams (against an exact reference):
+#: 1e4 leaves about 3e-7 relative error, 1e5 about 1e-7 in displacements and 5e-8
+#: in periods; from 1e6 on the dense eigen solver's round-off, which grows with
+#: the stiffest entry, costs more than the stiffer spring gains (5e-6 at 1e6).
+DIAPHRAGM_PENALTY_FACTOR = 1.0e5
+
+#: ``elasticBeamColumn`` release flag of each release DOF, and its bit per end.
+_ELEMENT_RELEASE = {"M3": "-releasez", "M2": "-releasey"}
+_ELEMENT_RELEASE_BIT = {"i": 1, "j": 2}
 
 #: zeroLength direction of each release DOF (rotation about local x, y, z).
 _ZERO_LENGTH_DIR = {"T": 4, "M2": 5, "M3": 6}
@@ -106,6 +144,19 @@ class MemberPlan:
     inline: dict[str, float] = field(default_factory=dict)
     """Modified ``A``, ``Iz``, ``Iy``, ``J`` of a ``beamWithHinges``."""
     rho: float | None = None
+    element_releases: dict[str, int] = field(default_factory=dict)
+    """``-releasez`` / ``-releasey`` code (1 end i, 2 end j, 3 both) of an elastic member
+    released inside the element (see "Releases at a rigid-diaphragm joint")."""
+
+    @property
+    def release_args(self) -> tuple[Any, ...]:
+        """The ``elasticBeamColumn`` release options, empty when the element releases nothing."""
+        return tuple(
+            arg
+            for flag in ("-releasez", "-releasey")
+            if self.element_releases.get(flag)
+            for arg in (flag, self.element_releases[flag])
+        )
 
     @property
     def joint_offset(self) -> tuple[float, ...]:
@@ -165,17 +216,70 @@ def _kept_rotation_dofs(layout: MemberLayout, kept: Sequence[str]) -> tuple[int,
     return tuple(4 + g for g in range(3) if diagonal[g] == 1.0)
 
 
-def _elastic_rotational_stiffness(project: Project, el: Any, clear_length: float) -> float | None:
-    """``max(4 E Iz, 4 E Iy, G J) / L`` of an elastic member, None for a fibre member."""
+def _elastic_stiffness(
+    project: Project, el: Any, clear_length: float
+) -> tuple[float, float] | None:
+    """Largest translational and rotational stiffness of an elastic member, None for a fibre one.
+
+    ``max(E A / L, 12 E Iz / L^3, 12 E Iy / L^3)`` and ``max(4 E Iz, 4 E Iy, G J) / L``.
+    """
     if isinstance(el, BeamWithHingesElement):
-        E, Iz, Iy, G, J = el.E, el.Iz, el.Iy, el.G, el.J
+        E, A, Iz, Iy, G, J = el.E, el.A, el.Iz, el.Iy, el.G, el.J
     else:
         section = next((s for s in project.sections if s.id == el.section_id), None)
         if not isinstance(section, ElasticSection):
             return None
-        E, Iz, Iy, G, J = section.E, section.Iz, section.Iy, section.G, section.J
-    values = [4.0 * E * Iz, 4.0 * E * (Iy or 0.0), (G or 0.0) * (J or 0.0)]
-    return max(values) / clear_length
+        E, A, Iz, Iy, G, J = section.E, section.A, section.Iz, section.Iy, section.G, section.J
+    L = clear_length
+    bending = max(Iz, Iy or 0.0)
+    translational = max(E * A / L, 12.0 * E * bending / L**3)
+    rotational = max(4.0 * E * bending, (G or 0.0) * (J or 0.0)) / L
+    return translational, rotational
+
+
+def _elastic_rotational_stiffness(project: Project, el: Any, clear_length: float) -> float | None:
+    """``max(4 E Iz, 4 E Iy, G J) / L`` of an elastic member, None for a fibre member."""
+    stiffness = _elastic_stiffness(project, el, clear_length)
+    return None if stiffness is None else stiffness[1]
+
+
+def diaphragm_joints(project: Project) -> set[int]:
+    """Nodes a rigid diaphragm constrains (a released end there cannot use ``equalDOF``)."""
+    if not project.diaphragms or not diaphragms_supported(project):
+        return set()
+    return {nid for d in project.diaphragms for nid in constrained_node_ids(project, d)}
+
+
+def _condensable(project: Project, el: Any, layout: MemberLayout) -> bool:
+    """Whether OpenSees can release ``el`` exactly inside the element.
+
+    An ``elasticBeamColumn`` on an elastic section with a lumped mass, whose
+    every load reaches the flexible part as a full-length ``-beamUniform``:
+    ``ElasticBeam3d`` condenses only that load's fixed-end forces, and its
+    consistent mass ignores the release.
+    """
+    if not isinstance(el, ElasticBeamColumn) or el.consistent_mass or project.ndm != 3:
+        return False
+    section = next((s for s in project.sections if s.id == el.section_id), None)
+    if not isinstance(section, ElasticSection):
+        return False
+    segments: list[Any] = []
+    points: list[Any] = []
+    for pat in project.load_patterns:
+        for ul in getattr(pat, "element_loads", ()):
+            if ul.element_id == el.id:
+                w = (ul.wx, ul.wy, ul.wz)
+                segments.append((0.0, 1.0, w, w))
+        for dl in getattr(pat, "distributed_loads", ()):
+            if dl.element_id == el.id:
+                segments.append((dl.x_start, dl.x_end, dl.start(), dl.end()))
+        for pl in getattr(pat, "point_loads", ()):
+            if pl.element_id == el.id:
+                points.append((pl.x, (pl.px, pl.py, pl.pz)))
+    if not segments and not points:
+        return True
+    split = split_member_loads(layout, segments, points)
+    return not split.points and all(piece.is_uniform_full for piece in split.pieces)
 
 
 def check_frame_options(project: Project) -> list[str]:
@@ -198,6 +302,21 @@ def check_frame_options(project: Project) -> list[str]:
     return problems
 
 
+def _kept(release: Any, ndm: int) -> list[str]:
+    kept = [d for d in RELEASE_DOFS if d not in release.released]
+    return [d for d in kept if d == "M3"] if ndm == 2 else kept
+
+
+def _unstiffened(layout: MemberLayout, release: Any) -> set[int] | None:
+    """Global rotations a released end leaves unstiffened at its joint; None when skewed."""
+    kept_dofs = _kept_rotation_dofs(layout, _kept(release, layout.ndm))
+    if kept_dofs is None:
+        return None
+    springs = [d for d in release.released if release.spring(d) > 0.0]
+    stiffened = {*kept_dofs, *(_kept_rotation_dofs(layout, springs) or ())}
+    return set(_rotation_dofs(layout.ndm)) - stiffened
+
+
 def plan_frame_members(project: Project) -> FramePlan:
     """Plan the extra OpenSees objects for every frame member's assignments."""
     problems = check_frame_options(project)
@@ -211,6 +330,7 @@ def plan_frame_members(project: Project) -> FramePlan:
     derived: dict[tuple[Any, ...], int] = {}
     ndm = project.ndm
     translations = (1, 2) if ndm == 2 else (1, 2, 3)
+    at_diaphragm = diaphragm_joints(project)
 
     for el in project.elements:
         if not isinstance(el, FrameMember):
@@ -218,7 +338,20 @@ def plan_frame_members(project: Project) -> FramePlan:
         layout = member_layout(project, el)
         member = MemberPlan(layout=layout, nodes=(el.nodes[0], el.nodes[1]))
         plan.members[el.id] = member
-        _plan_modifiers(project, el, member, derived, section_tags, plan)
+        # Released ends at a diaphragm joint that the element itself releases.
+        condensed = {
+            end
+            for end, nid in zip(("i", "j"), el.nodes, strict=False)
+            if nid in at_diaphragm
+            and el.releases.end(end).released
+            and not el.releases.end(end).springs
+        }
+        if condensed and (layout is None or not _condensable(project, el, layout)):
+            condensed = set()
+        # A torsion release in the element is a zero G J: the member carries no
+        # torque at all, so a hidden node at its other end keeps T tied.
+        torsion_free = any("T" in el.releases.end(end).released for end in condensed)
+        _plan_modifiers(project, el, member, derived, section_tags, plan, torsion_free)
         if layout is None:
             continue
         if (
@@ -234,15 +367,48 @@ def plan_frame_members(project: Project) -> FramePlan:
         for k, end in enumerate(("i", "j")):
             offset = layout.offset_i if end == "i" else layout.offset_j
             release = el.releases.end(end)
-            if not release.released:
+            if not release.released or end in condensed:
                 member_offset = tuple(float(v) for v in offset[:ndm])
                 if end == "i":
                     member.offset_i = member_offset
                 else:
                     member.offset_j = member_offset
+                if end in condensed:
+                    for dof in release.released:
+                        if dof in _ELEMENT_RELEASE:
+                            flag = _ELEMENT_RELEASE[dof]
+                            code = member.element_releases.get(flag, 0)
+                            member.element_releases[flag] = code | _ELEMENT_RELEASE_BIT[end]
+                    unstiffened = _unstiffened(layout, release)
+                    if not layout.has_offset(end) and unstiffened is not None:
+                        plan.released_dofs[(el.id, end)] = unstiffened
                 continue
             joint = nodes[k]
             joint_xyz = layout.joint_i if end == "i" else layout.joint_j
+            kept = _kept(release, ndm)
+            if torsion_free and "T" not in kept:
+                kept = [d for d in RELEASE_DOFS if d == "T" or d in kept]
+            if joint in at_diaphragm:
+                nodes[k] = _plan_penalty_end(
+                    project,
+                    el,
+                    layout,
+                    end,
+                    joint,
+                    kept,
+                    plan,
+                    node_tags,
+                    element_tags,
+                    material_tags,
+                )
+                if end == "i":
+                    member.offset_i = (0.0,) * ndm
+                else:
+                    member.offset_j = (0.0,) * ndm
+                unstiffened = _unstiffened(layout, release)
+                if unstiffened is not None:
+                    plan.released_dofs[(el.id, end)] = unstiffened
+                continue
             base = joint
             if layout.has_offset(end):
                 face = ExtraNode(
@@ -264,9 +430,6 @@ def plan_frame_members(project: Project) -> FramePlan:
             else:
                 member.offset_j = (0.0,) * ndm
 
-            kept = [d for d in RELEASE_DOFS if d not in release.released]
-            if ndm == 2:
-                kept = [d for d in kept if d == "M3"]
             kept_dofs = _kept_rotation_dofs(layout, kept)
             dirs: list[int] = []
             stiffness: list[float] = []
@@ -289,26 +452,90 @@ def plan_frame_members(project: Project) -> FramePlan:
                     dirs.append(_ZERO_LENGTH_DIR[d])
                     stiffness.append(release.spring(d))
             if dirs:
-                order = np.argsort(dirs)
-                dirs = [dirs[n] for n in order]
-                stiffness = [stiffness[n] for n in order]
                 plan.springs.append(
-                    SpringLink(
-                        tag=element_tags.take(),
-                        node_a=base,
-                        node_b=inner.tag,
-                        dirs=tuple(dirs),
-                        material_tags=tuple(material_tags.take() for _ in dirs),
-                        stiffnesses=tuple(stiffness),
-                        orient=(*(float(v) for v in layout.x), *(float(v) for v in layout.y)),
+                    _spring_link(
+                        layout, base, inner.tag, dirs, stiffness, element_tags, material_tags
                     )
                 )
-            if not layout.has_offset(end) and kept_dofs == _kept_rotation_dofs(layout, kept):
-                springs = [d for d in release.released if release.spring(d) > 0.0]
-                stiffened = {*kept_dofs, *(_kept_rotation_dofs(layout, springs) or ())}
-                plan.released_dofs[(el.id, end)] = set(_rotation_dofs(ndm)) - stiffened
+            unstiffened = _unstiffened(layout, release)
+            if not layout.has_offset(end) and unstiffened is not None:
+                plan.released_dofs[(el.id, end)] = unstiffened
         member.nodes = (nodes[0], nodes[1])
     return plan
+
+
+def _spring_link(
+    layout: MemberLayout,
+    node_a: int,
+    node_b: int,
+    dirs: list[int],
+    stiffness: list[float],
+    element_tags: _Tags,
+    material_tags: _Tags,
+) -> SpringLink:
+    """A ``zeroLength`` along the member's local axes, its directions in ascending order."""
+    order = np.argsort(dirs)
+    return SpringLink(
+        tag=element_tags.take(),
+        node_a=node_a,
+        node_b=node_b,
+        dirs=tuple(dirs[n] for n in order),
+        material_tags=tuple(material_tags.take() for _ in dirs),
+        stiffnesses=tuple(stiffness[n] for n in order),
+        orient=(*(float(v) for v in layout.x), *(float(v) for v in layout.y)),
+    )
+
+
+def _plan_penalty_end(
+    project: Project,
+    el: Any,
+    layout: MemberLayout,
+    end: str,
+    joint: int,
+    kept: list[str],
+    plan: FramePlan,
+    node_tags: _Tags,
+    element_tags: _Tags,
+    material_tags: _Tags,
+) -> int:
+    """Hang a released end at a diaphragm joint off a hidden node held by penalty springs.
+
+    Returns the hidden node's tag. The ``zeroLength`` carries the end's force
+    into the joint, so the hidden node is not one whose reaction is folded back.
+    """
+    release = el.releases.end(end)
+    where = f"Element {el.id}: the release at end {end} (joint {joint}, which a rigid diaphragm "
+    if layout.has_offset(end):
+        raise ValueError(
+            where + "constrains) is at the face of a rigid end zone, and OpenSees cannot tie that "
+            "face to a diaphragm joint exactly. Use a full release (no partial fixity) on an "
+            "elasticBeamColumn with an elastic section and only full-length uniform loads, "
+            "remove the end offset, or take the joint out of the diaphragm."
+        )
+    stiffness = _elastic_stiffness(project, el, layout.clear_length)
+    if stiffness is None:
+        raise ValueError(
+            where + "constrains) is on a fibre member, which has no elastic stiffness to scale "
+            "the springs that tie it to the joint. Use an elastic section, or take the joint out "
+            "of the diaphragm."
+        )
+    k_t, k_r = (DIAPHRAGM_PENALTY_FACTOR * v for v in stiffness)
+    joint_xyz = layout.joint_i if end == "i" else layout.joint_j
+    inner = ExtraNode(node_tags.take(), tuple(float(v) for v in joint_xyz[: layout.ndm]), joint)
+    plan.nodes.append(inner)
+    dirs = [1, 2, 3]
+    values = [k_t, k_t, k_t]
+    for d in kept:
+        dirs.append(_ZERO_LENGTH_DIR[d])
+        values.append(k_r)
+    for d in release.released:
+        if d not in kept and release.spring(d) > 0.0:
+            dirs.append(_ZERO_LENGTH_DIR[d])
+            values.append(release.spring(d))
+    plan.springs.append(
+        _spring_link(layout, joint, inner.tag, dirs, values, element_tags, material_tags)
+    )
+    return inner.tag
 
 
 def _plan_modifiers(
@@ -318,11 +545,12 @@ def _plan_modifiers(
     derived: dict[tuple[Any, ...], int],
     section_tags: _Tags,
     plan: FramePlan,
+    torsion_free: bool = False,
 ) -> None:
     mods = el.modifiers
     if isinstance(el, ElasticBeamColumn) and mods.mass != 1.0:
         member.rho = el.rho * mods.mass
-    if not mods.scales_stiffness:
+    if not mods.scales_stiffness and not torsion_free:
         return
     if isinstance(el, BeamWithHingesElement):
         member.inline = {
@@ -350,7 +578,7 @@ def _plan_modifiers(
             section.Iz * mods.i33,
             section.Iy * mods.i22,
             section.G,
-            section.J * mods.torsion,
+            0.0 if torsion_free else section.J * mods.torsion,
         )
     key = (section.id, args)
     if key not in derived:

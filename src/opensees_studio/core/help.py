@@ -1826,9 +1826,15 @@ A release at an end that also has an end offset or an insertion point acts at
 the face of the rigid zone, as in SAP2000: the hidden node hangs off the joint
 with `rigidLink beam`, and such a model runs with the Transformation constraint
 handler even if the case asks for Plain (Plain ignores a rigid link).
+
+At a joint a rigid diaphragm constrains, a hidden node tied by `equalDOF` would
+chain through the diaphragm, which OpenSees solves wrong; there the release is
+made inside the element or with penalty springs instead (see Assign → Joint →
+Diaphragm).
 """,
             "assign.end_offsets",
             "assign.insertion_point",
+            "assign.diaphragm",
         ),
         "assign.end_offsets": _t(
             "Assign → Frame → End (Length) Offsets",
@@ -2478,11 +2484,24 @@ failure. A joint can belong to one diaphragm only, and not also be the
 constrained node of an equalDOF or rigid link; a joint out of the plane is
 refused (OpenSees would silently drop it).
 
-A joint of the diaphragm may not **retain** another constraint either: no frame
-end release there (a release hangs a hidden node off the joint), and no equalDOF
-or rigid link retained by it. The Transformation handler cannot chain such
-constraints and gives wrong results without an error, so the model check refuses
-them; release the member at its other end, or leave that joint out of the floor.
+A joint of the diaphragm may not **retain** another constraint either: no
+equalDOF or rigid link retained by it. The Transformation handler cannot chain
+such constraints (it keeps one per node and numbers the chained one wrong) and
+gives wrong results without an error, so the model check refuses them; leave
+that joint out of the floor.
+
+**Frame end releases** at a diaphragm joint work, without such a chain:
+
+- an elastic beam-column with an elastic section is released inside the element
+  (`-releasez` / `-releasey` for M3 / M2, a zero `G J` for torsion), exactly, and
+  at the face of a rigid end zone when the end is offset;
+- any other member with elastic properties (and an elastic beam-column with a
+  point, partial or trapezoidal load, a consistent mass matrix, or partial
+  fixity at that end, which OpenSees cannot condense) hangs the end off a hidden
+  node held by penalty springs 10^5 times the member's own stiffness: results
+  within about 10^-7 of the exact ones;
+- a fibre member, or such a spring-held end with an end offset, is refused with
+  a remedy.
 
 The canvas draws the diaphragm as spokes from the retained node (a small cube).
 Deleting the retained node deletes the diaphragm.

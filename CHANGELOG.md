@@ -47,12 +47,25 @@ refused instead of silently downgraded).
   diaphragm eliminates and the ones fixed on a floating retained node.
 - Projects without storeys, diaphragms, rigid links or a mass source save
   byte-identical to before.
-- A joint a diaphragm constrains may not also retain another constraint: a frame
-  end release at that joint (its hidden node hangs off the joint by `equalDOF`
-  or `rigidLink`) or an `equalDOF` / rigid link retained there is refused by the
-  model check. OpenSees' Transformation handler cannot chain such constraints and
-  solves them without an error into wrong results (a released-beam building came
-  out four times too stiff).
+- A joint a diaphragm constrains may not also retain an `equalDOF` or rigid
+  link: the model check refuses it. OpenSees' Transformation handler cannot chain
+  such constraints and solves them without an error into wrong results.
+- **Frame end releases and partial fixity at diaphragm joints** work. The hidden
+  node `equalDOF`'d to the joint would be such a chain (the example building
+  with M3 released at one end of its X beams came out with T1 = 0.18 s instead
+  of 0.69 s, with pinned beams 0.06 s instead of 1.02 s; Lagrange and Penalty chain
+  correctly but get every eigen analysis wrong). At those joints an
+  `elasticBeamColumn` with an elastic section is released inside the element
+  (`-releasez` / `-releasey`, a zero `G J` for torsion), exactly, also at an
+  offset end; any other member with elastic properties, or an elastic member
+  with point / partial / trapezoidal loads, a consistent mass or partial fixity
+  there, hangs the end off a hidden node held by penalty springs 1e5 times its
+  own stiffness (about 1e-7 from exact). A fibre member released at a diaphragm
+  joint, or a spring-held end there with an end offset, is refused with a
+  remedy. Verified on the
+  example building with released and with partially fixed beam ends against
+  hand-built OpenSeesPy (element releases, `ModElasticBeam3d`, and hidden nodes
+  under the Lagrange handler): 1e-9 and 1e-6.
 
 ## [0.0.10] — 2026-10-11
 
