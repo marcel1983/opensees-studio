@@ -26,6 +26,13 @@ from opensees_studio.views.dialogs.display_options import DisplayOptionsDialog
 from opensees_studio.views.dialogs.distributed_load import AssignDistributedLoadDialog
 from opensees_studio.views.dialogs.duplicates import DuplicatesDialog
 from opensees_studio.views.dialogs.dxf_import import DxfImportDialog, member_sections
+from opensees_studio.views.dialogs.frame_assignments import (
+    FrameEndOffsetsDialog,
+    FrameInsertionDialog,
+    FrameModifiersDialog,
+    FrameReleasesDialog,
+    TrapezoidalLoadDialog,
+)
 from opensees_studio.views.dialogs.frame_wizard import FrameWizard
 from opensees_studio.views.dialogs.friction_library import FrictionLibraryDialog
 from opensees_studio.views.dialogs.generate_excitation import GenerateExcitationDialog
@@ -75,6 +82,10 @@ __all__ = [
     "DisplayOptionsDialog",
     "DuplicatesDialog",
     "DxfImportDialog",
+    "FrameEndOffsetsDialog",
+    "FrameInsertionDialog",
+    "FrameModifiersDialog",
+    "FrameReleasesDialog",
     "FrameWizard",
     "FrictionLibraryDialog",
     "GenerateExcitationDialog",
@@ -92,6 +103,7 @@ __all__ = [
     "ReplicateDialog",
     "RunAnalysisDialog",
     "SectionLibraryDialog",
+    "TrapezoidalLoadDialog",
     "TrussWizard",
     "TypicalMaterialsDialog",
     "UniformExcitationDialog",

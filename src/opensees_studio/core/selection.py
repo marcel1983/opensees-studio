@@ -151,6 +151,7 @@ def loaded_by_pattern(project: Project, pattern_id: int) -> tuple[set[int], set[
     nodes = {load.node_id for load in pattern.nodal_loads}
     elements = {load.element_id for load in pattern.element_loads}
     elements |= {load.element_id for load in pattern.point_loads}
+    elements |= {load.element_id for load in pattern.distributed_loads}
     if pattern.self_weight:
         elements |= weighted_elements(project)
     return nodes, elements

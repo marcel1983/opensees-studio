@@ -76,6 +76,12 @@ from opensees_studio.core import (
     ZeroLengthElement,
     ZeroLengthSectionElement,
 )
+from opensees_studio.core.frame_members import (
+    ClearPiece,
+    ClearPoint,
+    gauss_point_loads,
+    split_member_loads,
+)
 from opensees_studio.core.geometry.local_axes import frame_vecxz
 from opensees_studio.core.modal import (
     dof_indices,
@@ -87,6 +93,7 @@ from opensees_studio.core.modal import (
 from opensees_studio.core.modal_combination import DEFAULT_MODAL_DAMPING, closely_spaced_pairs
 from opensees_studio.core.self_weight import self_weight_loads, shell_self_weight_nodal_loads
 from opensees_studio.services.catalog_emitters import emit_catalog_material
+from opensees_studio.services.frame_members import FramePlan, plan_frame_members
 from opensees_studio.services.material_emitters import emit_material
 from opensees_studio.services.opensees_io import (
     check_recorder_output,
@@ -140,7 +147,9 @@ class OpenSeesRunner:
                 progress lines.
         """
         if ops_module is None:
-            import openseespy.opensees as ops_module  # local import for testability
+            import openseespy.opensees as _default_ops  # local import for testability
+
+            ops_module = _default_ops
         # The solver module is duck-typed at runtime (and a mock in the tests):
         # `Any` is the honest type, and `None` never survives this line.
         self._ops: Any = ops_module
@@ -149,6 +158,7 @@ class OpenSeesRunner:
         self._dof_idx: tuple[int, ...] = _dof_indices(project.ndm, project.ndf)
         self._geom_transf_tags: dict[str, int] = {}
         self._element_geom_transf_tag: dict[int, int] = {}
+        self._frame_plan = FramePlan()
 
     # ─────────────────────── public API ───────────────────────
     def _progress(self, completed: int, total: int) -> None:
@@ -158,6 +168,7 @@ class OpenSeesRunner:
     def build(self) -> None:
         """Emit all model-construction commands. Idempotent (wipes first)."""
         self.project.validate_references()
+        plan = self._frame_plan = plan_frame_members(self.project)
 
         ops = self._ops
         ops.wipe()
@@ -165,11 +176,18 @@ class OpenSeesRunner:
 
         for node in self.project.nodes:
             self._emit_node(node)
+        # Hidden nodes of the frame releases (see services/frame_members.py).
+        for extra in plan.nodes:
+            ops.node(extra.tag, *extra.coords)
         for node in self.project.nodes:
             if node.is_restrained:
                 self._emit_fix(node)
         for mp in self.project.mp_constraints:
             self._emit_mp_constraint(mp)
+        for retained, constrained in plan.rigid_links:
+            ops.rigidLink("beam", retained, constrained)
+        for retained, constrained, dofs in plan.equal_dofs:
+            ops.equalDOF(retained, constrained, *dofs)
 
         # Mass: emit only if any non-zero
         for node in self.project.nodes:
@@ -178,6 +196,9 @@ class OpenSeesRunner:
 
         for material in self.project.materials:
             self._emit_material(material)
+        for spring in plan.springs:
+            for mat_tag, k in zip(spring.material_tags, spring.stiffnesses, strict=True):
+                ops.uniaxialMaterial("Elastic", mat_tag, k)
         for friction in self.project.friction_models:
             self._emit_friction_model(friction)
 
@@ -194,12 +215,27 @@ class OpenSeesRunner:
 
         for section in self.project.sections:
             self._emit_section(section)
+        for derived in plan.sections:
+            ops.section("Elastic", derived.tag, *derived.args)
 
         # Geometric transformations needed by frame elements
         self._allocate_and_emit_geom_transfs()
 
         for element in self.project.elements:
             self._emit_element(element)
+        for spring in plan.springs:
+            ops.element(
+                "zeroLength",
+                spring.tag,
+                spring.node_a,
+                spring.node_b,
+                "-mat",
+                *spring.material_tags,
+                "-dir",
+                *spring.dirs,
+                "-orient",
+                *spring.orient,
+            )
 
     def run(self, case: Any, results_dir: Path | None = None) -> Any:
         """Build the model and run the requested analysis case.
@@ -401,19 +437,23 @@ class OpenSeesRunner:
         )
         node_coords = {n.id: np.array(n.coords, dtype=float) for n in self.project.nodes}
 
-        # Allocate (transf_type, vecxz_tuple) → tag, lazily.
-        combo_to_tag: dict[tuple[str, tuple[float, float, float]], int] = {}
-        self._element_geom_transf_tag: dict[int, int] = {}
+        # Allocate (transf_type, vecxz_tuple, joint offsets) → tag, lazily.
+        combo_to_tag: dict[tuple[Any, ...], int] = {}
+        self._element_geom_transf_tag = {}
         next_tag = 1
 
         for el in self.project.elements:
             if not isinstance(el, frame_types):
                 continue
+            # End offsets and insertion points: ``-jntOffset`` (services/frame_members.py).
+            member = self._frame_plan.members.get(el.id)
+            offsets = member.joint_offset if member is not None else ()
+            tail: list[Any] = ["-jntOffset", *offsets] if offsets else []
             if self.project.ndm == 2:
-                key = (el.geom_transf, (0.0, 0.0, 0.0))  # vecxz unused in 2D
+                key = (el.geom_transf, (0.0, 0.0, 0.0), offsets)  # vecxz unused in 2D
                 if key not in combo_to_tag:
                     combo_to_tag[key] = next_tag
-                    self._ops.geomTransf(el.geom_transf, next_tag)
+                    self._ops.geomTransf(el.geom_transf, next_tag, *tail)
                     next_tag += 1
                 self._element_geom_transf_tag[el.id] = combo_to_tag[key]
                 continue
@@ -421,10 +461,10 @@ class OpenSeesRunner:
             # 3D: pick vecxz orthogonal to the element axis.
             vecxz = frame_vecxz(node_coords[el.nodes[0]], node_coords[el.nodes[1]])
 
-            key = (el.geom_transf, vecxz)
+            key = (el.geom_transf, vecxz, offsets)
             if key not in combo_to_tag:
                 combo_to_tag[key] = next_tag
-                self._ops.geomTransf(el.geom_transf, next_tag, *vecxz)
+                self._ops.geomTransf(el.geom_transf, next_tag, *vecxz, *tail)
                 next_tag += 1
             self._element_geom_transf_tag[el.id] = combo_to_tag[key]
 
@@ -529,6 +569,18 @@ class OpenSeesRunner:
         """
         self._ops.section("ElasticMembranePlateSection", sec.id, sec.E, sec.nu, sec.h, sec.rho)
 
+    def _frame_nodes(self, el: Any) -> tuple[int, int]:
+        """The node tags a frame's ``element`` command uses: a released end's hidden node."""
+        member = self._frame_plan.members.get(el.id)
+        return member.nodes if member is not None else (el.nodes[0], el.nodes[1])
+
+    def _frame_section(self, el: Any) -> int:
+        """The section a frame uses: a derived section when its stiffness is modified."""
+        member = self._frame_plan.members.get(el.id)
+        if member is not None and member.section_id is not None:
+            return member.section_id
+        return int(el.section_id)
+
     def _emit_element(self, el: Any) -> None:
         ops = self._ops
         match el:
@@ -538,22 +590,26 @@ class OpenSeesRunner:
                 ops.element("corotTruss", el.id, *el.nodes, el.area, el.material_id, "-rho", el.rho)
             case ElasticBeamColumn():
                 tag = self._element_geom_transf_tag[el.id]
-                ebc_args: list[Any] = [el.section_id, tag, "-mass", el.rho]
+                member = self._frame_plan.members.get(el.id)
+                rho = member.rho if member is not None and member.rho is not None else el.rho
+                ebc_args: list[Any] = [self._frame_section(el), tag, "-mass", rho]
                 if el.consistent_mass:
                     ebc_args.append("-cMass")
                 ops.element(
                     "elasticBeamColumn",
                     el.id,
-                    *el.nodes,
+                    *self._frame_nodes(el),
                     *ebc_args,
                 )
             case ForceBeamColumn():
                 tag = self._element_geom_transf_tag[el.id]
-                ops.beamIntegration(el.integration, el.id, el.section_id, el.integration_points)
+                ops.beamIntegration(
+                    el.integration, el.id, self._frame_section(el), el.integration_points
+                )
                 ops.element(
                     "forceBeamColumn",
                     el.id,
-                    *el.nodes,
+                    *self._frame_nodes(el),
                     tag,
                     el.id,
                     "-iter",
@@ -562,8 +618,10 @@ class OpenSeesRunner:
                 )
             case DispBeamColumn():
                 tag = self._element_geom_transf_tag[el.id]
-                ops.beamIntegration(el.integration, el.id, el.section_id, el.integration_points)
-                ops.element("dispBeamColumn", el.id, *el.nodes, tag, el.id)
+                ops.beamIntegration(
+                    el.integration, el.id, self._frame_section(el), el.integration_points
+                )
+                ops.element("dispBeamColumn", el.id, *self._frame_nodes(el), tag, el.id)
             case ZeroLengthElement():
                 zl_args: list[Any] = [
                     "zeroLength",
@@ -633,23 +691,25 @@ class OpenSeesRunner:
                 #   element beamWithHinges id ni nj secI lpI secJ lpJ E A Iz Iy G J transfTag
                 # 2D signature drops Iy, G, J:
                 #   element beamWithHinges id ni nj secI lpI secJ lpJ E A Iz transfTag
+                member = self._frame_plan.members.get(el.id)
+                inline = member.inline if member is not None else {}
                 args = [
                     el.id,
-                    *el.nodes,
+                    *self._frame_nodes(el),
                     el.section_i_id,
                     el.lp_i,
                     el.section_j_id,
                     el.lp_j,
                     el.E,
-                    el.A,
-                    el.Iz,
+                    inline.get("A", el.A),
+                    inline.get("Iz", el.Iz),
                 ]
                 if self.project.ndm == 3:
                     if el.Iy is None or el.G is None or el.J is None:
                         raise ValueError(
                             f"BeamWithHinges {el.id} needs Iy, G, J in 3D models.",
                         )
-                    args.extend([el.Iy, el.G, el.J])
+                    args.extend([inline.get("Iy", el.Iy), el.G, inline.get("J", el.J)])
                 args.append(tag)
                 ops.element("beamWithHinges", *args)
             case _:
@@ -724,11 +784,21 @@ class OpenSeesRunner:
                 ).items():
                     full = (*(float(f) for f in force), 0.0, 0.0, 0.0)
                     ops.load(node_id, *(full[i] for i in self._dof_idx))
-                for el in [*pat.element_loads, *self_weight_loads(self.project, pat.self_weight)]:
+                # A member with rigid end zones takes its loads through the
+                # split below; every other member exactly as before.
+                rigid = {
+                    eid
+                    for eid, member in self._frame_plan.members.items()
+                    if member.layout is not None and member.layout.has_rigid_zones
+                }
+                uniform = [*pat.element_loads, *self_weight_loads(self.project, pat.self_weight)]
+                for el in uniform:
                     # eleLoad -ele N -type -beamUniform wy wz wx
                     # (the pattern's self weight is a uniform load per frame).
                     # 2D: only (wy, wx) are emitted (wz drops).
                     # 3D: (wy, wz, wx).
+                    if el.element_id in rigid:
+                        continue
                     if self.project.ndm == 2:
                         ops.eleLoad("-ele", el.element_id, "-type", "-beamUniform", el.wy, el.wx)
                     else:
@@ -738,6 +808,8 @@ class OpenSeesRunner:
                 for pl in pat.point_loads:
                     # eleLoad -ele N -type -beamPoint Py <Pz> xL Px
                     # 2D: (Py, xL, Px); 3D: (Py, Pz, xL, Px).
+                    if pl.element_id in rigid:
+                        continue
                     if self.project.ndm == 2:
                         ops.eleLoad(
                             "-ele", pl.element_id, "-type", "-beamPoint", pl.py, pl.x, pl.px
@@ -746,6 +818,7 @@ class OpenSeesRunner:
                         ops.eleLoad(
                             "-ele", pl.element_id, "-type", "-beamPoint", pl.py, pl.pz, pl.x, pl.px
                         )
+                self._emit_member_loads(pat, rigid, uniform)
             case UniformExcitationPattern():
                 args: list[Any] = [pat.direction, "-accel", pat.accel_series_id]
                 if pat.vel_series_id is not None:
@@ -759,6 +832,83 @@ class OpenSeesRunner:
                 self._emit_imposed_support_motion(pat)
             case _:
                 raise NotImplementedError(f"Pattern type not yet handled: {type(pat).__name__}")
+
+    def _emit_member_loads(
+        self, pat: PlainLoadPattern, rigid: set[int], uniform: list[Any]
+    ) -> None:
+        """Distributed (trapezoidal) loads, and every load of a member with rigid end zones.
+
+        Each member's loads are split between its flexible part and its joints
+        (:func:`core.frame_members.split_member_loads`). On the flexible part a
+        full-length uniform load stays ``-beamUniform``. Any other linear piece
+        goes to a force-based element (``forceBeamColumn``, ``beamWithHinges``)
+        as the native partial/trapezoidal ``-beamUniform``, which it integrates
+        at its integration points; an elastic or displacement-based element gets
+        three ``-beamPoint`` loads at the Gauss points instead, which give its
+        exact end forces. (OpenSees 3.8's 3D elastic element ignores the
+        trapezoid's end values and ``dispBeamColumn`` drops partial loads with
+        only a warning, so the native form is not an option for them.)
+        """
+        by_element: dict[int, tuple[list[Any], list[Any]]] = {}
+        for ul in uniform:
+            if ul.element_id in rigid:
+                w = (ul.wx, ul.wy, ul.wz)
+                by_element.setdefault(ul.element_id, ([], []))[0].append((0.0, 1.0, w, w))
+        for dl in pat.distributed_loads:
+            by_element.setdefault(dl.element_id, ([], []))[0].append(
+                (dl.x_start, dl.x_end, dl.start(), dl.end())
+            )
+        for pl in pat.point_loads:
+            if pl.element_id in rigid:
+                by_element.setdefault(pl.element_id, ([], []))[1].append(
+                    (pl.x, (pl.px, pl.py, pl.pz))
+                )
+        elements = {el.id: el for el in self.project.elements}
+        for eid, (segments, points) in by_element.items():
+            member = self._frame_plan.members.get(eid)
+            if member is None or member.layout is None:
+                raise ValueError(f"Element {eid} carries a frame load but is not a frame member.")
+            layout = member.layout
+            split = split_member_loads(layout, segments, points)
+            el = elements[eid]
+            for piece in split.pieces:
+                self._emit_clear_piece(el, piece, layout.clear_length)
+            for point in split.points:
+                self._emit_beam_point(eid, point)
+            for end, (force, moment) in split.joint.items():
+                full = (*force, *moment)
+                values = [float(full[i]) for i in self._dof_idx]
+                if any(values):
+                    self._ops.load(el.nodes[0] if end == "i" else el.nodes[1], *values)
+
+    def _emit_clear_piece(self, el: Any, piece: ClearPiece, clear_length: float) -> None:
+        wx_a, wy_a, wz_a = (float(v) for v in piece.w_a)
+        if piece.is_uniform_full:
+            if self.project.ndm == 2:
+                self._ops.eleLoad("-ele", el.id, "-type", "-beamUniform", wy_a, wx_a)
+            else:
+                self._ops.eleLoad("-ele", el.id, "-type", "-beamUniform", wy_a, wz_a, wx_a)
+            return
+        if isinstance(el, (ForceBeamColumn, BeamWithHingesElement)):
+            wx_b, wy_b, wz_b = (float(v) for v in piece.w_b)
+            a, b = float(piece.a), float(piece.b)
+            # 2D: Wya Wxa aL bL Wyb Wxb; 3D: Wya Wza Wxa aL bL Wyb Wzb Wxb.
+            if self.project.ndm == 2:
+                args: list[Any] = [wy_a, wx_a, a, b, wy_b, wx_b]
+            else:
+                args = [wy_a, wz_a, wx_a, a, b, wy_b, wz_b, wx_b]
+            self._ops.eleLoad("-ele", el.id, "-type", "-beamUniform", *args)
+            return
+        for point in gauss_point_loads(piece, clear_length):
+            self._emit_beam_point(el.id, point)
+
+    def _emit_beam_point(self, element_id: int, point: ClearPoint) -> None:
+        px, py, pz = (float(v) for v in point.p)
+        x = float(point.x)
+        if self.project.ndm == 2:
+            self._ops.eleLoad("-ele", element_id, "-type", "-beamPoint", py, x, px)
+        else:
+            self._ops.eleLoad("-ele", element_id, "-type", "-beamPoint", py, pz, x, px)
 
     def _emit_imposed_support_motion(self, pat: ImposedSupportMotionPattern) -> None:
         """``pattern MultipleSupport`` + shared ``groundMotion`` + per-node ``imposedMotion``.
@@ -941,6 +1091,7 @@ class OpenSeesRunner:
             loads = [
                 *getattr(pat, "element_loads", ()),
                 *getattr(pat, "point_loads", ()),
+                *getattr(pat, "distributed_loads", ()),
                 *self_weight_loads(self.project, getattr(pat, "self_weight", 0.0)),
             ]
             if any(load.element_id in force_based for load in loads):
@@ -977,11 +1128,52 @@ class OpenSeesRunner:
         ops.integrator(case.integrator, case.load_factor_increment)
         return status
 
+    def _constraints(self, case: Any) -> None:
+        """``constraints``: the case's handler, Transformation instead of Plain when needed.
+
+        A release at an offset member end hangs a face node off the joint with
+        ``rigidLink beam``, a non-identity constraint the Plain handler ignores
+        (it only warns), so such a model runs with Transformation.
+        """
+        handler = case.constraints
+        if handler == "Plain" and self._frame_plan.needs_transformation:
+            handler = "Transformation"
+        self._ops.constraints(handler)
+
+    def _node_reactions(self, node_id: int, ndf: int) -> list[float]:
+        """``nodeReaction`` of every DOF, plus what reaches the node through its hidden nodes.
+
+        A released member end hangs off a hidden node tied to the joint by
+        ``equalDOF`` (or ``rigidLink``), and OpenSees reports the force that
+        crosses such a constraint at the hidden node, not at the joint. Each
+        hidden node's reaction is added back, moved to the joint (plus the
+        moment of its force about the joint for a face node).
+        """
+        ops = self._ops
+        total = [ops.nodeReaction(node_id, dof) for dof in range(1, ndf + 1)]
+        attached = self._frame_plan.attached.get(node_id)
+        if not attached:
+            return total
+        ndm = self.project.ndm
+        joint = np.asarray(self.project.node(node_id).coords[:ndm], dtype=float)
+        for extra in attached:
+            r = [float(ops.nodeReaction(extra.tag, dof)) for dof in range(1, ndf + 1)]
+            arm = np.asarray(extra.coords, dtype=float) - joint
+            for k in range(ndm):
+                total[k] += r[k]
+            if ndm == 2 and ndf == 3:
+                total[2] += r[2] + arm[0] * r[1] - arm[1] * r[0]
+            elif ndm == 3 and ndf == 6:
+                moment = np.cross(arm, r[:3])
+                for k in range(3):
+                    total[3 + k] += r[3 + k] + float(moment[k])
+        return total
+
     def _setup_analysis(self, case: Any) -> None:
         ops = self._ops
         ops.system(case.system, *case.system_args)
         ops.numberer(case.numberer)
-        ops.constraints(case.constraints)
+        self._constraints(case)
         ops.test(case.test, case.tolerance, case.max_iter)
         ops.algorithm(case.algorithm)
         if isinstance(case, StaticCase):
@@ -1048,7 +1240,14 @@ class OpenSeesRunner:
             else:
                 # Unknown type: assume it covers every DOF (safe default).
                 contributed = {0, 1, 2, 3, 4, 5}
-            for nid in el.nodes:
+            for end, nid in zip(("i", "j"), el.nodes, strict=False):
+                if nid not in active:
+                    continue
+                # A released end leaves the joint's matching rotations unstiffened.
+                released = self._frame_plan.released_dofs.get((el.id, end), set())
+                slots = {self._dof_idx[dof - 1] for dof in released}
+                active[nid].update(contributed - slots)
+            for nid in el.nodes[2:]:
                 if nid in active:
                     active[nid].update(contributed)
 
@@ -1069,7 +1268,8 @@ class OpenSeesRunner:
                 "(or ndm=3/ndf=3). File → New 2D Truss creates an ndf=2 "
                 "project. For mixed truss+frame models, add a frame "
                 "element that engages the listed rotational DOFs, or "
-                "restrain them manually."
+                "restrain them manually. A rotation every member releases at a "
+                "joint (end releases) needs a support or a member that keeps it."
             )
             raise RuntimeError(
                 "Singular stiffness matrix — the solve cannot run.\n" + "\n".join(problems) + hint
@@ -1129,7 +1329,7 @@ class OpenSeesRunner:
             for node in self.project.nodes:
                 for j, dof in enumerate(range(1, ndf + 1)):
                     node_disp[node.id][step, j] = ops.nodeDisp(node.id, dof)
-                    node_reaction[node.id][step, j] = ops.nodeReaction(node.id, dof)
+                node_reaction[node.id][step, :] = self._node_reactions(node.id, ndf)
             for el in self.project.elements:
                 # Prefer "localForce" — gives [N, V_y, V_z, T, M_y, M_z] per
                 # end in the element's local frame, which is what diagrams
@@ -1231,7 +1431,7 @@ class OpenSeesRunner:
                 self._emit_patterns_for_case(const_ids)
                 ops.system(case.system, *case.system_args)
                 ops.numberer(case.numberer)
-                ops.constraints(case.constraints)
+                self._constraints(case)
                 ops.test(case.test, case.tolerance, case.max_iter)
                 ops.algorithm(case.algorithm)
                 ops.integrator("LoadControl", 0.0)
@@ -1253,7 +1453,7 @@ class OpenSeesRunner:
         # Configure analysis — DisplacementControl integrator.
         ops.system(case.system, *case.system_args)
         ops.numberer(case.numberer)
-        ops.constraints(case.constraints)
+        self._constraints(case)
         ops.test(case.test, case.tolerance, case.max_iter)
         ops.algorithm(case.algorithm)
         ops.integrator(
@@ -1277,7 +1477,7 @@ class OpenSeesRunner:
             # so positive base_shear means "applied load to the right".
             bs = 0.0
             for nid in base_nodes:
-                bs += float(ops.nodeReaction(nid, case.control_dof))
+                bs += float(self._node_reactions(nid, ndf)[case.control_dof - 1])
             base_shear[step] = -bs
             control_disp[step] = float(
                 ops.nodeDisp(case.control_node, case.control_dof),

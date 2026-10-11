@@ -17,6 +17,7 @@ from opensees_studio.core import (
     PlainLoadPattern,
     PointElementLoad,
     TimeSeries,
+    TrapezoidalElementLoad,
     UniformElementLoad,
     find_plain_pattern,
     make_default_pattern,
@@ -250,4 +251,43 @@ class AddPointElementLoadsCommand(_ElementLoadCommand):
         return [
             PointElementLoad(element_id=eid, py=self._py, pz=self._pz, px=self._px, x=x)
             for eid, x in sorted(self._positions.items())
+        ]
+
+
+class AddTrapezoidalElementLoadsCommand(_ElementLoadCommand):
+    """Apply the same trapezoidal / partial-span load to a set of frame elements.
+
+    ``values`` are the ``TrapezoidalElementLoad`` fields other than
+    ``element_id`` (relative distances and the local end values). Only
+    beam-column elements take it; any other id is refused before anything changes.
+    """
+
+    _list_name = "distributed_loads"
+
+    def __init__(
+        self,
+        vm: ProjectViewModel,
+        element_ids: set[int],
+        values: dict[str, float],
+        pattern_id: int | None = None,
+    ) -> None:
+        super().__init__(vm, f"Apply trapezoidal load to {len(element_ids)} element(s)", pattern_id)
+        self._element_ids = set(element_ids)
+        self._values = dict(values)
+
+    def _make_loads(self) -> list[Any]:
+        by_id = {el.id: el for el in self.project.elements}
+        not_frames = sorted(
+            eid
+            for eid in self._element_ids
+            if not isinstance(by_id.get(eid), FRAME_ELEMENT_CLASSES)
+        )
+        if not_frames:
+            raise ValueError(
+                "A distributed load needs a frame (beam-column) element; not one: "
+                + ", ".join(str(eid) for eid in not_frames)
+            )
+        return [
+            TrapezoidalElementLoad(element_id=eid, **self._values)
+            for eid in sorted(self._element_ids)
         ]

@@ -390,7 +390,7 @@ class AssignElastomericBearingDialog(FittedDialog):
             ]
             raise ValueError("; ".join(lines)) from exc
 
-    def accept(self) -> None:  # type: ignore[override]
+    def accept(self) -> None:
         """Validate before closing; an invalid bearing keeps the dialog open."""
         try:
             self.build_element(999999)

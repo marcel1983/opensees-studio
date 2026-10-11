@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, PositiveInt
+from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
 
 from opensees_studio.core._base import Entity, omit_when_default
 
@@ -226,6 +226,51 @@ class PointElementLoad(BaseModel):
     x: float = Field(default=0.5, ge=0.0, le=1.0, description="Relative position x/L from end i.")
 
 
+class TrapezoidalElementLoad(BaseModel):
+    """Linearly varying load over part or all of a frame element (SAP2000 *Frame Distributed* load).
+
+    Conventions:
+    - ``w*_start`` / ``w*_end`` are the load per unit length at ``x_start`` and
+      ``x_end``, in the element's **local** axes (``wy``, ``wz`` transverse,
+      ``wx`` axial), varying linearly in between; the load is zero outside.
+    - ``x_start`` < ``x_end`` are relative distances from end i along the full
+      joint-to-joint length (0 = joint i, 1 = joint j). A part that falls on a
+      rigid end zone goes straight to the joint (force plus moment).
+    A uniform load over the whole member is the special case
+    ``x_start = 0, x_end = 1`` with equal end values; ``UniformElementLoad``
+    remains the way to write that one.
+    Only beam-column elements take it (see ``FRAME_ELEMENT_CLASSES``).
+    """
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    element_id: PositiveInt
+    x_start: float = Field(default=0.0, ge=0.0, le=1.0, description="Relative start x/L.")
+    x_end: float = Field(default=1.0, ge=0.0, le=1.0, description="Relative end x/L.")
+    wy_start: float = 0.0
+    wy_end: float = 0.0
+    wz_start: float = 0.0
+    wz_end: float = 0.0
+    wx_start: float = 0.0
+    wx_end: float = 0.0
+
+    @model_validator(mode="after")
+    def _ordered(self) -> TrapezoidalElementLoad:
+        if not self.x_end > self.x_start:
+            raise ValueError(
+                f"A distributed load needs x_end > x_start (got {self.x_start} to {self.x_end})."
+            )
+        return self
+
+    def start(self) -> tuple[float, float, float]:
+        """``(wx, wy, wz)`` at ``x_start``."""
+        return (self.wx_start, self.wy_start, self.wz_start)
+
+    def end(self) -> tuple[float, float, float]:
+        """``(wx, wy, wz)`` at ``x_end``."""
+        return (self.wx_end, self.wy_end, self.wz_end)
+
+
 # ──────────────────────────── Patterns ────────────────────────────
 class PlainLoadPattern(Entity):
     """``pattern Plain`` — links a time series to a set of nodal and element loads."""
@@ -235,6 +280,7 @@ class PlainLoadPattern(Entity):
     nodal_loads: list[NodalLoad] = Field(default_factory=list)
     element_loads: list[UniformElementLoad] = Field(default_factory=list)
     point_loads: list[PointElementLoad] = Field(default_factory=list)
+    distributed_loads: list[TrapezoidalElementLoad] = Field(default_factory=list)
     self_weight: float = Field(
         default=0.0,
         description=(
@@ -244,7 +290,9 @@ class PlainLoadPattern(Entity):
         ),
     )
 
-    serialize_without_defaults = omit_when_default("point_loads", "self_weight")
+    serialize_without_defaults = omit_when_default(
+        "point_loads", "distributed_loads", "self_weight"
+    )
 
 
 class UniformExcitationPattern(Entity):

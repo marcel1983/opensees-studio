@@ -1,0 +1,352 @@
+"""Frame releases, end offsets, insertion points, modifiers and trapezoidal loads.
+
+The model and its file format, the member geometry, the load split, and the
+OpenSees commands the runner plans and emits for them (with a recorder in place
+of OpenSees, so no solver is needed here).
+"""
+
+from __future__ import annotations
+
+import math
+
+import numpy as np
+import pytest
+from pydantic import ValidationError
+
+from opensees_studio.core import (
+    ElasticBeamColumn,
+    ElasticSection,
+    EndRelease,
+    FiberSection,
+    ForceBeamColumn,
+    FrameEndOffsets,
+    FrameInsertion,
+    FrameModifiers,
+    FrameReleases,
+    LinearTimeSeries,
+    Node,
+    PlainLoadPattern,
+    Project,
+    RectangularPatch,
+    StaticCase,
+    TrapezoidalElementLoad,
+    UniformElementLoad,
+)
+from opensees_studio.core.frame_members import (
+    ClearPiece,
+    cardinal_offset,
+    gauss_point_loads,
+    member_layout,
+    section_extents,
+    split_member_loads,
+)
+from opensees_studio.services.frame_members import PENALTY_FACTOR, plan_frame_members
+from opensees_studio.services.opensees_script import export_script
+
+E, A, IZ = 2.0e8, 0.02, 2.0e-4
+
+
+def _project(*elements, ndm: int = 2, end=(6.0, 0.0, 0.0), sections=None, **pattern) -> Project:  # type: ignore[no-untyped-def]
+    return Project(
+        ndm=ndm,
+        ndf=3 if ndm == 2 else 6,
+        nodes=[Node(id=1, coords=(0.0, 0.0, 0.0)), Node(id=2, coords=end)],
+        sections=sections or [ElasticSection(id=1, E=E, A=A, Iz=IZ, Iy=IZ, G=8e7, J=3e-4)],
+        elements=list(elements) or [ElasticBeamColumn(id=1, nodes=(1, 2), section_id=1)],
+        time_series=[LinearTimeSeries(id=1)],
+        load_patterns=[PlainLoadPattern(id=1, time_series_id=1, **pattern)],
+        analyses=[StaticCase(id=1, name="s", pattern_ids=[1])],
+    )
+
+
+def _beam(**options) -> ElasticBeamColumn:  # type: ignore[no-untyped-def]
+    return ElasticBeamColumn(id=1, nodes=(1, 2), section_id=1, **options)
+
+
+# ──────────────────────────── model ────────────────────────────
+def test_a_member_without_assignments_saves_as_before() -> None:
+    dump = _beam().model_dump()
+    for name in ("releases", "end_offsets", "insertion", "modifiers"):
+        assert name not in dump
+    assert "distributed_loads" not in PlainLoadPattern(id=1, time_series_id=1).model_dump()
+
+
+def test_assignments_round_trip() -> None:
+    beam = _beam(
+        releases=FrameReleases(i=EndRelease(released=("M3", "T"), springs={"M3": 5.0})),
+        end_offsets=FrameEndOffsets(length_i=0.3, rigid_factor=0.5),
+        insertion=FrameInsertion(cardinal_point=8, offset_2=0.1),
+        modifiers=FrameModifiers(i33=0.35, mass=0.0),
+    )
+    again = ElasticBeamColumn.model_validate_json(beam.model_dump_json())
+    assert again == beam
+    assert again.releases.i.released == ("T", "M3")  # canonical order
+
+
+def test_a_spring_needs_its_action_released() -> None:
+    with pytest.raises(ValidationError, match="needs M2 to be released"):
+        EndRelease(released=("M3",), springs={"M2": 1.0})
+    with pytest.raises(ValidationError, match="positive"):
+        EndRelease(released=("M3",), springs={"M3": 0.0})
+
+
+def test_torsion_released_at_both_ends_is_unstable() -> None:
+    with pytest.raises(ValidationError, match="spin"):
+        FrameReleases(i=EndRelease(released=("T",)), j=EndRelease(released=("T",)))
+    FrameReleases(i=EndRelease(released=("T",)), j=EndRelease(released=("T",), springs={"T": 1.0}))
+
+
+def test_a_distributed_load_runs_forward() -> None:
+    with pytest.raises(ValidationError, match="x_end > x_start"):
+        TrapezoidalElementLoad(element_id=1, x_start=0.5, x_end=0.5)
+
+
+def test_a_distributed_load_needs_a_frame() -> None:
+    project = _project(distributed_loads=[TrapezoidalElementLoad(element_id=9, wy_start=-1.0)])
+    with pytest.raises(ValueError, match="missing element 9"):
+        project.validate_references()
+
+
+# ──────────────────────────── geometry ────────────────────────────
+def test_rigid_zones_and_clear_length() -> None:
+    project = _project(
+        _beam(end_offsets=FrameEndOffsets(length_i=0.4, length_j=0.6, rigid_factor=0.5))
+    )
+    layout = member_layout(project, project.elements[0])
+    assert layout is not None
+    assert (layout.rigid_i, layout.rigid_j) == pytest.approx((0.2, 0.3))
+    assert layout.clear_length == pytest.approx(5.5)
+    assert layout.offset_i == pytest.approx([0.2, 0.0, 0.0])
+    assert layout.offset_j == pytest.approx([-0.3, 0.0, 0.0])
+
+
+def test_rigid_zones_must_leave_a_flexible_length() -> None:
+    project = _project(_beam(end_offsets=FrameEndOffsets(length_i=3.0, length_j=3.0)))
+    with pytest.raises(ValueError, match="no flexible length"):
+        member_layout(project, project.elements[0])
+
+
+@pytest.mark.parametrize(
+    ("point", "expected"),
+    [(8, (-0.25, 0.0)), (2, (0.25, 0.0)), (1, (0.25, 0.1)), (9, (-0.25, -0.1)), (10, (0.0, 0.0))],
+)
+def test_cardinal_points(point: int, expected: tuple[float, float]) -> None:
+    project = _project(
+        sections=[
+            FiberSection(
+                id=1,
+                patches=[
+                    RectangularPatch(
+                        material_id=1, n_fib_y=2, n_fib_z=2, y_i=-0.25, z_i=-0.1, y_j=0.25, z_j=0.1
+                    )
+                ],
+                GJ=1.0,
+            )
+        ]
+    )
+    assert cardinal_offset(point, section_extents(project, 1)) == pytest.approx(expected)
+
+
+def test_an_elastic_section_is_sized_from_its_inertia() -> None:
+    extents = section_extents(_project(), 1)
+    assert extents is not None
+    depth = math.sqrt(12 * IZ / A)
+    assert (extents.y_min, extents.y_max) == pytest.approx((-depth / 2, depth / 2))
+
+
+def test_a_top_insertion_lowers_a_2d_beam() -> None:
+    project = _project(_beam(insertion=FrameInsertion(cardinal_point=8)))
+    layout = member_layout(project, project.elements[0])
+    assert layout is not None
+    assert layout.offset_i == pytest.approx([0.0, -math.sqrt(12 * IZ / A) / 2, 0.0])
+    assert layout.offset_j == pytest.approx(layout.offset_i)
+
+
+# ──────────────────────────── load split ────────────────────────────
+def _layout(**offsets):  # type: ignore[no-untyped-def]
+    project = _project(_beam(end_offsets=FrameEndOffsets(**offsets)))
+    return member_layout(project, project.elements[0])
+
+
+def test_a_load_on_a_rigid_zone_moves_to_the_joint() -> None:
+    layout = _layout(length_i=1.0)
+    w = (0.0, -10.0, 0.0)
+    split = split_member_loads(layout, [(0.0, 1.0, w, w)])
+    force, moment = split.joint["i"]
+    assert force == pytest.approx([0.0, -10.0, 0.0])
+    assert moment == pytest.approx([0.0, 0.0, -5.0])  # 10 kN at 0.5 m
+    (piece,) = split.pieces
+    assert (piece.a, piece.b) == pytest.approx((0.0, 1.0))
+    assert piece.is_uniform_full
+
+
+def test_a_trapezoid_is_cut_at_the_rigid_zone() -> None:
+    layout = _layout(length_j=1.5)
+    split = split_member_loads(layout, [(0.5, 1.0, (0, -1.0, 0), (0, -2.0, 0))])
+    (piece,) = split.pieces
+    # Full length 6, clear 4.5: 3..4.5 m of it, i.e. 2/3..1 of the clear span.
+    assert (piece.a, piece.b) == pytest.approx((2 / 3, 1.0))
+    assert piece.w_b[1] == pytest.approx(-1.5)
+    force, _ = split.joint["j"]
+    assert force[1] == pytest.approx(-(1.5 + 2.0) / 2 * 1.5)
+
+
+def test_a_point_load_on_a_rigid_zone() -> None:
+    layout = _layout(length_j=1.0)
+    split = split_member_loads(layout, points=[(1.0, (0.0, -3.0, 0.0))])
+    force, moment = split.joint["j"]
+    assert force == pytest.approx([0.0, -3.0, 0.0])
+    assert moment == pytest.approx([0.0, 0.0, 0.0])  # at the joint itself
+    assert not split.points
+
+
+def test_gauss_points_keep_the_resultant_and_its_moments() -> None:
+    piece = ClearPiece(a=0.2, b=0.9, w_a=np.array([0.0, -1.0, 0.0]), w_b=np.array([0.0, -4.0, 0.0]))
+    points = gauss_point_loads(piece, 10.0)
+    xs = np.linspace(2.0, 9.0, 20001)
+    w = np.interp(xs, [2.0, 9.0], [-1.0, -4.0])
+    for power in range(4):
+        exact = np.trapezoid(w * xs**power, xs)
+        total = sum(p.p[1] * (10.0 * p.x) ** power for p in points)
+        assert total == pytest.approx(exact, rel=1e-6)
+
+
+# ──────────────────────────── plan ────────────────────────────
+def test_an_aligned_moment_release_is_an_equal_dof() -> None:
+    plan = plan_frame_members(
+        _project(_beam(releases=FrameReleases(j=EndRelease(released=("M3",)))))
+    )
+    (hidden,) = plan.nodes
+    assert hidden.tag == 3 and hidden.joint == 2
+    assert plan.equal_dofs == [(2, 3, (1, 2))]
+    assert plan.members[1].nodes == (1, 3)
+    assert not plan.springs and not plan.needs_transformation
+    assert plan.released_dofs[(1, "j")] == {3}
+
+
+def test_a_spring_is_a_zero_length_element() -> None:
+    releases = FrameReleases(i=EndRelease(released=("M3",), springs={"M3": 7.0}))
+    plan = plan_frame_members(_project(_beam(releases=releases)))
+    (spring,) = plan.springs
+    assert (spring.tag, spring.node_a, spring.node_b) == (2, 1, 3)
+    assert spring.dirs == (6,) and spring.stiffnesses == (7.0,)
+    assert spring.material_tags == (1,)
+
+
+def test_a_skewed_kept_torsion_gets_a_penalty_spring() -> None:
+    releases = FrameReleases(j=EndRelease(released=("M2", "M3")))
+    plan = plan_frame_members(_project(_beam(releases=releases), ndm=3, end=(3.0, 3.0, 0.0)))
+    assert plan.equal_dofs == [(2, 3, (1, 2, 3))]
+    (spring,) = plan.springs
+    assert spring.dirs == (4,)
+    length = math.hypot(3.0, 3.0)
+    assert spring.stiffnesses[0] == pytest.approx(PENALTY_FACTOR * 4 * E * IZ / length)
+
+
+def test_the_same_release_along_x_needs_no_penalty() -> None:
+    releases = FrameReleases(j=EndRelease(released=("M2", "M3")))
+    plan = plan_frame_members(_project(_beam(releases=releases), ndm=3))
+    assert plan.equal_dofs == [(2, 3, (1, 2, 3, 4))]
+    assert not plan.springs
+
+
+def test_a_release_at_an_offset_end_hangs_off_a_rigid_link() -> None:
+    beam = _beam(
+        releases=FrameReleases(j=EndRelease(released=("M3",))),
+        end_offsets=FrameEndOffsets(length_j=0.5),
+    )
+    plan = plan_frame_members(_project(beam))
+    face, inner = plan.nodes
+    assert face.coords == pytest.approx((5.5, 0.0))
+    assert plan.rigid_links == [(2, face.tag)]
+    assert plan.equal_dofs == [(face.tag, inner.tag, (1, 2))]
+    assert plan.needs_transformation
+    assert plan.members[1].joint_offset == ()
+
+
+def test_a_2d_frame_only_releases_m3() -> None:
+    with pytest.raises(ValueError, match="only release M3"):
+        plan_frame_members(_project(_beam(releases=FrameReleases(i=EndRelease(released=("T",))))))
+
+
+def test_corotational_3d_offsets_are_refused() -> None:
+    beam = _beam(geom_transf="Corotational", end_offsets=FrameEndOffsets(length_i=0.2))
+    with pytest.raises(ValueError, match="Corotational"):
+        plan_frame_members(_project(beam, ndm=3))
+
+
+def test_modifiers_share_a_derived_section() -> None:
+    mods = FrameModifiers(i33=0.35, area=0.5)
+    project = _project(
+        _beam(modifiers=mods),
+        ElasticBeamColumn(id=2, nodes=(1, 2), section_id=1, modifiers=mods),
+    )
+    plan = plan_frame_members(project)
+    (derived,) = plan.sections
+    assert derived.tag == 2
+    assert derived.args == pytest.approx((E, 0.5 * A, 0.35 * IZ))
+    assert plan.members[1].section_id == plan.members[2].section_id == 2
+
+
+def test_stiffness_modifiers_need_an_elastic_section() -> None:
+    fiber = FiberSection(
+        id=1,
+        patches=[
+            RectangularPatch(material_id=1, n_fib_y=1, n_fib_z=1, y_i=-1, z_i=-1, y_j=1, z_j=1)
+        ],
+    )
+    beam = ForceBeamColumn(id=1, nodes=(1, 2), section_id=1, modifiers=FrameModifiers(i33=0.5))
+    with pytest.raises(ValueError, match="elastic section"):
+        plan_frame_members(_project(beam, sections=[fiber]))
+
+
+# ──────────────────────────── emitted script ────────────────────────────
+def test_the_script_carries_the_assignments() -> None:
+    beam = _beam(
+        releases=FrameReleases(j=EndRelease(released=("M3",), springs={"M3": 9.0})),
+        end_offsets=FrameEndOffsets(length_i=0.5),
+        modifiers=FrameModifiers(i33=0.5),
+    )
+    project = _project(
+        beam,
+        element_loads=[UniformElementLoad(element_id=1, wy=-1.0)],
+        distributed_loads=[TrapezoidalElementLoad(element_id=1, x_start=0.5, wy_start=-2.0)],
+    )
+    script = export_script(project, project.analyses[0])
+    assert "ops.geomTransf('Linear', 1, '-jntOffset', 0.5, 0.0, 0.0, 0.0)" in script
+    assert "ops.equalDOF(2, 3, 1, 2)" in script
+    assert "ops.uniaxialMaterial('Elastic', 1, 9.0)" in script
+    assert "ops.section('Elastic', 2, 200000000.0, 0.02, 0.0001)" in script
+    assert "ops.element('elasticBeamColumn', 1, 1, 3, 2, 1, '-mass', 0.0)" in script
+    assert "'zeroLength', 2, 2, 3, '-mat', 1, '-dir', 6" in script
+    # The load on the rigid zone goes to joint 1; the clear part as Gauss point loads.
+    assert "ops.load(1, " in script
+    assert script.count("'-beamPoint'") == 3
+
+
+def test_an_unassigned_model_emits_what_it_always_did() -> None:
+    project = _project(element_loads=[UniformElementLoad(element_id=1, wy=-1.0)])
+    script = export_script(project, project.analyses[0])
+    assert "jntOffset" not in script and "equalDOF" not in script
+    assert "ops.eleLoad('-ele', 1, '-type', '-beamUniform', -1.0, 0.0)" in script
+
+
+# ──────────────────────────── diagrams ────────────────────────────
+def test_diagrams_run_along_the_flexible_length() -> None:
+    from opensees_studio.services.element_forces import ForceComponent, extract_diagram_data
+    from opensees_studio.services.results import StaticResults
+
+    project = _project(_beam(end_offsets=FrameEndOffsets(length_i=0.5, length_j=1.0)))
+    results = StaticResults(
+        case_id=1,
+        case_name="s",
+        n_steps=1,
+        node_disp={},
+        node_reaction={},
+        element_forces={1: np.array([[0.0, 1.0, 2.0, 0.0, -1.0, 3.0]])},
+    )
+    data = extract_diagram_data(project, results, ForceComponent.M3)
+    start, end = data.ends[1]
+    assert start == pytest.approx([0.5, 0.0, 0.0])
+    assert end == pytest.approx([5.0, 0.0, 0.0])
+    assert not extract_diagram_data(_project(), results, ForceComponent.M3).ends
