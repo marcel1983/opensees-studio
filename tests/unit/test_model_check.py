@@ -29,6 +29,7 @@ from opensees_studio.core.model_check import (
     MAX_DOF_ENV,
     Severity,
     check_model,
+    zero_length_dof,
 )
 from opensees_studio.services.persistence import load_project
 
@@ -205,11 +206,95 @@ def test_a_zero_length_element_with_its_nodes_apart_is_a_warning() -> None:
 
 
 def test_a_zero_length_element_acting_on_a_missing_dof_is_reported() -> None:
+    # Direction 4 is a rotation about x: OpenSees gives it no stiffness in 2D.
     project = _frame2d(
         [_node(1, fix=FIXED), _node(2)],
-        [ZeroLengthElement(id=1, nodes=(1, 2), material_ids=(1,), dofs=(1, 6))],
+        [ZeroLengthElement(id=1, nodes=(1, 2), material_ids=(1,), dofs=(1, 4))],
     )
     assert "dof_mismatch" in _codes(check_model(project))
+
+
+TRANSLATIONS = (True, True, True, False, False, False)  # Ux, Uy, Uz; rotations free
+
+
+def _rotational_spring(ndm: int, ndf: int, dofs: tuple[int, ...]) -> Project:
+    """Two coincident nodes: 1 fully fixed, 2 held in translation, joined by a spring."""
+    return Project(
+        ndm=ndm,
+        ndf=ndf,
+        nodes=[_node(1, fix=FIXED), _node(2, fix=TRANSLATIONS)],
+        elements=[ZeroLengthElement(id=1, nodes=(1, 2), material_ids=(1,) * len(dofs), dofs=dofs)],
+    )
+
+
+@pytest.mark.parametrize(
+    ("ndm", "ndf", "dofs"),
+    [
+        (2, 3, (6,)),  # the documented 2D rotational spring
+        (2, 3, (3,)),  # OpenSees reads direction 3 as 6 in 2D
+        (3, 6, (4, 5, 6)),
+    ],
+)
+def test_a_zero_length_rotational_spring_holds_the_rotation(
+    ndm: int, ndf: int, dofs: tuple[int, ...]
+) -> None:
+    report = check_model(_rotational_spring(ndm, ndf, dofs))
+    assert report.is_clean, [f.summary() for f in report.findings]
+    assert report.stability_checked
+
+
+@pytest.mark.parametrize(
+    ("ndm", "ndf", "dofs", "bad"),
+    [
+        (2, 3, (4,), 4),
+        (2, 3, (5,), 5),
+        (2, 2, (3,), 3),
+        (3, 3, (4,), 4),
+        (3, 6, (7,), 7),
+    ],
+)
+def test_a_zero_length_direction_without_stiffness_is_a_dof_mismatch(
+    ndm: int, ndf: int, dofs: tuple[int, ...], bad: int
+) -> None:
+    nodes = [_node(1, fix=FIXED), _node(2, fix=FIXED)]
+    project = Project(
+        ndm=ndm,
+        ndf=ndf,
+        nodes=nodes,
+        elements=[ZeroLengthElement(id=1, nodes=(1, 2), material_ids=(1,), dofs=dofs)],
+    )
+    finding = _only(check_model(project), "dof_mismatch")
+    assert finding.element_ids == (1,)
+    assert str(bad) in finding.message
+
+
+def test_a_2d_spring_in_direction_6_leaves_no_mechanism_on_a_cantilever() -> None:
+    # The rotational spring is the only thing holding the beam's rotation at node 2.
+    def build(dofs: tuple[int, ...]) -> Project:
+        return _frame2d(
+            [_node(1, fix=FIXED), _node(2), _node(3, 3)],
+            [ZeroLengthElement(id=1, nodes=(1, 2), material_ids=(1,), dofs=dofs), _beam(2, 2, 3)],
+        )
+
+    assert check_model(build((1, 2, 6))).is_clean
+    without_rotation = check_model(build((1, 2)))
+    assert without_rotation.mechanism_count >= 1
+
+
+@pytest.mark.parametrize(
+    ("ndm", "ndf", "expected"),
+    [
+        (2, 2, {1: 0, 2: 1}),
+        (2, 3, {1: 0, 2: 1, 3: 2, 6: 2}),
+        (3, 3, {1: 0, 2: 1, 3: 2}),
+        (3, 6, {1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5}),
+    ],
+)
+def test_zero_length_directions_map_onto_nodal_dof(
+    ndm: int, ndf: int, expected: dict[int, int]
+) -> None:
+    mapped = {d: zero_length_dof(ndm, ndf, d) for d in range(1, 7)}
+    assert {d: k for d, k in mapped.items() if k is not None} == expected
 
 
 def test_a_frame_in_a_model_without_rotations_is_a_dof_mismatch() -> None:

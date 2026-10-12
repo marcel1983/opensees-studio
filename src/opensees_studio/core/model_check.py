@@ -225,6 +225,25 @@ def _rotation_dofs(ndm: int, ndf: int) -> dict[int, int]:
     return {}
 
 
+#: Nodal DOF index (0-based, within ``ndf``) that each zeroLength material direction
+#: acts on, per (ndm, ndf). Directions are not nodal DOF numbers: 1, 2, 3 translate
+#: along and 4, 5, 6 rotate about the element's local x, y, z axes, which are the
+#: global axes here (the runner writes no ``-orient``). OpenSees projects them onto
+#: the nodal DOF (``ZeroLength::setTran1d``), and in 2D it also reads direction 3 as
+#: 6, the rotation about z. A direction missing from a row gets no stiffness.
+_ZERO_LENGTH_DOF: dict[tuple[int, int], dict[int, int]] = {
+    (2, 2): {1: 0, 2: 1},
+    (2, 3): {1: 0, 2: 1, 3: 2, 6: 2},
+    (3, 3): {1: 0, 2: 1, 3: 2},
+    (3, 6): {1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5},
+}
+
+
+def zero_length_dof(ndm: int, ndf: int, direction: int) -> int | None:
+    """The nodal DOF index a zeroLength ``-dir`` acts on, or ``None`` if it has no stiffness."""
+    return _ZERO_LENGTH_DOF.get((ndm, ndf), {}).get(direction)
+
+
 def _complement_rows(basis: np.ndarray) -> np.ndarray:
     """Rows spanning the orthogonal complement of the columns of ``basis``."""
     _, s, vt = np.linalg.svd(basis.T, full_matrices=True)
@@ -349,7 +368,8 @@ def _element_rows(
                 rows.append(row)
         return rows
     if isinstance(element, ZeroLengthElement):
-        return _identity_rows(ids, [d - 1 for d in element.dofs if 1 <= d <= ndf])
+        acted = {zero_length_dof(ndm, ndf, d) for d in element.dofs}
+        return _identity_rows(ids, sorted(dof for dof in acted if dof is not None))
     # Zero-length sections, bearings, and any type this module does not know: a
     # connection that resists every DOF. Over-coupling can hide a mechanism but
     # never reports one that is not there.
@@ -503,14 +523,18 @@ def check_model(
             rejected.append(el)
             continue
         if isinstance(el, ZeroLengthElement):
-            bad = [d for d in el.dofs if d > ndf]
+            bad = [d for d in el.dofs if zero_length_dof(ndm, ndf, d) is None]
             if bad:
                 findings.append(
                     Finding(
                         Severity.ERROR,
                         "dof_mismatch",
-                        f"{label} acts on DOF {_ids(bad)} but the model has only {ndf} DOF per node.",
+                        f"{label} acts in direction{'s' if len(set(bad)) > 1 else ''} "
+                        f"{_ids(bad)}, which OpenSees gives no stiffness in a model with "
+                        f"ndm={ndm}, ndf={ndf}.",
                         element_ids=(el.id,),
+                        hint="zeroLength directions 1-3 are translations along x, y, z and 4-6 "
+                        "rotations about x, y, z; a 2D rotational spring is direction 6.",
                     )
                 )
         usable.append(el)
