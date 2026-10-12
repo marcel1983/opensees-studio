@@ -395,7 +395,7 @@ def test_envelope_diagram_is_the_envelope_of_the_case_diagrams() -> None:
     assert both.abs_max == pytest.approx(max(abs(1.6 * 7.0), 1.2 * 4.0, 1.2 * 3.0))
 
 
-def test_spectrum_case_gives_peak_bounds_and_leaves_forces_out() -> None:
+def test_spectrum_result_without_forces_leaves_them_out_and_says_to_rerun() -> None:
     project = _cases_project()
     project.combinations.append(
         LoadCombination(
@@ -416,14 +416,47 @@ def test_spectrum_case_gives_peak_bounds_and_leaves_forces_out() -> None:
     np.testing.assert_allclose(out.max.node_disp[2][0], [0.15, 0.22, 0.011])
     np.testing.assert_allclose(out.min.node_disp[2][0], [0.05, 0.18, 0.009])
     assert out.max.element_forces == {} and out.max.node_reaction == {}
-    assert set(out.missing_fields) == {"node_reaction", "element_forces", "element_stresses"}
-    assert any("peak displacements only" in w for w in out.warnings)
+    assert set(out.missing_fields) == {"node_reaction", "element_forces"}
+    assert any("run the case again" in w for w in out.warnings)
     assert "closely spaced" in out.warnings
     tabs = combination_tables(out, project)
     assert [name for name, _ in tabs] == ["Displacements"]
     disp = tabs[0][1]
     assert disp.columns[:2] == ["Node", "Bound"]
     assert [row[:2] for row in disp.rows] == [[1, "Max"], [1, "Min"], [2, "Max"], [2, "Min"]]
+
+
+def test_spectrum_case_with_forces_gives_peak_bounds_for_every_field() -> None:
+    project = _cases_project()
+    project.combinations.append(
+        LoadCombination(
+            id=1,
+            name="D+E",
+            terms=[CombinationTerm(ref_id=1), CombinationTerm(ref_id=4, factor=2.0)],
+        )
+    )
+    static = _static(1, [1.0, 2.0, 3.0, -1.0, -2.0, 4.0], [0.1, 0.2, 0.01])
+    spectrum = ResponseSpectrumResults(
+        case_id=4,
+        case_name="EQX",
+        direction=1,
+        combination="CQC",
+        combined_disp={1: np.zeros(3), 2: np.array([0.05, 0.02, 0.001])},
+        node_reaction={1: np.array([10.0, 0.0, 5.0])},
+        element_forces={1: np.array([0.5, 1.5, 2.5, 0.5, 1.5, 2.5])},
+    )
+    bounds = case_bounds(project, spectrum)
+    assert set(bounds.upper) == {"node_disp", "node_reaction", "element_forces"}
+    np.testing.assert_allclose(bounds.lower["node_reaction"][1], [-10.0, 0.0, -5.0])
+    out = combine_results(project, 1, {1: static, 4: spectrum})
+    assert out.missing_fields == [] and not out.single_valued
+    # Static reaction -disp = [-0.1, -0.2, -0.01]; the spectrum adds and subtracts 2 x peak.
+    np.testing.assert_allclose(out.max.node_reaction[1][0], [19.9, -0.2, 9.99])
+    np.testing.assert_allclose(out.min.node_reaction[1][0], [-20.1, -0.2, -10.01])
+    np.testing.assert_allclose(
+        np.abs(out.max.element_forces[1][0] - out.min.element_forces[1][0]),
+        4.0 * np.array([0.5, 1.5, 2.5, 0.5, 1.5, 2.5]),
+    )
 
 
 def test_combining_without_a_needed_result_names_the_cases() -> None:

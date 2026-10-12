@@ -69,7 +69,12 @@ def _flip_end_j(forces: dict[int, np.ndarray], two_node: set[int]) -> dict[int, 
 
 
 def case_bounds(project: Project, results: CombinableResults) -> ResponseBounds:
-    """The bounds of one case's results: final step of a static case, ``±peak`` of a spectrum."""
+    """The bounds of one case's results: final step of a static case, ``±peak`` of a spectrum.
+
+    A spectrum gives every field it holds as a peak magnitude (displacements,
+    reactions, element forces, shell resultants): the bounds are ``+peak`` and
+    ``-peak``.
+    """
     if isinstance(results, StaticResults):
         fields: dict[str, dict[int, np.ndarray]] = {}
         for name in RESULT_FIELDS:
@@ -78,9 +83,19 @@ def case_bounds(project: Project, results: CombinableResults) -> ResponseBounds:
         fields["element_forces"] = _flip_end_j(fields["element_forces"], _two_node_ids(project))
         return ResponseBounds.single(fields)
     if isinstance(results, ResponseSpectrumResults):
-        return ResponseBounds.peaks(
-            {"node_disp": {k: np.asarray(v, dtype=float) for k, v in results.combined_disp.items()}}
-        )
+        # A field a stored result lacks (one written before reactions and
+        # element forces existed) is left out, and the combination reports it.
+        fields = {
+            name: {k: np.asarray(v, dtype=float) for k, v in values.items()}
+            for name, values in (
+                ("node_disp", results.combined_disp),
+                ("node_reaction", results.node_reaction),
+                ("element_forces", results.element_forces),
+                ("element_stresses", results.element_stresses),
+            )
+            if values
+        }
+        return ResponseBounds.peaks(fields)
     raise TypeError(
         f"{type(results).__name__} cannot be combined: only static and response spectrum "
         "results can."
@@ -162,8 +177,8 @@ def combine_results(
         if response.missing_fields:
             listed = ", ".join(FIELD_LABELS[f] for f in response.missing_fields)
             warnings.append(
-                f"Combination '{combo.name}' has no {listed}: an included case "
-                "(a response spectrum gives peak displacements only) does not provide them."
+                f"Combination '{combo.name}' has no {listed}: an included case does not provide "
+                "them (a response spectrum result stored before it had forces: run the case again)."
             )
     for cid in needed:
         results = case_results[cid]

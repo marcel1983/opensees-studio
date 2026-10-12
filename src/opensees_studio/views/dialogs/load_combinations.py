@@ -45,11 +45,19 @@ from opensees_studio.core import (
     LoadCombination,
     Project,
 )
+from opensees_studio.core.code_combinations import (
+    CODES,
+    DEFAULT_CODE,
+    GeneratorOption,
+    default_options,
+    envelope_groups,
+    generate_for_code,
+    unused_roles,
+)
 from opensees_studio.core.combinations import (
     COMBINABLE_CASE_TYPES,
     LOAD_ROLE_LABELS,
     LOAD_ROLES,
-    asce7_16_lrfd,
     combination_problems,
     combinations_using_combination,
     guess_load_role,
@@ -60,7 +68,12 @@ from opensees_studio.views.float_field import FloatField
 from opensees_studio.views.screen_fit import FittedDialog, MessageArea
 
 ENVELOPE_NAME = "LRFD envelope"
-"""Name of the envelope the ASCE 7-16 generator adds over what it generated."""
+"""Name of the envelope the ASCE 7-16 LRFD generator adds over what it generated."""
+
+
+def envelope_name(group: str) -> str:
+    """Name of the envelope over one generated group (``LRFD`` → ``LRFD envelope``)."""
+    return f"{group} envelope"
 
 
 def _key(source: str, ref_id: int) -> str:
@@ -122,10 +135,11 @@ class LoadCombinationsDialog(FittedDialog):
         for btn in (self._add_btn, self._copy_btn, self._delete_btn):
             row.addWidget(btn)
         left.addLayout(row)
-        self._generate_btn = QPushButton("Generate ASCE 7-16 LRFD…")
+        self._generate_btn = QPushButton("Generate from a design code…")
         self._generate_btn.setToolTip(
-            "Add the ASCE 7-16 Section 2.3.1 basic strength combinations from cases "
-            "tagged Dead, Live, Roof live, Snow, Rain, Wind and Earthquake."
+            "Add the combinations of ASCE 7-16 (LRFD or ASD), EN 1990 or TS 500 / TBDY 2018 "
+            "from cases tagged Dead, Live, Roof live, Snow, Rain, Wind and Earthquake. "
+            "They are ordinary combinations: edit them freely."
         )
         self._generate_btn.clicked.connect(self._on_generate)
         left.addWidget(self._generate_btn)
@@ -401,7 +415,7 @@ class LoadCombinationsDialog(FittedDialog):
             return
         self._vm.apply_command(DeleteCombinationsCommand(self._vm, {combo.id}))
 
-    # ── ASCE 7-16 generator ─────────────────────────────────────────
+    # ── design-code generators ──────────────────────────────────────
     def _on_generate(self) -> None:
         project = self._vm.project
         if project is None:
@@ -414,63 +428,97 @@ class LoadCombinationsDialog(FittedDialog):
                 "error",
             )
             return
-        dlg = Asce7GeneratorDialog(cases, self)
+        dlg = CodeGeneratorDialog(cases, self)
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
-        self.generate_asce7(dlg.roles(), envelope=dlg.envelope_wanted())
+        self.generate(dlg.code(), dlg.roles(), dlg.options(), envelope=dlg.envelope_wanted())
 
-    def generate_asce7(self, roles: dict[str, list[int]], *, envelope: bool = True) -> int:
-        """Add the ASCE 7-16 LRFD combinations for ``roles`` as one undo step.
+    def generate(
+        self,
+        code: str,
+        roles: dict[str, list[int]],
+        options: dict[str, Any] | None = None,
+        *,
+        envelope: bool = True,
+    ) -> int:
+        """Add the combinations of design ``code`` for ``roles`` as one undo step.
 
-        Returns how many combinations were added (the envelope included).
+        With ``envelope`` each generated group of more than one combination
+        also gets an envelope over it. Returns how many combinations were
+        added (the envelopes included).
         """
         project = self._vm.project
         if project is None:
             return 0
+        spec = CODES[code]
         peaks = [c.id for c in project.analyses if c.type == "ResponseSpectrum"]
-        generated = asce7_16_lrfd(roles, peak_cases=peaks)
+        names = {c.id: c.name or str(c.id) for c in project.analyses}
+        generated = generate_for_code(
+            code, roles, peak_cases=peaks, case_names=names, options=options
+        )
         if not generated:
             self._message.show_message(
-                "Nothing generated: every ASCE 7-16 combination needs a Dead (D) case.",
+                f"Nothing generated: every {spec.label} combination needs a Dead case.",
                 "error",
             )
             return 0
         next_id = project.next_combination_id()
-        combos = []
-        for offset, (name, terms) in enumerate(generated):
-            combos.append(LoadCombination(id=next_id + offset, name=name, terms=terms))
-        if envelope and len(combos) > 1:
-            combos.append(
-                LoadCombination(
-                    id=next_id + len(combos),
-                    name=ENVELOPE_NAME,
-                    combination_type="Envelope",
-                    terms=[CombinationTerm(source="combination", ref_id=c.id) for c in combos],
-                )
-            )
+        combos: list[LoadCombination] = []
+        group_ids: dict[str, list[int]] = {g: [] for g in envelope_groups(generated)}
+        for combo in generated:
+            new_id = next_id + len(combos)
+            combos.append(LoadCombination(id=new_id, name=combo.name, terms=combo.terms))
+            group_ids[combo.group].append(new_id)
+        if envelope:
+            for group, ids in group_ids.items():
+                if len(ids) > 1:
+                    combos.append(
+                        LoadCombination(
+                            id=next_id + len(combos),
+                            name=envelope_name(group),
+                            combination_type="Envelope",
+                            terms=[CombinationTerm(source="combination", ref_id=i) for i in ids],
+                        )
+                    )
         self._vm.apply_command(
             AddCombinationsCommand(
-                self._vm, combos, text=f"Generate {len(combos)} ASCE 7-16 LRFD combination(s)"
+                self._vm, combos, text=f"Generate {len(combos)} {spec.label} combination(s)"
             )
         )
         self.select(combos[-1].id)
-        self._message.show_message(f"Added {len(combos)} ASCE 7-16 LRFD combination(s).")
+        text = f"Added {len(combos)} {spec.label} combination(s)."
+        left_out = unused_roles(code, roles)
+        if left_out:
+            text += (
+                " Not used by this code: " + ", ".join(LOAD_ROLE_LABELS[r] for r in left_out) + "."
+            )
+        self._message.show_message(text)
         return len(combos)
 
 
-class Asce7GeneratorDialog(FittedDialog):
-    """Tag each case with its load role for the ASCE 7-16 LRFD generator."""
+class CodeGeneratorDialog(FittedDialog):
+    """Pick a design code and tag each case with its load role."""
 
     def __init__(self, cases: list[Any], parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("ASCE 7-16 LRFD Combinations")
+        self.setWindowTitle("Generate Code Combinations")
         layout = QVBoxLayout(self)
+        top = QFormLayout()
+        self._code = QComboBox()
+        for key, spec in CODES.items():
+            self._code.addItem(spec.label, key)
+        top.addRow("Design code:", self._code)
+        layout.addLayout(top)
+        self._summary = QLabel()
+        self._summary.setWordWrap(True)
+        layout.addWidget(self._summary)
+        self._options_form = QFormLayout()
+        layout.addLayout(self._options_form)
+        self._option_widgets: dict[str, QWidget] = {}
+
         intro = QLabel(
-            "Give each case the load it carries. Section 2.3.1: 1.4D; 1.2D + 1.6L + "
-            "0.5(Lr or S or R); 1.2D + 1.6(Lr or S or R) + (L or 0.5W); 1.2D + 1.0W + L + "
-            "0.5(Lr or S or R); 1.2D + 1.0E + L + 0.2S; 0.9D + 1.0W; 0.9D + 1.0E. Wind and "
-            "static earthquake cases are applied in both signs. The live load factor in the "
-            "last three is 1.0 (the 0.5 exception depends on occupancy)."
+            "Give each case the load it carries. Wind and static earthquake cases are "
+            "applied in both signs."
         )
         intro.setWordWrap(True)
         layout.addWidget(intro)
@@ -487,7 +535,7 @@ class Asce7GeneratorDialog(FittedDialog):
             form.addRow(f"{case.name or case.id} [{case.type}]:", box)
             self._boxes[case.id] = box
         layout.addLayout(form)
-        self._envelope = QCheckBox(f"Also add an envelope of them ('{ENVELOPE_NAME}')")
+        self._envelope = QCheckBox("Also add an envelope over each generated group")
         self._envelope.setChecked(True)
         layout.addWidget(self._envelope)
         buttons = QDialogButtonBox(
@@ -498,6 +546,74 @@ class Asce7GeneratorDialog(FittedDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
+        self._code.currentIndexChanged.connect(self._on_code_changed)
+        self.set_code(DEFAULT_CODE)
+
+    # ── design code and its options ──────────────────────────────────
+    def code(self) -> str:
+        return str(self._code.currentData())
+
+    def set_code(self, key: str) -> None:
+        self._code.setCurrentIndex(self._code.findData(key))
+        self._on_code_changed()
+
+    def _on_code_changed(self) -> None:
+        spec = CODES[self.code()]
+        self._summary.setText(spec.summary)
+        while self._options_form.rowCount():
+            self._options_form.removeRow(0)
+        self._option_widgets.clear()
+        for option in spec.options:
+            widget = self._option_widget(option)
+            self._option_widgets[option.key] = widget
+            if option.kind == "bool":
+                self._options_form.addRow(widget)
+            else:
+                self._options_form.addRow(option.label + ":", widget)
+
+    @staticmethod
+    def _option_widget(option: GeneratorOption) -> QWidget:
+        widget: QWidget
+        if option.kind == "bool":
+            check = QCheckBox(option.label)
+            check.setChecked(bool(option.default))
+            widget = check
+        elif option.kind == "choice":
+            box = QComboBox()
+            for value, label in option.choices:
+                box.addItem(label, value)
+            box.setCurrentIndex(box.findData(option.default))
+            widget = box
+        else:
+            field = FloatField()
+            field.setRange(0.0, 10.0)
+            field.setValue(float(option.default))
+            widget = field
+        widget.setToolTip(option.tip)
+        return widget
+
+    def options(self) -> dict[str, Any]:
+        """The current value of every option of the selected code."""
+        out = default_options(self.code())
+        for key, widget in self._option_widgets.items():
+            if isinstance(widget, QCheckBox):
+                out[key] = widget.isChecked()
+            elif isinstance(widget, QComboBox):
+                out[key] = widget.currentData()
+            elif isinstance(widget, FloatField):
+                out[key] = float(widget.value())
+        return out
+
+    def set_option(self, key: str, value: Any) -> None:
+        widget = self._option_widgets[key]
+        if isinstance(widget, QCheckBox):
+            widget.setChecked(bool(value))
+        elif isinstance(widget, QComboBox):
+            widget.setCurrentIndex(widget.findData(value))
+        elif isinstance(widget, FloatField):
+            widget.setValue(float(value))
+
+    # ── case roles ───────────────────────────────────────────────────
     def set_role(self, case_id: int, role: str | None) -> None:
         box = self._boxes[case_id]
         box.setCurrentIndex(0 if role is None else box.findData(role))

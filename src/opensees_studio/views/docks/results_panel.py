@@ -196,9 +196,14 @@ class ResultsPanel(QWidget):
                 f"<b>Response spectrum — case #{results.case_id} '{results.case_name}'</b>  "
                 f"({results.combination}{damping}{solver})"
             )
-            combined, modes = response_spectrum_tables(results, project)
-            self._add_table_tab(combined, "Combined displacements")
-            self._add_table_tab(modes, "Modes")
+            tabs = ["Combined displacements"]
+            if results.node_reaction:
+                tabs.append("Combined reactions")
+            if results.element_forces:
+                tabs.append("Combined element forces")
+            tabs.append("Modes")
+            for name, table in zip(tabs, response_spectrum_tables(results, project), strict=True):
+                self._add_table_tab(table, name)
         elif isinstance(results, CombinationResults):
             bounds = "" if results.single_valued else ", max and min"
             cases = ", ".join(f"#{cid}" for cid in results.case_ids)

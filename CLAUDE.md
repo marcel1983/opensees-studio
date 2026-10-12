@@ -158,6 +158,15 @@ These are non-obvious things that are easy to break if you don't know:
   tolerance 1e-9, lowest DOF index wins), as `_run_modal` does; record the
   solver used in the results. Combination rules live in
   `core.modal_combination`; new response spectrum cases default to CQC.
+  Response spectrum reactions, element forces and shell resultants are the
+  static response to each mode's equivalent load `M φ Γ Sa`
+  (`services.spectrum.modal_equivalent_loads`, solved in
+  `OpenSeesRunner._modal_static_responses` after the one eigen call, never a
+  second `ops.eigen`), combined per component by
+  `core.modal_combination.combine_modal_fields` with the same rule and ρ as the
+  displacements. They are peak magnitudes; `services.combination.case_bounds`
+  turns them into ±peak. The load uses nodal mass only (as the participation
+  factors do), not element density.
 
 ## Dependency split
 

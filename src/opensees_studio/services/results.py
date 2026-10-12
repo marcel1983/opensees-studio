@@ -193,7 +193,10 @@ class ResponseSpectrumResults:
 
     All values are PEAK responses (positive by definition — SRSS/CQC
     sign is lost in the combination). Per-mode metadata is preserved
-    so users can inspect modal participation.
+    so users can inspect modal participation. Reactions, element forces and
+    shell stress resultants are the modal combination of the response to each
+    mode's equivalent static load; a result stored before they existed has
+    them empty.
     """
 
     case_id: int
@@ -206,6 +209,12 @@ class ResponseSpectrumResults:
     """List of ModeContribution; per-mode period, Γ, M_eff, Sa(T), …"""
     solver: str = ""
     """Eigen solver the underlying modal analysis actually used."""
+    node_reaction: dict[int, np.ndarray] = field(default_factory=dict)
+    """node_id → peak combined reaction (one value per DOF)."""
+    element_forces: dict[int, np.ndarray] = field(default_factory=dict)
+    """element_id → peak combined ``localForce`` (a positive magnitude per component)."""
+    element_stresses: dict[int, np.ndarray] = field(default_factory=dict)
+    """element_id → peak combined shell stress resultants."""
     damping_ratio: float | None = None
     """Damping the CQC correlation used (None for SRSS)."""
     warnings: list[str] = field(default_factory=list)

@@ -386,7 +386,29 @@ def response_spectrum_tables(
                 float(m.sa_at_period) * converter.length,
             ]
         )
-    return [combined, modes]
+    tables = [combined]
+    ndf = next(iter(r.node_reaction.values())).shape[-1] if r.node_reaction else None
+    layout = Layout.of(project, ndf)
+    if r.node_reaction:
+        tables.append(
+            _node_table(
+                f"{r.combination} combined peak reactions (magnitudes)",
+                r.node_reaction,
+                layout,
+                "force",
+            )
+        )
+    if r.element_forces:
+        tables.append(
+            element_force_table(
+                f"{r.combination} combined peak element forces (magnitudes)",
+                r.element_forces,
+                project,
+                layout,
+            )
+        )
+    tables.append(modes)
+    return tables
 
 
 # ─────────────────────────── storeys ───────────────────────────

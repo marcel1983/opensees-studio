@@ -96,10 +96,15 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   switches between stored results. An envelope draws its max and min force
   diagrams together, offers Max/Min in the deformed shape, and its tables (and
   CSV export) list both. Adding a possibly nonlinear case warns that
-  superposition does not hold. **Generate ASCE 7-16 LRFD…** adds the Section
-  2.3.1 basic combinations (wind and static earthquake both ways) and their
-  envelope from cases tagged Dead, Live, Roof live, Snow, Rain, Wind and
-  Earthquake.
+  superposition does not hold. A response spectrum case gives displacements,
+  reactions, element forces and shell resultants (SRSS or CQC of the response
+  to every mode's equivalent load), so a combination with one has forces too.
+  **Generate from a design code…** adds the combinations of ASCE 7-16 (LRFD or
+  ASD), EN 1990 (ultimate 6.10, seismic, serviceability characteristic,
+  frequent and quasi-permanent, with the ψ factors of Table A1.1) or
+  TS 500 / TBDY 2018 (G+nQ±E, 0.9G±E) from cases tagged Dead, Live, Roof live,
+  Snow, Rain, Wind and Earthquake, wind and static earthquake both ways, with an
+  optional 100% + 30% orthogonal earthquake rule, and an envelope per group.
 - **Response spectra, by hand or by code** — in Ground Motions → Target
   spectrum: a **user table** (period in s, Sa in g), a spectrum from **ASCE/SEI
   7-16** (the mapped Ss and S1 with a site class, using Tables 11.4-1 and 11.4-2

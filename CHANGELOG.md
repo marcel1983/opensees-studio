@@ -44,8 +44,7 @@ refused instead of silently downgraded).
   post-processing on stored results, never a new solve: every result has a
   maximum and a minimum (a static case has one value, a spectrum peak counts as
   ±peak, a negative factor swaps them), and only what every included case
-  provides is combined (a spectrum gives displacements, so a combination with
-  one has no forces, and says so). Element forces are enveloped as internal
+  provides is combined. Element forces are enveloped as internal
   forces, so the envelope's force diagram is the envelope of the case diagrams.
   A Linear Add, Absolute Add or SRSS that includes a case solved with an
   iterative algorithm, or a model with P-Delta or corotational transformations,
@@ -66,6 +65,30 @@ refused instead of silently downgraded).
   Roof live, Snow, Rain, Wind and Earthquake — the role is guessed from the case
   name — with wind and static earthquake in both signs, plus an envelope of
   them.
+- **Code combination generators** (Generate from a design code… in the
+  combinations dialog, a code picker replacing the LRFD button): ASCE 7-16 LRFD
+  and ASD (Section 2.4.1), EN 1990 (ultimate equation 6.10 with each variable
+  action leading, the seismic G + E + Σψ2Q, serviceability characteristic,
+  frequent and quasi-permanent, ψ factors of Table A1.1 by imposed load
+  category, snow altitude, optional favourable permanent action) and
+  TS 500 / TBDY 2018 (1.4G+1.6Q, G+nQ±E with the live participation n, 0.9G±E,
+  TS 500 wind). An option applies the 100% + 30% orthogonal rule to the
+  earthquake cases (±Ex ± 0.3Ey, ±0.3Ex ± Ey). A generated set is ordinary
+  editable combinations, one undo step, with an envelope per group (ultimate and
+  serviceability states stay apart). The load role is still chosen per case in
+  the generator dialog, not stored in the project, so tagging never makes
+  results stale or changes a saved file.
+- **Response spectrum forces and reactions.** A response spectrum result now
+  carries peak reactions, element forces and shell resultants besides the
+  displacements: the static response of the model to each mode's equivalent load
+  (M·φ·Γ·Sa on the nodal mass), combined component by component with the case's
+  SRSS or CQC rule and the same correlation as the displacements (one new
+  `core.modal_combination.combine_modal_fields`, no second eigen solve). A
+  combination uses them as ±peak, so a combination with a spectrum case has
+  forces, reactions and force diagrams, and the "no forces" limitation is gone;
+  the Results panel lists the peak reactions and element forces (CSV at full
+  precision). A result stored by an earlier build still loads and gives
+  displacements only, and a combination using it says to run the case again.
 
 ### Changed
 
