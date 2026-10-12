@@ -1580,6 +1580,13 @@ Tying DOF removes them from the unknowns: the constrained node's displacement is
 whatever the retained node's is. It does not add stiffness anywhere else — a
 rigid floor is also, physically, a constraint that distributes horizontal force,
 which is exactly what this does.
+
+A node takes one constraint, and constraints do not chain: a node an equalDOF
+constrains may retain another equalDOF or rigid link only when its own equalDOF
+ties every DOF. OpenSees' Transformation handler (every eigen analysis uses it)
+solves any other chain, a node constrained twice, or a loop without an error
+into wrong results, so the model check refuses them. Tie each node straight to
+one retained node instead.
 """,
             "mechanics.constraints",
             "assign.support",
@@ -2507,6 +2514,10 @@ Deleting the retained node deletes the diaphragm.
 # Mechanics
 Like a diaphragm, a rigid link is a constraint the Plain handler cannot enforce,
 so the case runs with Transformation. The canvas draws it as a thick orange bar.
+
+The retained node must not itself be constrained (unless by an equalDOF of every
+DOF), and the constrained node takes no other constraint: see equalDOF. Two rigid
+beam links in a row are one rigid link from the first node to the last.
 """,
             "mechanics.constraints",
             "assign.remove_constraints",
