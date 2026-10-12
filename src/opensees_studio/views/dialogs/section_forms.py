@@ -91,7 +91,7 @@ class ElasticSectionForm(SectionFormBase):
             "Weight per unit volume (force / length³). A load pattern with a self "
             "weight applies gamma * A per unit length; 0 = weightless."
         )
-        self._shape = None
+        self._shape: Any = None
         for label, w in (
             ("E:", self._e),
             ("A:", self._a),

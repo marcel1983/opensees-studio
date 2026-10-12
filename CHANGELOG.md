@@ -67,6 +67,39 @@ refused instead of silently downgraded).
   name — with wind and static earthquake in both signs, plus an envelope of
   them.
 
+- **Automatic end offsets from connectivity** (Assign → Frame → End (Length)
+  Offsets… → Automatic from connectivity): each end's rigid length is the
+  largest half-extent, along the member, of the section of the other frame
+  members that meet it at that joint (`core.frame_members.connectivity_offsets`).
+  Worked out once on OK, stored as ordinary offsets, one undo step.
+- **Shear areas on elastic sections** (`ElasticSection.As2` / `As3`, left out of
+  the file while unset): a beam-column on such a section runs as an
+  `ElasticTimoshenkoBeam`, so the As2 / As3 property modifiers now change a
+  result. Verified against `P L³ / 3 E I + P L / G As` (tip load, 2D and 3D in
+  both bending directions, modifiers) and `w L⁴ / 8 E I + w L² / 2 G As`
+  (uniform load). OpenSees 3.8's Timoshenko element accepts only full-length
+  uniform loads, so point, partial and trapezoidal loads on it are refused with
+  a message instead of being silently dropped, and it takes no `-release` (a
+  released end uses the hidden-node route).
+- **Force diagrams with intermediate stations**: a member under uniform, point,
+  trapezoidal or self-weight span loads draws its moment and shear from statics
+  along the member (parabolic moment under a uniform load, a shear jump at a
+  point load), and labels the peak between the ends. Checked against `w L² / 8`,
+  `P a b / L`, the triangular-load moment and, with rigid end zones, the clear
+  span `w c² / 24`. Static case results only; combinations and envelopes still
+  draw straight lines.
+
+### Fixed
+
+- **AISC shapes in a 3D project put the strong axis on the wrong inertia.** The
+  table's `Ix` became Iz, which a horizontal 3D beam (local z vertical) bends
+  about only sideways, so a W14X90 under gravity deflected as its weak axis.
+  The AISC library now takes the project's dimension: 3D gives Iy = Ix and
+  Iz = Iy, and turns the fibre profile upright; 2D is unchanged. Sections
+  inserted earlier into a 3D project keep the old values: re-insert them. A
+  2D rectangle / angle shape hint is also drawn and inserted with its depth
+  along local y.
+
 ### Changed
 
 - A case left at the `Plain` constraint handler runs with `Transformation` when

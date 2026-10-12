@@ -208,12 +208,10 @@ def shape_to_elastic_section(
     fourth power for the inertias.
     """
     factor = length_scale(SOURCE_UNITS, units)
-    strong = shape.ix * factor**4
-    weak = (shape.iy * factor**4) if shape.iy is not None else None
-    if ndm == 3 and weak is not None:
-        iz, iy = weak, strong
-    else:
-        iz, iy = strong, weak
+    iz: float = shape.ix * factor**4
+    iy: float | None = (shape.iy * factor**4) if shape.iy is not None else None
+    if ndm == 3 and iy is not None:
+        iz, iy = iy, iz
     return ElasticSection(
         id=section_id,
         name=name or shape.name,
@@ -298,12 +296,13 @@ def shape_to_fiber_section(
 def converted_geometry(shape: AISCShape, units: UnitSystem, ndm: int = 2) -> dict[str, float]:
     """The values that would be inserted, for a dialog to show before it does."""
     factor = length_scale(SOURCE_UNITS, units)
-    strong = shape.ix * factor**4
-    weak = shape.iy * factor**4 if shape.iy is not None else None
-    swap = ndm == 3 and weak is not None
-    out = {"A": shape.area * factor**2, "Iz": weak if swap else strong}  # type: ignore[dict-item]
-    if weak is not None:
-        out["Iy"] = strong if swap else weak
+    iz: float = shape.ix * factor**4
+    iy: float | None = shape.iy * factor**4 if shape.iy is not None else None
+    if ndm == 3 and iy is not None:
+        iz, iy = iy, iz
+    out = {"A": shape.area * factor**2, "Iz": iz}
+    if iy is not None:
+        out["Iy"] = iy
     if shape.j is not None:
         out["J"] = shape.j * factor**4
     return out
