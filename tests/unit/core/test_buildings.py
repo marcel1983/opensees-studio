@@ -13,7 +13,9 @@ from opensees_studio.core import (
     CoordinateGridSystem,
     ElasticBeamColumn,
     ElasticSection,
+    EndRelease,
     EqualDOFConstraint,
+    FrameReleases,
     GridSystem,
     LinearTimeSeries,
     MassSource,
@@ -457,15 +459,6 @@ def test_mass_source_puts_no_mass_on_a_restrained_dof() -> None:
 
 def test_a_diaphragm_joint_cannot_retain_another_constraint() -> None:
     """OpenSees' Transformation handler solves such a chain silently wrong."""
-    from opensees_studio.core.geometry.frame_options import EndRelease, FrameReleases
-
-    released = _one_storey()
-    released.elements[4] = released.elements[4].model_copy(
-        update={"releases": FrameReleases(i=EndRelease(released=("M3",)))}
-    )
-    problems = diaphragm_problems(released)
-    assert any("node 5 is the joint of a released end of element 5" in p for p in problems)
-
     retaining = _one_storey()
     retaining.nodes.append(Node(id=10, coords=(0.0, 0.0, 3.0)))
     retaining.mp_constraints.append(
@@ -474,3 +467,152 @@ def test_a_diaphragm_joint_cannot_retain_another_constraint() -> None:
     assert any(
         "node 5 is the retained node of an equalDOF" in p for p in diaphragm_problems(retaining)
     )
+
+
+# ─────────────────────────── releases at diaphragm joints ───────────────────────────
+def _released(**ends: EndRelease) -> Project:
+    """``_one_storey`` with element 5 (the X beam from joint 5 to joint 6) released."""
+    project = _one_storey()
+    project.elements[4] = project.elements[4].model_copy(update={"releases": FrameReleases(**ends)})
+    return project
+
+
+def test_a_released_end_at_a_diaphragm_joint_is_no_problem() -> None:
+    assert diaphragm_problems(_released(i=EndRelease(released=("M3",)))) == []
+
+
+def test_an_elastic_member_is_released_inside_the_element_at_a_diaphragm_joint() -> None:
+    from opensees_studio.services.frame_members import plan_frame_members
+
+    project = _released(i=EndRelease(released=("M2", "M3")))
+    project.elements[5] = project.elements[5].model_copy(
+        update={"releases": FrameReleases(j=EndRelease(released=("T",)))}
+    )
+    plan = plan_frame_members(project)
+    assert not plan.nodes and not plan.equal_dofs and not plan.springs
+    assert plan.members[5].release_args == ("-releasez", 1, "-releasey", 1)
+    assert plan.members[5].nodes == (5, 6)
+    # The X beam's local (y, z) are global (Y, Z): M2 and M3 leave RY and RZ at joint 5.
+    assert plan.released_dofs[(5, "i")] == {5, 6}
+    # A torsion release is a section with no G J (and no flag).
+    assert plan.members[6].release_args == ()
+    (derived,) = plan.sections
+    assert derived.args == pytest.approx((30e9, 0.25, 5e-3, 5e-3, 12.5e9, 0.0))
+    assert plan.members[6].section_id == derived.tag
+
+
+def test_the_element_releases_reach_the_element_command() -> None:
+    from opensees_studio.services.opensees_script import export_script
+
+    script = export_script(_released(j=EndRelease(released=("M3",))))
+    assert "ops.element('elasticBeamColumn', 5, 5, 6, 1, " in script
+    assert "'-mass', 0.0, '-releasez', 2)" in script
+    assert "equalDOF" not in script
+
+
+@pytest.mark.parametrize(
+    "change",
+    ["spring", "point load", "consistent mass"],
+)
+def test_a_release_the_element_cannot_condense_is_held_by_penalty_springs(change: str) -> None:
+    from opensees_studio.services.frame_members import (
+        DIAPHRAGM_PENALTY_FACTOR,
+        plan_frame_members,
+    )
+
+    springs = {"M3": 1.0e7} if change == "spring" else {}
+    project = _released(i=EndRelease(released=("M3",), springs=springs))
+    if change == "point load":
+        project.load_patterns.append(
+            PlainLoadPattern(
+                id=1, time_series_id=1, point_loads=[PointElementLoad(element_id=5, pz=-1.0)]
+            )
+        )
+    if change == "consistent mass":
+        project.elements[4] = project.elements[4].model_copy(update={"consistent_mass": True})
+    plan = plan_frame_members(project)
+    (hidden,) = plan.nodes
+    assert hidden.coords == (0.0, 0.0, 3.0) and hidden.joint == 5
+    assert plan.members[5].nodes == (hidden.tag, 6)
+    assert plan.members[5].release_args == ()
+    # No constraint at all (it would chain through the diaphragm), and the
+    # springs carry the force into the joint, so nothing is folded back.
+    assert not plan.equal_dofs and not plan.rigid_links and not plan.attached
+    (link,) = plan.springs
+    assert (link.node_a, link.node_b) == (5, hidden.tag)
+    L, EI = 6.0, 30e9 * 5e-3
+    k_t = DIAPHRAGM_PENALTY_FACTOR * max(30e9 * 0.25 / L, 12 * EI / L**3)
+    k_r = DIAPHRAGM_PENALTY_FACTOR * max(4 * EI, 12.5e9 * 8e-3) / L
+    if springs:
+        assert link.dirs == (1, 2, 3, 4, 5, 6)
+        assert link.stiffnesses == pytest.approx((k_t, k_t, k_t, k_r, k_r, 1.0e7))
+    else:
+        assert link.dirs == (1, 2, 3, 4, 5)
+        assert link.stiffnesses == pytest.approx((k_t, k_t, k_t, k_r, k_r))
+    assert link.orient == pytest.approx((1.0, 0.0, 0.0, 0.0, 1.0, 0.0))
+    assert plan.released_dofs[(5, "i")] == ({6} if not springs else set())
+
+
+def test_a_torsion_free_member_keeps_torsion_tied_at_its_other_released_end() -> None:
+    """Column 1 releases T at joint 5 (a zero G J) and M2 at its base: the base's
+    hidden node keeps the rotation about the column axis tied, or it would spin."""
+    from opensees_studio.services.frame_members import plan_frame_members
+
+    project = _one_storey()
+    project.elements[0] = project.elements[0].model_copy(
+        update={
+            "releases": FrameReleases(i=EndRelease(released=("M2",)), j=EndRelease(released=("T",)))
+        }
+    )
+    plan = plan_frame_members(project)
+    (base, hidden, dofs) = plan.equal_dofs[0]
+    assert base == 1 and 6 in dofs
+    assert plan.members[1].nodes == (hidden, 5)
+    assert plan.sections[0].args[-1] == 0.0
+
+
+def test_releases_at_a_diaphragm_joint_that_cannot_be_modelled_are_refused() -> None:
+    from opensees_studio.core import FiberSection, ForceBeamColumn, RectangularPatch
+    from opensees_studio.core.geometry.frame_options import FrameEndOffsets
+    from opensees_studio.services.frame_members import plan_frame_members
+
+    offset = _released(i=EndRelease(released=("M3",), springs={"M3": 1.0e7}))
+    offset.elements[4] = offset.elements[4].model_copy(
+        update={"end_offsets": FrameEndOffsets(length_i=0.25)}
+    )
+    with pytest.raises(ValueError, match="face of a rigid end zone"):
+        plan_frame_members(offset)
+    # Without the spring, the element releases it at the face itself.
+    offset.elements[4] = offset.elements[4].model_copy(
+        update={"releases": FrameReleases(i=EndRelease(released=("M3",)))}
+    )
+    plan = plan_frame_members(offset)
+    assert plan.members[5].release_args == ("-releasez", 1)
+    assert plan.members[5].joint_offset == pytest.approx((0.25, 0, 0, 0, 0, 0))
+
+    fibre = _released(i=EndRelease(released=("M3",)))
+    fibre.sections.append(
+        FiberSection(
+            id=2,
+            patches=[
+                RectangularPatch(material_id=1, n_fib_y=1, n_fib_z=1, y_i=-1, z_i=-1, y_j=1, z_j=1)
+            ],
+        )
+    )
+    fibre.elements[4] = ForceBeamColumn(
+        id=5, nodes=(5, 6), section_id=2, releases=fibre.elements[4].releases
+    )
+    with pytest.raises(ValueError, match="fibre member"):
+        plan_frame_members(fibre)
+
+
+def test_a_project_without_releases_at_diaphragm_joints_plans_as_before() -> None:
+    """The same release at a joint no diaphragm constrains keeps its equalDOF."""
+    from opensees_studio.services.frame_members import plan_frame_members
+
+    project = _released(i=EndRelease(released=("M3",)))
+    project.diaphragms.clear()
+    plan = plan_frame_members(project)
+    (hidden,) = plan.nodes
+    assert plan.equal_dofs == [(5, hidden.tag, (1, 2, 3, 4, 5))]
+    assert plan.members[5].release_args == ()

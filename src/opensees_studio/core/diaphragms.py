@@ -137,21 +137,14 @@ def diaphragm_problems(project: Project) -> list[str]:
         link.constrained_node for link in project.rigid_links
     }
     # OpenSees' Transformation handler cannot chain constraints: a node a
-    # diaphragm constrains must not retain another constraint. A frame end
-    # release (or partial fixity) hangs a hidden node off its joint with
-    # equalDOF / rigidLink, so a released end at a diaphragm joint is one.
+    # diaphragm constrains must not retain another constraint. (A frame end
+    # released at such a joint does not use one: services.frame_members
+    # releases it inside the element or holds it with springs.)
     retaining: dict[int, str] = {}
     for mp in project.mp_constraints:
         retaining.setdefault(mp.retained_node, "the retained node of an equalDOF")
     for link in project.rigid_links:
         retaining.setdefault(link.retained_node, "the retained node of a rigid link")
-    for element in project.elements:
-        releases = getattr(element, "releases", None)
-        if releases is None:
-            continue
-        for end, nid in zip(("i", "j"), element.nodes, strict=False):
-            if releases.end(end).released:
-                retaining.setdefault(nid, f"the joint of a released end of element {element.id}")
     for diaphragm in project.diaphragms:
         label = f"Diaphragm {diaphragm.id}" + (f" '{diaphragm.name}'" if diaphragm.name else "")
         retained = by_id.get(diaphragm.retained_node)
