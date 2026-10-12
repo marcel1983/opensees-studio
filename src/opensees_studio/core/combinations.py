@@ -17,10 +17,11 @@ are the SAP2000 ones, with term ``k`` scaled by its factor ``f_k`` first
 - **Absolute Add** — ``max = sum_k max(|hi_k|, |lo_k|)``, ``min = -max``.
 - **SRSS** — ``max = sqrt(sum_k max(|hi_k|, |lo_k|)^2)``, ``min = -max``.
 
-A quantity is combined only when every term provides it: a response spectrum
-case gives peak displacements and nothing else, so a combination with one has
-no reactions or element forces. :func:`combine` reports what it had to leave
-out.
+A quantity is combined only when every term provides it. A response spectrum
+case provides displacements, reactions, element forces and shell resultants
+(the modal combination of each), all as peaks, so its bounds are ``±peak``; a
+result stored before the spectrum case had forces provides displacements only.
+:func:`combine` reports what it had to leave out.
 
 This module is part of ``core``: no Qt, no openseespy.
 """
@@ -28,9 +29,10 @@ This module is part of ``core``: no Qt, no openseespy.
 from __future__ import annotations
 
 import hashlib
+import itertools
 import json
 import math
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal, get_args
 
@@ -346,7 +348,8 @@ def combine(
 
     for name in RESULT_FIELDS:
         if not all(name in b.upper for _, b in terms):
-            if any(name in b.upper for _, b in terms):
+            # An empty field (no shells, say) is not something a term lacks.
+            if any(b.upper.get(name) for _, b in terms):
                 missing.append(name)
             continue
         ids = set(terms[0][1].upper[name])
@@ -431,17 +434,74 @@ def guess_load_role(name: str) -> str | None:
     return None
 
 
+ORTHOGONAL_FACTOR = 0.3
+"""Share of the orthogonal direction in the 100%/30% earthquake rule."""
+
+LateralVariant = tuple[tuple[float, int], ...]
+"""One way a lateral load acts: ``(signed coefficient, case id)`` parts."""
+
+
+def lateral_variants(
+    cases: Iterable[int],
+    peak_cases: Iterable[int] = (),
+    *,
+    orthogonal: bool = False,
+) -> list[LateralVariant]:
+    """The ways the lateral cases of one role act, as :data:`LateralVariant` parts.
+
+    A lateral load acts both ways, so a static case gives a ``+1`` and a ``-1``
+    variant. A case of ``peak_cases`` (a response spectrum, already ``±peak``)
+    gives one: the two would be identical. With ``orthogonal`` and several
+    cases, each case in turn acts at 100% with every other at 30%
+    (``ORTHOGONAL_FACTOR``), each static case in both signs: ``±Ex ± 0.3Ey``
+    and ``±0.3Ex ± Ey``.
+    """
+    peaks = set(peak_cases)
+    ordered = list(dict.fromkeys(cases))
+    if not orthogonal or len(ordered) < 2:
+        return [
+            ((sign, cid),) for cid in ordered for sign in ((1.0,) if cid in peaks else (1.0, -1.0))
+        ]
+    out: list[LateralVariant] = []
+    for primary in ordered:
+        parts = [primary, *[c for c in ordered if c != primary]]
+        weight = {c: (1.0 if c == primary else ORTHOGONAL_FACTOR) for c in parts}
+        free = [c for c in parts if c not in peaks]
+        for signs in itertools.product((1.0, -1.0), repeat=len(free)):
+            sign_of = dict(zip(free, signs, strict=True))
+            out.append(tuple((sign_of.get(c, 1.0) * weight[c], c) for c in parts))
+    return out
+
+
+def variant_name(scale: float, variant: LateralVariant, token: Callable[[int], str]) -> str:
+    """``+0.5W``, ``-E3``, ``+E1-0.3E2``: ``variant`` times ``scale``, each part signed."""
+    pieces = []
+    for coef, cid in variant:
+        value = round(coef * scale, 10)
+        magnitude = "" if abs(value) == 1.0 else f"{abs(value):g}"
+        pieces.append(f"{'+' if value > 0 else '-'}{magnitude}{token(cid)}")
+    return "".join(pieces)
+
+
+def scaled_parts(scale: float, variant: LateralVariant) -> list[tuple[float, list[int]]]:
+    """``variant`` times ``scale`` as ``(factor, [case id])`` groups for a term builder."""
+    return [(scale * coef, [cid]) for coef, cid in variant]
+
+
 def asce7_16_lrfd(
     roles: Mapping[str, Iterable[int]],
     *,
     peak_cases: Iterable[int] = (),
+    orthogonal: bool = False,
 ) -> list[tuple[str, list[CombinationTerm]]]:
     """ASCE 7-16 Section 2.3.1 basic LRFD combinations, as ``(name, terms)`` pairs.
 
     ``roles`` maps a role of :data:`LOAD_ROLES` to the analysis cases carrying
     that load. Every dead case enters each combination; ``Lr or S or R`` gives
     one combination per role present; each wind and each earthquake case gives
-    one combination per sign, since a lateral load acts both ways. A
+    one combination per sign, since a lateral load acts both ways (see
+    :func:`lateral_variants`; ``orthogonal`` applies the 100%/30% rule to the
+    earthquake cases). A
     combination is produced only when every load it names is present (and
     ``D`` is always required). The live-load factor 1.0 in combinations 3 to 5
     is used as is: the 0.5 reduction of the standard's exception depends on the
@@ -463,17 +523,9 @@ def asce7_16_lrfd(
         return []
     live = by_role["L"]
     roof = [(r, cid) for r in ("Lr", "S", "R") for cid in by_role[r]]
-    peaks = set(peak_cases)
-
-    def both_ways(role: str) -> list[tuple[float, int]]:
-        return [
-            (sign, cid)
-            for cid in by_role[role]
-            for sign in ((1.0,) if cid in peaks else (1.0, -1.0))
-        ]
-
-    lateral_w = both_ways("W")
-    lateral_e = both_ways("E")
+    peaks = list(peak_cases)
+    lateral_w = lateral_variants(by_role["W"], peaks)
+    lateral_e = lateral_variants(by_role["E"], peaks, orthogonal=orthogonal)
 
     out: list[tuple[str, list[CombinationTerm]]] = []
 
@@ -488,8 +540,8 @@ def asce7_16_lrfd(
         """``W``, or ``W3`` when several cases carry the role."""
         return f"{role}{cid}" if len(by_role[role]) > 1 else role
 
-    def signed(sign: float, factor: str, role: str, cid: int) -> str:
-        return f"{'+' if sign > 0 else '-'}{factor}{load(role, cid)}"
+    def signed(scale: float, role: str, variant: LateralVariant) -> str:
+        return variant_name(scale, variant, lambda cid: load(role, cid))
 
     with_live = "+L" if live else ""
 
@@ -514,38 +566,40 @@ def asce7_16_lrfd(
                 terms((1.2, dead), (1.6, [cid]), (1.0, live)),
             )
         )
-        for sign, wid in lateral_w:
+        for w in lateral_w:
             out.append(
                 (
-                    f"1.2D+1.6{load(role, cid)}{signed(sign, '0.5', 'W', wid)}",
-                    terms((1.2, dead), (1.6, [cid]), (0.5 * sign, [wid])),
+                    f"1.2D+1.6{load(role, cid)}{signed(0.5, 'W', w)}",
+                    terms((1.2, dead), (1.6, [cid]), *scaled_parts(0.5, w)),
                 )
             )
     # 4. 1.2D + 1.0W + L + 0.5(Lr or S or R)
-    for sign, wid in lateral_w:
-        w_name = signed(sign, "", "W", wid)
+    for w in lateral_w:
+        w_name = signed(1.0, "W", w)
         if not roof:
-            out.append((f"1.2D{w_name}{with_live}", terms((1.2, dead), (sign, [wid]), (1.0, live))))
+            out.append(
+                (f"1.2D{w_name}{with_live}", terms((1.2, dead), *scaled_parts(1.0, w), (1.0, live)))
+            )
         for role, cid in roof:
             out.append(
                 (
                     f"1.2D{w_name}{with_live}+0.5{load(role, cid)}",
-                    terms((1.2, dead), (sign, [wid]), (1.0, live), (0.5, [cid])),
+                    terms((1.2, dead), *scaled_parts(1.0, w), (1.0, live), (0.5, [cid])),
                 )
             )
     # 5. 1.2D + 1.0E + L + 0.2S
     snow = by_role["S"]
-    for sign, eid in lateral_e:
+    for e in lateral_e:
         out.append(
             (
-                f"1.2D{signed(sign, '', 'E', eid)}{with_live}{'+0.2S' if snow else ''}",
-                terms((1.2, dead), (sign, [eid]), (1.0, live), (0.2, snow)),
+                f"1.2D{signed(1.0, 'E', e)}{with_live}{'+0.2S' if snow else ''}",
+                terms((1.2, dead), *scaled_parts(1.0, e), (1.0, live), (0.2, snow)),
             )
         )
     # 6. 0.9D + 1.0W
-    for sign, wid in lateral_w:
-        out.append((f"0.9D{signed(sign, '', 'W', wid)}", terms((0.9, dead), (sign, [wid]))))
+    for w in lateral_w:
+        out.append((f"0.9D{signed(1.0, 'W', w)}", terms((0.9, dead), *scaled_parts(1.0, w))))
     # 7. 0.9D + 1.0E
-    for sign, eid in lateral_e:
-        out.append((f"0.9D{signed(sign, '', 'E', eid)}", terms((0.9, dead), (sign, [eid]))))
+    for e in lateral_e:
+        out.append((f"0.9D{signed(1.0, 'E', e)}", terms((0.9, dead), *scaled_parts(1.0, e))))
     return out

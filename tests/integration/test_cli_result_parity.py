@@ -114,6 +114,9 @@ def compare(inproc, cli) -> float:  # type: ignore[no-untyped-def]
     elif isinstance(inproc, ResponseSpectrumResults):
         assert (inproc.direction, inproc.combination) == (cli.direction, cli.combination)
         diffs.append(_dict_diff(inproc.combined_disp, cli.combined_disp))
+        for name in ("node_reaction", "element_forces", "element_stresses"):
+            diffs.append(_dict_diff(getattr(inproc, name), getattr(cli, name)))
+        assert inproc.element_forces, "a spectrum result carries element forces"
         assert len(inproc.modes) == len(cli.modes)
         for a, b in zip(inproc.modes, cli.modes, strict=True):
             for name in (

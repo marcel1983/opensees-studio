@@ -453,6 +453,14 @@ factor). The total peak is **not** the sum: the modes do not peak at the same
 instant, so they are combined statistically. SRSS/CQC give a design envelope,
 not a time history — nothing here tells you when the peak happens.
 
+**Forces and reactions.** Element forces, support reactions and shell
+resultants come from the static response of the model to each mode's equivalent
+load, M·φ_i·Γ_i·Sa(T_i), combined component by component with the same rule and
+correlation as the displacements. They are peak magnitudes (the sign is lost in
+the combination), and a combination uses them as plus and minus that peak. The
+load uses the nodal mass, as the participation factors do; mass given as an
+element density is not in it.
+
 For a nonlinear structure a response spectrum is only an approximation: it comes
 from linear modal analysis. The usual route is a pushover or a transient.
 """,
@@ -1541,9 +1549,11 @@ The results table lists each end force as OpenSees reports it (localForce), with
 its maximum and minimum.
 
 # What a combination contains
-Only what every included case provides: a response spectrum case gives peak
-displacements only, so a combination with one has no reactions or element
-forces, and says so.
+Only what every included case provides. A response spectrum case provides
+displacements, reactions, element forces and shell resultants: each is the SRSS
+or CQC of the response to the equivalent static load of every mode, a peak
+magnitude, so it counts as plus and minus that peak. A spectrum result stored
+before it had forces gives displacements only: run the case again.
 
 # Warnings
 A Linear Add, Absolute Add or SRSS that includes a case solved with an iterative
@@ -1559,10 +1569,26 @@ combines. A result stays current until the model changes; editing a combination
 does not make results stale. Display → Show Results Of… switches between stored
 results without running anything.
 
-# ASCE 7-16 LRFD
-**Generate ASCE 7-16 LRFD…** adds the basic strength combinations of Section
-2.3.1 from cases tagged Dead, Live, Roof live, Snow, Rain, Wind and Earthquake:
+# Generating the combinations of a design code
+**Generate from a design code…** adds the combinations of ASCE 7-16 (LRFD or
+ASD), EN 1990 or TS 500 / TBDY 2018 from cases you tag with the load they carry:
+Dead, Live, Roof live, Snow, Rain, Wind and Earthquake (the tag is guessed from
+the case name). The result is an ordinary set of Linear Add combinations: edit,
+copy or delete them. Wind and static earthquake cases are added in both signs; a
+response spectrum case is already plus and minus, so it is added once. An
+envelope over each generated group is added too (one per group, so the ultimate
+and serviceability limit states of EN 1990 do not mix). Roles a code does not use
+are named after the run.
 
+The factors are the code's. Judgement stays yours: the occupancy-dependent
+live-load reduction, favourable versus unfavourable permanent action, the
+national annex.
+
+**Earthquake: 100% + 30% orthogonal rule** applies to any code: with two or more
+earthquake cases, each acts at 100% with the others at 30% (±Ex ± 0.3Ey and
+±0.3Ex ± Ey).
+
+## ASCE 7-16 LRFD (Section 2.3.1)
 - 1.4D
 - 1.2D + 1.6L + 0.5(Lr or S or R)
 - 1.2D + 1.6(Lr or S or R) + (L or 0.5W)
@@ -1571,10 +1597,37 @@ results without running anything.
 - 0.9D + 1.0W
 - 0.9D + 1.0E
 
-Wind and static earthquake cases are added in both signs; a response spectrum
-case is already plus and minus, so it is added once. The live-load factor in the
-last combinations is 1.0: the 0.5 exception depends on the occupancy and is the
-engineer's call. An envelope of the generated combinations is added too.
+The live-load factor in the last combinations is 1.0: the 0.5 exception depends
+on the occupancy.
+
+## ASCE 7-16 ASD (Section 2.4.1)
+- D; D + L; D + (Lr or S or R); D + 0.75L + 0.75(Lr or S or R)
+- D + 0.6W; D + 0.7E
+- D + 0.75L + 0.75(0.6W) + 0.75(Lr or S or R); D + 0.75L + 0.75(0.7E) + 0.75S
+- 0.6D + 0.6W; 0.6D + 0.7E
+
+## EN 1990
+- **Ultimate, equation 6.10**: 1.35G + 1.5Q1 + Σ 1.5 ψ0,i Qi, with each variable
+  action (imposed, roof, snow, wind) leading in turn, and 1.35G alone. With
+  *favourable permanent action* the set is repeated with 1.0G (uplift,
+  overturning).
+- **Seismic (accidental), 6.11b**: G + E + Σ ψ2,i Qi.
+- **Serviceability**: characteristic G + Q1 + Σ ψ0,i Qi; frequent
+  G + ψ1,1 Q1 + Σ ψ2,i Qi; quasi-permanent G + Σ ψ2,i Qi.
+
+The ψ factors are those of Table A1.1: the *imposed load category* (A to H) sets
+them for Live cases, roofs (Lr) are category H, wind is 0.6 / 0.2 / 0, snow is
+0.5 / 0.2 / 0 (0.7 / 0.5 / 0.2 above 1000 m). Rain has no EN 1990 factors and is
+not used.
+
+## TS 500 / TBDY 2018
+- 1.4G + 1.6Q
+- G + nQ ± E and 0.9G ± E (TBDY 2018), with n the *live load participation* (1.0
+  by default; Table 4.3 of the code gives 0.3 for housing and offices)
+- G + 1.3Q ± 1.3W and 0.9G ± 1.3W (TS 500)
+
+Roof live, snow and rain cases are not used. Check the factors against the
+edition you design to.
 """,
             "analyze.cases",
             "analyze.run",

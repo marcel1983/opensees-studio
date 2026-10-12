@@ -20,6 +20,7 @@ from opensees_studio.core.project import ProjectMeta
 from opensees_studio.core.units import UnitSystem
 from opensees_studio.services.result_tables import (
     display_text,
+    full_text,
     modal_tables,
     node_history_table,
     pushover_tables,
@@ -281,6 +282,30 @@ def test_response_spectrum_converts_peak_displacements_and_sa() -> None:
     assert combined.rows[0][1] == pytest.approx(0.01 * IN_M)
     assert modes.columns[-1] == "Sa(T) [m/s²]"
     assert modes.rows[0][-1] == pytest.approx(0.5 * IN_M)
+
+
+def test_response_spectrum_lists_peak_reactions_and_element_forces_at_full_precision() -> None:
+    results = ResponseSpectrumResults(
+        case_id=6,
+        case_name="rs",
+        direction=1,
+        combination="SRSS",
+        combined_disp={1: np.array([0.01, 0.0, 0.0])},
+        node_reaction={1: np.array([1234.5678901234567, 0.0, 99.0])},
+        element_forces={1: np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])},
+    )
+    tables = response_spectrum_tables(results, _shown_in_si())
+    assert [t.title for t in tables] == [
+        "SRSS combined peak displacements",
+        "SRSS combined peak reactions (magnitudes)",
+        "SRSS combined peak element forces (magnitudes)",
+        "Modal contributions",
+    ]
+    reactions = tables[1]
+    assert reactions.rows[0][1] == pytest.approx(1234.5678901234567 * KIP_N)
+    # The export keeps every digit of the stored double.
+    assert full_text(reactions.rows[0][1]) == repr(reactions.rows[0][1])
+    assert len(tables[2].rows) == 6
 
 
 def test_headers_and_values_cannot_disagree() -> None:

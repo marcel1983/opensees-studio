@@ -19,12 +19,13 @@ from opensees_studio.core import (
     PlainLoadPattern,
     StaticCase,
 )
+from opensees_studio.core.code_combinations import CODES
 from opensees_studio.services.results import CombinationResults, StaticResults
 from opensees_studio.viewmodels import ProjectViewModel
 from opensees_studio.views.dialogs.case_manager import AnalysisCaseManagerDialog
 from opensees_studio.views.dialogs.load_combinations import (
     ENVELOPE_NAME,
-    Asce7GeneratorDialog,
+    CodeGeneratorDialog,
     LoadCombinationsDialog,
 )
 
@@ -199,7 +200,7 @@ def test_asce_generator_adds_combinations_and_an_envelope_in_one_step(qtbot) -> 
     project = vm.project
     assert project is not None
     cases = [c for c in project.analyses if c.type == "Static"]
-    gen = Asce7GeneratorDialog(cases)
+    gen = CodeGeneratorDialog(cases)
     qtbot.addWidget(gen)
     # The case names give the roles.
     assert gen.roles() == {"D": [1], "L": [2], "W": [3]}
@@ -208,7 +209,7 @@ def test_asce_generator_adds_combinations_and_an_envelope_in_one_step(qtbot) -> 
 
     dlg = LoadCombinationsDialog(vm)
     qtbot.addWidget(dlg)
-    added = dlg.generate_asce7({"D": [1], "L": [2], "W": [3]})
+    added = dlg.generate("asce7_lrfd", {"D": [1], "L": [2], "W": [3]})
     names = [c.name for c in project.combinations]
     assert added == len(names)
     assert names[:2] == ["1.4D", "1.2D+1.6L"]
@@ -220,6 +221,56 @@ def test_asce_generator_adds_combinations_and_an_envelope_in_one_step(qtbot) -> 
 
     vm.undo_stack.undo()
     assert project.combinations == []
+
+
+@pytest.mark.gui
+def test_generator_dialog_offers_every_code_with_its_options(qtbot) -> None:  # type: ignore[no-untyped-def]
+    vm = _vm()
+    project = vm.project
+    assert project is not None
+    gen = CodeGeneratorDialog([c for c in project.analyses if c.type == "Static"])
+    qtbot.addWidget(gen)
+    assert gen.code() == "asce7_lrfd"
+    assert set(CODES) == {"asce7_lrfd", "asce7_asd", "en1990", "tbdy"}
+    gen.set_code("en1990")
+    assert gen.options()["imposed_category"] == "A"
+    gen.set_option("imposed_category", "E")
+    gen.set_option("favourable_permanent", True)
+    assert gen.options()["imposed_category"] == "E" and gen.options()["favourable_permanent"]
+    gen.set_code("tbdy")
+    assert gen.options() == {"live_participation": 1.0, "orthogonal": False}
+    gen.set_option("live_participation", 0.3)
+    assert gen.options()["live_participation"] == 0.3
+
+
+@pytest.mark.gui
+def test_generate_en1990_adds_a_separate_envelope_per_group(qtbot) -> None:  # type: ignore[no-untyped-def]
+    vm = _vm()
+    project = vm.project
+    assert project is not None
+    dlg = LoadCombinationsDialog(vm)
+    qtbot.addWidget(dlg)
+    added = dlg.generate("en1990", {"D": [1], "L": [2], "W": [3]})
+    names = [c.name for c in project.combinations]
+    assert added == len(names)
+    assert "ULS 1.35G+1.5Q" in names and "SLS quasi G+0.3Q" in names
+    envelopes = [c.name for c in project.combinations if c.combination_type == "Envelope"]
+    assert envelopes == [
+        "ULS envelope",
+        "SLS characteristic envelope",
+        "SLS frequent envelope",
+    ]
+    vm.undo_stack.undo()
+    assert project.combinations == []
+
+
+@pytest.mark.gui
+def test_generate_without_a_dead_case_says_so(qtbot) -> None:  # type: ignore[no-untyped-def]
+    vm = _vm()
+    dlg = LoadCombinationsDialog(vm)
+    qtbot.addWidget(dlg)
+    assert dlg.generate("tbdy", {"L": [2]}) == 0
+    assert "needs a Dead case" in dlg.message_text()
 
 
 @pytest.mark.gui
@@ -353,6 +404,64 @@ def test_run_dialog_runs_missing_cases_once_then_combines_from_stored_results(
     assert window._case_results.current(project) == {}
     monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: None)
     assert not window.show_results_of("combination:1")
+
+
+@pytest.mark.gui
+def test_envelope_with_a_spectrum_case_draws_both_force_diagrams(qtbot, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """A spectrum case now provides element forces, so its combination has diagrams."""
+    import numpy as np
+
+    from opensees_studio.core import ResponseSpectrum, ResponseSpectrumCase
+    from opensees_studio.services.element_forces import ForceComponent
+    from opensees_studio.services.results import ResponseSpectrumResults
+
+    window = _cantilever_window(qtbot, tmp_path)
+    project = window._vm.project
+    project.spectra.append(
+        ResponseSpectrum(id=1, name="flat", periods=[0.01, 10.0], accelerations=[1.0, 1.0])
+    )
+    project.analyses.extend(
+        [
+            ModalCase(id=10, name="Modal", n_modes=2),
+            ResponseSpectrumCase(id=11, name="RSX", modal_case_id=10, spectrum_id=1, direction=1),
+        ]
+    )
+    project.combinations.append(
+        LoadCombination(
+            id=3,
+            name="D+E",
+            terms=[CombinationTerm(ref_id=1), CombinationTerm(ref_id=11)],
+        )
+    )
+    ndf = project.ndf
+    dead = StaticResults(
+        case_id=1,
+        case_name="DEAD",
+        n_steps=1,
+        node_disp={n.id: np.zeros((1, ndf)) for n in project.nodes},
+        node_reaction={n.id: np.zeros((1, ndf)) for n in project.nodes},
+        element_forces={el.id: np.full((1, 12), 2.0) for el in project.elements},
+    )
+    spectrum = ResponseSpectrumResults(
+        case_id=11,
+        case_name="RSX",
+        direction=1,
+        combination="CQC",
+        combined_disp={n.id: np.zeros(3) for n in project.nodes},
+        node_reaction={n.id: np.ones(ndf) for n in project.nodes},
+        element_forces={el.id: np.full(12, 5.0) for el in project.elements},
+    )
+    window._case_results.put(project, dead)
+    window._case_results.put(project, spectrum)
+    assert window.show_results_of("combination:3")
+    combo = window._latest_results
+    assert isinstance(combo, CombinationResults) and not combo.single_valued
+    assert combo.missing_fields == []
+    window._on_show_force_diagram()
+    data = window._diagram_data(ForceComponent.M3)
+    assert len(data.element_ids) == 2 * len(project.elements)
+    # The upper diagram is dead + peak, the lower dead - peak.
+    assert data.abs_max == pytest.approx(7.0)
 
 
 @pytest.mark.gui

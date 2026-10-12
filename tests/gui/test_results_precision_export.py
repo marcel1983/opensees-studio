@@ -145,3 +145,35 @@ def test_transient_node_history_table(qtbot, tmp_path: Path) -> None:  # type: i
     assert table.title == "Node 2 acceleration history"
     assert table.columns[1] == "A1 [m/s^2]"
     assert [row[1] for row in table.rows] == [2 * THIRD, 2e-10, 0.0]
+
+
+@pytest.mark.gui
+def test_response_spectrum_panel_has_reaction_and_force_tabs_exported_in_full(  # type: ignore[no-untyped-def]
+    qtbot, tmp_path: Path
+) -> None:
+    from opensees_studio.services.results import ResponseSpectrumResults
+
+    reaction = 12345.678901234567
+    results = ResponseSpectrumResults(
+        case_id=4,
+        case_name="EQX",
+        direction=1,
+        combination="CQC",
+        combined_disp={1: np.zeros(3), 2: np.array([THIRD, 0.0, 0.0])},
+        node_reaction={1: np.array([reaction, 0.0, 0.0])},
+        element_forces={1: np.array([THIRD, 0.0, 0.0, THIRD, 0.0, 0.0])},
+    )
+    panel = _panel(qtbot)
+    panel.show_results(results, _project())
+    names = [panel._tabs.tabText(i) for i in range(panel._tabs.count())]
+    assert names == [
+        "Combined displacements",
+        "Combined reactions",
+        "Combined element forces",
+        "Modes",
+    ]
+    panel._tabs.setCurrentIndex(1)
+    panel.set_digits(3)
+    assert _cell(panel, 0, 1) == "1.23e+04"
+    exported = panel.export_current(tmp_path / "reactions.csv").read_text(encoding="utf-8")
+    assert repr(reaction) in exported

@@ -143,6 +143,9 @@ def write_results(results: AnyResults, out_dir: str | Path) -> dict[str, Any]:
             entry["warnings"] = list(results.warnings)
             entry["modes"] = [_mode_scalars(m) for m in results.modes]
             _write_int_dict(f, "combined_disp", results.combined_disp)
+            _write_int_dict(f, "node_reaction", results.node_reaction)
+            _write_int_dict(f, "element_forces", results.element_forces)
+            _write_int_dict(f, "element_stresses", results.element_stresses)
             modes = f.create_group("modes")
             for i, mode in enumerate(results.modes):
                 _write_int_dict(modes, str(i), mode.modal_peak_disp)
@@ -239,6 +242,9 @@ def load_results(entry: dict[str, Any], out_dir: str | Path) -> AnyResults:
                 direction=int(entry["direction"]),
                 combination=str(entry["combination"]),
                 combined_disp=_read_int_dict(f, "combined_disp"),
+                node_reaction=_read_int_dict(f, "node_reaction"),
+                element_forces=_read_int_dict(f, "element_forces"),
+                element_stresses=_read_int_dict(f, "element_stresses"),
                 modes=modes,
                 solver=str(entry.get("solver", "")),
                 damping_ratio=(

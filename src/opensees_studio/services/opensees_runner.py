@@ -38,6 +38,7 @@ import os
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import numpy as np
@@ -134,6 +135,10 @@ def _dof_indices(ndm: int, ndf: int) -> tuple[int, ...]:
 
 
 # ─────────────────────── runner ───────────────────────
+_MODAL_STATIC_CASE = SimpleNamespace(constraints="Plain")
+"""What the constraint-handler choice reads of a case, for the modal static solves."""
+
+
 class OpenSeesRunner:
     """Translator + executor. Instantiate with a project, then ``run(case)``."""
 
@@ -1356,6 +1361,22 @@ class OpenSeesRunner:
             return None
         return values.reshape(-1, self.STRESS_RESULTANTS).mean(axis=0)
 
+    def _element_local_force(self, element_id: int) -> Any:
+        """One element's end forces: ``localForce`` when it answers, else ``eleForce``.
+
+        ``localForce`` is ``[N, V_y, V_z, T, M_y, M_z]`` per end in the element's
+        local frame, which is what diagrams need; a zeroLength or truss element
+        may only have the global ``eleForce``.
+        """
+        ops = self._ops
+        try:
+            forces = ops.eleResponse(element_id, "localForce")
+        except Exception:
+            forces = []
+        if not forces:
+            forces = ops.eleForce(element_id)
+        return forces
+
     def _run_static(self, case: StaticCase) -> StaticResults:
         ops = self._ops
         self._emit_patterns_for_case(case.pattern_ids)
@@ -1385,16 +1406,7 @@ class OpenSeesRunner:
                     node_disp[node.id][step, j] = ops.nodeDisp(node.id, dof)
                 node_reaction[node.id][step, :] = self._node_reactions(node.id, ndf)
             for el in self.project.elements:
-                # Prefer "localForce" — gives [N, V_y, V_z, T, M_y, M_z] per
-                # end in the element's local frame, which is what diagrams
-                # need. Fall back to global eleForce if the element type
-                # doesn't expose localForce (e.g. zeroLength, truss).
-                try:
-                    forces = ops.eleResponse(el.id, "localForce")
-                except Exception:
-                    forces = []
-                if not forces:
-                    forces = ops.eleForce(el.id)
+                forces = self._element_local_force(el.id)
                 if el.id not in element_forces:
                     element_forces[el.id] = np.zeros((case.n_steps, len(forces)))
                 element_forces[el.id][step, :] = forces
@@ -1631,8 +1643,10 @@ class OpenSeesRunner:
         wiring up :class:`ResponseSpectrumResults`.
         """
         from opensees_studio.services.spectrum import (
+            combine_modal_field,
             combine_modal_response,
             mass_participation,
+            modal_equivalent_loads,
         )
 
         modal_case = next(
@@ -1684,6 +1698,17 @@ class OpenSeesRunner:
             damping=damping,
         )
 
+        # Reactions and element forces: the static response to each mode's
+        # equivalent load, combined across modes with the rule of the case.
+        per_mode = self._modal_static_responses(
+            modal_equivalent_loads(self.project, modal_results, modes)
+        )
+        rule_damping = damping if damping is not None else spectrum.damping_ratio
+        peak = {
+            name: combine_modal_field(modes, by_mode, method=case.combination, damping=rule_damping)
+            for name, by_mode in per_mode.items()
+        }
+
         if case.combination == "SRSS":
             pairs = closely_spaced_pairs(
                 [m.angular_frequency for m in modes], ratio=case.closely_spaced_ratio
@@ -1705,11 +1730,75 @@ class OpenSeesRunner:
             direction=case.direction,
             combination=case.combination,
             combined_disp=combined,
+            node_reaction=peak["node_reaction"],
+            element_forces=peak["element_forces"],
+            element_stresses=peak["element_stresses"],
             modes=modes,
             solver=modal_results.solver,
             damping_ratio=damping,
             warnings=warnings,
         )
+
+    def _modal_static_responses(
+        self, loads_by_mode: dict[int, dict[int, np.ndarray]]
+    ) -> dict[str, dict[int, dict[int, np.ndarray]]]:
+        """Reactions, element forces and shell resultants under each mode's static load.
+
+        ``loads_by_mode`` maps a mode number to its nodal load vectors (see
+        ``services.spectrum.modal_equivalent_loads``). Each mode is one linear
+        static solve of the built model, with the loads on free DOFs only (the
+        mode shape is zero on a restrained one). Returns ``{"node_reaction" |
+        "element_forces" | "element_stresses": {mode: {id: vector}}}``. It runs
+        after the eigen solve and never calls ``eigen``, so it leaves the
+        eigen determinism rule alone.
+        """
+        ops = self._ops
+        ndf = len(self._dof_idx)
+        out: dict[str, dict[int, dict[int, np.ndarray]]] = {
+            "node_reaction": {},
+            "element_forces": {},
+            "element_stresses": {},
+        }
+        ops.wipeAnalysis()
+        for mode, loads in loads_by_mode.items():
+            ops.timeSeries("Constant", 1)
+            ops.pattern("Plain", 1, 1)
+            for nid, vec in loads.items():
+                full = np.zeros(ndf)
+                full[: vec.size] = vec
+                ops.load(nid, *[float(x) for x in full])
+            ops.system("BandGeneral")
+            ops.numberer("RCM")
+            ops.constraints(self._constraints_handler(_MODAL_STATIC_CASE))
+            ops.test("NormDispIncr", 1.0e-12, 10)
+            ops.algorithm("Linear")
+            ops.integrator("LoadControl", 1.0)
+            ops.analysis("Static")
+            status = ops.analyze(1)
+            if status != 0:
+                raise RuntimeError(
+                    f"The static solve for the load of mode {mode} failed "
+                    f"(ops.analyze returned {status})."
+                )
+            ops.reactions()
+            out["node_reaction"][mode] = {
+                n.id: np.asarray(self._node_reactions(n.id, ndf), dtype=float)
+                for n in self.project.nodes
+            }
+            forces: dict[int, np.ndarray] = {}
+            stresses: dict[int, np.ndarray] = {}
+            for el in self.project.elements:
+                forces[el.id] = np.asarray(self._element_local_force(el.id), dtype=float)
+                resultants = self._element_stress_resultants(el.id)
+                if resultants is not None:
+                    stresses[el.id] = resultants
+            out["element_forces"][mode] = forces
+            out["element_stresses"][mode] = stresses
+            ops.wipeAnalysis()
+            ops.remove("loadPattern", 1)
+            ops.remove("timeSeries", 1)
+            ops.reset()
+        return out
 
     def _run_modal(self, case: ModalCase) -> ModalResults:
         """Eigenvalue analysis with history-independent results.
