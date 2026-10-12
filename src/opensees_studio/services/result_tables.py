@@ -42,6 +42,7 @@ from opensees_studio.core.storeys import (
 )
 from opensees_studio.core.units import UnitConverter, UnitLabels, UnitSystem
 from opensees_studio.services.results import (
+    CombinationResults,
     ModalResults,
     PushoverResults,
     ResponseSpectrumResults,
@@ -228,6 +229,91 @@ def static_tables(r: StaticResults, project: Project | None = None) -> list[Resu
         _node_table("Final-step reactions", r.node_reaction, layout, "force"),
         element_force_table("Final-step element forces", r.element_forces, project, layout),
     ]
+
+
+def _bounded_node_table(
+    title: str,
+    upper: dict[int, np.ndarray],
+    lower: dict[int, np.ndarray],
+    layout: Layout,
+    column: str,
+) -> ResultTable:
+    """Two rows per node, ``Max`` then ``Min``."""
+    nodes = sorted(set(upper) & set(lower))
+    ndf = int(np.atleast_2d(upper[nodes[0]]).shape[-1]) if nodes else layout.ndf
+    is_force = column == "force"
+    name = layout.force_column if is_force else layout.disp_column
+    factor = layout.force_dof_factor if is_force else layout.dof_factor
+    factors = np.array([factor(d) for d in range(1, ndf + 1)])
+    table = ResultTable(title, ["Node", "Bound"] + [name(d) for d in range(1, ndf + 1)])
+    for nid in nodes:
+        a, b = np.atleast_2d(upper[nid])[-1], np.atleast_2d(lower[nid])[-1]
+        for bound, values in (("Max", np.maximum(a, b)), ("Min", np.minimum(a, b))):
+            table.rows.append([nid, bound, *(float(v) for v in values * factors)])
+    return table
+
+
+def _bounded_element_force_table(
+    title: str,
+    upper: dict[int, np.ndarray],
+    lower: dict[int, np.ndarray],
+    project: Project | None,
+    layout: Layout,
+) -> ResultTable:
+    """One row per component with its ``localForce`` maximum and minimum."""
+    by_id = {el.id: el for el in project.elements} if project is not None else {}
+    table = ResultTable(title, ["Element", "Type", "Component", "Unit", "Max", "Min"])
+    for eid in sorted(set(upper) & set(lower)):
+        a, b = np.atleast_2d(upper[eid])[-1], np.atleast_2d(lower[eid])[-1]
+        element = by_id.get(eid)
+        kind = type(element).__name__ if element is not None else ""
+        for (component, unit, factor), hi, lo in zip(
+            _component_names(element, len(a), layout),
+            np.maximum(a, b),
+            np.minimum(a, b),
+            strict=True,
+        ):
+            table.rows.append([eid, kind, component, unit, float(hi) * factor, float(lo) * factor])
+    return table
+
+
+def combination_tables(
+    r: CombinationResults, project: Project | None = None
+) -> list[tuple[str, ResultTable]]:
+    """``(tab name, table)`` for each quantity the combination has.
+
+    A single-valued combination reads like a static case. Otherwise every value
+    has a maximum and a minimum; element forces are given per ``localForce``
+    component, the same convention as a static case's table (the force diagram
+    is what shows the envelope as internal forces).
+    """
+    ndf = next(iter(r.max.node_disp.values())).shape[-1] if r.max.node_disp else None
+    layout = Layout.of(project, ndf)
+    notes = list(r.warnings)
+    tabs: list[tuple[str, ResultTable]] = []
+    quantities = (
+        ("node_disp", "Displacements", "displacements", "disp"),
+        ("node_reaction", "Reactions", "reactions", "force"),
+        ("element_forces", "Element forces", "element forces", ""),
+    )
+    for name, tab, what, column in quantities:
+        if name in r.missing_fields:
+            continue
+        upper, lower = getattr(r.max, name), getattr(r.min, name)
+        title = f"Combination '{r.combination_name}' {what}"
+        if name == "element_forces":
+            table = (
+                element_force_table(title, upper, project, layout)
+                if r.single_valued
+                else _bounded_element_force_table(title, upper, lower, project, layout)
+            )
+        elif r.single_valued:
+            table = _node_table(title, upper, layout, column)
+        else:
+            table = _bounded_node_table(title, upper, lower, layout, column)
+        table.notes = list(notes)
+        tabs.append((tab, table))
+    return tabs
 
 
 def pushover_tables(r: PushoverResults, project: Project | None = None) -> list[ResultTable]:

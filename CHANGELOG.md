@@ -38,6 +38,35 @@ refused instead of silently downgraded).
   a hand-built OpenSeesPy model with `rigidDiaphragm` (all periods) and with
   `equalDOF` (the X-sway periods) to 1e-9.
 
+- **Load combinations** (Define → Load Combinations…). A combination includes
+  Static and Response Spectrum cases, or other combinations, each with a scale
+  factor, and is one of Linear Add, Envelope, Absolute Add or SRSS. Combining is
+  post-processing on stored results, never a new solve: every result has a
+  maximum and a minimum (a static case has one value, a spectrum peak counts as
+  ±peak, a negative factor swaps them), and only what every included case
+  provides is combined (a spectrum gives displacements, so a combination with
+  one has no forces, and says so). Element forces are enveloped as internal
+  forces, so the envelope's force diagram is the envelope of the case diagrams.
+  A Linear Add, Absolute Add or SRSS that includes a case solved with an
+  iterative algorithm, or a model with P-Delta or corotational transformations,
+  is applied with a warning. Missing or non-combinable cases and combinations
+  that include each other are refused; a case or combination another
+  combination uses cannot be deleted. Every edit is one undo step, and a
+  project without combinations saves byte-identical to before (schema 2).
+- **Running and showing combinations.** Analyze → Run lists the combinations
+  after the cases: running one runs only the cases it needs that have no
+  current result, in one analysis process, then combines. Results stay current
+  until the model changes (editing a combination does not make them stale).
+  Display → Show Results Of… switches between stored case and combination
+  results. Envelopes draw their max and min force diagrams together, the
+  deformed shape has a Max/Min choice, shell contours show the maximum, and the
+  results tables and CSV export list Max and Min.
+- **ASCE 7-16 LRFD generator** (Generate ASCE 7-16 LRFD… in the combinations
+  dialog): the Section 2.3.1 basic combinations from cases tagged Dead, Live,
+  Roof live, Snow, Rain, Wind and Earthquake — the role is guessed from the case
+  name — with wind and static earthquake in both signs, plus an envelope of
+  them.
+
 ### Changed
 
 - A case left at the `Plain` constraint handler runs with `Transformation` when
@@ -66,6 +95,15 @@ refused instead of silently downgraded).
   example building with released and with partially fixed beam ends against
   hand-built OpenSeesPy (element releases, `ModElasticBeam3d`, and hidden nodes
   under the Lagrange handler): 1e-9 and 1e-6.
+- Chains of equalDOFs and rigid links are refused by the model check, with a
+  remedy: a node that one constraint ties and that retains another (equalDOF
+  2->3 plus equalDOF 3->5, or a rigid link whose retained node an equalDOF or
+  rigid link constrains), a node constrained twice, a loop, and an equalDOF of a
+  node to itself. OpenSees 3.8's Transformation handler, which every eigen
+  analysis uses, keeps one constraint per constrained node and solves the rest
+  without an error into wrong results (a probe against Lagrange: static
+  displacements off by up to 85 %, periods by more). A chain through a node an
+  equalDOF of every DOF constrains comes out right and is still accepted.
 
 ### Fixed
 

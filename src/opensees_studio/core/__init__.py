@@ -30,6 +30,12 @@ from opensees_studio.core.asce7 import (
     fv_coefficient,
 )
 from opensees_studio.core.catalog_material import CatalogMaterial, catalog_names, catalog_spec
+from opensees_studio.core.combinations import (
+    COMBINATION_LABELS,
+    COMBINATION_TYPES,
+    CombinationTerm,
+    LoadCombination,
+)
 from opensees_studio.core.constraints import EqualDOFConstraint, RigidDiaphragm, RigidLink
 from opensees_studio.core.defaults import (
     DEAD_CASE_NAME,
@@ -596,4 +602,9 @@ __all__ = [  # noqa: RUF022 - grouped by domain under section comments, not alph
     "TransientCase",
     "PushoverCase",
     "ResponseSpectrumCase",
+    # Load combinations
+    "COMBINATION_LABELS",
+    "COMBINATION_TYPES",
+    "CombinationTerm",
+    "LoadCombination",
 ]

@@ -13,6 +13,11 @@ from opensees_studio.commands.buildings import (
     SetMassSourceCommand,
     SetStoreysCommand,
 )
+from opensees_studio.commands.combinations import (
+    AddCombinationsCommand,
+    DeleteCombinationsCommand,
+    UpdateCombinationCommand,
+)
 from opensees_studio.commands.constraints import (
     AddEqualDOFConstraintCommand,
 )
@@ -77,6 +82,7 @@ from opensees_studio.commands.transforms import (
 
 __all__ = [
     "AddAnalysisCasesCommand",
+    "AddCombinationsCommand",
     "AddDiaphragmCommand",
     "AddElementLoadsCommand",
     "AddElementsCommand",
@@ -97,6 +103,7 @@ __all__ = [
     "AssignSectionCommand",
     "ConvertElementTypeCommand",
     "DeleteAnalysisCasesCommand",
+    "DeleteCombinationsCommand",
     "DeleteElementsCommand",
     "DeleteFrictionModelsCommand",
     "DeleteMaterialsCommand",
@@ -120,6 +127,7 @@ __all__ = [
     "SetRestraintCommand",
     "SetStoreysCommand",
     "UpdateAnalysisCaseCommand",
+    "UpdateCombinationCommand",
     "UpdateElementFieldsCommand",
     "UpdateFrictionModelCommand",
     "UpdateMaterialCommand",
