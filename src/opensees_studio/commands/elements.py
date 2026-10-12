@@ -289,6 +289,7 @@ class AssignElementFieldsCommand(ProjectCommand):
     so a mixed selection of frames and trusses assigns to the frames only.
     Each changed element is rebuilt through Pydantic validation when the
     command is created, so an invalid value raises before anything changes.
+    ``per_element`` adds values that differ per element (``{id: {field: value}}``).
     """
 
     def __init__(
@@ -298,13 +299,17 @@ class AssignElementFieldsCommand(ProjectCommand):
         fields: dict[str, Any],
         *,
         text: str | None = None,
+        per_element: dict[int, dict[str, Any]] | None = None,
     ) -> None:
         keys = ", ".join(sorted(fields))
         super().__init__(vm, text or f"Assign {keys} to {len(element_ids)} element(s)")
+        per_element = per_element or {}
         # Validated here, before the push: an exception raised inside redo() would
         # be swallowed by Qt and leave a half-applied command on the stack.
         self._updated: dict[int, Any] = {
-            el.id: type(el).model_validate({**el.model_dump(), **fields})
+            el.id: type(el).model_validate(
+                {**el.model_dump(), **fields, **per_element.get(el.id, {})}
+            )
             for el in self.project.elements
             if el.id in element_ids and self.accepts(el, fields)
         }

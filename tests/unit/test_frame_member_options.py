@@ -37,6 +37,7 @@ from opensees_studio.core import (
 from opensees_studio.core.frame_members import (
     ClearPiece,
     cardinal_offset,
+    connectivity_offsets,
     gauss_point_loads,
     member_layout,
     section_extents,
@@ -459,3 +460,97 @@ def test_diagrams_run_along_the_flexible_length() -> None:
     assert start == pytest.approx([0.5, 0.0, 0.0])
     assert end == pytest.approx([5.0, 0.0, 0.0])
     assert not extract_diagram_data(_project(), results, ForceComponent.M3).ends
+
+
+# ──────────────────────────── offsets from connectivity ────────────────────────────
+def _frame_with_columns(ndm: int = 2) -> Project:
+    """A 6 m beam (1-2) with a 0.4 m column on joint 1 and a 0.6 m column on joint 2."""
+    wide = 0.6 * 0.6
+    sections = [
+        ElasticSection(id=1, E=E, A=A, Iz=IZ, Iy=IZ, G=8e7, J=3e-4),
+        ElasticSection(id=2, E=E, A=0.16, Iz=0.16 * 0.16 / 12, Iy=0.16 * 0.16 / 12, G=8e7, J=1e-3),
+        ElasticSection(id=3, E=E, A=wide, Iz=wide * wide / 12, Iy=wide * wide / 12, G=8e7, J=1e-3),
+    ]
+    project = _project(sections=sections, ndm=ndm)
+    project.nodes += [
+        Node(id=3, coords=(0.0, 3.0, 0.0)),
+        Node(id=4, coords=(6.0, 3.0, 0.0)),
+        Node(id=5, coords=(12.0, 0.0, 0.0)),
+    ]
+    project.elements += [
+        ElasticBeamColumn(id=2, nodes=(1, 3), section_id=2),
+        ElasticBeamColumn(id=3, nodes=(2, 4), section_id=3),
+        # collinear neighbour: its depth is across the beam axis only if it were crossing
+        ElasticBeamColumn(id=4, nodes=(2, 5), section_id=3),
+    ]
+    return project
+
+
+@pytest.mark.parametrize("ndm", [2, 3])
+def test_connectivity_offsets_are_half_the_framing_member_depth(ndm: int) -> None:
+    project = _frame_with_columns(ndm)
+    li, lj = connectivity_offsets(project, 1)
+    assert li == pytest.approx(0.2)
+    assert lj == pytest.approx(0.3)  # the collinear member adds nothing, the column 0.6/2
+
+
+def test_connectivity_offsets_follow_the_projection_on_the_member_axis() -> None:
+    """A column leaning at 45 deg reaches into the beam by the projected half extent."""
+    project = _frame_with_columns()
+    project.nodes[2] = Node(id=3, coords=(3.0, 3.0, 0.0))  # column 2 at 45 deg
+    li, _ = connectivity_offsets(project, 1)
+    assert li == pytest.approx(
+        0.2 * math.sqrt(0.5)
+    )  # |x . y_col| * h/2, y_col = (-1, 1)/sqrt2 -> .707
+
+
+def test_connectivity_offsets_of_an_isolated_member_are_zero() -> None:
+    assert connectivity_offsets(_project(), 1) == (0.0, 0.0)
+
+
+def test_connectivity_offsets_need_a_frame() -> None:
+    project = _frame_with_columns()
+    with pytest.raises(ValueError, match="not a frame member"):
+        connectivity_offsets(project, 99)
+
+
+# ──────────────────────────── shear areas ────────────────────────────
+def test_shear_areas_are_left_out_of_a_dump_until_set() -> None:
+    plain = ElasticSection(id=1, E=E, A=A, Iz=IZ)
+    assert "As2" not in plain.model_dump() and "As3" not in plain.model_dump()
+    assert not plain.has_shear_deformation
+    shear = ElasticSection(id=1, E=E, A=A, Iz=IZ, G=8e7, As2=0.01)
+    assert ElasticSection.model_validate(shear.model_dump()).As2 == 0.01
+    assert shear.has_shear_deformation
+
+
+def test_a_section_with_shear_areas_plans_a_timoshenko_member() -> None:
+    section = ElasticSection(id=1, E=E, A=A, Iz=IZ, G=8e7, As2=0.01)
+    element = _beam(modifiers=FrameModifiers(as2=0.5, i33=0.5))
+    plan = plan_frame_members(_project(element, sections=[section]))
+    assert plan.members[1].timoshenko == (E, 8e7, A, IZ * 0.5, 0.005)
+    assert plan_frame_members(_project()).members[1].timoshenko is None
+
+
+def test_a_shear_area_needs_the_shear_modulus() -> None:
+    section = ElasticSection(id=1, E=E, A=A, Iz=IZ, As2=0.01)
+    with pytest.raises(ValueError, match="shear modulus"):
+        plan_frame_members(_project(sections=[section]))
+
+
+def test_a_3d_timoshenko_member_needs_both_shear_areas() -> None:
+    section = ElasticSection(id=1, E=E, A=A, Iz=IZ, Iy=IZ, G=8e7, J=3e-4, As2=0.01)
+    with pytest.raises(ValueError, match="As2, As3"):
+        plan_frame_members(_project(sections=[section], ndm=3))
+
+
+def test_a_shape_hint_stands_upright_in_2d_and_3d() -> None:
+    from opensees_studio.core import RectShape
+
+    section = ElasticSection(
+        id=1, E=E, A=A, Iz=IZ, Iy=IZ, G=8e7, J=3e-4, shape=RectShape(d=0.5, b=0.2)
+    )
+    two = section_extents(_project(sections=[section]), 1)
+    three = section_extents(_project(sections=[section], ndm=3), 1)
+    assert (two.y_max - two.y_min, two.z_max - two.z_min) == pytest.approx((0.5, 0.2))
+    assert (three.y_max - three.y_min, three.z_max - three.z_min) == pytest.approx((0.2, 0.5))

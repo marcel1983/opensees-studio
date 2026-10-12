@@ -173,6 +173,13 @@ class FrameEndOffsetsDialog(_AssignDialog):
             parent,
         )
         current = current or FrameEndOffsets()
+        self._auto = QCheckBox("Automatic from connectivity")
+        self._auto.setToolTip(
+            "Take each end's offset from the largest half-extent, along the member, of the "
+            "other frame members that meet it at that joint (the lengths below are ignored). "
+            "Computed once, when you press OK."
+        )
+        self._layout.addWidget(self._auto)
         form = QFormLayout()
         self._length_i = _field(current.length_i, 0.0, 1e12, "Offset length at end i")
         self._length_j = _field(current.length_j, 0.0, 1e12, "Offset length at end j")
@@ -180,6 +187,8 @@ class FrameEndOffsetsDialog(_AssignDialog):
         form.addRow("End-I length:", self._length_i)
         form.addRow("End-J length:", self._length_j)
         form.addRow("Rigid-zone factor:", self._factor)
+        self._auto.toggled.connect(lambda on: self._length_i.setEnabled(not on))
+        self._auto.toggled.connect(lambda on: self._length_j.setEnabled(not on))
         self._layout.addLayout(form)
         self._finish()
 
@@ -192,6 +201,14 @@ class FrameEndOffsetsDialog(_AssignDialog):
 
     def offsets(self) -> FrameEndOffsets:
         return self._build()
+
+    @property
+    def automatic(self) -> bool:
+        """The lengths come from the connectivity, not from the fields."""
+        return self._auto.isChecked()
+
+    def set_automatic(self, on: bool) -> None:
+        self._auto.setChecked(on)
 
 
 class FrameInsertionDialog(_AssignDialog):

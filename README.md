@@ -48,7 +48,10 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   rigid-zone factor, cardinal-point insertion, and property modifiers
   (A, J, I22, I33, mass, weight, e.g. 0.35 Ig for cracked beams). Releases are
   drawn as dots near the member end and rigid zones as bars; force diagrams run
-  along the flexible length.
+  along the flexible length and, under span loads, follow statics between the
+  ends (parabolic moment under a uniform load). End offsets can be taken
+  automatically from the members framing into each joint, and a section with
+  shear areas As2 / As3 runs as a Timoshenko beam.
 - **Multi-storey buildings** — Define → Storeys (typed, or one per Z grid
   line), Assign → Joint → Diaphragm (OpenSees `rigidDiaphragm` over every joint
   of a storey or the selected joints, with a new retained node at the centre of
@@ -402,9 +405,22 @@ fails, the dialog shows the error message instead of a curve.
   the joint; a release at an offset end acts at the face (the model then runs
   with the Transformation handler). Offsets, rigid-zone factor and cardinal
   point are also editable in the Properties dock.
+- **Assign > Frame > End (Length) Offsets... > Automatic from connectivity**:
+  the rigid length at each end is the largest half-extent along the member of
+  the sections of the other frames meeting at that joint.
 - **Assign > Frame > Property Modifiers...**: multipliers on the elastic
   section (a derived section per distinct combination), the mass and the self
-  weight.
+  weight. The shear-area modifiers act on sections that define As2 / As3.
+- **Shear areas** (Define > Section Library, elastic section As2 / As3): the
+  member runs as `ElasticTimoshenkoBeam`, verified against
+  `P L^3 / 3 E I + P L / G As`. OpenSees 3.8 loads that element with
+  full-length uniform loads only; point, partial and trapezoidal loads on it
+  are refused.
+- **Force diagrams** carry intermediate stations under span loads (uniform,
+  point, trapezoidal, self weight) for static case results; combinations and
+  envelopes still draw straight lines between the ends.
+- **AISC shapes in 3D**: the strong axis `Ix` goes to Iy (the inertia gravity
+  bends a horizontal 3D beam about), in 2D to Iz.
 - **Assign > Frame > Trapezoidal Load...**: a load varying linearly over part
   or all of a member. Elastic and displacement-based members take it as three
   Gauss-point `-beamPoint` loads (exact end forces), force-based members as the

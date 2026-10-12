@@ -1405,6 +1405,14 @@ Sections are what frame, shell and zero-length-section elements point at.
 
 # Types
 - **Elastic section** — E, A, Iz, Iy, G, J. What a linear frame analysis needs.
+  Optional **shear areas As2 / As3** (0 = none) add shear deformation: an elastic
+  beam-column on such a section runs as an `ElasticTimoshenkoBeam`
+  (needs G; a 3D member needs both). OpenSees 3.8 loads that element with
+  full-length uniform loads (and self weight) only, so point, partial and
+  trapezoidal loads on it are refused, and it takes no `-release`: a released end
+  uses the hidden-node route instead. The member deflects by
+  `P L³ / (3 E I) + P L / (G As)` on a cantilever; the Property Modifiers' shear
+  areas scale As2 / As3.
 - **Fibre section** — patches and rebar layers tied to uniaxial materials. It
   yields and cracks where the material does, and needs a non-linear case.
 - **Section aggregator** — several responses (axial, bending, shear, torsion)
@@ -1417,6 +1425,14 @@ are the published US-customary ones; the dialog shows the published value *and*
 the converted one, and E and G remain your choice, because a shape is geometry,
 not a material. The data comes from Steel Construction Manual values and was
 cross-checked against an independent source before being committed.
+
+Which inertia is strong depends on the project. A 2D frame bends in the x-y plane
+about local z, so the table's strong-axis `Ix` becomes **Iz**. A 3D beam stands
+with its depth along local z (local z is vertical for a horizontal member), so
+gravity bends it about local y and `Ix` becomes **Iy**, with the table's `Iy` as
+Iz. A fibre profile is turned upright the same way in 3D. The dialog's preview
+shows the values it will insert. Sections inserted by builds before 0.0.11 into a
+3D project have the two swapped: re-insert them, or swap Iy and Iz by hand.
 """,
             "define.material_library",
             "mechanics.fiber_sections",
@@ -1980,6 +1996,13 @@ element or with penalty springs instead (see Assign → Joint → Diaphragm).
   joint, typically half the depth of the member it frames into.
 - **Rigid-zone factor** — the part of each offset that is rigid (0 to 1). The
   flexible length is `L - factor × (length i + length j)`.
+- **Automatic from connectivity** — instead of typed lengths, each end takes the
+  largest half-extent, measured along this member, of the section of the other
+  frame members that meet it at that joint (SAP2000 "automatic from
+  connectivity"): a 0.4 m column gives a beam 0.2 m at that end. Members parallel
+  to it and members whose section size is unknown add nothing. The lengths are
+  worked out once, when you press OK, and stored like typed ones (change the
+  geometry and assign again).
 
 # Mechanics
 The rigid zones are `geomTransf ... -jntOffset`, so they add no DOF. The end
@@ -2023,8 +2046,10 @@ length is unchanged, and an axial force along the offset axis bends it.
 - **Area, Torsional constant, I22, I33** — multiply A, J, Iy and Iz of the
   member's elastic section (or the elastic interior of a BeamWithHinges). The
   run builds a derived elastic section for every distinct combination.
-- **Shear areas 2 / 3** — kept for SAP2000 parity; the elastic sections here
-  have no shear deformation, so they do not change a result.
+- **Shear areas 2 / 3** — multiply the section's shear areas As2 / As3, so they
+  change a result only when the elastic section defines them (the member is then
+  an `ElasticTimoshenkoBeam`, see Define → Section Library). On a section
+  without shear areas the member is Euler-Bernoulli and they have no effect.
 - **Mass** — scales an elastic beam-column's mass per length.
 - **Weight** — scales the member's self weight.
 - A fibre section has no property to scale: stiffness modifiers other than 1 on
@@ -2219,6 +2244,14 @@ along each member, at the analysis step you pick.
 - The end-j sign is flipped internally so a diagram is continuous across an
   element: a jump at a joint means a real discontinuity (a hinge, a point load,
   or two members with different sections).
+- A member under span loads (uniform, point, trapezoidal, self weight) is drawn
+  with **intermediate stations**: the internal forces follow from the end forces
+  and the loads by statics, so the moment is parabolic under a uniform load and
+  piecewise linear under point loads, with the shear jumping at each point, and
+  the largest value between the ends is labelled. A member without a span load
+  stays a straight line between its ends. Stations are drawn for the results of a
+  static case; a combination or envelope (whose cases are not at hand) draws
+  straight lines between the ends.
 - Diagrams are drawn **between the two ends of a line element**. Shells, quads
   and other face elements have no two-end station, so they are skipped rather
   than drawn wrongly; if no line element returned forces the log says so.

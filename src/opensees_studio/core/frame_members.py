@@ -102,7 +102,11 @@ def section_extents(project: Project, section_id: int) -> SectionExtents | None:
         if isinstance(shape, PipeShape):
             return _symmetric(shape.od, shape.od)
         if isinstance(shape, (RectShape, AngleShape)):
-            return _symmetric(shape.b, shape.d)
+            # The hint stands with its depth along local z (a 3D beam); a 2D frame bends in
+            # the x-y plane, so there the depth lies along local y.
+            return (
+                _symmetric(shape.d, shape.b) if project.ndm == 2 else _symmetric(shape.b, shape.d)
+            )
         return _elastic_extents(section.A, section.Iz, section.Iy)
     if isinstance(section, FiberSection):
         ys: list[float] = []
@@ -153,6 +157,62 @@ def cardinal_offset(cardinal_point: int, extents: SectionExtents | None) -> tupl
     y = (extents.y_min, (extents.y_min + extents.y_max) / 2.0, extents.y_max)[row + 1]
     z = (extents.z_min, (extents.z_min + extents.z_max) / 2.0, extents.z_max)[col + 1]
     return (-y, -z)
+
+
+# ──────────────────────────── offsets from connectivity ────────────────────────────
+#: Two members whose axes make an angle below this (|cos| above the limit) are parallel
+#: for the connectivity rule: neither one's section reaches into the other along its axis.
+_PARALLEL_COS = 0.99
+
+
+def connectivity_offsets(project: Project, element_id: int) -> tuple[float, float]:
+    """``(length_i, length_j)``: end offsets of a member from the members framing into its joints.
+
+    SAP2000 "automatic from connectivity": at each end the offset is the
+    largest half-extent, measured along this member's axis, of the section of
+    any other frame member that meets it at that joint. A column of width ``b``
+    along a beam gives ``b / 2``. Members parallel to this one, and members
+    whose section size is unknown, add nothing.
+
+    Raises ``ValueError`` for an element that is not a frame member.
+    """
+    elements = {el.id: el for el in project.elements}
+    element = elements.get(element_id)
+    if not isinstance(element, FrameMember):
+        raise ValueError(f"Element {element_id} is not a frame member.")
+    coords = {node.id: np.asarray(node.coords, dtype=float) for node in project.nodes}
+
+    def axes_of(el: Any) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
+        p_i, p_j = coords[el.nodes[0]].copy(), coords[el.nodes[1]].copy()
+        if project.ndm == 2:
+            p_i[2] = p_j[2] = 0.0
+        return frame_local_axes(project.ndm, p_i.tolist(), p_j.tolist())
+
+    own = axes_of(element)
+    if own is None:
+        return (0.0, 0.0)
+    x = own[0]
+    result: list[float] = []
+    for node_id in element.nodes[:2]:
+        reach = 0.0
+        for other in project.elements:
+            if other.id == element.id or not isinstance(other, FrameMember):
+                continue
+            if node_id not in other.nodes[:2]:
+                continue
+            axes = axes_of(other)
+            extents = member_extents(project, other)
+            if axes is None or extents is None or abs(float(x @ axes[0])) > _PARALLEL_COS:
+                continue
+            _, oy, oz = axes
+            half_y = (extents.y_max - extents.y_min) / 2.0
+            half_z = (extents.z_max - extents.z_min) / 2.0
+            along = abs(float(x @ oy)) * half_y
+            if project.ndm == 3:
+                along += abs(float(x @ oz)) * half_z
+            reach = max(reach, along)
+        result.append(reach)
+    return (result[0], result[1])
 
 
 # ──────────────────────────── layout ────────────────────────────

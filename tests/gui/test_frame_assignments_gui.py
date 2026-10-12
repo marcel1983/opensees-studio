@@ -173,6 +173,36 @@ def test_end_offsets_insertion_and_modifiers_from_the_menu(qtbot, monkeypatch) -
 
 
 @pytest.mark.gui
+def test_automatic_end_offsets_come_from_the_framing_members(qtbot, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    mw = _window(qtbot)
+    vm = mw._vm
+    # Joint 1 meets a truss, not a frame: the beam gets no offset; add a 0.5 m column on joint 2.
+    vm.apply_command(AddNodesCommand(vm, [Node(id=4, coords=(LENGTH, 3.0, 0.0))]))
+    vm.apply_command(
+        AddSectionsCommand(
+            vm,
+            [ElasticSection(id=2, E=2e8, A=0.25, Iz=0.25**2 / 12, Iy=0.25**2 / 12, G=8e7, J=1e-3)],
+        )
+    )
+    vm.apply_command(AddElementsCommand(vm, [ElasticBeamColumn(id=5, nodes=(2, 4), section_id=2)]))
+    mw._canvas.selection.set_selection(set(), {1})
+    mw._refresh_action_enablement()
+
+    def _fill(d: FrameEndOffsetsDialog) -> None:
+        d.set_automatic(True)
+        d._factor.setValue(0.75)
+
+    _accept_with(monkeypatch, FrameEndOffsetsDialog, _fill)
+    mw._act_assign_end_offsets.trigger()
+    offsets = vm.project.element(1).end_offsets
+    assert offsets.length_i == 0.0
+    assert offsets.length_j == pytest.approx(0.25)
+    assert offsets.rigid_factor == 0.75
+    vm.undo_stack.undo()
+    assert vm.project.element(1).end_offsets == FrameEndOffsets()
+
+
+@pytest.mark.gui
 def test_a_trapezoidal_load_from_the_menu(qtbot, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     mw = _window(qtbot)
 

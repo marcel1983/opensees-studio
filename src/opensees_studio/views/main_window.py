@@ -2565,8 +2565,36 @@ class MainWindow(QMainWindow):
             return
         ids, current = picked
         dlg = FrameEndOffsetsDialog(len(ids), current, self)
-        if dlg.exec() == QDialog.DialogCode.Accepted:
-            self._assign_element_fields("Frame End Offsets", ids, {"end_offsets": dlg.offsets()})
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        offsets = dlg.offsets()
+        if not dlg.automatic:
+            self._assign_element_fields("Frame End Offsets", ids, {"end_offsets": offsets})
+            return
+        from opensees_studio.commands import AssignElementFieldsCommand
+        from opensees_studio.core.frame_members import connectivity_offsets
+
+        project = self._vm.project
+        assert project is not None
+        try:
+            per_element = {}
+            for i in ids:
+                li, lj = connectivity_offsets(project, i)
+                per_element[i] = {
+                    "end_offsets": offsets.model_copy(update={"length_i": li, "length_j": lj})
+                }
+            self._vm.apply_command(
+                AssignElementFieldsCommand(
+                    self._vm,
+                    ids,
+                    {"end_offsets": offsets},
+                    per_element=per_element,
+                    text=f"Assign automatic end offsets to {len(ids)} element(s)",
+                )
+            )
+            self._log(f"Frame End Offsets (from connectivity) on {len(ids)} element(s).")
+        except Exception as exc:
+            QMessageBox.critical(self, "Frame End Offsets failed", str(exc))
 
     def _on_assign_insertion(self) -> None:
         """Assign > Frame > Insertion Point."""
@@ -2781,7 +2809,10 @@ class MainWindow(QMainWindow):
         static = self._static_result()
         if project is None or static is None:
             return DiagramData(component, np.zeros(0, dtype=int), np.zeros(0), np.zeros(0), 0.0)
-        return extract_diagram_data(project, static, component)
+        # Stations read the case's loads back: only for a case's own results, not a combination's.
+        return extract_diagram_data(
+            project, static, component, stations=isinstance(self._latest_results, StaticResults)
+        )
 
     def _on_analysis_failed(self, report: str) -> None:
         """Show the failure report (exit code, last error, stderr tail) without blocking."""
