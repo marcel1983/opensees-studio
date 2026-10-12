@@ -634,7 +634,7 @@ class OpenSeesRunner:
                 ebc_args: list[Any] = [self._frame_section(el), tag, "-mass", rho]
                 if el.consistent_mass:
                     ebc_args.append("-cMass")
-                # A release at a diaphragm joint is condensed in the element.
+                # A release at a constrained joint is condensed in the element.
                 if member is not None:
                     ebc_args.extend(member.release_args)
                 ops.element(

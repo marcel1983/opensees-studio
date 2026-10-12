@@ -516,7 +516,7 @@ def test_the_element_releases_reach_the_element_command() -> None:
 )
 def test_a_release_the_element_cannot_condense_is_held_by_penalty_springs(change: str) -> None:
     from opensees_studio.services.frame_members import (
-        DIAPHRAGM_PENALTY_FACTOR,
+        CONSTRAINED_PENALTY_FACTOR,
         plan_frame_members,
     )
 
@@ -541,8 +541,8 @@ def test_a_release_the_element_cannot_condense_is_held_by_penalty_springs(change
     (link,) = plan.springs
     assert (link.node_a, link.node_b) == (5, hidden.tag)
     L, EI = 6.0, 30e9 * 5e-3
-    k_t = DIAPHRAGM_PENALTY_FACTOR * max(30e9 * 0.25 / L, 12 * EI / L**3)
-    k_r = DIAPHRAGM_PENALTY_FACTOR * max(4 * EI, 12.5e9 * 8e-3) / L
+    k_t = CONSTRAINED_PENALTY_FACTOR * max(30e9 * 0.25 / L, 12 * EI / L**3)
+    k_r = CONSTRAINED_PENALTY_FACTOR * max(4 * EI, 12.5e9 * 8e-3) / L
     if springs:
         assert link.dirs == (1, 2, 3, 4, 5, 6)
         assert link.stiffnesses == pytest.approx((k_t, k_t, k_t, k_r, k_r, 1.0e7))

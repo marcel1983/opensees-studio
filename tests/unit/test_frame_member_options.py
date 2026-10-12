@@ -17,6 +17,7 @@ from opensees_studio.core import (
     ElasticBeamColumn,
     ElasticSection,
     EndRelease,
+    EqualDOFConstraint,
     FiberSection,
     ForceBeamColumn,
     FrameEndOffsets,
@@ -28,6 +29,7 @@ from opensees_studio.core import (
     PlainLoadPattern,
     Project,
     RectangularPatch,
+    RigidLink,
     StaticCase,
     TrapezoidalElementLoad,
     UniformElementLoad,
@@ -40,7 +42,11 @@ from opensees_studio.core.frame_members import (
     section_extents,
     split_member_loads,
 )
-from opensees_studio.services.frame_members import PENALTY_FACTOR, plan_frame_members
+from opensees_studio.services.frame_members import (
+    CONSTRAINED_PENALTY_FACTOR,
+    PENALTY_FACTOR,
+    plan_frame_members,
+)
 from opensees_studio.services.opensees_script import export_script
 
 E, A, IZ = 2.0e8, 0.02, 2.0e-4
@@ -298,6 +304,109 @@ def test_stiffness_modifiers_need_an_elastic_section() -> None:
     beam = ForceBeamColumn(id=1, nodes=(1, 2), section_id=1, modifiers=FrameModifiers(i33=0.5))
     with pytest.raises(ValueError, match="elastic section"):
         plan_frame_members(_project(beam, sections=[fiber]))
+
+
+# ─────────────────────── releases at constrained joints ───────────────────────
+def _constrained_at_2(beam: ElasticBeamColumn, link: str, ndm: int = 2, **pattern) -> Project:  # type: ignore[no-untyped-def]
+    """``beam`` with its joint 2 the constrained node of a user equalDOF or rigid link."""
+    project = _project(beam, ndm=ndm, **pattern)
+    project.nodes.append(Node(id=3, coords=(6.0, 1.0, 0.0)))
+    if link == "equalDOF":
+        project.mp_constraints.append(
+            EqualDOFConstraint(retained_node=3, constrained_node=2, dofs=(1,))
+        )
+    else:
+        project.rigid_links.append(RigidLink(retained_node=3, constrained_node=2))
+    return project
+
+
+@pytest.mark.parametrize("link", ["equalDOF", "rigidLink"])
+@pytest.mark.parametrize("ndm", [2, 3])
+def test_a_release_at_a_constrained_joint_is_made_in_the_element(link: str, ndm: int) -> None:
+    """A hidden node equalDOF'd to the joint would chain the two constraints."""
+    plan = plan_frame_members(
+        _constrained_at_2(_beam(releases=FrameReleases(j=EndRelease(released=("M3",)))), link, ndm)
+    )
+    assert not plan.nodes and not plan.equal_dofs and not plan.springs
+    assert plan.members[1].nodes == (1, 2)
+    assert plan.members[1].release_args == (("-release", 2) if ndm == 2 else ("-releasez", 2))
+    assert plan.released_dofs[(1, "j")] == ({3} if ndm == 2 else {6})
+
+
+def test_a_2d_partial_fixity_at_a_constrained_joint_is_held_by_penalty_springs() -> None:
+    releases = FrameReleases(j=EndRelease(released=("M3",), springs={"M3": 7.0}))
+    plan = plan_frame_members(_constrained_at_2(_beam(releases=releases), "equalDOF"))
+    (hidden,) = plan.nodes
+    assert hidden.coords == (6.0, 0.0) and hidden.joint == 2
+    assert plan.members[1].nodes == (1, hidden.tag)
+    assert not plan.equal_dofs and not plan.attached and plan.members[1].release_args == ()
+    (link,) = plan.springs
+    assert (link.node_a, link.node_b) == (2, hidden.tag)
+    k_t = CONSTRAINED_PENALTY_FACTOR * max(E * A / 6.0, 12 * E * IZ / 6.0**3)
+    assert link.dirs == (1, 2, 6)
+    assert link.stiffnesses == pytest.approx((k_t, k_t, 7.0))
+
+
+def test_a_point_load_sends_a_constrained_release_to_the_springs() -> None:
+    """OpenSees condenses only a full-length ``-beamUniform`` in a released element."""
+    from opensees_studio.core import PointElementLoad
+
+    releases = FrameReleases(j=EndRelease(released=("M3",)))
+    project = _constrained_at_2(
+        _beam(releases=releases),
+        "rigidLink",
+        point_loads=[PointElementLoad(element_id=1, x=0.5, py=-1.0)],
+    )
+    plan = plan_frame_members(project)
+    (link,) = plan.springs
+    # The kept rotation is free: only the translations are tied.
+    assert link.dirs == (1, 2) and plan.members[1].release_args == ()
+
+
+def test_a_release_at_a_retained_joint_keeps_its_equal_dof() -> None:
+    """Only the constrained node of a constraint would chain: joint 2 retains this one."""
+    project = _project(_beam(releases=FrameReleases(j=EndRelease(released=("M3",)))))
+    project.nodes.append(Node(id=3, coords=(6.0, 1.0, 0.0)))
+    project.mp_constraints.append(
+        EqualDOFConstraint(retained_node=2, constrained_node=3, dofs=(1,))
+    )
+    plan = plan_frame_members(project)
+    assert plan.equal_dofs == [(2, 4, (1, 2))]
+    assert plan.members[1].release_args == ()
+
+
+@pytest.mark.parametrize(
+    ("link", "remedy"),
+    [("equalDOF", "remove an equalDOF"), ("rigidLink", "remove a rigid link")],
+)
+def test_a_fibre_member_released_at_a_constrained_joint_is_refused(link: str, remedy: str) -> None:
+    fibre = FiberSection(
+        id=1,
+        patches=[
+            RectangularPatch(material_id=1, n_fib_y=1, n_fib_z=1, y_i=-1, z_i=-1, y_j=1, z_j=1)
+        ],
+    )
+    beam = ForceBeamColumn(
+        id=1, nodes=(1, 2), section_id=1, releases=FrameReleases(j=EndRelease(released=("M3",)))
+    )
+    project = _constrained_at_2(beam, link)  # type: ignore[arg-type]
+    project.sections[:] = [fibre]
+    with pytest.raises(ValueError, match=f"joint 2, which an? .*{remedy}"):
+        plan_frame_members(project)
+
+
+def test_the_2d_element_release_reaches_the_script() -> None:
+    project = _constrained_at_2(
+        _beam(releases=FrameReleases(j=EndRelease(released=("M3",)))), "equalDOF"
+    )
+    # Hold joint 2's rotation (nothing else stiffens it) and the retained node.
+    project.nodes[1] = project.nodes[1].model_copy(
+        update={"restraint": (False, False, False, False, False, True)}
+    )
+    project.nodes[2] = project.nodes[2].model_copy(update={"restraint": (True,) * 6})
+    script = export_script(project, project.analyses[0])
+    assert "ops.element('elasticBeamColumn', 1, 1, 2, 1, 1, '-mass', 0.0, '-release', 2)" in script
+    assert script.count("ops.equalDOF") == 1
 
 
 # ──────────────────────────── emitted script ────────────────────────────
