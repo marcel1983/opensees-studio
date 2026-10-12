@@ -345,7 +345,8 @@ class MainWindow(QMainWindow):
 
         # Analyze
         self._act_case_manager = QAction("&Cases…", self, shortcut="Ctrl+Shift+A")
-        self._act_check_model = QAction("Check &Model…", self, shortcut="F6")
+        self._act_check_model = QAction("Check &Model…", self)
+        self._act_check_model.setShortcut("F6")
         self._act_run = QAction("&Run…", self, shortcut="F5")
 
         # View
