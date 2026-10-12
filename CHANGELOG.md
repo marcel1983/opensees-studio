@@ -53,6 +53,15 @@ refused instead of silently downgraded).
   model check. OpenSees' Transformation handler cannot chain such constraints and
   solves them without an error into wrong results (a released-beam building came
   out four times too stiff).
+- Chains of equalDOFs and rigid links are refused by the model check, with a
+  remedy: a node that one constraint ties and that retains another (equalDOF
+  2->3 plus equalDOF 3->5, or a rigid link whose retained node an equalDOF or
+  rigid link constrains), a node constrained twice, a loop, and an equalDOF of a
+  node to itself. OpenSees 3.8's Transformation handler, which every eigen
+  analysis uses, keeps one constraint per constrained node and solves the rest
+  without an error into wrong results (a probe against Lagrange: static
+  displacements off by up to 85 %, periods by more). A chain through a node an
+  equalDOF of every DOF constrains comes out right and is still accepted.
 
 ## [0.0.10] — 2026-10-11
 

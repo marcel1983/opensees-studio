@@ -15,6 +15,8 @@ storey table:
 * :func:`centre_of_mass` places a new retained node.
 * :func:`diaphragm_problems` lists what OpenSees would refuse or silently
   ignore (a node out of the plane is dropped with a warning only).
+* :func:`constraint_chain_problems` does the same for the equalDOFs and rigid
+  links among themselves: the Transformation handler cannot chain them.
 
 No Qt, no OpenSees.
 """
@@ -26,7 +28,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from opensees_studio.core.constraints import RigidDiaphragm
+from opensees_studio.core.constraints import EqualDOFConstraint, RigidDiaphragm, RigidLink
 from opensees_studio.core.storeys import elevation_tolerance, storey_node_ids
 
 if TYPE_CHECKING:
@@ -195,5 +197,105 @@ def diaphragm_problems(project: Project) -> list[str]:
             problems.append(
                 f"{label}: its retained node {diaphragm.retained_node} is constrained by an "
                 "equalDOF or rigid link."
+            )
+    return problems
+
+
+def _describe_mp(mp: EqualDOFConstraint) -> str:
+    dofs = ", ".join(str(d) for d in mp.dofs)
+    return f"equalDOF {mp.retained_node}->{mp.constrained_node} (DOF {dofs})"
+
+
+def _describe_link(link: RigidLink) -> str:
+    return f"rigid link ({link.kind}) {link.retained_node}->{link.constrained_node}"
+
+
+def constraint_chain_problems(project: Project) -> list[str]:
+    """Why OpenSees would quietly mangle the project's equalDOFs and rigid links (empty when fine).
+
+    OpenSees 3.8's Transformation handler (the one every eigen analysis uses)
+    keeps one constraint per constrained node and indexes a constrained
+    retained node by its reduced DOF numbering. It reports no error and gives
+    wrong results for:
+
+    * a node constrained twice (the second constraint is dropped);
+    * a chain, where the retained node of one constraint is the constrained
+      node of another. The one chain it solves right is the one through a
+      node an ``equalDOF`` of every DOF constrains: that node keeps no DOF of
+      its own, so its reduced numbering is its retained node's;
+    * a loop (displacements come out zero), or an ``equalDOF`` of a node to
+      itself.
+
+    Chains through a rigid diaphragm are :func:`diaphragm_problems`' job.
+    """
+    every_dof = set(range(1, project.ndf + 1))
+    constrained_by: dict[int, list[tuple[int, str, bool]]] = {}
+    problems: list[str] = []
+    for mp in project.mp_constraints:
+        if mp.retained_node == mp.constrained_node:
+            problems.append(
+                f"{_describe_mp(mp)} ties node {mp.retained_node} to itself; remove it."
+            )
+            continue
+        constrained_by.setdefault(mp.constrained_node, []).append(
+            (mp.retained_node, _describe_mp(mp), set(mp.dofs) == every_dof)
+        )
+    for link in project.rigid_links:
+        constrained_by.setdefault(link.constrained_node, []).append(
+            (link.retained_node, _describe_link(link), False)
+        )
+    retaining: dict[int, list[str]] = {}
+    for mp in project.mp_constraints:
+        if mp.retained_node != mp.constrained_node:
+            retaining.setdefault(mp.retained_node, []).append(_describe_mp(mp))
+    for link in project.rigid_links:
+        retaining.setdefault(link.retained_node, []).append(_describe_link(link))
+
+    for nid, owners in sorted(constrained_by.items()):
+        if len(owners) > 1:
+            problems.append(
+                f"Node {nid} is the constrained node of {len(owners)} constraints "
+                f"({'; '.join(text for _, text, _ in owners)}). OpenSees keeps only one "
+                "constraint per constrained node and would ignore the others without an error. "
+                "Merge them into one equalDOF with all their DOFs, or tie the node to a single "
+                "retained node."
+            )
+            continue
+        retained, text, full = owners[0]
+        if full or nid not in retaining:
+            continue
+        problems.append(
+            f"Node {nid} is the constrained node of {text} and the retained node of "
+            f"{'; '.join(retaining[nid])}. OpenSees cannot chain these constraints (it would "
+            f"solve without an error and give wrong results). Tie those nodes to node "
+            f"{retained} directly (two rigid links in a row are one rigid link), or make the "
+            f"constraint on node {nid} an equalDOF of every DOF (1-{project.ndf})."
+        )
+
+    # A loop through a partial constraint is a chain reported above. What is
+    # left is a loop of full-DOF equalDOFs, each node with one retained node:
+    # a cycle of that map.
+    parent = {
+        nid: owners[0][0]
+        for nid, owners in constrained_by.items()
+        if len(owners) == 1 and owners[0][2]
+    }
+    reported: set[int] = set()
+    for start in sorted(parent):
+        path: list[int] = []
+        node = start
+        while node in parent and node not in path and node not in reported:
+            path.append(node)
+            node = parent[node]
+        reported.update(path)
+        if node in path:
+            # Retained -> constrained, from the lowest node id round to itself.
+            loop = path[path.index(node) :][::-1]
+            first = loop.index(min(loop))
+            loop = loop[first:] + loop[:first]
+            chain = "->".join(str(n) for n in [*loop, loop[0]])
+            problems.append(
+                f"The constraints between nodes {chain} form a loop; OpenSees would solve it "
+                "without an error into zero displacements. Remove one of them."
             )
     return problems

@@ -24,7 +24,7 @@ from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
 from opensees_studio.core._base import omit_when_default
 from opensees_studio.core.analysis import AnalysisCase
 from opensees_studio.core.constraints import EqualDOFConstraint, RigidDiaphragm, RigidLink
-from opensees_studio.core.diaphragms import diaphragm_problems
+from opensees_studio.core.diaphragms import constraint_chain_problems, diaphragm_problems
 from opensees_studio.core.friction import FrictionModel
 from opensees_studio.core.geometry import (
     BEARING_CLASSES,
@@ -427,6 +427,7 @@ class Project(BaseModel):
                 f"(this model has ndm={self.ndm}, ndf={self.ndf})."
             )
         problems.extend(diaphragm_problems(self))
+        problems.extend(constraint_chain_problems(self))
 
         if self.mass_source is not None:
             pattern_ids = {p.id for p in self.load_patterns}
