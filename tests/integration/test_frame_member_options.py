@@ -510,3 +510,140 @@ def test_a_modal_run_with_releases_and_offsets(tmp_path: Path) -> None:
 
     omega = (np.pi / L) ** 2 * np.sqrt(E * I_SEC / m)
     assert np.sqrt(results.eigenvalues[0]) == pytest.approx(omega, rel=1e-3)
+
+
+# ──────────────────────────── diagram stations ────────────────────────────
+def _simply_supported(element: object, ndm: int = 2, **pattern) -> Project:  # type: ignore[no-untyped-def]
+    pin = (True, True, False, False, False, False) if ndm == 2 else (True,) * 3 + (False,) * 3
+    roller = (
+        (False, True, False, False, False, False)
+        if ndm == 2
+        else (False, True, True, True, False, False)
+    )
+    return _project(
+        [element],
+        [
+            Node(id=1, coords=(0.0, 0.0, 0.0), restraint=pin),
+            Node(id=2, coords=(L, 0.0, 0.0), restraint=roller),
+        ],
+        ndm=ndm,
+        pattern=PlainLoadPattern(id=1, time_series_id=1, **pattern),
+    )
+
+
+def _stations(project: Project, tmp_path: Path, component=None):  # type: ignore[no-untyped-def]
+    from opensees_studio.services.element_forces import ForceComponent, extract_diagram_data
+
+    results = _solve(project, tmp_path)
+    data = extract_diagram_data(project, results, component or ForceComponent.M3, stations=True)
+    assert 1 in data.stations, "a loaded member carries stations"
+    return data, data.stations[1]
+
+
+@pytest.mark.parametrize("element_cls", FRAMES)
+def test_a_uniform_load_gives_a_parabolic_moment(element_cls: type, tmp_path: Path) -> None:
+    element = element_cls(id=1, nodes=(1, 2), section_id=1)
+    project = _simply_supported(element, element_loads=[UniformElementLoad(element_id=1, wy=-W)])
+    data, (s, m) = _stations(project, tmp_path)
+    expected = np.abs(W * s * L * (1.0 - s) * L / 2.0)  # w x (L - x) / 2
+    assert np.allclose(np.abs(m), expected, rtol=1e-6, atol=1e-6)
+    assert np.max(np.abs(m)) == pytest.approx(W * L**2 / 8, rel=1e-6)
+    assert data.abs_max == pytest.approx(W * L**2 / 8, rel=1e-6)
+    # The ends agree with the end forces of the element.
+    assert m[0] == pytest.approx(data.values_i[0], abs=1e-9)
+    assert m[-1] == pytest.approx(data.values_j[0], abs=1e-9)
+
+
+def test_a_point_load_gives_a_piecewise_moment_and_a_shear_jump(tmp_path: Path) -> None:
+    from opensees_studio.services.element_forces import ForceComponent
+
+    p, a = 12.0, 0.25
+    element = ElasticBeamColumn(id=1, nodes=(1, 2), section_id=1)
+    project = _simply_supported(element, point_loads=[PointElementLoad(element_id=1, x=a, py=-p)])
+    _, (s, m) = _stations(project, tmp_path)
+    peak = p * a * (1 - a) * L  # P a b / L
+    assert np.max(np.abs(m)) == pytest.approx(peak, rel=1e-6)
+    assert s[int(np.argmax(np.abs(m)))] == pytest.approx(a)
+    _, (sv, v) = _stations(project, tmp_path, ForceComponent.V2)
+    at_load = np.flatnonzero(np.isclose(sv, a))
+    assert len(at_load) == 2
+    assert abs(v[at_load[1]] - v[at_load[0]]) == pytest.approx(p, rel=1e-6)
+
+
+@pytest.mark.parametrize("element_cls", FRAMES)
+def test_a_trapezoidal_load_follows_statics(element_cls: type, tmp_path: Path) -> None:
+    """w rises 0 -> w0 over the span: M(x) = w0 L^2 (x/L)(1 - (x/L)^2) / 6, peak at x = L/sqrt(3)."""
+    w0 = 15.0
+    element = element_cls(id=1, nodes=(1, 2), section_id=1)
+    project = _simply_supported(
+        element,
+        distributed_loads=[TrapezoidalElementLoad(element_id=1, wy_start=0.0, wy_end=-w0)],
+    )
+    _, (s, m) = _stations(project, tmp_path)
+    expected = w0 * L**2 * s * (1.0 - s**2) / 6.0
+    assert np.allclose(np.abs(m), expected, rtol=1e-5, atol=1e-6)
+
+
+def test_stations_run_along_the_flexible_length_with_rigid_zones(tmp_path: Path) -> None:
+    """Fixed-fixed, rigid ends: M at the face of a rigid zone, w c^2/12 at the clear-span ends."""
+    offset = 0.5
+    clear = L - 2 * offset
+    element = ElasticBeamColumn(
+        id=1,
+        nodes=(1, 2),
+        section_id=1,
+        end_offsets=FrameEndOffsets(length_i=offset, length_j=offset),
+    )
+    project = _fixed_fixed(element, element_loads=[UniformElementLoad(element_id=1, wy=-W)])
+    data, (s, m) = _stations(project, tmp_path)
+    # The faces of the rigid zones are fixed: clear-span fixed-end moments w c^2 / 12,
+    # mid-span w c^2 / 24 of the opposite sign.
+    mid = m[int(np.argmin(np.abs(s - 0.5)))]
+    assert abs(m[0]) == pytest.approx(W * clear**2 / 12, rel=1e-6)
+    assert abs(mid) == pytest.approx(W * clear**2 / 24, rel=1e-6)
+    assert mid * m[0] < 0.0
+    assert m[0] == pytest.approx(data.values_i[0], abs=1e-9)
+    assert m[-1] == pytest.approx(data.values_j[0], abs=1e-9)
+
+
+def test_a_3d_load_along_local_z_gives_a_parabolic_m2(tmp_path: Path) -> None:
+    from opensees_studio.services.element_forces import ForceComponent
+
+    element = ElasticBeamColumn(id=1, nodes=(1, 2), section_id=1)
+    project = _simply_supported(
+        element, ndm=3, element_loads=[UniformElementLoad(element_id=1, wz=-W)]
+    )
+    data, (s, m) = _stations(project, tmp_path, ForceComponent.M2)
+    assert np.allclose(np.abs(m), W * s * (1.0 - s) * L**2 / 2.0, rtol=1e-6, atol=1e-6)
+    assert m[-1] == pytest.approx(data.values_j[0], abs=1e-9)
+    _, (_, v) = _stations(project, tmp_path, ForceComponent.V3)
+    assert abs(v[0]) == pytest.approx(W * L / 2, rel=1e-6)
+    assert v[0] * v[-1] < 0.0
+
+
+def test_a_3d_wide_flange_beam_bends_about_its_strong_axis_under_gravity(tmp_path: Path) -> None:
+    """The AISC strong axis Ix must be the inertia gravity bends a 3D beam about."""
+    from opensees_studio.core.aisc import get_shape, shape_to_elastic_section
+    from opensees_studio.core.units import UnitSystem
+
+    shape = get_shape("W14X90")
+    section = shape_to_elastic_section(
+        shape, elastic_modulus=29000.0, shear_modulus=11200.0, units=UnitSystem.US_IN_KIP, ndm=3
+    )
+    length, p = 120.0, 10.0
+    project = _project(
+        [ElasticBeamColumn(id=1, nodes=(1, 2), section_id=1)],
+        [
+            Node(id=1, coords=(0.0, 0.0, 0.0), restraint=FIXED_3D),
+            Node(id=2, coords=(length, 0.0, 0.0)),
+        ],
+        ndm=3,
+        pattern=PlainLoadPattern(
+            id=1,
+            time_series_id=1,
+            nodal_loads=[NodalLoad(node_id=2, forces=(0.0, 0.0, -p, 0.0, 0.0, 0.0))],
+        ),
+    )
+    project.sections[0] = section
+    tip = _solve(project, tmp_path).node_disp[2][0][2]
+    assert tip == pytest.approx(-p * length**3 / (3 * 29000.0 * shape.ix), rel=1e-6)

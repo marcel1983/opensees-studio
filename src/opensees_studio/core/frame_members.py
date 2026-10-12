@@ -102,7 +102,11 @@ def section_extents(project: Project, section_id: int) -> SectionExtents | None:
         if isinstance(shape, PipeShape):
             return _symmetric(shape.od, shape.od)
         if isinstance(shape, (RectShape, AngleShape)):
-            return _symmetric(shape.b, shape.d)
+            # The hint stands with its depth along local z (a 3D beam); a 2D frame bends in
+            # the x-y plane, so there the depth lies along local y.
+            return (
+                _symmetric(shape.d, shape.b) if project.ndm == 2 else _symmetric(shape.b, shape.d)
+            )
         return _elastic_extents(section.A, section.Iz, section.Iy)
     if isinstance(section, FiberSection):
         ys: list[float] = []

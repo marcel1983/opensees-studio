@@ -16,8 +16,10 @@ Convention:
   * T → drawn around the axis as a ribbon (visualised as V2-style for now).
 - The diagram polygon goes from the element line out to the value-scaled
   perpendicular offset and back, forming a filled triangle/trapezoid per
-  element. Linear interpolation between end values (good enough for
-  elastic beams without distributed loads).
+  element. A member with no span load interpolates linearly between its end
+  values; one under span loads carries intermediate stations
+  (``DiagramData.stations``) and is drawn as a strip of such trapezoids, so a
+  moment diagram is parabolic under a uniform load and piecewise under points.
 """
 
 from __future__ import annotations
@@ -112,6 +114,27 @@ class DiagramRenderer:
             if is_perpendicular:
                 perp = self._local_perp(pi, pj, axis_id)
                 if perp is None:
+                    continue
+                station = data.stations.get(int(eid))
+                if station is not None:
+                    # A strip of trapezoids along the member, one per pair of stations.
+                    s_arr, v_arr = station
+                    for n in range(len(s_arr) - 1):
+                        if s_arr[n + 1] - s_arr[n] <= 0.0:
+                            continue  # a jump under a point load: no area
+                        p0 = pi + (pj - pi) * s_arr[n]
+                        p1 = pi + (pj - pi) * s_arr[n + 1]
+                        polys.append(
+                            np.vstack(
+                                [
+                                    p0,
+                                    p1,
+                                    p1 + perp * v_arr[n + 1] * scale,
+                                    p0 + perp * v_arr[n] * scale,
+                                ]
+                            )
+                        )
+                        scalars.append(0.5 * float(v_arr[n] + v_arr[n + 1]))
                     continue
                 # Trapezoid: i, j, j+perp*v_j, i+perp*v_i
                 quad = np.vstack([pi, pj, pj + perp * v_j, pi + perp * v_i])
@@ -213,7 +236,14 @@ class DiagramRenderer:
             pi, pj = data.ends.get(int(eid)) or (node_pos.get(n_i), node_pos.get(n_j))
             if pi is None or pj is None:
                 continue
-            for end_pt, val in ((pi, data.values_i[k]), (pj, data.values_j[k])):
+            points = [(pi, data.values_i[k]), (pj, data.values_j[k])]
+            station = data.stations.get(int(eid))
+            if station is not None and is_perp:
+                # The peak between the ends (mid-span moment) is what a reader looks for.
+                s_arr, v_arr = station
+                for n in (int(np.argmax(v_arr)), int(np.argmin(v_arr))):
+                    points.append((pi + (pj - pi) * s_arr[n], v_arr[n]))
+            for end_pt, val in points:
                 if is_perp:
                     perp = self._local_perp(pi, pj, axis_id)
                     label_pos = end_pt + (perp * val * scale if perp is not None else 0)

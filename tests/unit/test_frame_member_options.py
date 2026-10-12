@@ -433,3 +433,15 @@ def test_a_3d_timoshenko_member_needs_both_shear_areas() -> None:
     section = ElasticSection(id=1, E=E, A=A, Iz=IZ, Iy=IZ, G=8e7, J=3e-4, As2=0.01)
     with pytest.raises(ValueError, match="As2, As3"):
         plan_frame_members(_project(sections=[section], ndm=3))
+
+
+def test_a_shape_hint_stands_upright_in_2d_and_3d() -> None:
+    from opensees_studio.core import RectShape
+
+    section = ElasticSection(
+        id=1, E=E, A=A, Iz=IZ, Iy=IZ, G=8e7, J=3e-4, shape=RectShape(d=0.5, b=0.2)
+    )
+    two = section_extents(_project(sections=[section]), 1)
+    three = section_extents(_project(sections=[section], ndm=3), 1)
+    assert (two.y_max - two.y_min, two.z_max - two.z_min) == pytest.approx((0.5, 0.2))
+    assert (three.y_max - three.y_min, three.z_max - three.z_min) == pytest.approx((0.2, 0.5))

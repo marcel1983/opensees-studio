@@ -2809,7 +2809,10 @@ class MainWindow(QMainWindow):
         static = self._static_result()
         if project is None or static is None:
             return DiagramData(component, np.zeros(0, dtype=int), np.zeros(0), np.zeros(0), 0.0)
-        return extract_diagram_data(project, static, component)
+        # Stations read the case's loads back: only for a case's own results, not a combination's.
+        return extract_diagram_data(
+            project, static, component, stations=isinstance(self._latest_results, StaticResults)
+        )
 
     def _on_analysis_failed(self, report: str) -> None:
         """Show the failure report (exit code, last error, stderr tail) without blocking."""

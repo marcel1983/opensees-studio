@@ -254,3 +254,34 @@ def test_the_shape_model_is_frozen() -> None:
     shape: AISCShape = get_shape("W14X90")
     with pytest.raises(ValidationError):
         shape.area = 1.0  # type: ignore[misc]
+
+
+# ─────────────────────── strong axis in 2D and 3D ───────────────────────
+def test_a_2d_section_bends_about_the_strong_axis_in_plane() -> None:
+    shape = get_shape("W14X90")
+    section = shape_to_elastic_section(
+        shape, elastic_modulus=1.0, units=UnitSystem.US_IN_KIP, ndm=2
+    )
+    assert (section.Iz, section.Iy) == (shape.ix, shape.iy)
+
+
+def test_a_3d_section_puts_the_strong_axis_on_the_one_gravity_bends_about() -> None:
+    """A horizontal 3D beam has local z vertical, so gravity bends it about local y."""
+    shape = get_shape("W14X90")
+    section = shape_to_elastic_section(
+        shape, elastic_modulus=1.0, units=UnitSystem.US_IN_KIP, ndm=3
+    )
+    assert section.Iy == shape.ix
+    assert section.Iz == shape.iy
+    assert section.Iy > section.Iz
+    preview = converted_geometry(shape, UnitSystem.US_IN_KIP, 3)
+    assert (preview["Iy"], preview["Iz"]) == (section.Iy, section.Iz)
+
+
+def test_a_3d_fibre_section_stands_with_its_depth_along_local_z() -> None:
+    shape = get_shape("W14X90")
+    flat = shape_to_fiber_section(shape, material_id=1, ndm=2)
+    upright = shape_to_fiber_section(shape, material_id=1, ndm=3)
+    assert max(p.y_j for p in flat.patches) == pytest.approx(shape.d / 2)
+    assert max(p.z_j for p in upright.patches) == pytest.approx(shape.d / 2)
+    assert max(p.y_j for p in upright.patches) == pytest.approx(shape.bf / 2)

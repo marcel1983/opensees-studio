@@ -191,6 +191,7 @@ class SectionLibraryDialog(FittedDialog):
         new_id = self._vm.project.next_section_id()
         dlg = AiscLibraryDialog(
             units=units,
+            ndm=self._vm.project.ndm,
             materials=list(self._vm.project.materials),
             next_id=new_id,
             parent=self,
