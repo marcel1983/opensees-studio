@@ -634,7 +634,6 @@ class OpenSeesRunner:
                 ebc_args: list[Any] = [self._frame_section(el), tag, "-mass", rho]
                 if el.consistent_mass:
                     ebc_args.append("-cMass")
-                # A release at a diaphragm joint is condensed in the element.
                 if member is not None and member.timoshenko is not None:
                     # Shear areas on the section: a Timoshenko beam (no sections, no -release).
                     t_args: list[Any] = [*member.timoshenko, tag, "-mass", rho]
@@ -642,6 +641,7 @@ class OpenSeesRunner:
                         t_args.append("-cMass")
                     ops.element("ElasticTimoshenkoBeam", el.id, *self._frame_nodes(el), *t_args)
                     return
+                # A release at a constrained joint is condensed in the element.
                 if member is not None:
                     ebc_args.extend(member.release_args)
                 ops.element(

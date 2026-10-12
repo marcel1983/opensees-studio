@@ -34,30 +34,37 @@ model runs with the Transformation handler (:attr:`FramePlan.needs_transformatio
 ``Corotational`` in 3D ignores ``-jntOffset`` in OpenSees 3.8 (it prints "rigid
 joint zones not implemented yet" and uses zero), so that combination is refused.
 
-**Releases at a rigid-diaphragm joint.** A joint a diaphragm constrains is
-already the constrained node of an MP constraint, and OpenSees 3.8's
-Transformation handler cannot chain constraints: it keeps one MP per
-constrained node and numbers a retained node that is itself constrained wrong,
-solving without a warning (Lagrange and Penalty do chain, but their eigen
-analysis is wrong: they put the constraint block into the mass matrix too). A
-hidden node tied to such a joint by ``equalDOF`` or ``rigidLink`` is therefore
-not an option, and no rearrangement of node-to-node constraints avoids the chain
-(the hidden node needs its in-plane DOFs from the diaphragm's retained node and
-the rest from the joint). So at a diaphragm joint:
+**Releases at a constrained joint.** A joint that a rigid diaphragm, a user
+``equalDOF`` or a user ``rigidLink`` constrains is already the constrained node
+of an MP constraint, and OpenSees 3.8's Transformation handler cannot chain
+constraints: it keeps one MP per constrained node and numbers a retained node
+that is itself constrained by its reduced ID, solving without a warning
+(measured: a beam released at a joint ``equalDOF``'d to a column top in U1 and
+U2 only, or hung off it by ``rigidLink beam``, comes out wrong in 2D and 3D;
+only an ``equalDOF`` of every DOF happens to number right). Plain chains an
+``equalDOF`` but drops a ``rigidLink``; Lagrange and Penalty chain, but their
+eigen analysis is wrong (they put the constraint block into the mass matrix
+too), and a case's handler is the user's choice. A hidden node tied to such a
+joint by ``equalDOF`` or ``rigidLink`` is therefore not an option, and no
+rearrangement of node-to-node constraints avoids the chain (at a diaphragm
+joint the hidden node needs its in-plane DOFs from the retained node and the
+rest from the joint). So at a constrained joint (:func:`constrained_joints`):
 
 * an ``elasticBeamColumn`` with an elastic section releases M2 / M3 in the
-  element (``-releasey`` / ``-releasez``, condensed in its basic system, so at
-  the face of a rigid end zone) and T by a zero ``G J`` (a member released in
-  torsion at one end carries no torque). That is exact, but OpenSees condenses
-  only the full-length ``-beamUniform``: a member with a point, partial or
-  trapezoidal load, a consistent mass matrix, or a partial-fixity spring at that
-  end takes the next route instead;
+  element (``-releasey`` / ``-releasez``, in 2D ``-release``, condensed in its
+  basic system, so at the face of a rigid end zone) and T by a zero ``G J`` (a
+  member released in torsion at one end carries no torque). That is exact, but
+  OpenSees condenses only the full-length ``-beamUniform``: a member with a
+  point, partial or trapezoidal load, a consistent mass matrix, or a
+  partial-fixity spring at that end takes the next route instead;
 * any other member with elastic properties hangs the released end off a hidden
   node joined to the joint by a ``zeroLength`` whose kept directions are
-  penalty springs, :data:`DIAPHRAGM_PENALTY_FACTOR` times the member's own
-  stiffness (results within about 1e-7 of the exact ones, measured; a stiffer
-  spring loses more to round-off than it gains). A fibre member, or such an end
-  with a rigid end zone, is refused with a remedy.
+  penalty springs, :data:`CONSTRAINED_PENALTY_FACTOR` times the member's own
+  stiffness. The springs act in series with the member, so a result its own
+  stiffness governs alone (a beam's axial vibration mode) is about 1 / factor
+  too soft; a building's periods and displacements come out within about 1e-7
+  (measured; a stiffer spring loses more to round-off than it gains). A fibre
+  member, or such an end with a rigid end zone, is refused with a remedy.
 
 **Modifiers** become a derived ``section Elastic`` per distinct (section,
 modifiers) pair, or scaled inline properties for ``beamWithHinges``.
@@ -86,16 +93,18 @@ from opensees_studio.core.geometry.frame_options import RELEASE_AXIS, RELEASE_DO
 #: member's largest rotational stiffness ``4 E I / L`` (or ``G J / L``).
 PENALTY_FACTOR = 1.0e8
 
-#: Penalty springs tying a released end's hidden node to a diaphragm joint, as a
+#: Penalty springs tying a released end's hidden node to a constrained joint, as a
 #: multiple of the member's own translational / rotational stiffness. Measured on
 #: the example building with partially fixed beams (against an exact reference):
 #: 1e4 leaves about 3e-7 relative error, 1e5 about 1e-7 in displacements and 5e-8
 #: in periods; from 1e6 on the dense eigen solver's round-off, which grows with
 #: the stiffest entry, costs more than the stiffer spring gains (5e-6 at 1e6).
-DIAPHRAGM_PENALTY_FACTOR = 1.0e5
+#: A mode the member's own axial stiffness governs (a beam vibrating along its
+#: axis between two masses) is about 1 / factor = 1e-5 too soft.
+CONSTRAINED_PENALTY_FACTOR = 1.0e5
 
-#: ``elasticBeamColumn`` release flag of each release DOF, and its bit per end.
-_ELEMENT_RELEASE = {"M3": "-releasez", "M2": "-releasey"}
+#: ``elasticBeamColumn`` release flag of each release DOF per ``ndm``, and its bit per end.
+_ELEMENT_RELEASE = {3: {"M3": "-releasez", "M2": "-releasey"}, 2: {"M3": "-release"}}
 _ELEMENT_RELEASE_BIT = {"i": 1, "j": 2}
 
 #: zeroLength direction of each release DOF (rotation about local x, y, z).
@@ -148,15 +157,15 @@ class MemberPlan:
     """``(E, G, A, J, Iy, Iz, Avy, Avz)`` of an elastic member with shear areas (modifiers
     applied; 2D uses ``(E, G, A, Iz, Avy)``): it runs as an ``ElasticTimoshenkoBeam``."""
     element_releases: dict[str, int] = field(default_factory=dict)
-    """``-releasez`` / ``-releasey`` code (1 end i, 2 end j, 3 both) of an elastic member
-    released inside the element (see "Releases at a rigid-diaphragm joint")."""
+    """``-releasez`` / ``-releasey`` (2D: ``-release``) code (1 end i, 2 end j, 3 both) of
+    an elastic member released inside the element (see "Releases at a constrained joint")."""
 
     @property
     def release_args(self) -> tuple[Any, ...]:
         """The ``elasticBeamColumn`` release options, empty when the element releases nothing."""
         return tuple(
             arg
-            for flag in ("-releasez", "-releasey")
+            for flag in ("-releasez", "-releasey", "-release")
             if self.element_releases.get(flag)
             for arg in (flag, self.element_releases[flag])
         )
@@ -246,11 +255,22 @@ def _elastic_rotational_stiffness(project: Project, el: Any, clear_length: float
     return None if stiffness is None else stiffness[1]
 
 
-def diaphragm_joints(project: Project) -> set[int]:
-    """Nodes a rigid diaphragm constrains (a released end there cannot use ``equalDOF``)."""
-    if not project.diaphragms or not diaphragms_supported(project):
-        return set()
-    return {nid for d in project.diaphragms for nid in constrained_node_ids(project, d)}
+def constrained_joints(project: Project) -> dict[int, str]:
+    """Nodes an MP constraint constrains, each with what constrains it.
+
+    A released end there cannot hang off the joint by ``equalDOF`` or
+    ``rigidLink``: see "Releases at a constrained joint".
+    """
+    joints: dict[int, str] = {}
+    for mp in project.mp_constraints:
+        joints.setdefault(mp.constrained_node, "an equalDOF")
+    for link in project.rigid_links:
+        joints.setdefault(link.constrained_node, "a rigid link")
+    if project.diaphragms and diaphragms_supported(project):
+        for d in project.diaphragms:
+            for nid in constrained_node_ids(project, d):
+                joints.setdefault(nid, "a rigid diaphragm")
+    return joints
 
 
 def _condensable(project: Project, el: Any, layout: MemberLayout) -> bool:
@@ -258,10 +278,10 @@ def _condensable(project: Project, el: Any, layout: MemberLayout) -> bool:
 
     An ``elasticBeamColumn`` on an elastic section with a lumped mass, whose
     every load reaches the flexible part as a full-length ``-beamUniform``:
-    ``ElasticBeam3d`` condenses only that load's fixed-end forces, and its
-    consistent mass ignores the release.
+    ``ElasticBeam3d`` condenses only that load's fixed-end forces (2D keeps the
+    same rule), and the consistent mass ignores the release.
     """
-    if not isinstance(el, ElasticBeamColumn) or el.consistent_mass or project.ndm != 3:
+    if not isinstance(el, ElasticBeamColumn) or el.consistent_mass:
         return False
     section = next((s for s in project.sections if s.id == el.section_id), None)
     if not isinstance(section, ElasticSection) or section.has_shear_deformation:
@@ -333,7 +353,8 @@ def plan_frame_members(project: Project) -> FramePlan:
     derived: dict[tuple[Any, ...], int] = {}
     ndm = project.ndm
     translations = (1, 2) if ndm == 2 else (1, 2, 3)
-    at_diaphragm = diaphragm_joints(project)
+    constrained = constrained_joints(project)
+    element_release = _ELEMENT_RELEASE[ndm]
 
     for el in project.elements:
         if not isinstance(el, FrameMember):
@@ -341,11 +362,11 @@ def plan_frame_members(project: Project) -> FramePlan:
         layout = member_layout(project, el)
         member = MemberPlan(layout=layout, nodes=(el.nodes[0], el.nodes[1]))
         plan.members[el.id] = member
-        # Released ends at a diaphragm joint that the element itself releases.
+        # Released ends at a constrained joint that the element itself releases.
         condensed = {
             end
             for end, nid in zip(("i", "j"), el.nodes, strict=False)
-            if nid in at_diaphragm
+            if nid in constrained
             and el.releases.end(end).released
             and not el.releases.end(end).springs
         }
@@ -378,8 +399,8 @@ def plan_frame_members(project: Project) -> FramePlan:
                     member.offset_j = member_offset
                 if end in condensed:
                     for dof in release.released:
-                        if dof in _ELEMENT_RELEASE:
-                            flag = _ELEMENT_RELEASE[dof]
+                        if dof in element_release:
+                            flag = element_release[dof]
                             code = member.element_releases.get(flag, 0)
                             member.element_releases[flag] = code | _ELEMENT_RELEASE_BIT[end]
                     unstiffened = _unstiffened(layout, release)
@@ -391,13 +412,14 @@ def plan_frame_members(project: Project) -> FramePlan:
             kept = _kept(release, ndm)
             if torsion_free and "T" not in kept:
                 kept = [d for d in RELEASE_DOFS if d == "T" or d in kept]
-            if joint in at_diaphragm:
+            if joint in constrained:
                 nodes[k] = _plan_penalty_end(
                     project,
                     el,
                     layout,
                     end,
                     joint,
+                    constrained[joint],
                     kept,
                     plan,
                     node_tags,
@@ -495,39 +517,45 @@ def _plan_penalty_end(
     layout: MemberLayout,
     end: str,
     joint: int,
+    constraint: str,
     kept: list[str],
     plan: FramePlan,
     node_tags: _Tags,
     element_tags: _Tags,
     material_tags: _Tags,
 ) -> int:
-    """Hang a released end at a diaphragm joint off a hidden node held by penalty springs.
+    """Hang a released end at a constrained joint off a hidden node held by penalty springs.
 
-    Returns the hidden node's tag. The ``zeroLength`` carries the end's force
-    into the joint, so the hidden node is not one whose reaction is folded back.
+    ``constraint`` names what constrains the joint (for the messages). Returns
+    the hidden node's tag. The ``zeroLength`` carries the end's force into the
+    joint, so the hidden node is not one whose reaction is folded back.
     """
     release = el.releases.end(end)
-    where = f"Element {el.id}: the release at end {end} (joint {joint}, which a rigid diaphragm "
+    where = f"Element {el.id}: the release at end {end} (joint {joint}, which {constraint} "
+    remedy = (
+        "take the joint out of the diaphragm"
+        if constraint == "a rigid diaphragm"
+        else f"remove {constraint} that constrains the joint"
+    )
     if layout.has_offset(end):
         raise ValueError(
             where + "constrains) is at the face of a rigid end zone, and OpenSees cannot tie that "
-            "face to a diaphragm joint exactly. Use a full release (no partial fixity) on an "
+            "face to a constrained joint exactly. Use a full release (no partial fixity) on an "
             "elasticBeamColumn with an elastic section and only full-length uniform loads, "
-            "remove the end offset, or take the joint out of the diaphragm."
+            f"remove the end offset, or {remedy}."
         )
     stiffness = _elastic_stiffness(project, el, layout.clear_length)
     if stiffness is None:
         raise ValueError(
             where + "constrains) is on a fibre member, which has no elastic stiffness to scale "
-            "the springs that tie it to the joint. Use an elastic section, or take the joint out "
-            "of the diaphragm."
+            f"the springs that tie it to the joint. Use an elastic section, or {remedy}."
         )
-    k_t, k_r = (DIAPHRAGM_PENALTY_FACTOR * v for v in stiffness)
+    k_t, k_r = (CONSTRAINED_PENALTY_FACTOR * v for v in stiffness)
     joint_xyz = layout.joint_i if end == "i" else layout.joint_j
     inner = ExtraNode(node_tags.take(), tuple(float(v) for v in joint_xyz[: layout.ndm]), joint)
     plan.nodes.append(inner)
-    dirs = [1, 2, 3]
-    values = [k_t, k_t, k_t]
+    dirs = [1, 2] if layout.ndm == 2 else [1, 2, 3]
+    values = [k_t] * len(dirs)
     for d in kept:
         dirs.append(_ZERO_LENGTH_DIR[d])
         values.append(k_r)

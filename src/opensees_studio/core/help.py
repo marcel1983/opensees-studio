@@ -1673,6 +1673,10 @@ ties every DOF. OpenSees' Transformation handler (every eigen analysis uses it)
 solves any other chain, a node constrained twice, or a loop without an error
 into wrong results, so the model check refuses them. Tie each node straight to
 one retained node instead.
+
+A frame end released at the constrained node is made without a further
+constraint, as at a diaphragm joint (see Assign → Frame → Releases/Partial
+Fixity).
 """,
             "mechanics.constraints",
             "assign.support",
@@ -1920,10 +1924,10 @@ the face of the rigid zone, as in SAP2000: the hidden node hangs off the joint
 with `rigidLink beam`, and such a model runs with the Transformation constraint
 handler even if the case asks for Plain (Plain ignores a rigid link).
 
-At a joint a rigid diaphragm constrains, a hidden node tied by `equalDOF` would
-chain through the diaphragm, which OpenSees solves wrong; there the release is
-made inside the element or with penalty springs instead (see Assign → Joint →
-Diaphragm).
+At a joint that a rigid diaphragm, an equalDOF or a rigid link constrains, a
+hidden node tied by `equalDOF` would chain through that constraint, which
+OpenSees solves wrong without an error; there the release is made inside the
+element or with penalty springs instead (see Assign → Joint → Diaphragm).
 """,
             "assign.end_offsets",
             "assign.insertion_point",
@@ -2661,6 +2665,10 @@ so the case runs with Transformation. The canvas draws it as a thick orange bar.
 The retained node must not itself be constrained (unless by an equalDOF of every
 DOF), and the constrained node takes no other constraint: see equalDOF. Two rigid
 beam links in a row are one rigid link from the first node to the last.
+
+A frame end released at the constrained node is made without a further
+constraint, as at a diaphragm joint (see Assign → Frame → Releases/Partial
+Fixity).
 """,
             "mechanics.constraints",
             "assign.remove_constraints",
