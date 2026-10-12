@@ -2116,6 +2116,11 @@ class MainWindow(QMainWindow):
             return proceed
         for finding in report.warnings:
             self._log(finding.summary())
+        if not report.is_complete:
+            # A partial check is not a pass: say what was left out.
+            for finding in report.infos:
+                self._log(finding.summary())
+            self._log(report.summary())
         return True
 
     def _on_run_analysis(self) -> None:

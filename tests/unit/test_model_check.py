@@ -567,12 +567,38 @@ def test_a_part_above_the_dof_limit_is_skipped_with_a_note(monkeypatch: pytest.M
     assert finding.severity is Severity.INFO
     assert not report.stability_checked
     assert report.is_clean  # information alone is not a problem
+    # ...but a partial check is not a pass.
+    assert not report.is_complete
+    assert report.stability_skipped_parts == 1
+    assert "passed" not in report.summary()
+    assert "no problems found" not in report.summary()
+    assert report.summary().startswith("Model check incomplete:")
+
+
+def test_a_skipped_part_is_named_next_to_the_other_findings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(MAX_DOF_ENV, "3")
+    project = _portal()
+    project.nodes.append(_node(9, 7, 7, fix=FIXED))  # a warning
+    summary = check_model(project).summary()
+    assert summary == (
+        "Model check: 1 warning. Incomplete: stability was not checked for 1 part of the model."
+    )
+
+
+def test_a_complete_check_still_says_passed() -> None:
+    report = check_model(_portal())
+    assert report.is_complete
+    assert report.summary().startswith("Model check passed:")
 
 
 def test_the_stability_test_can_be_switched_off() -> None:
     report = check_model(_square_truss(diagonal=False), check_stability=False)
     assert report.findings == ()
     assert not report.stability_checked
+    assert not report.is_complete
+    assert "passed" not in report.summary()
 
 
 def test_findings_come_errors_first_and_the_summary_counts_them() -> None:

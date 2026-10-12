@@ -135,6 +135,8 @@ class ModelCheckReport:
     part_count: int = 0
     mechanism_count: int = 0
     stability_checked: bool = False
+    stability_skipped_parts: int = 0
+    """Supported parts the stability test left out (over the DOF limit, or switched off)."""
 
     @property
     def errors(self) -> list[Finding]:
@@ -157,9 +159,25 @@ class ModelCheckReport:
         """No error and no warning (information alone does not count)."""
         return not any(f.severity in (Severity.ERROR, Severity.WARNING) for f in self.findings)
 
+    @property
+    def is_complete(self) -> bool:
+        """Every check ran, including stability on every supported part."""
+        return self.stability_checked and self.stability_skipped_parts == 0
+
     def summary(self) -> str:
         errors, warnings = len(self.errors), len(self.warnings)
+        skipped = self.stability_skipped_parts
+        not_checked = (
+            f"stability was not checked for {_plural(skipped, 'part')} of the model"
+            if skipped
+            else "stability was not checked"
+        )
         if errors == 0 and warnings == 0:
+            if not self.is_complete:
+                return (
+                    f"Model check incomplete: {self.node_count} nodes, {self.element_count} "
+                    f"elements; {not_checked}. The checks that ran found no problems."
+                )
             return (
                 f"Model check passed: {self.node_count} nodes, {self.element_count} elements, "
                 "no problems found."
@@ -169,7 +187,10 @@ class ModelCheckReport:
             parts.append(f"{errors} error{'s' if errors != 1 else ''}")
         if warnings:
             parts.append(f"{warnings} warning{'s' if warnings != 1 else ''}")
-        return "Model check: " + ", ".join(parts) + "."
+        text = "Model check: " + ", ".join(parts) + "."
+        if skipped:
+            text += f" Incomplete: {not_checked}."
+        return text
 
 
 # ──────────────────────────── small helpers ────────────────────────────
@@ -643,6 +664,7 @@ def check_model(
     # ── static stability ────────────────────────────────────────────
     mechanisms = 0
     checked = False
+    skipped = 0 if check_stability else len(supported)
     if check_stability:
         limit = max_stability_dof()
         for members in supported:
@@ -658,6 +680,7 @@ def check_model(
                         hint=f"Raise {MAX_DOF_ENV} to check it, or run the model and read the log.",
                     )
                 )
+                skipped += 1
                 continue
             checked = True
             mechanisms += outcome.count
@@ -667,6 +690,7 @@ def check_model(
         part_count=len(part_list),
         mechanism_count=mechanisms,
         stability_checked=checked,
+        stability_skipped_parts=skipped,
     )
 
 
