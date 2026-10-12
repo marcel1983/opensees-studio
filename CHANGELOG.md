@@ -66,6 +66,15 @@ refused instead of silently downgraded).
   example building with released and with partially fixed beam ends against
   hand-built OpenSeesPy (element releases, `ModElasticBeam3d`, and hidden nodes
   under the Lagrange handler): 1e-9 and 1e-6.
+- Chains of equalDOFs and rigid links are refused by the model check, with a
+  remedy: a node that one constraint ties and that retains another (equalDOF
+  2->3 plus equalDOF 3->5, or a rigid link whose retained node an equalDOF or
+  rigid link constrains), a node constrained twice, a loop, and an equalDOF of a
+  node to itself. OpenSees 3.8's Transformation handler, which every eigen
+  analysis uses, keeps one constraint per constrained node and solves the rest
+  without an error into wrong results (a probe against Lagrange: static
+  displacements off by up to 85 %, periods by more). A chain through a node an
+  equalDOF of every DOF constrains comes out right and is still accepted.
 
 ## [0.0.10] — 2026-10-11
 
