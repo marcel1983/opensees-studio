@@ -9,6 +9,13 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.10] — 2026-10-12
+
+The building release: storeys, rigid diaphragms and a mass source for multi-storey
+models, load combinations with envelopes and code generators, and the member-level
+options a SAP2000 user expects on frames (releases, offsets, modifiers, trapezoidal
+loads).
+
 ### Added
 
 - **Storeys** (Define → Storeys…): named floor levels with an elevation, typed or
@@ -181,11 +188,7 @@ refused instead of silently downgraded).
   `ModElasticBeam2d` / `3d`, hidden nodes under the Lagrange handler): 1e-9 for
   the pinned ends, 1e-6 (2e-5 for the eigenvalues) for the spring-held ones.
 
-## [0.0.10] — 2026-10-11
-
-The frame members release: the member-level options a SAP2000 user expects.
-
-### Added
+### Added — frame members
 
 - **Frame end releases and partial fixity** (Assign → Frame → Releases/Partial
   Fixity…): T, M2 and M3 per end, each with an optional rotational spring.
