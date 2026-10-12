@@ -81,6 +81,17 @@ class ElasticSection(Entity):
     J: PositiveFloat | None = Field(
         default=None, description="Torsional constant; required for 3D frames."
     )
+    As2: PositiveFloat | None = Field(
+        default=None,
+        description=(
+            "Shear area for shear along local 2 (y). With As2 (and As3 in 3D) set, an "
+            "elasticBeamColumn is run as an ElasticTimoshenkoBeam and deforms in shear; "
+            "None keeps the Euler-Bernoulli member (no shear deformation). Needs G."
+        ),
+    )
+    As3: PositiveFloat | None = Field(
+        default=None, description="Shear area for shear along local 3 (z); 3D frames only."
+    )
     shape: SectionShape | None = Field(
         default=None,
         description=(
@@ -99,7 +110,12 @@ class ElasticSection(Entity):
         ),
     )
 
-    serialize_without_defaults = omit_when_default("unit_weight")
+    serialize_without_defaults = omit_when_default("unit_weight", "As2", "As3")
+
+    @property
+    def has_shear_deformation(self) -> bool:
+        """A shear area is set: the member is a Timoshenko beam."""
+        return self.As2 is not None or self.As3 is not None
 
 
 # ──────────────────────────── Fiber primitives ────────────────────────────

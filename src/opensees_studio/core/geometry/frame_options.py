@@ -178,9 +178,10 @@ class FrameModifiers(_Options):
     modifiers on one. ``mass`` scales an elastic member's mass per length and
     ``weight`` its self weight.
 
-    ``as2`` / ``as3`` scale the shear areas. The elastic sections here are
-    Euler-Bernoulli (no shear deformation), so they are kept for SAP2000
-    parity and do not change a result.
+    ``as2`` / ``as3`` scale the shear areas ``As2`` / ``As3`` of an elastic
+    section. They change a result only when the section defines shear areas
+    (the member then runs as an ``ElasticTimoshenkoBeam``); without them the
+    member is Euler-Bernoulli and they are kept for SAP2000 parity.
     """
 
     area: float = Field(default=1.0, gt=0.0, description="Cross-section area A.")

@@ -36,6 +36,7 @@ from opensees_studio.core import (
     NodalLoad,
     Node,
     PlainLoadPattern,
+    PointElementLoad,
     Project,
     StaticCase,
     TrapezoidalElementLoad,
@@ -392,6 +393,97 @@ def test_the_weight_modifier_scales_the_self_weight(tmp_path: Path) -> None:
     results = _solve(project, tmp_path)
 
     assert results.node_reaction[1][0][1] == pytest.approx(0.5 * 25.0 * A * L / 2, rel=1e-6)
+
+
+# ──────────────────────────── shear areas ────────────────────────────
+G_SEC = 8.0e7
+
+
+def _shear_cantilever(
+    *, ndm: int, as2: float | None, as3: float | None, iz: float, iy: float, load: tuple, **extra
+) -> Project:  # type: ignore[no-untyped-def]
+    forces = (*load, *(0.0,) * (6 - len(load)))
+    project = _project(
+        [ElasticBeamColumn(id=1, nodes=(1, 2), section_id=1, **extra)],
+        [
+            Node(id=1, coords=(0.0, 0.0, 0.0), restraint=FIXED_2D if ndm == 2 else FIXED_3D),
+            Node(id=2, coords=(L, 0.0, 0.0)),
+        ],
+        ndm=ndm,
+        pattern=PlainLoadPattern(
+            id=1, time_series_id=1, nodal_loads=[NodalLoad(node_id=2, forces=forces)]
+        ),
+    )
+    project.sections[0] = ElasticSection(
+        id=1, E=E, A=A, Iz=iz, Iy=iy, G=G_SEC, J=3e-4, As2=as2, As3=as3
+    )
+    return project
+
+
+@pytest.mark.parametrize("ndm", [2, 3])
+def test_a_shear_area_adds_the_shear_deflection(ndm: int, tmp_path: Path) -> None:
+    """Tip load P on a cantilever: P L^3 / (3 E I) + P L / (G As)."""
+    p, as2 = 100.0, 0.008
+    project = _shear_cantilever(ndm=ndm, as2=as2, as3=0.005, iz=I_SEC, iy=I_SEC, load=(0.0, -p))
+    tip = _solve(project, tmp_path).node_disp[2][0][1]
+    assert tip == pytest.approx(-(p * L**3 / (3 * E * I_SEC) + p * L / (G_SEC * as2)), rel=1e-6)
+
+
+def test_a_section_without_shear_areas_stays_euler_bernoulli(tmp_path: Path) -> None:
+    project = _shear_cantilever(ndm=2, as2=None, as3=None, iz=I_SEC, iy=I_SEC, load=(0.0, -100.0))
+    tip = _solve(project, tmp_path).node_disp[2][0][1]
+    assert tip == pytest.approx(-100.0 * L**3 / (3 * E * I_SEC), rel=1e-9)
+
+
+def test_the_3d_shear_areas_follow_the_local_axes(tmp_path: Path) -> None:
+    """Global z loads bend a beam along x about local y: Iy and As3."""
+    p, iy, as3 = 100.0, 1.5e-4, 0.004
+    project = _shear_cantilever(ndm=3, as2=0.008, as3=as3, iz=I_SEC, iy=iy, load=(0.0, 0.0, -p))
+    tip = _solve(project, tmp_path).node_disp[2][0][2]
+    assert tip == pytest.approx(-(p * L**3 / (3 * E * iy) + p * L / (G_SEC * as3)), rel=1e-6)
+
+
+def test_the_shear_area_modifiers_scale_the_shear_deflection(tmp_path: Path) -> None:
+    p, as2 = 100.0, 0.008
+    project = _shear_cantilever(
+        ndm=2,
+        as2=as2,
+        as3=None,
+        iz=I_SEC,
+        iy=I_SEC,
+        load=(0.0, -p),
+        modifiers=FrameModifiers(as2=0.5, i33=0.5),
+    )
+    tip = _solve(project, tmp_path).node_disp[2][0][1]
+    assert tip == pytest.approx(
+        -(p * L**3 / (3 * E * 0.5 * I_SEC) + p * L / (G_SEC * 0.5 * as2)), rel=1e-6
+    )
+
+
+def test_a_uniform_load_on_a_timoshenko_member(tmp_path: Path) -> None:
+    """Tip of a cantilever under w: w L^4 / (8 E I) + w L^2 / (2 G As)."""
+    as2 = 0.008
+    project = _shear_cantilever(ndm=2, as2=as2, as3=None, iz=I_SEC, iy=I_SEC, load=())
+    project.load_patterns[0] = PlainLoadPattern(
+        id=1, time_series_id=1, element_loads=[UniformElementLoad(element_id=1, wy=-W)]
+    )
+    results = _solve(project, tmp_path)
+    assert results.node_disp[2][0][1] == pytest.approx(
+        -(W * L**4 / (8 * E * I_SEC) + W * L**2 / (2 * G_SEC * as2)), rel=1e-6
+    )
+    # Root reactions are statics: shear w L, moment w L^2 / 2.
+    assert results.node_reaction[1][0][1] == pytest.approx(W * L, rel=1e-9)
+
+
+def test_a_point_load_on_a_timoshenko_member_is_refused(tmp_path: Path) -> None:
+    project = _shear_cantilever(ndm=2, as2=0.008, as3=None, iz=I_SEC, iy=I_SEC, load=())
+    project.load_patterns[0] = PlainLoadPattern(
+        id=1,
+        time_series_id=1,
+        point_loads=[PointElementLoad(element_id=1, x=0.5, py=-10.0)],
+    )
+    with pytest.raises(ValueError, match="Timoshenko"):
+        _solve(project, tmp_path)
 
 
 # ──────────────────────────── modal ────────────────────────────

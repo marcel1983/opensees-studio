@@ -635,6 +635,13 @@ class OpenSeesRunner:
                 if el.consistent_mass:
                     ebc_args.append("-cMass")
                 # A release at a diaphragm joint is condensed in the element.
+                if member is not None and member.timoshenko is not None:
+                    # Shear areas on the section: a Timoshenko beam (no sections, no -release).
+                    t_args: list[Any] = [*member.timoshenko, tag, "-mass", rho]
+                    if el.consistent_mass:
+                        t_args.append("-cMass")
+                    ops.element("ElasticTimoshenkoBeam", el.id, *self._frame_nodes(el), *t_args)
+                    return
                 if member is not None:
                     ebc_args.extend(member.release_args)
                 ops.element(
@@ -852,6 +859,7 @@ class OpenSeesRunner:
                     # 2D: (Py, xL, Px); 3D: (Py, Pz, xL, Px).
                     if pl.element_id in rigid:
                         continue
+                    self._require_beamlike_loads(pl.element_id)
                     if self.project.ndm == 2:
                         ops.eleLoad(
                             "-ele", pl.element_id, "-type", "-beamPoint", pl.py, pl.x, pl.px
@@ -944,7 +952,19 @@ class OpenSeesRunner:
         for point in gauss_point_loads(piece, clear_length):
             self._emit_beam_point(el.id, point)
 
+    def _require_beamlike_loads(self, element_id: int) -> None:
+        """OpenSees 3.8's ``ElasticTimoshenkoBeam`` takes only full-length uniform loads."""
+        member = self._frame_plan.members.get(element_id)
+        if member is not None and member.timoshenko is not None:
+            raise ValueError(
+                f"Element {element_id} has a section with shear areas (a Timoshenko beam), "
+                "which OpenSees 3.8 loads only with full-length uniform loads: point, partial "
+                "and trapezoidal loads are refused. Remove the shear areas from the section "
+                "or load the member with a uniform load."
+            )
+
     def _emit_beam_point(self, element_id: int, point: ClearPoint) -> None:
+        self._require_beamlike_loads(element_id)
         px, py, pz = (float(v) for v in point.p)
         x = float(point.x)
         if self.project.ndm == 2:

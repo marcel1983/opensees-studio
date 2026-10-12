@@ -78,6 +78,14 @@ class ElasticSectionForm(SectionFormBase):
         self._iy = _spin(8.33e-6, step=1e-7)
         self._g = _spin(80e9, step=1e9)
         self._j = _spin(1e-6, step=1e-7)
+        self._as2 = _spin(0.0, minimum=0.0, step=1e-4)
+        self._as3 = _spin(0.0, minimum=0.0, step=1e-4)
+        for w, axis in ((self._as2, "2 (y)"), (self._as3, "3 (z)")):
+            w.setToolTip(
+                f"Shear area for shear along local {axis}. 0 = rigid in shear (Euler-Bernoulli). "
+                "With a shear area the member becomes a Timoshenko beam; it then takes "
+                "full-length uniform loads only, and needs G."
+            )
         self._unit_weight = _spin(0.0, minimum=0.0, step=1e3)
         self._unit_weight.setToolTip(
             "Weight per unit volume (force / length³). A load pattern with a self "
@@ -91,6 +99,8 @@ class ElasticSectionForm(SectionFormBase):
             ("Iy:", self._iy),
             ("G:", self._g),
             ("J:", self._j),
+            ("Shear area As2:", self._as2),
+            ("Shear area As3:", self._as3),
             ("Unit weight γ:", self._unit_weight),
         ):
             self._layout.addRow(label, w)
@@ -106,6 +116,8 @@ class ElasticSectionForm(SectionFormBase):
             self._g.setValue(s.G)
         if s.J is not None:
             self._j.setValue(s.J)
+        self._as2.setValue(s.As2 or 0.0)
+        self._as3.setValue(s.As3 or 0.0)
         self._unit_weight.setValue(s.unit_weight)
         self._shape = s.shape
 
@@ -119,6 +131,8 @@ class ElasticSectionForm(SectionFormBase):
             Iy=self._iy.value(),
             G=self._g.value(),
             J=self._j.value(),
+            As2=self._as2.value() or None,
+            As3=self._as3.value() or None,
             unit_weight=self._unit_weight.value(),
             shape=self._shape,
         )

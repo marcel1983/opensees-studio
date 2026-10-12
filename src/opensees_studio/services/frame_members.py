@@ -144,6 +144,9 @@ class MemberPlan:
     inline: dict[str, float] = field(default_factory=dict)
     """Modified ``A``, ``Iz``, ``Iy``, ``J`` of a ``beamWithHinges``."""
     rho: float | None = None
+    timoshenko: tuple[float, ...] | None = None
+    """``(E, G, A, J, Iy, Iz, Avy, Avz)`` of an elastic member with shear areas (modifiers
+    applied; 2D uses ``(E, G, A, Iz, Avy)``): it runs as an ``ElasticTimoshenkoBeam``."""
     element_releases: dict[str, int] = field(default_factory=dict)
     """``-releasez`` / ``-releasey`` code (1 end i, 2 end j, 3 both) of an elastic member
     released inside the element (see "Releases at a rigid-diaphragm joint")."""
@@ -261,7 +264,7 @@ def _condensable(project: Project, el: Any, layout: MemberLayout) -> bool:
     if not isinstance(el, ElasticBeamColumn) or el.consistent_mass or project.ndm != 3:
         return False
     section = next((s for s in project.sections if s.id == el.section_id), None)
-    if not isinstance(section, ElasticSection):
+    if not isinstance(section, ElasticSection) or section.has_shear_deformation:
         return False
     segments: list[Any] = []
     points: list[Any] = []
@@ -538,6 +541,38 @@ def _plan_penalty_end(
     return inner.tag
 
 
+def _timoshenko_args(
+    project: Project, el: Any, section: ElasticSection, mods: Any, torsion_free: bool
+) -> tuple[float, ...]:
+    """The ``ElasticTimoshenkoBeam`` section arguments of an elastic member with shear areas."""
+    if section.G is None:
+        raise ValueError(
+            f"Element {el.id}: section {section.id} has a shear area but no shear modulus G."
+        )
+    area = section.A * mods.area
+    if project.ndm == 2:
+        if section.As2 is None:
+            raise ValueError(
+                f"Element {el.id}: a 2D frame needs the shear area As2 on section {section.id}."
+            )
+        return (section.E, section.G, area, section.Iz * mods.i33, section.As2 * mods.as2)
+    if section.As2 is None or section.As3 is None or section.Iy is None or section.J is None:
+        raise ValueError(
+            f"Element {el.id}: a 3D Timoshenko member needs As2, As3, Iy and J on "
+            f"section {section.id}."
+        )
+    return (
+        section.E,
+        section.G,
+        area,
+        0.0 if torsion_free else section.J * mods.torsion,
+        section.Iy * mods.i22,
+        section.Iz * mods.i33,
+        section.As2 * mods.as2,
+        section.As3 * mods.as3,
+    )
+
+
 def _plan_modifiers(
     project: Project,
     el: Any,
@@ -550,6 +585,11 @@ def _plan_modifiers(
     mods = el.modifiers
     if isinstance(el, ElasticBeamColumn) and mods.mass != 1.0:
         member.rho = el.rho * mods.mass
+    if isinstance(el, ElasticBeamColumn):
+        section = next((s for s in project.sections if s.id == el.section_id), None)
+        if isinstance(section, ElasticSection) and section.has_shear_deformation:
+            member.timoshenko = _timoshenko_args(project, el, section, mods, torsion_free)
+            return
     if not mods.scales_stiffness and not torsion_free:
         return
     if isinstance(el, BeamWithHingesElement):
