@@ -23,6 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
 
 from opensees_studio.core._base import omit_when_default
 from opensees_studio.core.analysis import AnalysisCase
+from opensees_studio.core.combinations import LoadCombination
 from opensees_studio.core.constraints import EqualDOFConstraint, RigidDiaphragm, RigidLink
 from opensees_studio.core.diaphragms import constraint_chain_problems, diaphragm_problems
 from opensees_studio.core.friction import FrictionModel
@@ -74,10 +75,11 @@ class Project(BaseModel):
     """The root aggregate. Serializable to/from JSON via ``model_dump_json``."""
 
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
-    # The building fields are additive: a project without storeys, diaphragms,
-    # rigid links or a mass source saves byte-identical to before they existed.
+    # The building fields and the load combinations are additive: a project
+    # without storeys, diaphragms, rigid links, a mass source or combinations
+    # saves byte-identical to before they existed.
     serialize_without_defaults = omit_when_default(
-        "storeys", "diaphragms", "rigid_links", "mass_source"
+        "storeys", "diaphragms", "rigid_links", "mass_source", "combinations"
     )
 
     # 1 = pre ground-motion catalog (records embedded in PathTimeSeries),
@@ -177,6 +179,10 @@ class Project(BaseModel):
         description="Design/target spectra in g for record scaling (additive, schema 2).",
     )
     analyses: list[AnalysisCase] = Field(default_factory=list)
+    combinations: list[LoadCombination] = Field(
+        default_factory=list,
+        description="Load combinations of analysis-case results (additive, schema 2).",
+    )
 
     # ─────────────────── invariants ───────────────────
     @model_validator(mode="after")
@@ -204,6 +210,7 @@ class Project(BaseModel):
             ("analysis", self.analyses),
             ("storey", self.storeys),
             ("diaphragm", self.diaphragms),
+            ("load combination", self.combinations),
         ):
             ids = [it.id for it in items]
             if len(ids) != len(set(ids)):
@@ -251,6 +258,9 @@ class Project(BaseModel):
     def next_analysis_id(self) -> int:
         return self._next_id(self.analyses)
 
+    def next_combination_id(self) -> int:
+        return self._next_id(self.combinations)
+
     def next_storey_id(self) -> int:
         return self._next_id(self.storeys)
 
@@ -278,6 +288,12 @@ class Project(BaseModel):
 
     def target_spectrum(self, spectrum_id: PositiveInt) -> TargetSpectrum:
         return self._get(self.target_spectra, spectrum_id, "target spectrum")
+
+    def combination(self, combination_id: PositiveInt) -> LoadCombination:
+        for combo in self.combinations:
+            if combo.id == combination_id:
+                return combo
+        raise KeyError(f"Load combination with id={combination_id} not found.")
 
     @staticmethod
     def _get(items: list[Any], target_id: int, label: str) -> Any:

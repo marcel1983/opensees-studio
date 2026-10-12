@@ -33,4 +33,7 @@
 # main (the 0.0.9 CI run was red on this step). Removing the 27 `type: ignore`
 # comments mypy reports as unused and typing the new frame-member code brought
 # it to 214.
-214
+# The Display paths read results through typed helpers (`_static_result`,
+# `_diagram_data`) instead of passing the untyped `_latest_results` on, which
+# took eight `arg-type` errors out of views/main_window.py: 214 -> 206.
+206

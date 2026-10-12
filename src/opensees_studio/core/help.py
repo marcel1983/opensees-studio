@@ -1510,6 +1510,76 @@ differently (a long bridge), use an imposed support motion pattern instead.
 TOPICS.update(
     {
         # ──────────────────────────── Assign: joints ────────────────────────────
+        "define.load_combinations": _t(
+            "Define → Load Combinations",
+            "Define",
+            "Factored sums and envelopes of the results of analysis cases.",
+            """
+A load combination combines the **stored results** of analysis cases; it never
+runs a solver of its own. A combination can include Static and Response Spectrum
+cases, and other combinations (an envelope of the strength combinations, for
+instance). Each included case has a scale factor.
+
+# The four types
+- **Linear Add** — the factored sum, 1.2·DEAD + 1.6·LIVE. Superposition: valid
+  only when the cases respond linearly.
+- **Envelope** — the maximum and the minimum over the included cases, value by
+  value. Valid for any case, linear or not.
+- **Absolute Add** — the sum of the magnitudes.
+- **SRSS** — the square root of the sum of the squares.
+
+# Maximum and minimum
+Every result has an upper and a lower value. A static case has one value (both
+are the same); a response spectrum result is a peak, so it counts as plus and
+minus that peak. A Linear Add of static cases therefore has one value; an
+envelope, an SRSS, an Absolute Add, or anything that includes a spectrum has a
+maximum and a minimum. With a negative scale factor the two swap.
+
+Element forces are enveloped as **internal forces**, the sign the force diagram
+draws, so the diagram of the maximum is the upper envelope of the case diagrams.
+The results table lists each end force as OpenSees reports it (localForce), with
+its maximum and minimum.
+
+# What a combination contains
+Only what every included case provides: a response spectrum case gives peak
+displacements only, so a combination with one has no reactions or element
+forces, and says so.
+
+# Warnings
+A Linear Add, Absolute Add or SRSS that includes a case solved with an iterative
+algorithm (Newton, …), or a model with P-Delta or corotational transformations,
+is applied with a warning: adding nonlinear responses is not the response to the
+added loads. Run the summed loads as one case instead, or use an Envelope.
+Material nonlinearity is not detected.
+
+# Running a combination
+Analyze → Run lists the combinations after the cases. Running one runs only the
+cases it needs that have no current results (in one analysis process), then
+combines. A result stays current until the model changes; editing a combination
+does not make results stale. Display → Show Results Of… switches between stored
+results without running anything.
+
+# ASCE 7-16 LRFD
+**Generate ASCE 7-16 LRFD…** adds the basic strength combinations of Section
+2.3.1 from cases tagged Dead, Live, Roof live, Snow, Rain, Wind and Earthquake:
+
+- 1.4D
+- 1.2D + 1.6L + 0.5(Lr or S or R)
+- 1.2D + 1.6(Lr or S or R) + (L or 0.5W)
+- 1.2D + 1.0W + L + 0.5(Lr or S or R)
+- 1.2D + 1.0E + L + 0.2S
+- 0.9D + 1.0W
+- 0.9D + 1.0E
+
+Wind and static earthquake cases are added in both signs; a response spectrum
+case is already plus and minus, so it is added once. The live-load factor in the
+last combinations is 1.0: the 0.5 exception depends on the occupancy and is the
+engineer's call. An envelope of the generated combinations is added too.
+""",
+            "analyze.cases",
+            "analyze.run",
+            "display.select_results",
+        ),
         "assign.support": _t(
             "Assign → Joint → Restraints",
             "Assign — joints",
@@ -2016,6 +2086,27 @@ the log records the step reached and the results keep what was computed.
             "display.deformed",
         ),
         # ──────────────────────────── Display ────────────────────────────
+        "display.select_results": _t(
+            "Display → Show Results Of",
+            "Display",
+            "Pick which stored case or load combination the Display views show.",
+            """
+The Display views (deformed shape, force diagram, shell contours) and the results
+panel show one result at a time — normally the latest run. Show Results Of lists
+every case result that is still current for the model, and every load
+combination, and switches to the one you pick without running anything.
+
+- A combination is combined from the current case results. When one of its cases
+  has none (never run, or the model changed since), run the combination from
+  Analyze → Run: it runs only the missing cases.
+- A combination with a maximum and a minimum draws both force diagrams at once,
+  offers a Max/Min choice in the deformed shape, and lists both in the tables;
+  Export CSV writes the table shown.
+""",
+            "define.load_combinations",
+            "display.deformed",
+            "display.force_diagram",
+        ),
         "display.deformed": _t(
             "Display → Deformed Shape",
             "Display",
@@ -2625,6 +2716,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_add_path_ts": "define.path_ts",
     "_act_add_plain_pattern": "define.plain_pattern",
     "_act_add_uniform_excitation": "define.uniform_excitation",
+    "_act_load_combinations": "define.load_combinations",
     # ── Assign: joints ──────────────────────────────────────────────
     "_act_assign_support": "assign.support",
     "_act_assign_masses": "assign.masses",
@@ -2652,6 +2744,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_case_manager": "analyze.cases",
     "_act_run": "analyze.run",
     # ── Display ─────────────────────────────────────────────────────
+    "_act_select_results": "display.select_results",
     "_act_show_deformed": "display.deformed",
     "_act_show_mode_shape": "display.mode_shape",
     "_act_show_force_diagram": "display.force_diagram",
