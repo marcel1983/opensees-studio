@@ -17,6 +17,13 @@ refused instead of silently downgraded).
   own (LIVE, ROOF LIVE, SNOW, RAIN, WIND X/Y, EQ X/Y, and DEAD with the self
   weight), in the same undo step as the combinations. The dialog lists them
   before you accept.
+- **Analyze → Check Model Stability.** Builds the model as an analysis would,
+  assembles its stiffness matrix once and decomposes it into singular values:
+  each zero is a mechanism, reported with the joints and DOFs that move in it
+  (in global names, Ux/Uz/Ry in 2D), and those joints are selected in the view.
+  Free DOFs no element stiffens are listed too. It runs in the analysis child
+  process (`python -m opensees_studio.run --project P --check-stability`), so a
+  model OpenSees cannot build does not take the window down.
 
 ### Changed
 

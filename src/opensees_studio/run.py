@@ -1,5 +1,10 @@
 """Analysis CLI: ``python -m opensees_studio.run --project P --cases IDS --out DIR``.
 
+``--project P --check-stability`` instead builds the model and prints one
+``stability`` line whose ``report`` is a
+:class:`~opensees_studio.services.stability.StabilityReport` dict (Analyze →
+Check Model Stability).
+
 The GUI runs every analysis through this entry point in a child process
 (``QProcess``), so a hard exit inside OpenSees cannot take the
 application down. The script loads the project (normally the pre-run
@@ -103,22 +108,54 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         "--project", required=True, help="project file (.osmodel), usually the pre-run snapshot"
     )
     parser.add_argument(
+        "--check-stability",
+        action="store_true",
+        help="build the model and report its mechanisms (one 'stability' line) instead of running cases",
+    )
+    parser.add_argument(
         "--cases",
-        required=True,
+        required=False,
         type=int,
         nargs="+",
         metavar="ID",
         help="case ids to run, in order",
     )
     parser.add_argument(
-        "--out", required=True, help="output directory for results and manifest.json"
+        "--out", required=False, help="output directory for results and manifest.json"
     )
     parser.add_argument(
         "--case-override",
         default=None,
         help="JSON file with a list of case objects that replace the same-id cases for this run",
     )
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if not args.check_stability and (not args.cases or not args.out):
+        parser.error("--cases and --out are required unless --check-stability is given")
+    return args
+
+
+def _check_stability(protocol: _Protocol, project_path: str) -> int:
+    """``--check-stability``: one ``stability`` line with the report, exit 0."""
+    from opensees_studio.services.persistence import load_project
+
+    try:
+        project = load_project(project_path, on_notice=protocol.log)
+        project.validate_references()
+    except Exception as exc:
+        protocol.emit(type="error", message=str(exc), traceback=traceback.format_exc())
+        return EXIT_INVALID_PROJECT
+    from opensees_studio.services.stability import check_stability
+
+    protocol.log(
+        f"Checking stability: {len(project.nodes)} nodes, {len(project.elements)} elements."
+    )
+    try:
+        report = check_stability(project)
+    except Exception as exc:
+        protocol.emit(type="error", message=str(exc), traceback=traceback.format_exc())
+        return EXIT_ANALYSIS_ERROR
+    protocol.emit(type="stability", report=report.to_dict())
+    return EXIT_OK
 
 
 def _throttled(protocol: _Protocol, case_id: int) -> Any:
@@ -232,6 +269,8 @@ def _run_in_fresh_process(
 def main(argv: list[str] | None = None) -> int:
     protocol = _Protocol(_claim_stdout())
     args = _parse_args(argv)
+    if args.check_stability:
+        return _check_stability(protocol, str(args.project))
 
     from opensees_studio.core import Project
     from opensees_studio.services.persistence import load_project
