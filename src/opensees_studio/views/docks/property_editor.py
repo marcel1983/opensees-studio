@@ -11,7 +11,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QFormLayout,
     QGroupBox,
@@ -73,6 +75,10 @@ class PropertyEditorDock(QScrollArea):
         self.on_change_element_material: Callable[[int, int], None] | None = None
         self.on_change_element_section: Callable[[int, int], None] | None = None
         self.on_change_element_fields: Callable[[int, dict], None] | None = None
+        # Multi-selection callbacks — one call per Apply, one undo step on the host side.
+        self.on_assign_node_restraints: Callable[[dict[int, tuple[bool, ...]]], None] | None = None
+        self.on_assign_node_masses: Callable[[dict[int, tuple[float, ...]]], None] | None = None
+        self.on_assign_elements: Callable[[MultiElementEdit], None] | None = None
         self._show_empty()
 
     def set_project(self, project: Project | None) -> None:
@@ -483,20 +489,203 @@ class PropertyEditorDock(QScrollArea):
         PropertyEditorDock._add_bearing_options_row(form, el)
 
     def _show_multi(self, node_ids: frozenset[int], element_ids: frozenset[int]) -> None:
+        """Several things selected: edit what they share, in one step per group.
+
+        A value every selected item has is shown as it is; one that differs
+        shows ``(varies)`` and is left alone unless it is changed. Apply sends
+        only what was changed.
+        """
         self._layout.addWidget(QLabel("<h3>Multi-selection</h3>"))
+        project = self._project
+        nodes = [n for n in project.nodes if n.id in node_ids] if project else []
+        elements = [e for e in project.elements if e.id in element_ids] if project else []
         if node_ids:
             self._layout.addWidget(
                 QLabel(
                     f"<b>{len(node_ids)}</b> node(s) selected: {self._fmt_id_list(node_ids)}",
                 )
             )
+            if nodes and (
+                self.on_assign_node_restraints is not None or self.on_assign_node_masses is not None
+            ):
+                self._layout.addWidget(self._multi_node_group(nodes))
         if element_ids:
             self._layout.addWidget(
                 QLabel(
                     f"<b>{len(element_ids)}</b> element(s) selected: {self._fmt_id_list(element_ids)}",
                 )
             )
+            if elements and self.on_assign_elements is not None:
+                self._layout.addWidget(self._multi_element_group(elements))
         self._layout.addStretch(1)
+
+    # ── multi-selection: joints ──────────────────────────────────────
+    def _multi_node_group(self, nodes: list[Any]) -> QGroupBox:
+        group = QGroupBox(f"Edit {len(nodes)} joint(s)")
+        form = QFormLayout(group)
+        labels = ("Ux", "Uy", "Uz", "Rx", "Ry", "Rz")
+        row = QHBoxLayout()
+        boxes: list[QCheckBox] = []
+        for i, label in enumerate(labels):
+            box = QCheckBox(label)
+            values = {bool(n.restraint[i]) for n in nodes}
+            if len(values) > 1:
+                box.setTristate(True)
+                box.setCheckState(Qt.CheckState.PartiallyChecked)
+            else:
+                box.setChecked(values.pop())
+            boxes.append(box)
+            row.addWidget(box)
+        form.addRow("Restraint:", row)
+        masses = [_multi_float([float(n.mass[i]) for n in nodes], 0.0, 1e12) for i in range(6)]
+        for label, field in zip(("mx", "my", "mz", "Ixx", "Iyy", "Izz"), masses, strict=True):
+            form.addRow(f"{label}:", field)
+
+        def _apply() -> None:
+            restraints: dict[int, tuple[bool, ...]] = {}
+            new_masses: dict[int, tuple[float, ...]] = {}
+            for node in nodes:
+                r = tuple(
+                    bool(node.restraint[i])
+                    if box.checkState() == Qt.CheckState.PartiallyChecked
+                    else box.isChecked()
+                    for i, box in enumerate(boxes)
+                )
+                if r != tuple(node.restraint):
+                    restraints[node.id] = r
+                m = tuple(
+                    float(node.mass[i]) if (v := _read_multi(field)) is None else v
+                    for i, field in enumerate(masses)
+                )
+                if m != tuple(node.mass):
+                    new_masses[node.id] = m
+            if restraints and self.on_assign_node_restraints is not None:
+                self.on_assign_node_restraints(restraints)
+            if new_masses and self.on_assign_node_masses is not None:
+                self.on_assign_node_masses(new_masses)
+
+        button = QPushButton(f"Apply to {len(nodes)} joint(s)")
+        button.clicked.connect(_apply)
+        form.addRow(button)
+        self._multi_restraint_boxes = boxes
+        self._multi_mass_fields = masses
+        self._multi_node_apply = button
+        return group
+
+    # ── multi-selection: elements ────────────────────────────────────
+    def _multi_element_group(self, elements: list[Any]) -> QGroupBox:
+        project = self._project
+        assert project is not None
+        group = QGroupBox(f"Edit {len(elements)} element(s)")
+        form = QFormLayout(group)
+        types = {e.type for e in elements}
+        form.addRow("Types:", QLabel(", ".join(sorted(types))))
+        controls: dict[str, Any] = {}
+
+        if all(e.type in _CONVERTIBLE_ELEMENT_TYPES for e in elements):
+            controls["type"] = _multi_combo(
+                [(t, t) for t in _CONVERTIBLE_ELEMENT_TYPES], [e.type for e in elements]
+            )
+            form.addRow("Type:", controls["type"])
+        with_section = [e for e in elements if hasattr(e, "section_id")]
+        if with_section and project.sections:
+            controls["section_id"] = _multi_combo(
+                [(f"#{s.id} {s.name or s.type}", s.id) for s in project.sections],
+                [e.section_id for e in with_section],
+            )
+            form.addRow(f"Section ({len(with_section)}):", controls["section_id"])
+        with_material = [e for e in elements if hasattr(e, "material_id")]
+        if with_material and project.materials:
+            controls["material_id"] = _multi_combo(
+                [(f"#{m.id} {m.name or m.type}", m.id) for m in project.materials],
+                [e.material_id for e in with_material],
+            )
+            form.addRow(f"Material ({len(with_material)}):", controls["material_id"])
+        with_area = [e for e in elements if hasattr(e, "area")]
+        if with_area:
+            controls["area"] = _multi_float([float(e.area) for e in with_area], 1e-12, 1e6)
+            form.addRow(f"Area ({len(with_area)}):", controls["area"])
+        with_transf = [e for e in elements if hasattr(e, "geom_transf")]
+        if with_transf:
+            controls["geom_transf"] = _multi_combo(
+                [(t, t) for t in GEOM_TRANSF_TYPES], [e.geom_transf for e in with_transf]
+            )
+            form.addRow(f"Geom transf ({len(with_transf)}):", controls["geom_transf"])
+        with_rule = [e for e in elements if getattr(e, "integration", None) is not None]
+        if with_rule:
+            controls["integration"] = _multi_combo(
+                [(r, r) for r in BEAM_INTEGRATION_RULES], [e.integration for e in with_rule]
+            )
+            controls["integration_points"] = _multi_combo(
+                [(str(p), p) for p in range(2, 11)], [e.integration_points for e in with_rule]
+            )
+            form.addRow(f"Integration rule ({len(with_rule)}):", controls["integration"])
+            form.addRow("Integration points:", controls["integration_points"])
+        members = [e for e in elements if isinstance(e, FrameMember)]
+        if members:
+            for name, label, hi in (
+                ("length_i", "Offset i", 1e12),
+                ("length_j", "Offset j", 1e12),
+                ("rigid_factor", "Rigid-zone factor", 1.0),
+            ):
+                controls[name] = _multi_float(
+                    [float(getattr(e.end_offsets, name)) for e in members], 0.0, hi
+                )
+                form.addRow(f"{label} ({len(members)}):", controls[name])
+            controls["cardinal_point"] = _multi_combo(
+                [(f"{p} ({n})", p) for p, n in CARDINAL_POINT_NAMES.items()],
+                [e.insertion.cardinal_point for e in members],
+            )
+            form.addRow("Cardinal point:", controls["cardinal_point"])
+            releases = {self._release_text(e) for e in members}
+            modifiers = {self._modifier_text(e) for e in members}
+            form.addRow("Releases:", QLabel(releases.pop() if len(releases) == 1 else "(varies)"))
+            form.addRow(
+                "Modifiers:", QLabel(modifiers.pop() if len(modifiers) == 1 else "(varies)")
+            )
+
+        def _apply() -> None:
+            edit = MultiElementEdit(element_ids={e.id for e in elements})
+            if "type" in controls:
+                edit.new_type = _read_combo(controls["type"])
+            for key in ("section_id", "material_id"):
+                if key in controls:
+                    setattr(edit, key, _read_combo(controls[key]))
+            fields: dict[str, Any] = {}
+            for key in ("geom_transf", "integration", "integration_points"):
+                if key in controls and (value := _read_combo(controls[key])) is not None:
+                    fields[key] = value
+            if "area" in controls and (area := _read_multi(controls["area"])) is not None:
+                fields["area"] = area
+            edit.fields = fields
+            if members:
+                offsets = {
+                    k: _read_multi(controls[k]) for k in ("length_i", "length_j", "rigid_factor")
+                }
+                point = _read_combo(controls["cardinal_point"])
+                for e in members:
+                    update: dict[str, Any] = {}
+                    changed = {k: v for k, v in offsets.items() if v is not None}
+                    if changed:
+                        new = e.end_offsets.model_copy(update=changed)
+                        if new != e.end_offsets:
+                            update["end_offsets"] = new
+                    if point is not None and point != e.insertion.cardinal_point:
+                        update["insertion"] = e.insertion.model_copy(
+                            update={"cardinal_point": point}
+                        )
+                    if update:
+                        edit.per_element[e.id] = update
+            if edit.is_empty or self.on_assign_elements is None:
+                return
+            self.on_assign_elements(edit)
+
+        button = QPushButton(f"Apply to {len(elements)} element(s)")
+        button.clicked.connect(_apply)
+        form.addRow(button)
+        self._multi_element_controls = controls
+        self._multi_element_apply = button
+        return group
 
     @staticmethod
     def _fmt_restraint(r: tuple[bool, ...]) -> str:
@@ -512,3 +701,82 @@ class PropertyEditorDock(QScrollArea):
         return (
             ", ".join(str(i) for i in sorted_ids[:limit]) + f", … (+{len(sorted_ids) - limit} more)"
         )
+
+
+# ─────────────────────────── multi-selection helpers ───────────────────────────
+VARIES = "(varies)"
+"""What a field shows when the selected items do not share its value."""
+
+
+class MultiElementEdit:
+    """What an Apply on several elements changes (``None`` = left as each one has it)."""
+
+    def __init__(self, element_ids: set[int]) -> None:
+        self.element_ids = element_ids
+        self.new_type: str | None = None
+        self.section_id: int | None = None
+        self.material_id: int | None = None
+        self.fields: dict[str, Any] = {}
+        """Same value for every element that has the field."""
+        self.per_element: dict[int, dict[str, Any]] = {}
+        """Values that differ per element (end offsets, insertion)."""
+
+    @property
+    def is_empty(self) -> bool:
+        return (
+            self.new_type is None
+            and self.section_id is None
+            and self.material_id is None
+            and not self.fields
+            and not self.per_element
+        )
+
+
+def _multi_float(values: list[float], lo: float, hi: float) -> FloatField:
+    """A number field: the shared value, or ``(varies)`` until the user types one."""
+    field = FloatField()
+    shared = set(values)
+    if len(shared) == 1:
+        field.setRange(lo, hi)
+        field.setValue(shared.pop())
+        field.setProperty("multi_initial", field.value())
+        return field
+    # Below the range: the minimum shows the special text and means "unchanged".
+    sentinel = lo - max(1.0, abs(lo))
+    field.setRange(sentinel, hi)
+    field.setSpecialValueText(VARIES)
+    field.setValue(sentinel)
+    field.setProperty("multi_initial", sentinel)
+    field.setProperty("multi_low", lo)
+    return field
+
+
+def _read_multi(field: FloatField) -> float | None:
+    """The typed value, or ``None`` when the field still shows what it started with."""
+    value = field.value()
+    if value == field.property("multi_initial"):
+        return None
+    low = field.property("multi_low")
+    if low is not None and value < float(low):
+        return None
+    return float(value)
+
+
+def _multi_combo(items: list[tuple[str, Any]], values: list[Any]) -> QComboBox:
+    """A choice: the shared one selected, or ``(varies)`` first and selected."""
+    combo = QComboBox()
+    shared = set(values)
+    if len(shared) != 1:
+        combo.addItem(VARIES, None)
+    for text, data in items:
+        combo.addItem(text, data)
+    combo.setCurrentIndex(combo.findData(shared.pop()) if len(shared) == 1 else 0)
+    combo.setProperty("multi_initial", combo.currentIndex())
+    return combo
+
+
+def _read_combo(combo: QComboBox) -> Any:
+    """The chosen value, or ``None`` when the selection was not changed."""
+    if combo.currentIndex() == combo.property("multi_initial"):
+        return None
+    return combo.currentData()
