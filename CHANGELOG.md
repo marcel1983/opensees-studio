@@ -11,6 +11,13 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **Edit several items at once in the Properties panel.** With more than one
+  joint or element selected, the panel shows what they share and lets you change
+  it: restraints and lumped masses of joints; type, section, material, area,
+  geometric transformation, beam integration, end offsets and cardinal point of
+  elements, each applied where the field exists. Differing values show
+  `(varies)` and stay as they are unless changed; Apply is one undo step.
+
 - **The code-combination generator creates the loads the model lacks.** With
   *Create the missing load cases* (on by default), every load the chosen code
   uses that no case carries gets an empty Plain pattern and static case of its

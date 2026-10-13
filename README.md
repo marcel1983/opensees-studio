@@ -413,6 +413,11 @@ fails, the dialog shows the error message instead of a curve.
   the joint; a release at an offset end acts at the face (the model then runs
   with the Transformation handler). Offsets, rigid-zone factor and cardinal
   point are also editable in the Properties dock.
+- **Editing a selection together**: with several joints or elements selected,
+  the Properties dock edits what they share (restraints, masses, type, section,
+  material, area, transformation, integration, offsets, cardinal point). Values
+  that differ show `(varies)` and stay as they are unless changed; Apply is one
+  undo step.
 - **Assign > Frame > End (Length) Offsets... > Automatic from connectivity**:
   the rigid length at each end is the largest half-extent along the member of
   the sections of the other frames meeting at that joint.

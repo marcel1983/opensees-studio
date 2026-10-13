@@ -1137,6 +1137,17 @@ clicking empty space clears it. A box drag selects everything inside it.
 With nothing else active this is also what unlocks the model for inspection:
 hovering an element shows its properties, and the property dock follows the
 selection.
+
+# Editing several at once
+With more than one thing selected, the Properties panel edits what they share.
+Joints: the restraints (a box that differs between the joints shows a partial
+check and is left alone) and the six lumped masses. Elements: type, section,
+material, area, geometric transformation, integration rule and points, end
+offsets, rigid-zone factor and cardinal point, each applied to the selected
+elements that have it (an area to the trusses, a section to the frames). A value
+the selection shares is shown as it is; one that differs shows **(varies)** and
+keeps each item's own value unless you change it. **Apply to N joint(s)** and
+**Apply to N element(s)** send only what you changed, as one undo step.
 """,
             "tools.draw_node",
         ),
