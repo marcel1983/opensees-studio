@@ -18,6 +18,31 @@ refused instead of silently downgraded).
   weight), in the same undo step as the combinations. The dialog lists them
   before you accept.
 
+### Changed
+
+- **Z is the elevation axis of every model.** A 2D model now lives in the X-Z
+  plane (nodes at y = 0, Z up) with the DOFs Ux, Uz and Ry, the way a 3D model
+  stands; OpenSees still solves it in its own x-y plane, and the application
+  translates coordinates, loads and results on the way (`core.plane`). Gravity
+  is -Z in 2D and 3D; the portal frame and truss wizards, the DXF import and
+  File → New 2D Frame / Truss build in XZ, and a 2D project opens face on with
+  the XZ working plane. Result columns are named after the global axes (U1, U3,
+  R2 for a 2D frame), and a 2D rotation or moment about Y is the OpenSees one
+  with its sign changed.
+- **File schema 3.** A 2D project saved by an earlier build (X-Y plane, Y up) is
+  turned into the X-Z plane when it is opened — nodes, restraints, masses, nodal
+  loads, bearing orientations and grid lines together, the same physical model —
+  with a notice, and is saved as schema 3. 3D projects only change the number. A
+  2D node off the X-Z plane is refused before a run. The wizards no longer offer
+  the XY plane: a frame or truss stands in an elevation.
+
+### Fixed
+
+- The deformed shape of a 2D frame no longer moves the joints out of plane by
+  their rotation (the third result column was read as a translation).
+- The Roller (Z) support preset restrains a 2D model's vertical translation; it
+  used to restrain nothing there.
+
 ## [0.0.10] — 2026-10-12
 
 The building release: storeys, rigid diaphragms and a mass source for multi-storey

@@ -39,6 +39,8 @@ from opensees_studio.core import (
 )
 from opensees_studio.core.diaphragms import constrained_node_ids
 from opensees_studio.core.frame_members import member_layout
+from opensees_studio.core.geometry.local_axes import frame_local_axes
+from opensees_studio.core.plane import dof_indices as plane_dof_indices
 from opensees_studio.services.deformation import DeformationSource
 from opensees_studio.views.canvas3d.style import RenderStyle
 
@@ -87,14 +89,12 @@ def _classify_support(restraint: tuple[bool, ...], dof_idx: tuple[int, ...]) -> 
     return "custom"
 
 
-def _dof_indices(ndf: int) -> tuple[int, ...]:
-    if ndf == 6:
-        return (0, 1, 2, 3, 4, 5)
-    if ndf == 3:
-        return (0, 1, 5)
-    if ndf == 2:
-        return (0, 1)
-    return tuple(range(ndf))
+def _dof_indices(ndm: int, ndf: int) -> tuple[int, ...]:
+    """Restraint slots a model uses (core.plane); every slot for an unknown layout."""
+    try:
+        return plane_dof_indices(ndm, ndf)
+    except ValueError:
+        return tuple(range(ndf))
 
 
 class ModelRenderer:
@@ -715,7 +715,7 @@ class ModelRenderer:
         if not project.nodes or self._node_original_points is None:
             return
         ndf = project.ndf
-        dof_idx = _dof_indices(ndf)
+        dof_idx = _dof_indices(project.ndm, ndf)
         size = max(self._diag_of_points(self._node_original_points) * 0.015, 1e-6)
         support_color = (1.0, 0.5, 0.1)
         for node in project.nodes:
@@ -1004,6 +1004,12 @@ class ModelRenderer:
         if length < 1e-9:
             return None
         x_local = axis / length
+        if project.ndm == 2:
+            # A 2D model is in the X-Z plane: its local axes are OpenSees' own.
+            axes2 = frame_local_axes(2, node_i.coords, node_j.coords)
+            if axes2 is None:
+                return None
+            return pi, axis, axes2
         # Same convention as the distributed loads and the diagram renderer.
         y_local = np.cross(np.array([0.0, 0.0, 1.0]), x_local)
         if float(np.linalg.norm(y_local)) < 1e-6:

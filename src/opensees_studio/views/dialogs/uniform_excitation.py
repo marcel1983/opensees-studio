@@ -20,17 +20,20 @@ from PySide6.QtWidgets import (
 )
 
 from opensees_studio.core import Project, UniformExcitationPattern
+from opensees_studio.core.plane import VERTICAL_AXIS, dof_indices, dof_labels
 from opensees_studio.views.float_field import FloatField
 from opensees_studio.views.screen_fit import FittedDialog
 
-_DIRECTION_CHOICES: list[tuple[int, str]] = [
-    (1, "1 — X (horizontal)"),
-    (2, "2 — Y (vertical for ndm=2, lateral for ndm=3)"),
-    (3, "3 — Z (out-of-plane or vertical)"),
-    (4, "4 — Rx (rotation about X)"),
-    (5, "5 — Ry"),
-    (6, "6 — Rz"),
-]
+
+def _direction_choices(ndm: int, ndf: int) -> list[tuple[int, str]]:
+    """``(OpenSees DOF, label)`` of every DOF of the model; Z is the vertical one."""
+    out: list[tuple[int, str]] = []
+    for dof, (slot, label) in enumerate(
+        zip(dof_indices(ndm, ndf), dof_labels(ndm, ndf), strict=True), start=1
+    ):
+        note = " (vertical)" if slot == VERTICAL_AXIS else " (horizontal)" if slot < 3 else ""
+        out.append((dof, f"{dof} — {label}{note}"))
+    return out
 
 
 class UniformExcitationDialog(FittedDialog):
@@ -62,7 +65,7 @@ class UniformExcitationDialog(FittedDialog):
         form.addRow("Name:", self._name_edit)
 
         self._dir_cb = QComboBox()
-        for dof, label in _DIRECTION_CHOICES:
+        for dof, label in _direction_choices(self._project.ndm, self._project.ndf):
             self._dir_cb.addItem(label, dof)
         form.addRow("Direction:", self._dir_cb)
 

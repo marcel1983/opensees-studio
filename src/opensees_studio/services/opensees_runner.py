@@ -99,6 +99,7 @@ from opensees_studio.core.modal import (
     resolve_modal_solver,
 )
 from opensees_studio.core.modal_combination import DEFAULT_MODAL_DAMPING, closely_spaced_pairs
+from opensees_studio.core.plane import dof_signs, to_solver_coords, to_solver_vector3
 from opensees_studio.core.self_weight import self_weight_loads, shell_self_weight_nodal_loads
 from opensees_studio.core.storey_results import cut_force, storey_cuts
 from opensees_studio.services.catalog_emitters import emit_catalog_material
@@ -169,6 +170,8 @@ class OpenSeesRunner:
         self._on_progress = on_progress
         self.project = project
         self._dof_idx: tuple[int, ...] = _dof_indices(project.ndm, project.ndf)
+        # OpenSees value -> global value of each DOF: -1 on a 2D rotation (core.plane).
+        self._dof_sign = np.array(dof_signs(project.ndm, project.ndf), dtype=float)
         self._geom_transf_tags: dict[str, int] = {}
         self._element_geom_transf_tag: dict[int, int] = {}
         self._node_mass: dict[int, np.ndarray] = {}
@@ -303,8 +306,11 @@ class OpenSeesRunner:
 
     # ─────────────────────── nodes / fixes / mass ───────────────────────
     def _emit_node(self, node: Any) -> None:
-        coords = node.coords[: self.project.ndm]
-        self._ops.node(node.id, *coords)
+        self._ops.node(node.id, *to_solver_coords(node.coords, self.project.ndm))
+
+    def _solver_dofs(self, full: Any) -> list[float]:
+        """A global 6-component load as the values of OpenSees' DOFs (core.plane)."""
+        return [float(full[i]) * s for i, s in zip(self._dof_idx, self._dof_sign, strict=True)]
 
     def _emit_fix(self, node: Any, extra: set[int] | None = None) -> None:
         extra = extra or set()
@@ -520,17 +526,22 @@ class OpenSeesRunner:
         """``(x1, x2, x3, y1, y2, y3)`` for an elastomeric or sliding bearing.
 
         The user's ``orient`` wins. Otherwise x is the element axis (node i
-        to node j) or, for coincident nodes, the vertical (global Y in 2D,
-        global Z in 3D); y is the shear direction, global X unless the axis
+        to node j) or, for coincident nodes, the vertical (global Z; OpenSees'
+        y of a 2D model, see core.plane); y is the shear direction, global X unless the axis
         is horizontal, then the horizontal perpendicular to the axis.
         OpenSees 3.8 terminates the process when a zero-length bearing has
         no -orient, so the six values are always written.
         """
         if el.orient is not None:
-            return tuple(float(v) for v in el.orient)
+            ndm_o = self.project.ndm
+            return (
+                *to_solver_vector3(el.orient[:3], ndm_o),
+                *to_solver_vector3(el.orient[3:6], ndm_o),
+            )
         ndm = self.project.ndm
-        pi = np.asarray(self.project.node(el.nodes[0]).coords[:3], dtype=float)
-        pj = np.asarray(self.project.node(el.nodes[1]).coords[:3], dtype=float)
+        # Worked out in OpenSees' own frame: a 2D model's (X, Z) are its (x, y).
+        pi = np.asarray(to_solver_vector3(self.project.node(el.nodes[0]).coords, ndm), dtype=float)
+        pj = np.asarray(to_solver_vector3(self.project.node(el.nodes[1]).coords, ndm), dtype=float)
         if ndm == 2:
             pi[2] = pj[2] = 0.0
         axis = pj - pi
@@ -830,14 +841,13 @@ class OpenSeesRunner:
             case PlainLoadPattern():
                 ops.pattern("Plain", pat.id, pat.time_series_id)
                 for nl in pat.nodal_loads:
-                    forces = tuple(nl.forces[i] for i in self._dof_idx)
-                    ops.load(nl.node_id, *forces)
+                    ops.load(nl.node_id, *self._solver_dofs(nl.forces))
                 # The shells' self weight: consistent nodal forces (translations only).
                 for node_id, force in shell_self_weight_nodal_loads(
                     self.project, pat.self_weight
                 ).items():
                     full = (*(float(f) for f in force), 0.0, 0.0, 0.0)
-                    ops.load(node_id, *(full[i] for i in self._dof_idx))
+                    ops.load(node_id, *self._solver_dofs(full))
                 # A member with rigid end zones takes its loads through the
                 # split below; every other member exactly as before.
                 rigid = {
@@ -932,7 +942,7 @@ class OpenSeesRunner:
                 self._emit_beam_point(eid, point)
             for end, (force, moment) in split.joint.items():
                 full = (*force, *moment)
-                values = [float(full[i]) for i in self._dof_idx]
+                values = self._solver_dofs(full)
                 if any(values):
                     self._ops.load(el.nodes[0] if end == "i" else el.nodes[1], *values)
 
@@ -1215,7 +1225,7 @@ class OpenSeesRunner:
         if not attached:
             return total
         ndm = self.project.ndm
-        joint = np.asarray(self.project.node(node_id).coords[:ndm], dtype=float)
+        joint = np.asarray(to_solver_coords(self.project.node(node_id).coords, ndm), dtype=float)
         for extra in attached:
             r = [float(ops.nodeReaction(extra.tag, dof)) for dof in range(1, ndf + 1)]
             arm = np.asarray(extra.coords, dtype=float) - joint
@@ -1423,8 +1433,10 @@ class OpenSeesRunner:
             ops.reactions()
             for node in self.project.nodes:
                 for j, dof in enumerate(range(1, ndf + 1)):
-                    node_disp[node.id][step, j] = ops.nodeDisp(node.id, dof)
-                node_reaction[node.id][step, :] = self._node_reactions(node.id, ndf)
+                    node_disp[node.id][step, j] = ops.nodeDisp(node.id, dof) * self._dof_sign[j]
+                node_reaction[node.id][step, :] = (
+                    np.asarray(self._node_reactions(node.id, ndf), dtype=float) * self._dof_sign
+                )
             for el in self.project.elements:
                 forces = self._element_local_force(el.id)
                 if el.id not in element_forces:
@@ -1557,7 +1569,7 @@ class OpenSeesRunner:
             "DisplacementControl",
             case.control_node,
             case.control_dof,
-            dU,
+            dU * float(self._dof_sign[case.control_dof - 1]),
         )
         ops.analysis("Static")
 
@@ -1573,15 +1585,16 @@ class OpenSeesRunner:
             # Sum reactions at base nodes in the control direction; negate
             # so positive base_shear means "applied load to the right".
             bs = 0.0
+            control_sign = float(self._dof_sign[case.control_dof - 1])
             for nid in base_nodes:
-                bs += float(self._node_reactions(nid, ndf)[case.control_dof - 1])
+                bs += float(self._node_reactions(nid, ndf)[case.control_dof - 1]) * control_sign
             base_shear[step] = -bs
-            control_disp[step] = float(
+            control_disp[step] = control_sign * float(
                 ops.nodeDisp(case.control_node, case.control_dof),
             )
             for node in self.project.nodes:
                 for j, dof in enumerate(range(1, ndf + 1)):
-                    node_disp[node.id][step, j] = ops.nodeDisp(node.id, dof)
+                    node_disp[node.id][step, j] = ops.nodeDisp(node.id, dof) * self._dof_sign[j]
             for el in self.project.elements:
                 try:
                     forces = ops.eleResponse(el.id, "localForce")
@@ -1786,7 +1799,8 @@ class OpenSeesRunner:
             for nid, vec in loads.items():
                 full = np.zeros(ndf)
                 full[: vec.size] = vec
-                ops.load(nid, *[float(x) for x in full])
+                # Mode shapes carry global signs; OpenSees takes its own.
+                ops.load(nid, *[float(x) for x in full * self._dof_sign])
             ops.system("BandGeneral")
             ops.numberer("RCM")
             ops.constraints(self._constraints_handler(_MODAL_STATIC_CASE))
@@ -1849,6 +1863,7 @@ class OpenSeesRunner:
                     [ops.nodeEigenvector(node.id, mode, dof) for dof in range(1, ndf + 1)],
                     dtype=float,
                 )
+                * self._dof_sign
                 for node in self.project.nodes
             }
         node_mass = {
@@ -2037,7 +2052,9 @@ class OpenSeesRunner:
                 for i, nid in enumerate(node_ids):
                     cols = slice(1 + i * ndof, 1 + (i + 1) * ndof)
                     for kind, table in node_tables.items():
-                        f.create_dataset(f"nodes/{nid}/{kind}", data=table[:, cols])
+                        # Recorders write OpenSees' signs; results carry the global ones.
+                        data = table[:, cols] * self._dof_sign[:ndof]
+                        f.create_dataset(f"nodes/{nid}/{kind}", data=data)
                 if elem_table is not None:
                     start = 1
                     for eid, width in zip(elem_ids, widths, strict=True):

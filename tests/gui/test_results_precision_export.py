@@ -19,7 +19,9 @@ THIRD = 1.0 / 3.0
 
 
 def _project() -> Project:
-    return Project(ndm=2, ndf=3, nodes=[Node(id=1, coords=(0, 0, 0)), Node(id=2, coords=(1, 0, 0))])
+    return Project(
+        ndm=2, ndf=3, nodes=[Node(id=1, coords=(0, 0.0, 0)), Node(id=2, coords=(1, 0.0, 0))]
+    )
 
 
 def _static() -> StaticResults:
@@ -51,7 +53,7 @@ def test_digits_change_the_display_only(qtbot, tmp_path: Path) -> None:  # type:
     panel.show_results(_static(), _project())
     assert panel.digits() == DEFAULT_DIGITS == 6
     header = panel.current_model().headerData(3, Qt.Orientation.Horizontal)
-    assert header == "R3 [rad]"
+    assert header == "R2 [rad]"
     assert _cell(panel, 0, 1) == "0.333333"
     before = panel.export_current(tmp_path / "before.csv").read_bytes()
 
@@ -84,7 +86,7 @@ def test_export_button_writes_the_current_tab(qtbot, tmp_path: Path, monkeypatch
     assert panel._export.isEnabled()
     panel._export.click()
     lines = target.read_text(encoding="utf-8").splitlines()
-    assert lines[0] == "Node,F1 [N],F2 [N],M3 [N·m]"
+    assert lines[0] == "Node,F1 [N],F3 [N],M2 [N·m]"
     assert lines[1] == "1,0.30000000000000004,0.0,12345.678901234567"
     # the element forces tab of this result has no rows: nothing to export
     panel._tabs.setCurrentIndex(2)
@@ -137,7 +139,7 @@ def test_transient_node_history_table(qtbot, tmp_path: Path) -> None:  # type: i
     )
     panel._tabs.setCurrentIndex(1)
     table = panel.tables()[0]
-    assert table.columns == ["Time [s]", "U1 [m]", "U2 [m]", "R3 [rad]"]
+    assert table.columns == ["Time [s]", "U1 [m]", "U3 [m]", "R2 [rad]"]
     assert [row[1] for row in table.rows] == [THIRD, 1e-10, 0.0]
     panel._history_node.setCurrentIndex(1)
     panel._history_kind.setCurrentIndex(2)

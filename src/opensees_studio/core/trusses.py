@@ -41,7 +41,8 @@ TRUSS_NDF: frozenset[tuple[int, int]] = frozenset({(2, 2), (2, 3), (3, 3), (3, 6
 #: Out-of-plane translation index per plane (canonical 6-DOF storage).
 _OUT_OF_PLANE_TRANSLATION = {"XY": 2, "XZ": 1, "YZ": 0}
 
-Plane = Literal["XY", "XZ", "YZ"]
+Plane = Literal["XZ", "YZ"]
+"""Planes a truss can stand in (Z up); a 2D project lives in XZ (core.plane)."""
 
 
 class TrussType(enum.Enum):
@@ -98,7 +99,7 @@ class TrussSpec:
             raise TrussError("Both member areas must be positive.")
         if self.material_id < 1:
             raise TrussError("The members need a material.")
-        if self.plane not in PLANE_AXES:
+        if self.plane not in ("XZ", "YZ"):  # an elevation: Z is up
             raise TrussError(f"Unknown plane {self.plane!r}.")
         if self.is_pitched:
             warren = self.truss_type is TrussType.WARREN
@@ -137,7 +138,7 @@ class TrussSpec:
         """The 6-DOF restraint vector of a truss node."""
         if (ndm, ndf) not in TRUSS_NDF:
             raise TrussError(f"Unsupported (ndm, ndf): ({ndm}, {ndf}).")
-        span_axis, height_axis, _ = PLANE_AXES[self.plane] if ndm == 3 else (0, 1, 2)
+        span_axis, height_axis, _ = PLANE_AXES[self.plane] if ndm == 3 else PLANE_AXES["XZ"]
         flags = [False] * 6
         if support == "pin":
             flags[span_axis] = flags[height_axis] = True
@@ -146,7 +147,7 @@ class TrussSpec:
         if ndm == 3 and (self.restrain_out_of_plane or support != "free"):
             flags[_OUT_OF_PLANE_TRANSLATION[self.plane]] = True
         if ndf == 3 and ndm == 2:
-            flags[5] = True  # Rz: a truss node has no rotational stiffness
+            flags[4] = True  # Ry: a truss node has no rotational stiffness
         if ndf == 6:
             flags[3] = flags[4] = flags[5] = True
         return (flags[0], flags[1], flags[2], flags[3], flags[4], flags[5])
@@ -185,12 +186,12 @@ def build_truss(
 
     Raises:
         TrussError: if ``(ndm, ndf)`` cannot carry a plane truss, or a 2D model
-            is asked for a plane other than XY.
+            is asked for a plane other than XZ.
     """
     if (ndm, ndf) not in TRUSS_NDF:
         raise TrussError(f"Unsupported (ndm, ndf): ({ndm}, {ndf}).")
-    if ndm == 2 and spec.plane != "XY":
-        raise TrussError("A 2D project builds its trusses in the XY plane.")
+    if ndm == 2 and spec.plane != "XZ":
+        raise TrussError("A 2D project builds its trusses in the XZ plane.")
 
     span_axis, height_axis, _ = PLANE_AXES[spec.plane]
 

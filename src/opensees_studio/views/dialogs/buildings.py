@@ -71,7 +71,7 @@ class StoreysDialog(FittedDialog):
         self._ids: list[int] = []
         self._result: list[Storey] = []
         root = QVBoxLayout(self)
-        axis = "Y" if project.ndm == 2 else "Z"
+        axis = "Z"  # the elevation axis of every model (core.plane)
         root.addWidget(
             QLabel(
                 f"Floor levels, by elevation along {axis}. The levels below the lowest "
@@ -99,7 +99,6 @@ class StoreysDialog(FittedDialog):
             "One storey per Z grid line of the chosen system, the lowest line being the base."
         )
         self.from_grid_button.clicked.connect(self._on_from_grid)
-        self.from_grid_button.setEnabled(project.ndm == 3)
         row.addWidget(self.system_combo)
         row.addWidget(self.from_grid_button)
         root.addLayout(row)

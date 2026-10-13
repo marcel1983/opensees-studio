@@ -151,6 +151,8 @@ class DrawNodeTool(CanvasTool):
         project = self._vm.project
         if project is None:
             return
+        if project.ndm == 2:
+            y = 0.0  # a 2D model lives in the X-Z plane (core.plane)
         # Skip duplicates at the snapped intersection.
         for n in project.nodes:
             if (

@@ -170,6 +170,15 @@ solver cannot take the interface with it.
 4. **Display** the results: deformed shape, mode shapes, force diagrams, time
 histories, hysteresis, pushover curves and response spectra.
 
+# Axes
+**Z is the elevation axis of every model.** A 3D model uses X, Y and Z; a 2D
+model lives in the **X-Z plane** (every node at y = 0, Z up), so its joints move
+in Ux and Uz and turn in Ry, and gravity acts along -Z in both. OpenSees itself
+solves a 2D model in its own x-y plane; the application translates on the way
+in and out, so you never see that plane. A 2D project saved by an earlier build
+(X-Y plane, Y up) is turned into the X-Z plane when it is opened, loads and
+supports included, and is saved that way.
+
 # Where things are
 - The **3D viewport** is the model; clicking selects, dragging orbits.
 - Everything is a command on an undo stack: Ctrl+Z undoes one model edit.
@@ -701,9 +710,9 @@ anything where the out-of-plane behaviour matters.
             "File",
             "An empty 2D frame project, then the wizard that fills it, then its grid.",
             """
-Creates a planar frame project (ndm = 2, ndf = 3: Ux, Uy, Rz per joint) and
-immediately opens the **Portal Frame Wizard**. The frame is built on the XY
-plane, which is the only plane a 2D model has, and the wizard also writes the
+Creates a planar frame project (ndm = 2, ndf = 3: Ux, Uz, Ry per joint) and
+immediately opens the **Portal Frame Wizard**. The frame is built on the XZ
+plane (Z up), which is the only plane a 2D model has, and the wizard also writes the
 **grid** it used, so you can keep drawing on the same lines. Cancelling the
 wizard leaves the empty project.
 
@@ -738,7 +747,8 @@ makes a portal frame stiff) and the **sections** (bending stiffness).
             "File",
             "A planar truss: ndm = 2, ndf = 2, no rotational degrees of freedom.",
             """
-Creates a project with two degrees of freedom per node (Ux, Uy). Use it for a
+Creates a project with two degrees of freedom per node (Ux, Uz: the model is in
+the X-Z plane, Z up). Use it for a
 genuine pin-jointed truss: with no rotational DOF there are no empty rows in the
 stiffness matrix, so the solver does not have to be told what to do with a
 rotational DOF that carries no stiffness.
@@ -1489,7 +1499,7 @@ reference patterns by id, so the same loads can be used by several cases.
 # Self weight
 - **Self-weight multiplier** — 1 adds the weight of every frame whose section
   has a **unit weight** (gamma, force per volume, set in the Section Library):
-  gamma times A per unit length, downward (-Z in 3D, -Y in 2D), split over the
+  gamma times A per unit length, downward (-Z, in 2D and in 3D), split over the
   member's local axes, so a column takes it axially and a sloped rafter partly
   axially. 0 leaves it out.
 - A new project starts with a **DEAD** case: a time series, a pattern with a
@@ -1667,8 +1677,9 @@ A restraint removes a DOF from the unknowns: a fixed DOF carries a reaction
 instead of a displacement.
 
 # Values
-- **Ux, Uy, Uz** — translations; **Rx, Ry, Rz** — rotations. In a 2D frame model
-  only Ux, Uy and Rz exist; in a 2D truss only Ux and Uy.
+- **Ux, Uy, Uz** — translations; **Rx, Ry, Rz** — rotations. A 2D model lives in
+  the X-Z plane (Z up): in a 2D frame only Ux, Uz and Ry exist, in a 2D truss only
+  Ux and Uz.
 - **Presets** — pinned (translations fixed), fixed (everything), roller (one
   translation free), and so on. The check boxes are what is actually applied.
 - The assignment **replaces** the restraints of the selected nodes.
@@ -2598,8 +2609,8 @@ TOPICS.update(
             "Define",
             "Name the floor levels of a building and their elevations.",
             """
-A storey is a floor level: a name and an elevation along the vertical axis (Z in
-3D, Y in 2D). The storey table, the "every joint of storey N" diaphragm and the
+A storey is a floor level: a name and an elevation along the vertical axis, Z
+(in 2D and in 3D). The storey table, the "every joint of storey N" diaphragm and the
 drift ratios all read them.
 
 # Values

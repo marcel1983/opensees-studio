@@ -18,13 +18,14 @@ def _build(spec: TrussSpec, ndm: int = 2, ndf: int = 2):  # type: ignore[no-unty
 
 
 def _pairs(truss, ids) -> set[tuple[tuple[float, float], tuple[float, float]]]:  # type: ignore[no-untyped-def]
-    xy = {node.id: (node.coords[0], node.coords[1]) for node in truss.nodes}
+    # (span, height) of each node: a 2D truss stands in the X-Z plane (Z up).
+    xy = {node.id: (node.coords[0], node.coords[2]) for node in truss.nodes}
     members = {e.id: e for e in truss.elements}
     return {tuple(sorted((xy[members[i].nodes[0]], xy[members[i].nodes[1]]))) for i in ids}  # type: ignore[misc]
 
 
 def test_a_pratt_truss() -> None:
-    truss = _build(_spec(plane="XY"))
+    truss = _build(_spec(plane="XZ"))
     assert len(truss.nodes) == 10  # 5 bottom + 5 top
     assert len(truss.chord_element_ids) == 8
     assert len(truss.web_element_ids) == 5 + 4  # verticals + diagonals
@@ -36,14 +37,14 @@ def test_a_pratt_truss() -> None:
 
 
 def test_a_howe_truss_mirrors_the_diagonals() -> None:
-    web = _pairs(t := _build(_spec(truss_type=TrussType.HOWE, plane="XY")), t.web_element_ids)
+    web = _pairs(t := _build(_spec(truss_type=TrussType.HOWE, plane="XZ")), t.web_element_ids)
     assert ((0.0, 0.0), (3.0, 2.0)) in web
     assert ((9.0, 2.0), (12.0, 0.0)) in web
 
 
 def test_a_warren_truss_has_top_nodes_at_mid_panel_and_no_verticals() -> None:
-    truss = _build(_spec(truss_type=TrussType.WARREN, plane="XY"))
-    tops = sorted(n.coords[0] for n in truss.nodes if n.coords[1] > 0)
+    truss = _build(_spec(truss_type=TrussType.WARREN, plane="XZ"))
+    tops = sorted(n.coords[0] for n in truss.nodes if n.coords[2] > 0)
     assert tops == [1.5, 4.5, 7.5, 10.5]
     assert len(truss.web_element_ids) == 8
     web = _pairs(truss, truss.web_element_ids)
@@ -51,12 +52,12 @@ def test_a_warren_truss_has_top_nodes_at_mid_panel_and_no_verticals() -> None:
 
 
 def test_a_triangular_truss_closes_on_its_supports_without_repeating_a_chord() -> None:
-    truss = _build(_spec(end_depth=0.0, plane="XY"))
+    truss = _build(_spec(end_depth=0.0, plane="XZ"))
     assert len(truss.nodes) == 5 + 3  # the end top nodes are the supports
     pairs = [frozenset(e.nodes) for e in truss.elements]
     assert len(pairs) == len(set(pairs))
     assert all(len(p) == 2 for p in pairs)
-    ridge = max(n.coords[1] for n in truss.nodes)
+    ridge = max(n.coords[2] for n in truss.nodes)
     assert ridge == 2.0
 
 
@@ -85,6 +86,12 @@ def test_what_is_refused(changes, message) -> None:  # type: ignore[no-untyped-d
         _spec(**changes)
 
 
-def test_a_2d_model_builds_in_xy_only() -> None:
-    with pytest.raises(TrussError, match="XY"):
-        _build(_spec(plane="XZ"))
+def test_a_2d_model_builds_in_xz_only() -> None:
+    with pytest.raises(TrussError, match="XZ"):
+        _build(_spec(plane="YZ"))
+
+
+def test_the_xy_plane_is_not_a_truss_plane() -> None:
+    # Z is up: a truss stands in an elevation, never in plan.
+    with pytest.raises(ValueError):
+        _spec(plane="XY")

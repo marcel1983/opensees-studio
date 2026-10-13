@@ -51,7 +51,7 @@ L = 6.0
 W = 10.0
 FRAMES = [ElasticBeamColumn, ForceBeamColumn, DispBeamColumn]
 
-FIXED_2D = (True, True, False, False, False, True)
+FIXED_2D = (True, False, True, False, True, False)  # Ux, Uz, Ry: the X-Z plane
 FIXED_3D = (True,) * 6
 
 
@@ -314,8 +314,8 @@ def test_a_partial_load_on_a_simple_beam_follows_statics(element_cls: type, tmp_
     project = _project(
         [element],
         [
-            Node(id=1, coords=(0.0, 0.0, 0.0), restraint=(True, True, False, False, False, False)),
-            Node(id=2, coords=(L, 0.0, 0.0), restraint=(False, True, False, False, False, False)),
+            Node(id=1, coords=(0.0, 0.0, 0.0), restraint=(True, False, True, False, False, False)),
+            Node(id=2, coords=(L, 0.0, 0.0), restraint=(False, False, True, False, False, False)),
         ],
         pattern=PlainLoadPattern(
             id=1,
@@ -357,7 +357,8 @@ def test_a_load_on_a_rigid_zone_goes_to_the_joint(tmp_path: Path) -> None:
 
     span = 0.1 * L
     assert results.node_reaction[1][0][1] == pytest.approx(W * span, rel=1e-6)
-    assert results.node_reaction[1][0][2] == pytest.approx(W * span**2 / 2, rel=1e-6)
+    # The support's moment about +Y resists a downward load at +x: negative.
+    assert results.node_reaction[1][0][2] == pytest.approx(-W * span**2 / 2, rel=1e-6)
     assert np.allclose(results.element_forces[1][0], 0.0, atol=1e-9)
 
 
@@ -372,7 +373,7 @@ def test_a_cracked_section_modifier_softens_the_member(element_cls: type, tmp_pa
         pattern=PlainLoadPattern(
             id=1,
             time_series_id=1,
-            nodal_loads=[NodalLoad(node_id=2, forces=(0.0, -tip, 0.0, 0.0, 0.0, 0.0))],
+            nodal_loads=[NodalLoad(node_id=2, forces=(0.0, 0.0, -tip, 0.0, 0.0, 0.0))],
         ),
     )
 
@@ -424,13 +425,17 @@ def _shear_cantilever(
 def test_a_shear_area_adds_the_shear_deflection(ndm: int, tmp_path: Path) -> None:
     """Tip load P on a cantilever: P L^3 / (3 E I) + P L / (G As)."""
     p, as2 = 100.0, 0.008
-    project = _shear_cantilever(ndm=ndm, as2=as2, as3=0.005, iz=I_SEC, iy=I_SEC, load=(0.0, -p))
+    # Across local y: global Z in 2D (the X-Z plane), global Y in 3D.
+    load = (0.0, 0.0, -p) if ndm == 2 else (0.0, -p)
+    project = _shear_cantilever(ndm=ndm, as2=as2, as3=0.005, iz=I_SEC, iy=I_SEC, load=load)
     tip = _solve(project, tmp_path).node_disp[2][0][1]
     assert tip == pytest.approx(-(p * L**3 / (3 * E * I_SEC) + p * L / (G_SEC * as2)), rel=1e-6)
 
 
 def test_a_section_without_shear_areas_stays_euler_bernoulli(tmp_path: Path) -> None:
-    project = _shear_cantilever(ndm=2, as2=None, as3=None, iz=I_SEC, iy=I_SEC, load=(0.0, -100.0))
+    project = _shear_cantilever(
+        ndm=2, as2=None, as3=None, iz=I_SEC, iy=I_SEC, load=(0.0, 0.0, -100.0)
+    )
     tip = _solve(project, tmp_path).node_disp[2][0][1]
     assert tip == pytest.approx(-100.0 * L**3 / (3 * E * I_SEC), rel=1e-9)
 
@@ -451,7 +456,7 @@ def test_the_shear_area_modifiers_scale_the_shear_deflection(tmp_path: Path) -> 
         as3=None,
         iz=I_SEC,
         iy=I_SEC,
-        load=(0.0, -p),
+        load=(0.0, 0.0, -p),
         modifiers=FrameModifiers(as2=0.5, i33=0.5),
     )
     tip = _solve(project, tmp_path).node_disp[2][0][1]
@@ -514,9 +519,10 @@ def test_a_modal_run_with_releases_and_offsets(tmp_path: Path) -> None:
 
 # ──────────────────────────── diagram stations ────────────────────────────
 def _simply_supported(element: object, ndm: int = 2, **pattern) -> Project:  # type: ignore[no-untyped-def]
-    pin = (True, True, False, False, False, False) if ndm == 2 else (True,) * 3 + (False,) * 3
+    # 2D: the X-Z plane, so a pin holds Ux and Uz and a roller Uz.
+    pin = (True, False, True, False, False, False) if ndm == 2 else (True,) * 3 + (False,) * 3
     roller = (
-        (False, True, False, False, False, False)
+        (False, False, True, False, False, False)
         if ndm == 2
         else (False, True, True, True, False, False)
     )

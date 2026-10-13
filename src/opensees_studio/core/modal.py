@@ -34,6 +34,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from opensees_studio.core import plane
 from opensees_studio.core.diaphragms import IN_PLANE_SLOTS, auto_fixed_slots, constrained_node_ids
 
 if TYPE_CHECKING:
@@ -70,22 +71,8 @@ SYMM_BAND_REFUSAL = (
 
 
 def dof_indices(ndm: int, ndf: int) -> tuple[int, ...]:
-    """Map (ndm, ndf) onto positions in the canonical 6-DOF storage.
-
-    - (2, 2): 2D truss: (Ux, Uy) = (0, 1)
-    - (2, 3): 2D frame: (Ux, Uy, Rz) = (0, 1, 5)
-    - (3, 3): 3D truss or brick: (Ux, Uy, Uz) = (0, 1, 2)
-    - (3, 6): 3D frame: (Ux, Uy, Uz, Rx, Ry, Rz) = (0..5)
-    """
-    table = {
-        (2, 2): (0, 1),
-        (2, 3): (0, 1, 5),
-        (3, 3): (0, 1, 2),
-        (3, 6): (0, 1, 2, 3, 4, 5),
-    }
-    if (ndm, ndf) not in table:
-        raise ValueError(f"Unsupported (ndm, ndf): ({ndm}, {ndf}).")
-    return table[(ndm, ndf)]
+    """Slot of the canonical 6-DOF storage each OpenSees DOF reads (see :mod:`core.plane`)."""
+    return plane.dof_indices(ndm, ndf)
 
 
 def free_dof_count(project: Project) -> int:

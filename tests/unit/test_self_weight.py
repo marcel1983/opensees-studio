@@ -55,8 +55,12 @@ def test_local_axes_are_orthonormal_and_follow_opensees() -> None:
     assert list(x) == [1, 0, 0]
     assert list(z) == pytest.approx([0, 0, 1])  # vecxz lies in the x-z plane
     assert list(y) == pytest.approx([0, 1, 0])  # y = vecxz × x
-    x2, y2, _ = frame_local_axes(2, (0, 0, 0), (0, 3, 0))
-    assert list(x2) == [0, 1, 0] and list(y2) == pytest.approx([-1, 0, 0])
+    # 2D: the X-Z plane, local y = (-Y) x local x (OpenSees' own, see core.plane).
+    x2, y2, z2 = frame_local_axes(2, (0, 0, 0), (0, 0, 3))
+    assert list(x2) == [0, 0, 1] and list(y2) == pytest.approx([-1, 0, 0])
+    assert list(z2) == pytest.approx([0, -1, 0])
+    _, y_beam, _ = frame_local_axes(2, (0, 0, 0), (4, 0, 0))
+    assert list(y_beam) == pytest.approx([0, 0, 1])  # a 2D beam's local y points up
     assert frame_local_axes(3, (1, 1, 1), (1, 1, 1)) is None
 
 
@@ -76,9 +80,9 @@ def test_a_3d_beam_takes_its_weight_transversely_and_a_column_axially() -> None:
 
 
 def test_a_sloped_2d_rafter_splits_its_weight() -> None:
-    project = _project(2, {1: (0, 0, 0), 2: (3, 4, 0)}, [(1, (1, 2))])
+    project = _project(2, {1: (0, 0, 0), 2: (3, 0, 4)}, [(1, (1, 2))])
     (load,) = self_weight_loads(project, multiplier=2.0)
-    # x = (0.6, 0.8), y = (-0.8, 0.6); down = (0, -1).
+    # In the X-Z plane: x = (0.6, 0.8), y = (-0.8, 0.6); down = (0, -1) in (X, Z).
     assert (load.wx, load.wy) == pytest.approx((-0.8 * 2 * W, -0.6 * 2 * W))
     assert math.hypot(load.wx, load.wy) == pytest.approx(2 * W)
 

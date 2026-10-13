@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING
 from pydantic import Field
 
 from opensees_studio.core._base import Entity
+from opensees_studio.core.plane import VERTICAL_AXIS
 
 if TYPE_CHECKING:
     from opensees_studio.core.geometry import CoordinateGridSystem
@@ -39,8 +40,9 @@ class Storey(Entity):
 
 
 def elevation_axis(ndm: int) -> int:
-    """Index of the vertical coordinate: 1 (Y) in 2D, 2 (Z) in 3D."""
-    return 1 if ndm == 2 else 2
+    """Index of the vertical coordinate: 2 (Z), in 2D and in 3D (see core.plane)."""
+    del ndm
+    return VERTICAL_AXIS
 
 
 def lateral_axes(ndm: int) -> tuple[int, ...]:

@@ -165,7 +165,8 @@ def test_a_top_insertion_lowers_a_2d_beam() -> None:
     project = _project(_beam(insertion=FrameInsertion(cardinal_point=8)))
     layout = member_layout(project, project.elements[0])
     assert layout is not None
-    assert layout.offset_i == pytest.approx([0.0, -math.sqrt(12 * IZ / A) / 2, 0.0])
+    # A 2D beam along X: local y is +Z (the X-Z plane), so the top lies along -Z.
+    assert layout.offset_i == pytest.approx([0.0, 0.0, -math.sqrt(12 * IZ / A) / 2])
     assert layout.offset_j == pytest.approx(layout.offset_i)
 
 
@@ -180,8 +181,9 @@ def test_a_load_on_a_rigid_zone_moves_to_the_joint() -> None:
     w = (0.0, -10.0, 0.0)
     split = split_member_loads(layout, [(0.0, 1.0, w, w)])
     force, moment = split.joint["i"]
-    assert force == pytest.approx([0.0, -10.0, 0.0])
-    assert moment == pytest.approx([0.0, 0.0, -5.0])  # 10 kN at 0.5 m
+    # Local -y of a 2D beam is global -Z; the moment is about global Y.
+    assert force == pytest.approx([0.0, 0.0, -10.0])
+    assert moment == pytest.approx([0.0, 5.0, 0.0])  # 10 kN at 0.5 m
     (piece,) = split.pieces
     assert (piece.a, piece.b) == pytest.approx((0.0, 1.0))
     assert piece.is_uniform_full
@@ -195,14 +197,14 @@ def test_a_trapezoid_is_cut_at_the_rigid_zone() -> None:
     assert (piece.a, piece.b) == pytest.approx((2 / 3, 1.0))
     assert piece.w_b[1] == pytest.approx(-1.5)
     force, _ = split.joint["j"]
-    assert force[1] == pytest.approx(-(1.5 + 2.0) / 2 * 1.5)
+    assert force[2] == pytest.approx(-(1.5 + 2.0) / 2 * 1.5)
 
 
 def test_a_point_load_on_a_rigid_zone() -> None:
     layout = _layout(length_j=1.0)
     split = split_member_loads(layout, points=[(1.0, (0.0, -3.0, 0.0))])
     force, moment = split.joint["j"]
-    assert force == pytest.approx([0.0, -3.0, 0.0])
+    assert force == pytest.approx([0.0, 0.0, -3.0])
     assert moment == pytest.approx([0.0, 0.0, 0.0])  # at the joint itself
     assert not split.points
 
@@ -311,7 +313,8 @@ def test_stiffness_modifiers_need_an_elastic_section() -> None:
 def _constrained_at_2(beam: ElasticBeamColumn, link: str, ndm: int = 2, **pattern) -> Project:  # type: ignore[no-untyped-def]
     """``beam`` with its joint 2 the constrained node of a user equalDOF or rigid link."""
     project = _project(beam, ndm=ndm, **pattern)
-    project.nodes.append(Node(id=3, coords=(6.0, 1.0, 0.0)))
+    # 2D lives in the X-Z plane (Z up).
+    project.nodes.append(Node(id=3, coords=(6.0, 0.0, 1.0) if ndm == 2 else (6.0, 1.0, 0.0)))
     if link == "equalDOF":
         project.mp_constraints.append(
             EqualDOFConstraint(retained_node=3, constrained_node=2, dofs=(1,))
@@ -367,7 +370,7 @@ def test_a_point_load_sends_a_constrained_release_to_the_springs() -> None:
 def test_a_release_at_a_retained_joint_keeps_its_equal_dof() -> None:
     """Only the constrained node of a constraint would chain: joint 2 retains this one."""
     project = _project(_beam(releases=FrameReleases(j=EndRelease(released=("M3",)))))
-    project.nodes.append(Node(id=3, coords=(6.0, 1.0, 0.0)))
+    project.nodes.append(Node(id=3, coords=(6.0, 0.0, 1.0)))
     project.mp_constraints.append(
         EqualDOFConstraint(retained_node=2, constrained_node=3, dofs=(1,))
     )
@@ -402,7 +405,7 @@ def test_the_2d_element_release_reaches_the_script() -> None:
     )
     # Hold joint 2's rotation (nothing else stiffens it) and the retained node.
     project.nodes[1] = project.nodes[1].model_copy(
-        update={"restraint": (False, False, False, False, False, True)}
+        update={"restraint": (False, False, False, False, True, False)}  # Ry
     )
     project.nodes[2] = project.nodes[2].model_copy(update={"restraint": (True,) * 6})
     script = export_script(project, project.analyses[0])
@@ -472,9 +475,10 @@ def _frame_with_columns(ndm: int = 2) -> Project:
         ElasticSection(id=3, E=E, A=wide, Iz=wide * wide / 12, Iy=wide * wide / 12, G=8e7, J=1e-3),
     ]
     project = _project(sections=sections, ndm=ndm)
+    up = 2 if ndm == 2 else 1  # 2D: columns rise along Z (the X-Z plane)
     project.nodes += [
-        Node(id=3, coords=(0.0, 3.0, 0.0)),
-        Node(id=4, coords=(6.0, 3.0, 0.0)),
+        Node(id=3, coords=tuple(3.0 if k == up else 0.0 for k in range(3))),
+        Node(id=4, coords=tuple(3.0 if k == up else (6.0 if k == 0 else 0.0) for k in range(3))),
         Node(id=5, coords=(12.0, 0.0, 0.0)),
     ]
     project.elements += [
@@ -497,7 +501,7 @@ def test_connectivity_offsets_are_half_the_framing_member_depth(ndm: int) -> Non
 def test_connectivity_offsets_follow_the_projection_on_the_member_axis() -> None:
     """A column leaning at 45 deg reaches into the beam by the projected half extent."""
     project = _frame_with_columns()
-    project.nodes[2] = Node(id=3, coords=(3.0, 3.0, 0.0))  # column 2 at 45 deg
+    project.nodes[2] = Node(id=3, coords=(3.0, 0.0, 3.0))  # column 2 at 45 deg
     li, _ = connectivity_offsets(project, 1)
     assert li == pytest.approx(
         0.2 * math.sqrt(0.5)

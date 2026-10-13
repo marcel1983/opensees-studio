@@ -57,12 +57,13 @@ from opensees_studio.core.ground_motion import (
     record_path_to_posix,
     sanitize_record_filename,
 )
+from opensees_studio.core.plane import migrate_2d_payload_to_xz
 
 PROJECT_FILE_SUFFIX = ".osmodel"
 
 #: Current on-disk schema. 1 = records embedded in PathTimeSeries;
 #: 2 = ground_motions catalog with record-backed series.
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 #: Sidecar folder for legacy values that had no locatable source file:
 #: ``<project-stem>`` + this suffix, next to the ``.osmodel``.
@@ -587,6 +588,11 @@ def load_project(path: str | Path, on_notice: Notice | None = None) -> Project:
     payload = json.loads(src.read_text(encoding="utf-8"))
     if isinstance(payload, dict):
         _reject_future_schema(payload, src)
+        if migrate_2d_payload_to_xz(payload) and on_notice is not None:
+            on_notice(
+                "2D model moved from the X-Y plane to the X-Z plane: Z is now the "
+                "elevation axis of every model. Saving writes the new layout."
+            )
         _normalize_record_paths(payload)
         _migrate_embedded_records(payload, src.parent, src.stem, on_notice)
         _hydrate_record_backed_series(payload, src.parent, on_notice)
