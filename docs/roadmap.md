@@ -624,8 +624,14 @@ Status legend: ✅ done · 🟡 partial · ⬜ planned · ✂️ deferred / out-
   visual presets pending
 
 ## Backlog (post Phase 8)
-- ⬜ Pre-analysis model validation: detect under-restrained or mechanism 2D/3D
-  models before `ops.analyze`
+- ✅ Pre-analysis model validation: detect under-restrained or mechanism 2D/3D
+  models before `ops.analyze` — Analyze → Check Model Stability (0.0.11): the
+  singular values of the assembled stiffness, each zero reported as a mechanism
+  with the joints and DOFs that move; the runner's DOF-coverage check lists the
+  free DOFs nothing stiffens.
+- ✅ Z as the elevation axis of every model (0.0.11): 2D models in the X-Z plane,
+  file schema 3 converts older 2D projects on open (`core.plane`).
+- ✅ Multi-selection editing in the Properties panel (0.0.11).
 
 ## Maintenance / debt
 - ⬜ Canonical float serialization in `.osmodel` (platform last-digit noise
