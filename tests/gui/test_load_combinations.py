@@ -484,3 +484,77 @@ def test_define_menu_opens_the_dialog(qtbot, monkeypatch) -> None:  # type: igno
     titles = [a.text() for a in window.menuBar().actions()]
     define = window.menuBar().actions()[titles.index("&Define")].menu()
     assert window._act_load_combinations in define.actions()
+
+
+@pytest.mark.gui
+def test_generator_creates_the_missing_load_cases_in_one_undo_step(qtbot) -> None:  # type: ignore[no-untyped-def]
+    vm = ProjectViewModel()
+    vm.new_project(dead_case=True)  # 3D, with its DEAD case
+    project = vm.project
+    assert project is not None
+    dead = next(c for c in project.analyses if c.name == "DEAD")
+    before = (len(project.time_series), len(project.load_patterns), len(project.analyses))
+
+    gen = CodeGeneratorDialog([c for c in project.analyses if c.type == "Static"], ndm=project.ndm)
+    qtbot.addWidget(gen)
+    assert gen.create_missing_wanted()
+    assert gen.missing_names() == [
+        "LIVE",
+        "ROOF LIVE",
+        "SNOW",
+        "RAIN",
+        "WIND X",
+        "WIND Y",
+        "EQ X",
+        "EQ Y",
+    ]
+    gen.set_code("tbdy")
+    assert gen.missing_names() == ["LIVE", "WIND X", "WIND Y", "EQ X", "EQ Y"]
+
+    dlg = LoadCombinationsDialog(vm)
+    qtbot.addWidget(dlg)
+    added = dlg.generate("asce7_lrfd", {"D": [dead.id]}, create_missing=True)
+    created = [c.name for c in project.analyses[before[2] :]]
+    assert created == ["LIVE", "ROOF LIVE", "SNOW", "RAIN", "WIND X", "WIND Y", "EQ X", "EQ Y"]
+    patterns = {p.name: p for p in project.load_patterns}
+    assert all(not patterns[n].nodal_loads and patterns[n].self_weight == 0.0 for n in created)
+    names = [c.name for c in project.combinations]
+    assert added == len(names) and "1.2D+1.6L+0.5S" in names
+    used = {t.ref_id for c in project.combinations for t in c.terms if t.source == "case"}
+    assert {c.id for c in project.analyses[before[2] :]} <= used
+    assert "Created the load case(s) LIVE, ROOF LIVE" in dlg.message_text()
+
+    vm.undo_stack.undo()
+    assert project.combinations == []
+    assert (len(project.time_series), len(project.load_patterns), len(project.analyses)) == before
+
+
+@pytest.mark.gui
+def test_generator_in_2d_and_without_any_case_creates_dead_with_self_weight(qtbot) -> None:  # type: ignore[no-untyped-def]
+    vm = ProjectViewModel()
+    vm.new_project(ndm=2, ndf=3)
+    project = vm.project
+    assert project is not None
+    project.analyses.clear()
+    project.load_patterns.clear()
+    gen = CodeGeneratorDialog([], ndm=2)
+    qtbot.addWidget(gen)
+    gen.set_code("tbdy")
+    assert gen.missing_names() == ["DEAD", "LIVE", "WIND X", "EQ X"]
+    dlg = LoadCombinationsDialog(vm)
+    qtbot.addWidget(dlg)
+    assert dlg.generate("tbdy", {}, create_missing=True) > 0
+    dead = next(p for p in project.load_patterns if p.name == "DEAD")
+    assert dead.self_weight == 1.0
+
+
+@pytest.mark.gui
+def test_generator_leaves_cases_alone_when_asked_not_to_create(qtbot) -> None:  # type: ignore[no-untyped-def]
+    vm = _vm()
+    project = vm.project
+    assert project is not None
+    n_cases = len(project.analyses)
+    dlg = LoadCombinationsDialog(vm)
+    qtbot.addWidget(dlg)
+    dlg.generate("asce7_lrfd", {"D": [1], "L": [2]}, create_missing=False)
+    assert len(project.analyses) == n_cases
