@@ -11,6 +11,12 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **The code-combination generator creates the loads the model lacks.** With
+  *Create the missing load cases* (on by default), every load the chosen code
+  uses that no case carries gets an empty Plain pattern and static case of its
+  own (LIVE, ROOF LIVE, SNOW, RAIN, WIND X/Y, EQ X/Y, and DEAD with the self
+  weight), in the same undo step as the combinations. The dialog lists them
+  before you accept.
 - **Analyze → Check Model Stability.** Builds the model as an analysis would,
   assembles its stiffness matrix once and decomposes it into singular values:
   each zero is a mechanism, reported with the joints and DOFs that move in it

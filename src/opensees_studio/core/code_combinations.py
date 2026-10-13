@@ -624,6 +624,41 @@ def unused_roles(code: str, roles: Mapping[str, Iterable[int]]) -> list[str]:
     return [r for r in LOAD_ROLES if list(roles.get(r, ())) and r not in CODES[code].roles]
 
 
+PLACEHOLDER_CASE_NAMES: dict[str, tuple[str, ...]] = {
+    "D": ("DEAD",),
+    "L": ("LIVE",),
+    "Lr": ("ROOF LIVE",),
+    "S": ("SNOW",),
+    "R": ("RAIN",),
+    "W": ("WIND X", "WIND Y"),
+    "E": ("EQ X", "EQ Y"),
+}
+"""Names of the cases :func:`missing_load_cases` proposes, per load role.
+
+Each name is one :func:`opensees_studio.core.combinations.guess_load_role`
+reads back as its role. Wind and earthquake get one case per horizontal axis.
+"""
+
+
+def missing_load_cases(
+    code: str, roles: Mapping[str, Iterable[int]], ndm: int = 3
+) -> list[tuple[str, str]]:
+    """``(role, case name)`` for each load ``code`` uses that ``roles`` has no case for.
+
+    A 2D model (``ndm == 2``, Y vertical) gets one wind and one earthquake case
+    along X; a 3D model (Z vertical) one along X and one along Y.
+    """
+    out: list[tuple[str, str]] = []
+    for role in CODES[code].roles:
+        if list(roles.get(role, ())):
+            continue
+        names = PLACEHOLDER_CASE_NAMES[role]
+        if ndm == 2:
+            names = names[:1]
+        out.extend((role, name) for name in names)
+    return out
+
+
 def generate_for_code(
     code: str,
     roles: Mapping[str, Iterable[int]],

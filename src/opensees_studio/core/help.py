@@ -1606,6 +1606,15 @@ envelope over each generated group is added too (one per group, so the ultimate
 and serviceability limit states of EN 1990 do not mix). Roles a code does not use
 are named after the run.
 
+**Create the missing load cases** (on by default) gives every load the code uses
+that no case is tagged with an empty load case of its own before generating:
+LIVE, ROOF LIVE, SNOW, RAIN, WIND X and WIND Y, EQ X and EQ Y (one wind and one
+earthquake case along X in a 2D model), and DEAD with the self weight if there is
+no dead case. Each is a Plain pattern with a linear time series and a linear
+static case, all named after the load; the dialog lists what it would create.
+Their patterns start empty: assign the loads before running. Undo removes the
+cases and the combinations together.
+
 The factors are the code's. Judgement stays yours: the occupancy-dependent
 live-load reduction, favourable versus unfavourable permanent action, the
 national annex.
