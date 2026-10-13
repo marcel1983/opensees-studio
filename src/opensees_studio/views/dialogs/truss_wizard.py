@@ -44,7 +44,6 @@ CHORD_CHOICES: list[tuple[str, bool, bool]] = [
 PLANE_CHOICES: list[tuple[str, str]] = [
     ("XZ — front elevation (Z up)", "XZ"),
     ("YZ — side elevation (Z up)", "YZ"),
-    ("XY — plan (Y up)", "XY"),
 ]
 
 
@@ -190,9 +189,9 @@ class TrussWizard(QWizard):
         for label, code in PLANE_CHOICES:
             self._plane.addItem(label, userData=code)
         if self._ndm == 2:
-            self._plane.setCurrentIndex(self._plane.findData("XY"))
+            self._plane.setCurrentIndex(self._plane.findData("XZ"))
             self._plane.setEnabled(False)
-            self._plane.setToolTip("A 2D project builds its trusses in the XY plane.")
+            self._plane.setToolTip("A 2D project builds its trusses in the XZ plane.")
 
         self._origin = [
             _field(0.0, minimum=-1e9, maximum=1e9, step=1.0, suffix=self._unit) for _ in range(3)
@@ -202,6 +201,9 @@ class TrussWizard(QWizard):
         origin_layout.setContentsMargins(0, 0, 0, 0)
         for axis, box in zip("XYZ", self._origin, strict=True):
             origin_layout.addRow(f"{axis}₀:", box)
+        if self._ndm == 2:
+            # A 2D model lives in the plane y = 0 (core.plane).
+            self._origin[1].setEnabled(False)
 
         self._restrain_out_of_plane = QCheckBox(
             "Restrain the out-of-plane translation (a truss analysed on its own)"

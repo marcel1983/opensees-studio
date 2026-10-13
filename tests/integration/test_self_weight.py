@@ -30,12 +30,12 @@ from opensees_studio.services.opensees_runner import OpenSeesRunner
 
 def _frame(ndm: int) -> tuple[Project, int]:
     ndf = 3 if ndm == 2 else 6
-    up = 1 if ndm == 2 else 2  # the vertical coordinate
+    # Z is up in 2D (the X-Z plane) and 3D; result columns follow the DOFs, so
+    # the vertical reaction is column 1 in 2D (Ux, Uz, Ry) and 2 in 3D.
+    up = 1 if ndm == 2 else 2
 
     def at(x: float, height: float, y: float = 0.0) -> tuple[float, float, float]:
-        point = [x, y, 0.0]
-        point[up] = height
-        return (point[0], point[1], point[2])
+        return (x, y, height)
 
     project = Project(ndm=ndm, ndf=ndf, sections=[make_default_section(1)])
     ensure_dead_load_case(project)

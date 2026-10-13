@@ -41,7 +41,7 @@ def _column(masses: list[float]) -> Project:
     nodes = [Node(id=1, coords=(0.0, 0.0, 0.0), restraint=(True,) * 6)]
     elements = []
     for i, m in enumerate(masses, start=1):
-        nodes.append(Node(id=i + 1, coords=(0.0, i * H, 0.0), mass=(m, 0.0, 0.0, 0.0, 0.0, 0.0)))
+        nodes.append(Node(id=i + 1, coords=(0.0, 0.0, i * H), mass=(m, 0.0, 0.0, 0.0, 0.0, 0.0)))
         elements.append(ElasticBeamColumn(id=i, nodes=(i, i + 1), section_id=1))
     return Project(
         meta=ProjectMeta(name="rs column", units=UnitSystem.SI_M_N),

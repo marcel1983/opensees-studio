@@ -93,6 +93,14 @@ Regenerate the file only after all three suites pass on a changed environment.
 
 These are non-obvious things that are easy to break if you don't know:
 
+- Z is the elevation axis of every model. A 2D model lives in the global
+  **X-Z plane** (nodes at y = 0) with DOFs Ux, Uz, Ry in storage slots 0, 2, 4;
+  OpenSees gets (X, Z) as its (x, y). Everything crossing that boundary goes
+  through `core.plane`: `dof_indices`/`dof_signs` (a 2D rotation or moment is
+  `-1` times the OpenSees value), `to_solver_coords`, `to_solver_vector3`. Never
+  slice `coords[:ndm]` for OpenSees, and never assume 2D means "Y up". Result
+  arrays keep OpenSees' DOF order with the global sign applied. 2D files below
+  schema 3 are rotated on load by `migrate_2d_payload_to_xz`.
 - `ForceComponent` is a plain `Enum`, **not** a `str`-Enum — a `str`
   mix-in breaks `.value` lookup inside PyVista renderers.
 - `QObject.receivers()` in PySide6 takes a SIGNAL string, not a

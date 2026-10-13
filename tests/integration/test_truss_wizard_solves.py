@@ -31,7 +31,7 @@ def test_the_truss_carries_a_load_on_every_top_node(
 ) -> None:  # type: ignore[no-untyped-def]
     ndm, ndf = model
     pitched_warren = truss_type is TrussType.WARREN and end_depth is not None
-    plane = "XY" if ndm == 2 else "XZ"
+    plane = "XZ"  # Z up, in 2D (the X-Z plane) and 3D
     spec = TrussSpec(
         span=12.0,
         depth=2.0,
@@ -44,7 +44,7 @@ def test_the_truss_carries_a_load_on_every_top_node(
         plane=plane,
     )
     truss = build_truss(spec, ndm=ndm, ndf=ndf, first_node_id=1, first_element_id=1)
-    up = 1 if plane == "XY" else 2
+    up = 2
     tops = [node for node in truss.nodes if node.coords[up] > 0.0]
     loads = []
     for node in tops:
@@ -65,5 +65,6 @@ def test_the_truss_carries_a_load_on_every_top_node(
     results = OpenSeesRunner(project).run(project.analyses[0], results_dir=tmp_path)
 
     supports = [node.id for node in truss.nodes if node.restraint[up]]
-    reaction = sum(float(results.node_reaction[n][0][up]) for n in supports)
+    col = 1 if ndm == 2 else 2  # result columns follow the DOFs: a 2D model is (Ux, Uz, ...)
+    reaction = sum(float(results.node_reaction[n][0][col]) for n in supports)
     assert reaction == pytest.approx(1000.0 * len(tops), rel=1e-9)

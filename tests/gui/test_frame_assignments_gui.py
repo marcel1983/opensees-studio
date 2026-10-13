@@ -57,7 +57,7 @@ def _populate(vm: ProjectViewModel, ndm: int = 2) -> None:
             [
                 Node(id=1, coords=(0.0, 0.0, 0.0), restraint=(True,) * 6),
                 Node(id=2, coords=(LENGTH, 0.0, 0.0), restraint=(True,) * 6),
-                Node(id=3, coords=(0.0, 4.0, 0.0)),
+                Node(id=3, coords=(0.0, 0.0, 4.0)),  # Z up (a 2D model is the X-Z plane)
             ],
         )
     )
@@ -177,7 +177,7 @@ def test_automatic_end_offsets_come_from_the_framing_members(qtbot, monkeypatch)
     mw = _window(qtbot)
     vm = mw._vm
     # Joint 1 meets a truss, not a frame: the beam gets no offset; add a 0.5 m column on joint 2.
-    vm.apply_command(AddNodesCommand(vm, [Node(id=4, coords=(LENGTH, 3.0, 0.0))]))
+    vm.apply_command(AddNodesCommand(vm, [Node(id=4, coords=(LENGTH, 0.0, 3.0))]))
     vm.apply_command(
         AddSectionsCommand(
             vm,

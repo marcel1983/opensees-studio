@@ -43,7 +43,7 @@ def _project() -> Project:
             id=i,
             name=name,
             time_series_id=1,
-            nodal_loads=[NodalLoad(node_id=2, forces=(0.0, -force, 0.0, 0.0, 0.0, 0.0))],
+            nodal_loads=[NodalLoad(node_id=2, forces=(0.0, 0.0, -force, 0.0, 0.0, 0.0))],
         )
         for i, (name, force) in enumerate((("G", P_G), ("Q", P_Q), ("W", P_W)), start=1)
     ]

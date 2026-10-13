@@ -28,6 +28,7 @@ from opensees_studio.core import (
     Project,
 )
 from opensees_studio.core.mass_source import effective_nodal_masses
+from opensees_studio.core.plane import dof_indices
 from opensees_studio.core.storey_results import (
     BASE_NAME,
     base_shear_from_reactions,
@@ -115,7 +116,12 @@ class Layout:
         return self.ndf > self.ndm and dof > self.ndm
 
     def _rotation_axis(self, dof: int) -> int:
-        return 3 if self.ndm == 2 else dof - 3
+        # The global axis: a 2D frame's rotation is about Y (core.plane).
+        return dof_indices(self.ndm, self.ndf)[dof - 1] - 2
+
+    def _translation_axis(self, dof: int) -> int:
+        # The global axis: a 2D model's second DOF is Z (core.plane).
+        return dof_indices(self.ndm, self.ndf)[dof - 1] + 1
 
     def dof_factor(self, dof: int, kind: str = "disp") -> float:
         """Factor for a nodal DOF column: rotations are unit-free, translations are lengths.
@@ -142,13 +148,13 @@ class Layout:
             prefix = {"disp": "R", "vel": "VR", "accel": "AR"}[kind]
             return f"{prefix}{self._rotation_axis(dof)} [{self.labels.rotation}{per_time}]"
         prefix = {"disp": "U", "vel": "V", "accel": "A"}[kind]
-        return f"{prefix}{dof} [{self.labels.length}{per_time}]"
+        return f"{prefix}{self._translation_axis(dof)} [{self.labels.length}{per_time}]"
 
     def force_column(self, dof: int) -> str:
         """``F1 [N]``, ``M3 [N·m]``."""
         if self.is_rotation(dof):
             return f"M{self._rotation_axis(dof)} [{self.labels.moment}]"
-        return f"F{dof} [{self.labels.force}]"
+        return f"F{self._translation_axis(dof)} [{self.labels.force}]"
 
 
 # ─────────────────────────── builders ───────────────────────────

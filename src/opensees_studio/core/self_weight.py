@@ -41,8 +41,9 @@ if TYPE_CHECKING:
 
 
 def gravity_direction(ndm: int) -> np.ndarray:
-    """Unit vector of gravity: -Y in 2D, -Z in 3D."""
-    return np.array([0.0, -1.0, 0.0]) if ndm == 2 else np.array([0.0, 0.0, -1.0])
+    """Unit vector of gravity: -Z, in 2D (the X-Z plane) and in 3D."""
+    del ndm  # Z is the elevation axis of every model (see core.plane)
+    return np.array([0.0, 0.0, -1.0])
 
 
 def weight_per_length(project: Project, element: object) -> float:

@@ -83,10 +83,11 @@ class Project(BaseModel):
     )
 
     # 1 = pre ground-motion catalog (records embedded in PathTimeSeries),
-    # 2 = ground_motions catalog with record-backed time series.
+    # 2 = ground_motions catalog with record-backed time series,
+    # 3 = 2D models in the X-Z plane, Z up (core.plane).
     # ``services.persistence`` migrates v1 payloads on load and stamps the
     # current version on save.
-    schema_version: int = Field(default=2, frozen=True)
+    schema_version: int = Field(default=3, frozen=True)
     meta: ProjectMeta = Field(default_factory=ProjectMeta)
 
     ndm: int = Field(default=3, description="Spatial dimensions (2 or 3).")
@@ -97,7 +98,7 @@ class Project(BaseModel):
     )
     storeys: list[Storey] = Field(
         default_factory=list,
-        description="Floor levels (elevation along Z in 3D, Y in 2D); additive.",
+        description="Floor levels (elevation along Z); additive.",
     )
     nodes: list[Node] = Field(default_factory=list)
     materials: list[Material] = Field(default_factory=list)
@@ -318,6 +319,17 @@ class Project(BaseModel):
         gm_ids = {gm.id for gm in self.ground_motions}
         friction_ids = {fm.id for fm in self.friction_models}
         problems: list[str] = []
+
+        if self.ndm == 2:
+            # A 2D model lives in the X-Z plane (core.plane): OpenSees never sees y.
+            off_plane = [n.id for n in self.nodes if abs(float(n.coords[1])) > 1e-9]
+            if off_plane:
+                shown = ", ".join(str(i) for i in off_plane[:10])
+                more = f" and {len(off_plane) - 10} more" if len(off_plane) > 10 else ""
+                problems.append(
+                    f"2D model: node(s) {shown}{more} are off the X-Z plane (y != 0). A 2D "
+                    "model is drawn in X-Z with Z up; move them to y = 0."
+                )
 
         for ts in self.time_series:
             rec_id = getattr(ts, "record_id", None)

@@ -26,7 +26,7 @@ def _project(
 ) -> Project:
     """Four column tops 2, 3, 5, 7 tied by ``mps`` (retained, constrained, dofs) and ``links``."""
     nodes = [
-        Node(id=nid, coords=(float(nid), 3.0, 0.0) if ndm == 2 else (float(nid), 0.0, 3.0))
+        Node(id=nid, coords=(float(nid), 0.0, 3.0))  # Z up, in 2D (the X-Z plane) and 3D
         for nid in (2, 3, 5, 7)
     ]
     return Project(

@@ -49,8 +49,10 @@ def frame_local_axes(
         return None
     x = axis / length
     if ndm == 2:
-        y = np.array([-x[1], x[0], 0.0])
-        return x, y, np.array([0.0, 0.0, 1.0])
+        # The model is in the X-Z plane; OpenSees' local y is (-Y) x local x
+        # (see core.plane), so a horizontal member's local y points up (+Z).
+        y = np.array([-x[2], 0.0, x[0]])
+        return x, y, np.array([0.0, -1.0, 0.0])
     y = np.cross(np.asarray(frame_vecxz(p_i, p_j)), x)
     norm = float(np.linalg.norm(y))
     if norm < 1e-12:

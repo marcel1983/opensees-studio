@@ -88,6 +88,7 @@ from opensees_studio.core import (
 from opensees_studio.core.diaphragms import constrained_node_ids, diaphragms_supported
 from opensees_studio.core.frame_members import MemberLayout, member_layout, split_member_loads
 from opensees_studio.core.geometry.frame_options import RELEASE_AXIS, RELEASE_DOFS
+from opensees_studio.core.plane import to_solver_coords, to_solver_vector3
 
 #: Penalty spring for a kept rotation about a skewed axis, as a multiple of the
 #: member's largest rotational stiffness ``4 E I / L`` (or ``G J / L``).
@@ -392,7 +393,7 @@ def plan_frame_members(project: Project) -> FramePlan:
             offset = layout.offset_i if end == "i" else layout.offset_j
             release = el.releases.end(end)
             if not release.released or end in condensed:
-                member_offset = tuple(float(v) for v in offset[:ndm])
+                member_offset = to_solver_coords(offset, ndm)
                 if end == "i":
                     member.offset_i = member_offset
                 else:
@@ -436,16 +437,14 @@ def plan_frame_members(project: Project) -> FramePlan:
                 continue
             base = joint
             if layout.has_offset(end):
-                face = ExtraNode(
-                    node_tags.take(), tuple(float(v) for v in (joint_xyz + offset)[:ndm]), joint
-                )
+                face = ExtraNode(node_tags.take(), to_solver_coords(joint_xyz + offset, ndm), joint)
                 plan.nodes.append(face)
                 plan.attached.setdefault(joint, []).append(face)
                 plan.rigid_links.append((joint, face.tag))
                 base = face.tag
                 base_xyz = face.coords
             else:
-                base_xyz = tuple(float(v) for v in joint_xyz[:ndm])
+                base_xyz = to_solver_coords(joint_xyz, ndm)
             inner = ExtraNode(node_tags.take(), base_xyz, joint)
             plan.nodes.append(inner)
             plan.attached.setdefault(joint, []).append(inner)
@@ -507,7 +506,10 @@ def _spring_link(
         dirs=tuple(dirs[n] for n in order),
         material_tags=tuple(material_tags.take() for _ in dirs),
         stiffnesses=tuple(stiffness[n] for n in order),
-        orient=(*(float(v) for v in layout.x), *(float(v) for v in layout.y)),
+        orient=(
+            *to_solver_vector3(layout.x, layout.ndm),
+            *to_solver_vector3(layout.y, layout.ndm),
+        ),
     )
 
 
@@ -552,7 +554,7 @@ def _plan_penalty_end(
         )
     k_t, k_r = (CONSTRAINED_PENALTY_FACTOR * v for v in stiffness)
     joint_xyz = layout.joint_i if end == "i" else layout.joint_j
-    inner = ExtraNode(node_tags.take(), tuple(float(v) for v in joint_xyz[: layout.ndm]), joint)
+    inner = ExtraNode(node_tags.take(), to_solver_coords(joint_xyz, layout.ndm), joint)
     plan.nodes.append(inner)
     dirs = [1, 2] if layout.ndm == 2 else [1, 2, 3]
     values = [k_t] * len(dirs)

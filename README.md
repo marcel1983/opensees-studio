@@ -37,6 +37,10 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
 
 ## What works today
 
+- **Axes** — Z is the elevation axis of every model. A 2D model lives in the
+  X-Z plane (Ux, Uz, Ry per joint), drawn face on like a front elevation; the
+  application translates it to OpenSees' own 2D plane and back, and opens 2D
+  projects saved by earlier builds (X-Y plane, Y up) in the new layout.
 - **Modeling** — grids, nodes, frames (elastic, force-based and
   displacement-based), trusses, corotational trusses, quads, `ShellMITC4`
   shells (Define → Create Shell from 4 Nodes derives the winding from the

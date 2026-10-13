@@ -104,11 +104,12 @@ def _loads(ndm: int) -> dict[int, tuple[float, ...]]:
 
 # ───────────────────────────── the application's model ─────────────────────────────
 def _project(ndm: int, link: str, release: str) -> Project:
-    fixed = (True,) * 6 if ndm == 3 else (True, True, False, False, False, True)
-    mass = (MASS,) * 3 + (INERTIA,) * 3 if ndm == 3 else (MASS, MASS, 0.0, 0.0, 0.0, INERTIA)
+    # A 2D model lives in the X-Z plane: its DOFs are Ux, Uz, Ry (slots 0, 2, 4).
+    fixed = (True,) * 6 if ndm == 3 else (True, False, True, False, True, False)
+    mass = (MASS,) * 3 + (INERTIA,) * 3 if ndm == 3 else (MASS, 0.0, MASS, 0.0, INERTIA, 0.0)
 
     def node(tag: int, h: float, v: float, **kw: Any) -> Node:
-        return Node(id=tag, coords=(h, 0.0, v) if ndm == 3 else (h, v, 0.0), **kw)
+        return Node(id=tag, coords=(h, 0.0, v), **kw)
 
     nodes = [
         node(1, 0.0, 0.0, restraint=fixed),
@@ -140,8 +141,8 @@ def _project(ndm: int, link: str, release: str) -> Project:
     else:
         rigid_links.append(RigidLink(kind="beam", retained_node=2, constrained_node=3))
     nodal = [
-        # The 2D DOFs (U1, U2, R3) are slots 0, 1 and 5 of a NodalLoad.
-        NodalLoad(node_id=n, forces=(f[0], f[1], 0.0, 0.0, 0.0, f[2]) if ndm == 2 else f)
+        # OpenSees' 2D DOFs (x, y, rz) are the global Ux, Uz and -Ry (core.plane).
+        NodalLoad(node_id=n, forces=(f[0], 0.0, f[1], 0.0, -f[2], 0.0) if ndm == 2 else f)
         for n, f in _loads(ndm).items()
     ]
     beam_load = (
@@ -185,7 +186,10 @@ def _app(project: Project, case_id: int, tmp_path: Path) -> np.ndarray:
     results = OpenSeesRunner(project).run(case, results_dir=tmp_path / case.name)
     if case_id == 2:
         return np.asarray(results.eigenvalues, dtype=float)
-    return np.array([results.node_disp[n][-1] for n in (2, 3, 4)], dtype=float)
+    disp = np.array([results.node_disp[n][-1] for n in (2, 3, 4)], dtype=float)
+    if project.ndm == 2:
+        disp[:, 2] *= -1.0  # back to OpenSees' rz, which the references report
+    return disp
 
 
 # ───────────────────────────── the hand-built references ─────────────────────────────

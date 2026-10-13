@@ -32,6 +32,7 @@ import numpy as np
 import pyvista as pv
 
 from opensees_studio.core import Project, UnitConverter
+from opensees_studio.core.geometry.local_axes import frame_local_axes
 from opensees_studio.services.element_forces import DiagramData, ForceComponent
 
 _LOG = logging.getLogger("opensees_studio.diagram")
@@ -112,7 +113,7 @@ class DiagramRenderer:
             v_j = data.values_j[k] * scale
 
             if is_perpendicular:
-                perp = self._local_perp(pi, pj, axis_id)
+                perp = self._local_perp(pi, pj, axis_id, project.ndm)
                 if perp is None:
                     continue
                 station = data.stations.get(int(eid))
@@ -143,7 +144,7 @@ class DiagramRenderer:
             else:
                 # Axial: thin perpendicular rectangle (constant width visualises
                 # sign via color); use local-y axis for the perpendicular.
-                perp = self._local_perp(pi, pj, 2)
+                perp = self._local_perp(pi, pj, 2, project.ndm)
                 if perp is None:
                     continue
                 width = abs(v_i) * 0.5  # half-width fall-off
@@ -245,7 +246,7 @@ class DiagramRenderer:
                     points.append((pi + (pj - pi) * s_arr[n], v_arr[n]))
             for end_pt, val in points:
                 if is_perp:
-                    perp = self._local_perp(pi, pj, axis_id)
+                    perp = self._local_perp(pi, pj, axis_id, project.ndm)
                     label_pos = end_pt + (perp * val * scale if perp is not None else 0)
                 else:
                     label_pos = end_pt
@@ -312,7 +313,7 @@ class DiagramRenderer:
 
     # ── helpers ─────────────────────────────────────────────────────
     @staticmethod
-    def _local_perp(pi: np.ndarray, pj: np.ndarray, axis: int) -> np.ndarray | None:
+    def _local_perp(pi: np.ndarray, pj: np.ndarray, axis: int, ndm: int = 3) -> np.ndarray | None:
         """Unit vector perpendicular to the element axis.
 
         ``axis`` selects which local perpendicular axis (2 = local y, 3 = local z).
@@ -320,6 +321,10 @@ class DiagramRenderer:
         to (axis × global Y) if the element is vertical. For local z we
         cross local-x with local-y.
         """
+        if ndm == 2:
+            # A 2D model is in the X-Z plane: its local axes are OpenSees' own.
+            axes = frame_local_axes(2, pi.tolist(), pj.tolist())
+            return None if axes is None else axes[1 if axis == 2 else 2]
         x_local = pj - pi
         n = float(np.linalg.norm(x_local))
         if n == 0.0:

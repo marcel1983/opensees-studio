@@ -31,7 +31,7 @@ def _cantilever() -> Project:
         ndm=2,
         ndf=3,
         nodes=[
-            Node(id=1, coords=(0.0, 0.0, 0.0), restraint=(True, True, False, False, False, True)),
+            Node(id=1, coords=(0.0, 0.0, 0.0), restraint=(True, False, True, False, True, False)),
             Node(id=2, coords=(5.0, 0.0, 0.0)),
         ],
         sections=[ElasticSection(id=1, E=200e9, A=0.01, Iz=8.333e-6)],
@@ -41,7 +41,7 @@ def _cantilever() -> Project:
             PlainLoadPattern(
                 id=1,
                 time_series_id=1,
-                nodal_loads=[NodalLoad(node_id=2, forces=(0.0, -1000.0, 0.0, 0.0, 0.0, 0.0))],
+                nodal_loads=[NodalLoad(node_id=2, forces=(0.0, 0.0, -1000.0, 0.0, 0.0, 0.0))],
             )
         ],
         analyses=[StaticCase(id=1, name="Tip", pattern_ids=[1])],

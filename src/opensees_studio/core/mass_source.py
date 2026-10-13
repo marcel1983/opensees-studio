@@ -174,7 +174,7 @@ def source_weight_per_node(project: Project, source: MassSource) -> dict[int, fl
 # ─────────────────────────── nodal masses ───────────────────────────
 def _translation_slots(ndm: int, include_vertical: bool) -> tuple[int, ...]:
     lateral = (0,) if ndm == 2 else (0, 1)
-    vertical = (1,) if ndm == 2 else (2,)
+    vertical = (2,)  # Z, in 2D (the X-Z plane) and in 3D
     return lateral + vertical if include_vertical else lateral
 
 

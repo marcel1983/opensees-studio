@@ -53,11 +53,12 @@ class AddNodeDialog(FittedDialog):
         self._y = self._spin()
         self._z = self._spin()
         form.addRow("X:", self._x)
-        form.addRow("Y:", self._y)
         if self._ndm == 3:
-            form.addRow("Z:", self._z)
+            form.addRow("Y:", self._y)
         else:
-            self._z.setVisible(False)
+            # A 2D model lives in the X-Z plane (core.plane): no Y.
+            self._y.setVisible(False)
+        form.addRow("Z:", self._z)
         root.addLayout(form)
 
         self._snap_cb = QCheckBox("Snap to nearest grid intersection")
@@ -89,5 +90,5 @@ class AddNodeDialog(FittedDialog):
             y = _snap(y, self._grid.y_lines)
             z = _snap(z, self._grid.z_lines)
         if self._ndm == 2:
-            z = 0.0
+            y = 0.0
         return Node(id=self._next_id, coords=(x, y, z))

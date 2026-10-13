@@ -875,13 +875,13 @@ class MainWindow(QMainWindow):
         self._vm.new_project(dead_case=True)
 
     def _on_new_2d(self) -> None:
-        """Planar frame model — (ndm=2, ndf=3): Ux, Uy, Rz per joint, then the wizard.
+        """Planar frame model — (ndm=2, ndf=3): Ux, Uz, Ry per joint, then the wizard.
 
         Right choice when beam-columns are in the mix; for a pure truss use
         'New 2D Truss' so the solver doesn't face unrestrained rotational DOFs.
 
         An empty 2D frame project is just an empty canvas, and the only plane it
-        can build in is the wizard's XY, so the wizard opens here: it is what
+        can build in is the wizard's XZ (Z up), so the wizard opens here: it is what
         turns "new 2D frame" into a frame. Cancelling leaves the empty project,
         which is still the right start for drawing by hand.
         """
@@ -892,7 +892,7 @@ class MainWindow(QMainWindow):
         self._create_portal_frame(with_grid=True)
 
     def _on_new_2d_truss(self) -> None:
-        """Planar truss model — (ndm=2, ndf=2): only Ux, Uy per joint.
+        """Planar truss model — (ndm=2, ndf=2): only Ux, Uz per joint (the X-Z plane).
 
         Matches OpenSees's ``model BasicBuilder -ndm 2 -ndf 2`` from
         the Basic Truss Example and keeps the stiffness matrix well
@@ -1681,9 +1681,8 @@ class MainWindow(QMainWindow):
             )
             self._log(f"Grid '{grid.name}' created with {lines} line(s) from the same numbers.")
             if project.ndm == 2:
-                # A 2D model has one plane: show it face on, with the frame's
-                # heights available as the working-plane levels.
-                self._on_view_top()
+                # A 2D model has one plane, X-Z: show it face on.
+                self._on_view_front()
 
     def _on_truss_wizard(self) -> None:
         """Define → Create Truss: a parametric plane truss, one undo step.
@@ -1917,7 +1916,9 @@ class MainWindow(QMainWindow):
                 "Select exactly two nodes first.",
             )
             return
-        dlg = AssignEqualDOFDialog(sel, ndf=self._vm.project.ndf, parent=self)
+        dlg = AssignEqualDOFDialog(
+            sel, ndf=self._vm.project.ndf, parent=self, ndm=self._vm.project.ndm
+        )
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
         try:
@@ -3469,6 +3470,9 @@ class MainWindow(QMainWindow):
         # Results of another project (or of the closed one) never feed a combination.
         self._case_results.clear()
         self._canvas.show_project(project)
+        if project is not None and project.ndm == 2:
+            # A 2D model lives in the X-Z plane (core.plane): face on, drawing at y = 0.
+            self._on_view_front()
         self._props.set_project(project)
         self._refresh_tree(project)
         self._refresh_status()
