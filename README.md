@@ -155,6 +155,10 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   on a supported shell edge inherits the DOFs both of that edge's corners have
   restrained, so meshing a slab does not quietly unsupport it. One undo step, and
   the dialog shows what it will add before you accept it.
+- **Stability check** — Analyze → Check Model Stability looks for mechanisms
+  before anything is solved: the singular values of the assembled stiffness
+  matrix, each zero reported with the joints and DOFs that move (and selected in
+  the view), plus any free DOF that no element stiffens.
 - **Model health** — Edit → Check Model for Duplicates: coincident nodes and
   elements that describe the same member twice, with a tolerance that follows
   the size of the model. Pairs that are deliberate — the two nodes of a

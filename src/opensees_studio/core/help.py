@@ -2168,6 +2168,42 @@ gravity state. The case list applies the patterns in the order given.
             "mechanics.static",
             "analyze.run",
         ),
+        "analyze.stability": _t(
+            "Analyze → Check Model Stability",
+            "Analyze",
+            "Find the mechanisms of the model before running anything.",
+            """
+Builds the model exactly as an analysis would, assembles its stiffness matrix
+once and looks for **mechanisms**: motions of the free joints that no member,
+spring or support resists. A statically stable model has none, and its
+stiffness matrix has full rank; a model with a mechanism cannot be solved, or
+solves into nonsense.
+
+The check runs in the same child process as an analysis, so a model OpenSees
+cannot even build does not take the window with it.
+
+# What it reports
+- **Free DOFs that no element stiffens** — a joint DOF that nothing connects
+  to: a rotation of a truss joint in a frame model, a joint whose every member
+  releases the same moment, a node on its own.
+- **Mechanisms** — each one lists the joints and DOFs that move the most in it,
+  with their share of the motion (+1.00 is the largest). A frame without
+  bracing or base fixity sways; a beam on two rollers slides; a chain of hinges
+  folds. In a 2D model the DOFs are Ux, Uz and Ry (the X-Z plane).
+
+The joints that move are selected in the view, so you can see where to add a
+support, a brace or a member, or which DOF to restrain.
+
+# How it decides
+The stiffness matrix is decomposed into singular values. A singular value
+below 1e-11 of the largest is a zero: its vector is a mechanism. Constraints
+(equalDOF, rigid links, diaphragms) are applied first, so a DOF a constraint
+ties is not counted twice. The check reads the initial stiffness: a model that
+only becomes unstable as it yields or buckles needs a nonlinear analysis.
+""",
+            "analyze.run",
+            "assign.support",
+        ),
         "analyze.run": _t(
             "Analyze → Run",
             "Analyze",
@@ -2876,6 +2912,7 @@ ACTION_TOPICS: dict[str, str] = {
     # ── Analyze ─────────────────────────────────────────────────────
     "_act_case_manager": "analyze.cases",
     "_act_run": "analyze.run",
+    "_act_check_stability": "analyze.stability",
     # ── Display ─────────────────────────────────────────────────────
     "_act_select_results": "display.select_results",
     "_act_show_deformed": "display.deformed",
