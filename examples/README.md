@@ -104,7 +104,7 @@ File → Open → ex1a_canti2d_eq.osmodel
 Analyze → Cases → run "Earthquake"
 Display → Time-History Plot
    - Node 2 + DOF 1 (Ux) → horizontal response of the cantilever tip
-   - Node 2 + DOF 2 (Uy) → verify gravity stays essentially locked
+   - Node 2 + DOF 2 (Uz: a 2D model lives in the X-Z plane) → verify gravity stays essentially locked
 ```
 This model is intentionally tiny but important for workflow coverage:
 it demonstrates the general transient recipe of

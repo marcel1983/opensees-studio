@@ -164,7 +164,8 @@ frame wizard, or File → Import for a DXF drawing), then materials and sections
 2. **Assign** the properties: restraints and masses on joints, sections,
 materials, geometric transformations and beam integration rules on frame
 elements, loads in a load pattern.
-3. **Analyze**: create one or more cases (Analyze → Cases) and run them
+3. **Analyze**: Analyze → Check Model Stability finds mechanisms before
+anything is solved; then create one or more cases (Analyze → Cases) and run them
 (Analyze → Run). The solve happens in a separate process, so a crash in the
 solver cannot take the interface with it.
 4. **Display** the results: deformed shape, mode shapes, force diagrams, time
@@ -182,6 +183,8 @@ supports included, and is saved that way.
 # Where things are
 - The **3D viewport** is the model; clicking selects, dragging orbits.
 - Everything is a command on an undo stack: Ctrl+Z undoes one model edit.
+- The **Properties** panel follows the selection; with several joints or elements
+  selected it edits what they share in one step.
 - Every dialog that takes numbers has a help page: **press F1** while the menu
 or the dialog is open.
 - The **Console** dock keeps a log of what the application did, including the
@@ -333,7 +336,9 @@ capacity curve softens, not the cycling.
 
 # Parameters
 - **Control node and DOF** — where the displacement is imposed, usually the roof
-  in the lateral direction (DOF 1 for X, 2 for Y, 3 for Z, 4-6 for rotations).
+  in the lateral direction (in 3D: DOF 1 for X, 2 for Y, 3 for Z, 4-6 for
+  rotations; in a 2D model: 1 for X, 2 for Z, 3 for the rotation Ry). A positive
+  target on a 2D rotation turns about +Y, the global convention.
 - **Target displacement** — how far the node is pushed. It comes from a design
   displacement, a code formula, or a fraction of the height.
 - **Steps and increment** — the target divided into steps. Too few and the
@@ -1534,7 +1539,8 @@ The usual way to run a time history: one acceleration record, applied in one
 direction, at every restrained support.
 
 # Values
-- **Direction** — the DOF driven (1 = X, 2 = Y, 3 = Z).
+- **Direction** — the DOF driven: 1 = X, 2 = Y, 3 = Z (vertical) in 3D; 1 = X and
+  2 = Z (vertical) in a 2D model, which lives in the X-Z plane.
 - **Record / series** — the acceleration series, and optionally its velocity and
   displacement; the application derives them from the acceleration if you do not
   supply them.
@@ -1741,8 +1747,10 @@ The first node selected is the **retained** (master) node, the second the
 floor, a rigid link, a hinge made of two coincident nodes.
 
 # Values
-- **DOF numbers** — 1-based, in the order the model uses them: 1 = Ux, 2 = Uy,
-  3 = Uz, 4 = Rx, 5 = Ry, 6 = Rz. In a 2D frame model only 1, 2 and 6 exist.
+- **DOF numbers** — 1-based, in the order the model uses them. A 3D frame: 1 = Ux,
+  2 = Uy, 3 = Uz, 4 = Rx, 5 = Ry, 6 = Rz. A 2D model lives in the X-Z plane: a 2D
+  frame has 1 = Ux, 2 = Uz, 3 = Ry, a 2D truss 1 = Ux and 2 = Uz. The dialog lists
+  the model's own.
 - Ticking 1 and 2 on a pair of nodes at the same level is a diaphragm in plan.
 
 # Mechanics
