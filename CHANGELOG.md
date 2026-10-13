@@ -9,6 +9,16 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Added
+
+- **Analyze → Check Model Stability.** Builds the model as an analysis would,
+  assembles its stiffness matrix once and decomposes it into singular values:
+  each zero is a mechanism, reported with the joints and DOFs that move in it
+  (in global names, Ux/Uz/Ry in 2D), and those joints are selected in the view.
+  Free DOFs no element stiffens are listed too. It runs in the analysis child
+  process (`python -m opensees_studio.run --project P --check-stability`), so a
+  model OpenSees cannot build does not take the window down.
+
 ### Changed
 
 - **Z is the elevation axis of every model.** A 2D model now lives in the X-Z

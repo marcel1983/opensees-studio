@@ -109,8 +109,10 @@ from opensees_studio.services.results import (
     TransientResults,
 )
 from opensees_studio.services.shell_fields import shell_elements
+from opensees_studio.services.stability import StabilityReport
 from opensees_studio.viewmodels import AnalysisRunner, ProjectViewModel
 from opensees_studio.viewmodels.case_results import CaseResultsCache
+from opensees_studio.viewmodels.stability_checker import StabilityChecker
 from opensees_studio.views.canvas3d import ModelCanvas
 from opensees_studio.views.canvas3d.diagram_renderer import DiagramRenderer
 from opensees_studio.views.canvas3d.model_renderer import RendererMode
@@ -199,10 +201,12 @@ class MainWindow(QMainWindow):
 
         self._vm = ProjectViewModel(self)
         self._runner = AnalysisRunner(self)
+        self._stability = StabilityChecker(self)
         self._latest_results: object = None  # last analysis output (any kind)
         # Every static / response spectrum result of the session, for load combinations.
         self._case_results = CaseResultsCache()
         self._analysis_error_box: QMessageBox | None = None  # last failure report
+        self._stability_box: QMessageBox | None = None  # last stability check answer
         self._run_dialog: RunAnalysisDialog | None = None  # open while a Run dialog is shown
         self._post_dock: QDockWidget | None = None  # the active post-processing dock
         self._post_units_refresh: Callable[[], None] | None = None  # re-show the dock in new units
@@ -403,6 +407,7 @@ class MainWindow(QMainWindow):
         # Analyze
         self._act_case_manager = QAction("&Cases…", self, shortcut="Ctrl+Shift+A")
         self._act_run = QAction("&Run…", self, shortcut="F5")
+        self._act_check_stability = QAction("Check Model &Stability…", self)
 
         # View
         self._act_zoom_extents = QAction("Zoom &Extents", self, shortcut="Ctrl+E")
@@ -525,6 +530,7 @@ class MainWindow(QMainWindow):
         m_analyze = mb.addMenu("&Analyze")
         m_analyze.addAction(self._act_case_manager)
         m_analyze.addSeparator()
+        m_analyze.addAction(self._act_check_stability)
         m_analyze.addAction(self._act_run)
 
         m_display = mb.addMenu("&Display")
@@ -822,6 +828,11 @@ class MainWindow(QMainWindow):
         # Analyze
         self._act_case_manager.triggered.connect(self._on_case_manager)
         self._act_run.triggered.connect(self._on_run_analysis)
+        self._act_check_stability.triggered.connect(self._on_check_stability)
+        self._stability.log.connect(self._log)
+        self._stability.finished.connect(self._on_stability_report)
+        self._stability.failed.connect(self._on_stability_failed)
+        self._stability.runningChanged.connect(lambda _running: self._refresh_action_enablement())
 
         # Display
         self._act_select_results.triggered.connect(self._on_select_results)
@@ -2638,6 +2649,47 @@ class MainWindow(QMainWindow):
         self._log(f"Assigned a trapezoidal load to {len(ids)} frame element(s).")
 
     # ── slots: analyze ──────────────────────────────────────────────
+    def _on_check_stability(self) -> None:
+        """Analyze → Check Model Stability: look for mechanisms before solving anything."""
+        project = self._vm.project
+        if project is None:
+            return
+        if not project.nodes:
+            QMessageBox.information(self, "Check Model Stability", "The model has no joints yet.")
+            return
+        self._stability.check(project, self._vm.path)
+
+    def _on_stability_report(self, report: StabilityReport) -> None:
+        summary = report.summary()
+        self._log(summary)
+        if report.nodes:
+            # Show where the mechanisms are: their joints become the selection.
+            self._canvas.selection.set_selection(set(report.nodes), set())
+            self._refresh_action_enablement()
+        box = QMessageBox(self)
+        box.setWindowTitle("Check Model Stability")
+        box.setIcon(QMessageBox.Icon.Information if report.stable else QMessageBox.Icon.Warning)
+        box.setText(
+            "The model is statically stable."
+            if report.stable
+            else "The model is not statically stable."
+        )
+        box.setInformativeText(
+            summary + ("\n\nThe joints that move are selected." if report.nodes else "")
+        )
+        box.open()
+        self._stability_box = box
+
+    def _on_stability_failed(self, message: str) -> None:
+        self._log(message)
+        box = QMessageBox(self)
+        box.setWindowTitle("Check Model Stability")
+        box.setIcon(QMessageBox.Icon.Critical)
+        box.setText("The stability check could not finish.")
+        box.setInformativeText(message)
+        box.open()
+        self._stability_box = box
+
     def _on_case_manager(self) -> None:
         if self._vm.project is None:
             self._on_new()
@@ -3654,6 +3706,9 @@ class MainWindow(QMainWindow):
         self._act_frame_wizard.setEnabled(has_project)
         self._act_truss_wizard.setEnabled(has_project)
         self._act_check_duplicates.setEnabled(has_project)
+        self._act_check_stability.setEnabled(
+            has_project and not self._stability.is_running and not self._runner.is_running
+        )
         self._act_mesh.setEnabled(has_project)
         self._act_assign_support.setEnabled(has_project and has_selected_nodes)
         self._act_assign_masses.setEnabled(has_project and has_selected_nodes)
