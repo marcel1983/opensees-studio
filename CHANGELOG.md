@@ -9,6 +9,14 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.11] — 2026-10-13
+
+The Z-up release: every model, 2D included, stands on Z as its elevation axis;
+a stability check finds mechanisms before a run; the Properties panel edits a
+whole selection at once; and the combination generator creates the loads a
+model is missing. 2D projects saved by earlier builds are converted when they
+are opened (file schema 3).
+
 ### Added
 
 - **Edit several items at once in the Properties panel.** With more than one
