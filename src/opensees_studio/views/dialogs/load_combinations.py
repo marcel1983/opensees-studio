@@ -34,7 +34,10 @@ from PySide6.QtWidgets import (
 )
 
 from opensees_studio.commands import (
+    AddAnalysisCasesCommand,
     AddCombinationsCommand,
+    AddLoadPatternCommand,
+    AddTimeSeriesCommand,
     DeleteCombinationsCommand,
     UpdateCombinationCommand,
 )
@@ -44,6 +47,7 @@ from opensees_studio.core import (
     CombinationTerm,
     LoadCombination,
     Project,
+    make_load_cases,
 )
 from opensees_studio.core.code_combinations import (
     CODES,
@@ -52,6 +56,7 @@ from opensees_studio.core.code_combinations import (
     default_options,
     envelope_groups,
     generate_for_code,
+    missing_load_cases,
     unused_roles,
 )
 from opensees_studio.core.combinations import (
@@ -421,17 +426,16 @@ class LoadCombinationsDialog(FittedDialog):
         if project is None:
             return
         cases = _combinable_cases(project)
-        if not cases:
-            self._message.show_message(
-                "Define the load cases first: the generator combines Static and "
-                "Response Spectrum cases tagged Dead, Live, Wind, …",
-                "error",
-            )
-            return
-        dlg = CodeGeneratorDialog(cases, self)
+        dlg = CodeGeneratorDialog(cases, self, ndm=project.ndm)
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
-        self.generate(dlg.code(), dlg.roles(), dlg.options(), envelope=dlg.envelope_wanted())
+        self.generate(
+            dlg.code(),
+            dlg.roles(),
+            dlg.options(),
+            envelope=dlg.envelope_wanted(),
+            create_missing=dlg.create_missing_wanted(),
+        )
 
     def generate(
         self,
@@ -440,17 +444,56 @@ class LoadCombinationsDialog(FittedDialog):
         options: dict[str, Any] | None = None,
         *,
         envelope: bool = True,
+        create_missing: bool = False,
     ) -> int:
         """Add the combinations of design ``code`` for ``roles`` as one undo step.
 
         With ``envelope`` each generated group of more than one combination
-        also gets an envelope over it. Returns how many combinations were
-        added (the envelopes included).
+        also gets an envelope over it. With ``create_missing`` every load the
+        code uses that ``roles`` has no case for first gets an empty load
+        case of its own (see :func:`missing_load_cases`; a missing dead load
+        gets the self weight), in the same undo step. Returns how many
+        combinations were added (the envelopes included).
         """
         project = self._vm.project
         if project is None:
             return 0
         spec = CODES[code]
+        roles = {role: list(ids) for role, ids in roles.items()}
+        missing = missing_load_cases(code, roles, project.ndm) if create_missing else []
+        if not missing:
+            return self._generate(code, roles, options, envelope, missing)
+        stack = self._vm.undo_stack
+        stack.beginMacro(f"Generate {spec.label} combinations")
+        try:
+            return self._generate(code, roles, options, envelope, missing)
+        finally:
+            stack.endMacro()
+
+    def _generate(
+        self,
+        code: str,
+        roles: dict[str, list[int]],
+        options: dict[str, Any] | None,
+        envelope: bool,
+        missing: list[tuple[str, str]],
+    ) -> int:
+        project = self._vm.project
+        assert project is not None
+        spec = CODES[code]
+        created: list[str] = []
+        if missing:
+            new_names = [name for _role, name in missing]
+            dead = frozenset(name for role, name in missing if role == "D")
+            series, patterns, cases = make_load_cases(project, new_names, self_weight=dead)
+            for ts in series:
+                self._vm.apply_command(AddTimeSeriesCommand(self._vm, ts))
+            for pattern in patterns:
+                self._vm.apply_command(AddLoadPatternCommand(self._vm, pattern))
+            self._vm.apply_command(AddAnalysisCasesCommand(self._vm, list(cases)))
+            for (role, name), case in zip(missing, cases, strict=True):
+                roles.setdefault(role, []).append(case.id)
+                created.append(name)
         peaks = [c.id for c in project.analyses if c.type == "ResponseSpectrum"]
         names = {c.id: c.name or str(c.id) for c in project.analyses}
         generated = generate_for_code(
@@ -487,6 +530,12 @@ class LoadCombinationsDialog(FittedDialog):
         )
         self.select(combos[-1].id)
         text = f"Added {len(combos)} {spec.label} combination(s)."
+        if created:
+            text += (
+                " Created the load case(s) " + ", ".join(created) + ": their patterns are "
+                "empty (the dead load carries the self weight), assign their loads before "
+                "running."
+            )
         left_out = unused_roles(code, roles)
         if left_out:
             text += (
@@ -499,8 +548,9 @@ class LoadCombinationsDialog(FittedDialog):
 class CodeGeneratorDialog(FittedDialog):
     """Pick a design code and tag each case with its load role."""
 
-    def __init__(self, cases: list[Any], parent: QWidget | None = None) -> None:
+    def __init__(self, cases: list[Any], parent: QWidget | None = None, *, ndm: int = 3) -> None:
         super().__init__(parent)
+        self._ndm = ndm
         self.setWindowTitle("Generate Code Combinations")
         layout = QVBoxLayout(self)
         top = QFormLayout()
@@ -534,7 +584,19 @@ class CodeGeneratorDialog(FittedDialog):
                 box.setCurrentIndex(box.findData(guess))
             form.addRow(f"{case.name or case.id} [{case.type}]:", box)
             self._boxes[case.id] = box
+            box.currentIndexChanged.connect(self._update_missing)
         layout.addLayout(form)
+        self._create_missing = QCheckBox("Create the missing load cases")
+        self._create_missing.setChecked(True)
+        self._create_missing.setToolTip(
+            "Every load the code uses that no case is tagged with gets an empty "
+            "pattern and a static case of its own (wind and earthquake one per "
+            "horizontal axis); assign their loads afterwards."
+        )
+        layout.addWidget(self._create_missing)
+        self._missing_label = QLabel()
+        self._missing_label.setWordWrap(True)
+        layout.addWidget(self._missing_label)
         self._envelope = QCheckBox("Also add an envelope over each generated group")
         self._envelope.setChecked(True)
         layout.addWidget(self._envelope)
@@ -560,6 +622,7 @@ class CodeGeneratorDialog(FittedDialog):
     def _on_code_changed(self) -> None:
         spec = CODES[self.code()]
         self._summary.setText(spec.summary)
+        self._update_missing()
         while self._options_form.rowCount():
             self._options_form.removeRow(0)
         self._option_widgets.clear()
@@ -628,3 +691,22 @@ class CodeGeneratorDialog(FittedDialog):
 
     def envelope_wanted(self) -> bool:
         return self._envelope.isChecked()
+
+    def create_missing_wanted(self) -> bool:
+        return self._create_missing.isChecked()
+
+    def set_create_missing(self, on: bool) -> None:
+        self._create_missing.setChecked(on)
+
+    def missing_names(self) -> list[str]:
+        """Names of the load cases "Create the missing load cases" would add."""
+        return [name for _role, name in missing_load_cases(self.code(), self.roles(), self._ndm)]
+
+    def _update_missing(self) -> None:
+        if not hasattr(self, "_missing_label"):
+            return  # still building the dialog
+        names = self.missing_names()
+        self._create_missing.setEnabled(bool(names))
+        self._missing_label.setText(
+            "Would create: " + ", ".join(names) if names else "Every load of this code has a case."
+        )

@@ -186,3 +186,44 @@ def test_case_names_label_alternatives_when_several_cases_share_a_role() -> None
         case_names={3: "WX", 8: "WY"},
     )
     assert "D+0.6W:WX" in got and "D-0.6W:WY" in got
+
+
+def test_missing_load_cases_proposes_one_case_per_unused_role() -> None:
+    from opensees_studio.core.code_combinations import missing_load_cases
+
+    assert missing_load_cases("asce7_lrfd", {"D": [1]}) == [
+        ("L", "LIVE"),
+        ("Lr", "ROOF LIVE"),
+        ("S", "SNOW"),
+        ("R", "RAIN"),
+        ("W", "WIND X"),
+        ("W", "WIND Y"),
+        ("E", "EQ X"),
+        ("E", "EQ Y"),
+    ]
+    tbdy = missing_load_cases("tbdy", {"D": [1], "W": [2]}, ndm=2)
+    assert tbdy == [("L", "LIVE"), ("E", "EQ X")]
+    assert missing_load_cases("tbdy", {"D": [1], "L": [2], "W": [3], "E": [4]}) == []
+
+
+def test_placeholder_names_read_back_as_their_role() -> None:
+    from opensees_studio.core.code_combinations import PLACEHOLDER_CASE_NAMES
+    from opensees_studio.core.combinations import guess_load_role
+
+    for role, names in PLACEHOLDER_CASE_NAMES.items():
+        for name in names:
+            assert guess_load_role(name) == role, name
+
+
+def test_make_load_cases_builds_empty_cases_with_fresh_ids() -> None:
+    from opensees_studio.core import Project, make_load_cases
+
+    project = Project()
+    series, patterns, cases = make_load_cases(
+        project, ["DEAD", "WIND X"], self_weight=frozenset({"DEAD"})
+    )
+    assert [c.name for c in cases] == ["DEAD", "WIND X"]
+    assert [p.self_weight for p in patterns] == [1.0, 0.0]
+    assert [c.pattern_ids for c in cases] == [[p.id] for p in patterns]
+    assert [p.time_series_id for p in patterns] == [t.id for t in series]
+    assert len({c.id for c in cases}) == 2

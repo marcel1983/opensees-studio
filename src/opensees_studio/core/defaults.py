@@ -120,6 +120,38 @@ def make_dead_load_case(
     return ts, pattern, case
 
 
+def make_load_cases(
+    project: Project, names: list[str], *, self_weight: frozenset[str] = frozenset()
+) -> tuple[list[TimeSeries], list[PlainLoadPattern], list[StaticCase]]:
+    """Build one empty load case per name (nothing is appended).
+
+    Each name gets a linear time series, a Plain pattern and a linear static
+    case running it, all with that name and the next free ids. A name in
+    ``self_weight`` gets a pattern with a self-weight multiplier of 1, like
+    :func:`make_dead_load_case`; the others start with no loads.
+    """
+    ts_id, pat_id, case_id = (
+        project.next_time_series_id(),
+        project.next_pattern_id(),
+        project.next_analysis_id(),
+    )
+    series: list[TimeSeries] = []
+    patterns: list[PlainLoadPattern] = []
+    cases: list[StaticCase] = []
+    for k, name in enumerate(names):
+        series.append(make_default_time_series(ts_id + k, name=name))
+        patterns.append(
+            PlainLoadPattern(
+                id=pat_id + k,
+                name=name,
+                time_series_id=ts_id + k,
+                self_weight=1.0 if name in self_weight else 0.0,
+            )
+        )
+        cases.append(StaticCase(id=case_id + k, name=name, pattern_ids=[pat_id + k]))
+    return series, patterns, cases
+
+
 # ── finders (locate an existing default-eligible entity) ─────────────────────
 def find_default_section(project: Project) -> ElasticSection | None:
     """Return the first :class:`ElasticSection` in the project, if any."""
