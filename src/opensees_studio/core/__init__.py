@@ -54,6 +54,7 @@ from opensees_studio.core.defaults import (
     make_default_section,
     make_default_time_series,
     make_default_truss_material,
+    make_load_cases,
 )
 from opensees_studio.core.frames import (
     PLANE_AXES,
@@ -387,6 +388,7 @@ __all__ = [  # noqa: RUF022 - grouped by domain under section comments, not alph
     "DEFAULT_UNIT_WEIGHT",
     "ensure_dead_load_case",
     "make_dead_load_case",
+    "make_load_cases",
     "self_weight_loads",
     "TRUSS_NDF",
     "TRUSS_TYPE_LABELS",

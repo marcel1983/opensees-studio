@@ -9,6 +9,15 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Added
+
+- **The code-combination generator creates the loads the model lacks.** With
+  *Create the missing load cases* (on by default), every load the chosen code
+  uses that no case carries gets an empty Plain pattern and static case of its
+  own (LIVE, ROOF LIVE, SNOW, RAIN, WIND X/Y, EQ X/Y, and DEAD with the self
+  weight), in the same undo step as the combinations. The dialog lists them
+  before you accept.
+
 ## [0.0.10] — 2026-10-12
 
 The building release: storeys, rigid diaphragms and a mass source for multi-storey
