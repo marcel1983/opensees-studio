@@ -24,6 +24,13 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **Modal damping for transient cases** (Analyze → Cases → Transient: modal
+  damping ratio ζ and number of modes). OpenSees `modalDamping` gives each of the
+  first N modes exactly ζ, on top of any Rayleigh damping. The eigen solve follows
+  the eigen determinism rule (solver from `resolve_modal_solver`, a case routed to
+  ARPACK runs in a fresh child). Checked against the logarithmic decrement of a
+  damped SDOF. A case without it saves byte-identical to before.
+
 - **Analyze → Check Model (F6): review the model before it runs.** OpenSees does
   not explain a model it cannot solve — a node nobody connects, a member that
   points at a deleted node or a frame missing one support all end as a singular
