@@ -199,6 +199,8 @@ class OpenSeesRunner:
         # Hidden nodes of the frame releases (see services/frame_members.py).
         for extra in plan.nodes:
             ops.node(extra.tag, *extra.coords)
+        for ground in plan.grounds:
+            ops.fix(ground, *([1] * self.project.ndf))
         # A diaphragm's floating retained node has no stiffness out of its
         # plane: those DOFs are fixed together with the node's own restraint.
         auto_fixed = auto_fixed_slots(self.project)
@@ -1363,6 +1365,9 @@ class OpenSeesRunner:
         for nid, slots in auto_fixed_slots(self.project).items():
             if nid in active:
                 active[nid].update(slots)
+        # A support spring stiffens its own DOFs.
+        for node in self.project.nodes:
+            active[node.id].update(i for i, k in enumerate(node.spring) if k > 0)
         for link in self.project.rigid_links:
             shared = {0, 1, 2, 3, 4, 5} if link.kind == "beam" else {0, 1, 2}
             for nid in (link.retained_node, link.constrained_node):

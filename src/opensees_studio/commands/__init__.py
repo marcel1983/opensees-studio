@@ -68,6 +68,7 @@ from opensees_studio.commands.nodes import (
     DeleteNodesCommand,
     SetMassCommand,
     SetRestraintCommand,
+    SetSpringCommand,
 )
 from opensees_studio.commands.sections import (
     AddSectionsCommand,
@@ -80,6 +81,7 @@ from opensees_studio.commands.series_and_patterns import (
     ReplaceTimeSeriesCommand,
     SetPatternNodalLoadsCommand,
 )
+from opensees_studio.commands.tables import ApplyModelTablesCommand
 from opensees_studio.commands.transforms import (
     MirrorCommand,
     MoveNodesCommand,
@@ -106,6 +108,7 @@ __all__ = [
     "AddSpectrumCommand",
     "AddTimeSeriesCommand",
     "AddTrapezoidalElementLoadsCommand",
+    "ApplyModelTablesCommand",
     "AssignElementFieldsCommand",
     "AssignMaterialCommand",
     "AssignSectionCommand",
@@ -137,6 +140,7 @@ __all__ = [
     "SetPatternNodalLoadsCommand",
     "SetRestraintCommand",
     "SetSectionCutsCommand",
+    "SetSpringCommand",
     "SetStoreysCommand",
     "UpdateAnalysisCaseCommand",
     "UpdateCombinationCommand",

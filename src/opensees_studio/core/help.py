@@ -856,6 +856,38 @@ you drew two hundred has to say so.
             "define.portal_frame",
             "edit.check_duplicates",
         ),
+        "file.export_report": _t(
+            "File → Export → Report (HTML / PDF)",
+            "File",
+            "A calculation report: the model, loads, cases and the results of this session.",
+            """
+Writes one document that reads top to bottom like a calculation report. Choose
+**PDF** (A4, printed by Qt, no browser needed) or an **HTML page** (opens in any
+browser and pastes into Word).
+
+# Contents
+- **Project** — name, description, author, date, units, model type and program
+  version.
+- **Model** — joints, supports, elements by type, materials, sections, patterns,
+  cases, combinations, storeys, groups and section cuts, counted.
+- **Materials** and **Sections** — every one with its values.
+- **Load patterns** — the loads each holds and the sum of its joint loads.
+- **Analysis cases** and **Load combinations** — with their patterns and terms.
+- **Results** — one section per case run in this session *on the model as it is
+  now*: peak displacements (and where), support reactions with their sum, the
+  pushover curve, the periods, the storey table and the section cuts. Values
+  are in the display units, with the Results panel's signs.
+
+# Notes
+- Results computed before the last model change are left out; run the cases again
+  first. Nothing is run by the report itself.
+- Long tables stop at 60 rows; the Results panel exports any table in full (CSV).
+- Values below a billionth of a table's largest one print as 0 (solver
+  round-off).
+""",
+            "file.export_ifc",
+            "display.select_results",
+        ),
         "file.export_ifc": _t(
             "File → Export → IFC",
             "File",
@@ -1008,6 +1040,42 @@ a restraint) needs. On a large model this also means every glyph changes state;
 the canvas redraws once.
 """,
             "edit.clear_selection",
+            "select.menu",
+        ),
+        "edit.table_editing": _t(
+            "Edit → Interactive Table Editing",
+            "Edit and tools",
+            "Joints, elements and joint loads as spreadsheets: edit, paste, add, delete.",
+            """
+The model as tables, SAP2000's interactive database editing (Ctrl+T). Nothing
+changes until **OK**, which checks every cell and every reference and applies
+all the tabs as one undo step. A bad cell keeps the window open and names its
+table, row and column.
+
+# Tabs
+- **Joints** — ID, name, coordinates, restraints and masses. Only the DOFs the
+  model has are columns: a 2D frame shows X, Z, Ux, Uz, Ry. Restraints are **1**
+  (fixed) or **0** (free); yes/no and x also work. A new row with an empty ID
+  gets the next free joint number.
+- **Elements** — name, joints (space separated, i then j), section and material.
+  The type is read only, and elements are not added here (draw them or use a
+  wizard); rows can be deleted.
+- **Joint Loads** — one row per load: the Plain pattern (its name or id), the
+  joint and the force components. Add rows to load more joints.
+
+# Spreadsheet keys
+- **Ctrl+C** copies the selected cells as tab-separated text, **Ctrl+V** pastes
+  a block from Excel or LibreOffice at the current cell and adds the rows it
+  needs (Joints and Joint Loads). Read-only columns are skipped.
+- **Delete** clears the selected cells; **Delete Rows** removes whole rows.
+- A decimal comma is read as a point.
+
+# Notes
+- Deleting a joint that an element, a constraint or a load still uses is refused
+  at OK; delete those first or delete the joint from the canvas (which takes its
+  elements with it).
+""",
+            "edit.select_all",
             "select.menu",
         ),
         "select.menu": _t(
@@ -1768,6 +1836,35 @@ instead of a displacement.
 """,
             "mechanics.constraints",
             "assign.zero_length_section",
+        ),
+        "assign.springs": _t(
+            "Assign → Joint → Springs",
+            "Assign — joints",
+            "Elastic support springs to ground on the selected joints.",
+            """
+A support spring ties a joint to the ground through a stiffness instead of a
+fixed restraint: soil springs under a footing (Winkler), a flexible column base,
+a bearing pad, or a lateral prop.
+
+# Values
+- One **k** per DOF of the model (a 2D frame: Ux, Uz, Ry), in force per length
+  for a translation and moment per radian for a rotation, in the model's units.
+  Zero means no spring. OK replaces the springs of every selected joint; all
+  zero removes them.
+
+# How it is analysed
+- Each sprung joint gets a hidden ground node, fixed in every DOF, joined to it by
+  a `zeroLength` element with one elastic material per sprung DOF, along the
+  global axes.
+- The spring force is reported as the joint's **reaction**, so the reactions
+  still balance the loads. Springs also stiffen a modal analysis (a mass m on a
+  spring k vibrates at √(k/m)).
+- A DOF that is also restrained ignores its spring.
+- The canvas draws a green zigzag under a sprung joint. IFC export writes the
+  stiffness into the support's boundary condition.
+""",
+            "assign.support",
+            "assign.masses",
         ),
         "assign.masses": _t(
             "Assign → Joint → Masses",
@@ -3125,6 +3222,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_import_dxf": "file.import_dxf",
     "_act_export_script": "file.export_script",
     "_act_export_ifc": "file.export_ifc",
+    "_act_export_report": "file.export_report",
     "_act_quit": "file.quit",
     # ── Edit and tools ──────────────────────────────────────────────
     "_act_undo": "edit.undo",
@@ -3132,6 +3230,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_delete": "edit.delete",
     "_act_clear_selection": "edit.clear_selection",
     "_act_select_all": "edit.select_all",
+    "_act_table_editing": "edit.table_editing",
     "_act_invert_selection": "select.menu",
     "_act_previous_selection": "select.menu",
     "_act_select_all_joints": "select.menu",
@@ -3175,6 +3274,7 @@ ACTION_TOPICS: dict[str, str] = {
     # ── Assign: joints ──────────────────────────────────────────────
     "_act_assign_support": "assign.support",
     "_act_assign_masses": "assign.masses",
+    "_act_assign_springs": "assign.springs",
     "_act_assign_equal_dof": "assign.equal_dof",
     "_act_assign_diaphragm": "assign.diaphragm",
     "_act_assign_rigid_link": "assign.rigid_link",

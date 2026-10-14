@@ -79,11 +79,18 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
 - **Groups** — Define → Groups and Assign → Assign to Group (Ctrl+G): named,
   coloured sets of joints and elements to select again with Select → By Group.
   Deleting a member takes it out of its groups.
+- **Interactive table editing** — Edit → Interactive Table Editing (Ctrl+T):
+  joints, elements and joint loads as spreadsheets, with Excel copy and paste,
+  added and deleted rows, and one validated undo step.
+- **Calculation report** — File → Export → Report: model, loads, cases and the
+  current results as a PDF or an HTML page.
 - **Section cuts** — Define → Section Cuts: the force and moment through a group
   (storey or pier shear, overturning moment), in the Results panel of static
   cases.
 - **Modal damping** — a transient case can damp each of its first N modes by
   the same ratio ζ (OpenSees `modalDamping`), alone or with Rayleigh damping.
+- **Support springs** — Assign → Joint → Springs: elastic springs to ground per
+  DOF, their force reported as the joint's reaction.
 - **Seismic loads by the equivalent lateral force method** — Define → Seismic
   Loads: ASCE/SEI 7-16 §12.8 (Cs with its caps and minimums, k-exponent
   distribution) or TBDY 2018 §4.7 (SaR = Sae / Ra, the 0.04 I SDS minimum, the

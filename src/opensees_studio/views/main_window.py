@@ -59,6 +59,7 @@ from opensees_studio.commands import (
     SetCoordSystemsCommand,
     SetMassCommand,
     SetRestraintCommand,
+    SetSpringCommand,
 )
 from opensees_studio.commands.buildings import (
     AddDiaphragmCommand,
@@ -72,6 +73,7 @@ from opensees_studio.commands.groups import (
     SetGroupsCommand,
     SetSectionCutsCommand,
 )
+from opensees_studio.commands.tables import ApplyModelTablesCommand
 from opensees_studio.core import (
     SUPPORTED_NDF,
     ElasticMembranePlateSection,
@@ -86,6 +88,7 @@ from opensees_studio.core import (
     make_default_truss_material,
 )
 from opensees_studio.core import selection as selection_queries
+from opensees_studio.core.combinations import model_fingerprint
 from opensees_studio.core.geometry.ordering import QuadOrderError, order_quad_nodes
 from opensees_studio.core.groups import Group, colour_for, group_members
 from opensees_studio.core.help import ACTION_TOPICS, TOPIC_PROPERTY
@@ -171,6 +174,7 @@ from opensees_studio.views.dialogs.area_loads import (
     ImposedDisplacementDialog,
     SurfaceLoadDialog,
 )
+from opensees_studio.views.dialogs.assign_springs import AssignSpringsDialog
 from opensees_studio.views.dialogs.buildings import (
     AssignDiaphragmDialog,
     AssignRigidLinkDialog,
@@ -184,6 +188,7 @@ from opensees_studio.views.dialogs.groups import (
     SectionCutsDialog,
 )
 from opensees_studio.views.dialogs.load_combinations import LoadCombinationsDialog
+from opensees_studio.views.dialogs.model_tables import ModelTablesDialog
 from opensees_studio.views.dialogs.seismic_loads import SeismicLoadsDialog
 from opensees_studio.views.docks import (
     DeformedShapeView,
@@ -198,6 +203,7 @@ from opensees_studio.views.docks import (
     TimeHistoryView,
 )
 from opensees_studio.views.help_window import HelpController
+from opensees_studio.views.report_pdf import write_pdf
 from opensees_studio.views.tools import (
     DrawFrameTool,
     DrawNodeTool,
@@ -224,6 +230,7 @@ class MainWindow(QMainWindow):
         self._latest_results: object = None  # last analysis output (any kind)
         # Every static / response spectrum result of the session, for load combinations.
         self._case_results = CaseResultsCache()
+        self._report_extra: dict[int, tuple[str, Any]] = {}
         self._analysis_error_box: QMessageBox | None = None  # last failure report
         self._stability_box: QMessageBox | None = None  # last stability check answer
         self._run_dialog: RunAnalysisDialog | None = None  # open while a Run dialog is shown
@@ -327,6 +334,7 @@ class MainWindow(QMainWindow):
         self._act_import_dxf = QAction("&DXF Drawing…", self)
         self._act_export_script = QAction("OpenSees &script (.py)…", self)
         self._act_export_ifc = QAction("&IFC (.ifc)…", self)
+        self._act_export_report = QAction("&Report (HTML / PDF)…", self)
         self._act_quit = QAction("&Quit", self, shortcut=QKeySequence.StandardKey.Quit)
 
         # Edit (created from QUndoStack so text auto-tracks "Undo Add 4 nodes" etc.)
@@ -339,6 +347,8 @@ class MainWindow(QMainWindow):
         )
         self._act_clear_selection = QAction("Clear &selection", self, shortcut="Esc")
         self._act_select_all = QAction("Select &all", self, shortcut="Ctrl+A")
+        self._act_table_editing = QAction("Interactive &Table Editing…", self)
+        self._act_table_editing.setShortcut("Ctrl+T")
 
         # Select menu: queries that add to (or invert) the current selection.
         self._act_invert_selection = QAction("&Invert Selection", self, shortcut="Ctrl+I")
@@ -398,6 +408,7 @@ class MainWindow(QMainWindow):
         # Assign — organized as Joint (nodes) / Frame (elements) for SAP2000 parity.
         self._act_assign_support = QAction("&Restraints…", self, shortcut="Ctrl+R")
         self._act_assign_masses = QAction("&Masses…", self)
+        self._act_assign_springs = QAction("S&prings…", self)
         self._act_assign_equal_dof = QAction("&EqualDOF…", self)
         self._act_assign_diaphragm = QAction("&Diaphragm…", self)
         self._act_assign_rigid_link = QAction("Rigid &Link…", self)
@@ -489,6 +500,7 @@ class MainWindow(QMainWindow):
         m_export = m_file.addMenu("&Export")
         m_export.addAction(self._act_export_script)
         m_export.addAction(self._act_export_ifc)
+        m_export.addAction(self._act_export_report)
         m_file.addSeparator()
         m_file.addAction(self._act_quit)
 
@@ -499,6 +511,7 @@ class MainWindow(QMainWindow):
         m_edit.addSeparator()
         m_edit.addActions([self._act_move, self._act_replicate, self._act_mirror])
         m_edit.addSeparator()
+        m_edit.addAction(self._act_table_editing)
         m_edit.addAction(self._act_check_duplicates)
         m_edit.addAction(self._act_mesh)
 
@@ -538,6 +551,7 @@ class MainWindow(QMainWindow):
         m_joint = m_assign.addMenu("&Joint")
         m_joint.addAction(self._act_assign_support)
         m_joint.addAction(self._act_assign_masses)
+        m_joint.addAction(self._act_assign_springs)
         m_joint.addAction(self._act_assign_equal_dof)
         m_joint.addAction(self._act_assign_diaphragm)
         m_joint.addAction(self._act_assign_rigid_link)
@@ -783,6 +797,7 @@ class MainWindow(QMainWindow):
         self._act_import_dxf.triggered.connect(self._on_import_dxf)
         self._act_export_script.triggered.connect(self._on_export_script)
         self._act_export_ifc.triggered.connect(self._on_export_ifc)
+        self._act_export_report.triggered.connect(self._on_export_report)
         self._act_quit.triggered.connect(self._on_quit)
         self._act_about.triggered.connect(self._on_about)
         self._act_help_contents.triggered.connect(self._on_help_contents)
@@ -792,6 +807,7 @@ class MainWindow(QMainWindow):
         self._act_delete.triggered.connect(self._on_delete)
         self._act_clear_selection.triggered.connect(self._on_clear_selection)
         self._act_select_all.triggered.connect(self._on_select_all)
+        self._act_table_editing.triggered.connect(self._on_table_editing)
         self._act_invert_selection.triggered.connect(self._on_invert_selection)
         self._act_previous_selection.triggered.connect(self._on_previous_selection)
         q = selection_queries
@@ -846,6 +862,7 @@ class MainWindow(QMainWindow):
         # Assign
         self._act_assign_support.triggered.connect(self._on_assign_support)
         self._act_assign_masses.triggered.connect(self._on_assign_masses)
+        self._act_assign_springs.triggered.connect(self._on_assign_springs)
         self._act_assign_equal_dof.triggered.connect(self._on_assign_equal_dof)
         self._act_assign_diaphragm.triggered.connect(self._on_assign_diaphragm)
         self._act_assign_rigid_link.triggered.connect(self._on_assign_rigid_link)
@@ -1117,6 +1134,49 @@ class MainWindow(QMainWindow):
         if report.notes:
             QMessageBox.information(self, "Export IFC", report.summary())
 
+    def report_results(self) -> list[Any]:
+        """The results the report includes: every current case, plus the one on screen."""
+        project = self._vm.project
+        if project is None:
+            return []
+        current = dict(self._case_results.current(project))
+        fingerprint = model_fingerprint(project)
+        for case_id, (fp, results) in self._report_extra.items():
+            if fp == fingerprint:
+                current.setdefault(case_id, results)
+        return list(current.values())
+
+    def _on_export_report(self) -> None:
+        """File → Export → Report: model, loads, cases and current results as HTML or PDF."""
+        from opensees_studio.services.report import build_report
+
+        project = self._vm.project
+        if project is None:
+            QMessageBox.information(self, "Export report", "Open or create a project first.")
+            return
+        default = (self._vm.path.stem if self._vm.path is not None else "model") + "-report.pdf"
+        path, chosen = QFileDialog.getSaveFileName(
+            self, "Export report", default, "PDF (*.pdf);;HTML page (*.html)"
+        )
+        if not path:
+            return
+        as_html = path.lower().endswith((".html", ".htm")) or (
+            "HTML" in chosen and not path.lower().endswith(".pdf")
+        )
+        if not path.lower().endswith((".pdf", ".html", ".htm")):
+            path += ".html" if as_html else ".pdf"
+        results = self.report_results()
+        page = build_report(project, results)
+        try:
+            if as_html:
+                Path(path).write_text(page, encoding="utf-8")
+            else:
+                write_pdf(page, path)
+        except OSError as exc:
+            QMessageBox.critical(self, "Export report failed", str(exc))
+            return
+        self._log(f"Report written: {path} ({len(results)} result set(s)).")
+
     def _on_export_script(self) -> None:
         """File → Export → OpenSees script: the model as plain OpenSeesPy.
 
@@ -1185,6 +1245,23 @@ class MainWindow(QMainWindow):
             sel.clear()
         except Exception as exc:
             QMessageBox.critical(self, "Delete failed", str(exc))
+
+    def _on_table_editing(self) -> None:
+        """Edit → Interactive Table Editing: joints, elements and joint loads as tables."""
+        project = self._vm.project
+        if project is None:
+            return
+        dlg = ModelTablesDialog(project, self)
+        if dlg.exec() != QDialog.DialogCode.Accepted or dlg.edited is None:
+            return
+        try:
+            self._vm.apply_command(ApplyModelTablesCommand(self._vm, dlg.edited))
+            self._log(
+                f"Tables applied: {len(project.nodes)} joint(s), "
+                f"{len(project.elements)} element(s)."
+            )
+        except Exception as exc:
+            QMessageBox.critical(self, "Interactive Table Editing failed", str(exc))
 
     def _on_select_all(self) -> None:
         """Select all nodes AND all elements in the project."""
@@ -2502,6 +2579,31 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, "Assign Masses failed", str(exc))
 
+    def _on_assign_springs(self) -> None:
+        """Assign → Joint → Springs: elastic support springs on every selected joint."""
+        project = self._vm.project
+        sel_nodes = set(self._canvas.selection.nodes)
+        if not sel_nodes or project is None:
+            QMessageBox.information(self, "Assign Springs", "Select one or more joints first.")
+            return
+        first = next(n for n in project.nodes if n.id in sel_nodes)
+        labels = labels_for(project.meta.units)
+        dlg = AssignSpringsDialog(
+            len(sel_nodes),
+            project.ndm,
+            project.ndf,
+            current=first.spring,
+            units=(f"{labels.force}/{labels.length}", f"{labels.moment}/rad"),
+            parent=self,
+        )
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        try:
+            self._vm.apply_command(SetSpringCommand(self._vm, sel_nodes, dlg.spring_vector()))
+            self._log(f"Assigned support springs to {len(sel_nodes)} joint(s).")
+        except Exception as exc:
+            QMessageBox.critical(self, "Assign Springs failed", str(exc))
+
     def _on_assign_distributed_load(self) -> None:
         sel_elements = set(self._canvas.selection.elements)
         if not sel_elements:
@@ -3069,8 +3171,11 @@ class MainWindow(QMainWindow):
 
     def _on_case_finished(self, results: object) -> None:
         """Keep each case result of a run for the load combinations."""
-        if self._vm.project is not None:
-            self._case_results.put(self._vm.project, results)
+        if self._vm.project is not None and not self._case_results.put(self._vm.project, results):
+            # Modal, pushover and transient results: kept for the report only.
+            case_id = getattr(results, "case_id", None)
+            if case_id is not None:
+                self._report_extra[case_id] = (model_fingerprint(self._vm.project), results)
 
     # ── slots: load combinations ────────────────────────────────────
     def _on_load_combinations(self) -> None:
@@ -3830,6 +3935,7 @@ class MainWindow(QMainWindow):
     def _on_project_changed(self, project: Project | None) -> None:
         # Results of another project (or of the closed one) never feed a combination.
         self._case_results.clear()
+        self._report_extra.clear()
         self._canvas.show_project(project)
         if project is not None and project.ndm == 2:
             # A 2D model lives in the X-Z plane (core.plane): face on, drawing at y = 0.
@@ -4010,18 +4116,21 @@ class MainWindow(QMainWindow):
         self._act_import_dxf.setEnabled(has_project)
         self._act_export_script.setEnabled(has_project)
         self._act_export_ifc.setEnabled(has_project)
+        self._act_export_report.setEnabled(has_project)
         self._act_grid.setEnabled(True)
         self._act_add_node.setEnabled(True)
         self._act_create_shell.setEnabled(has_project)
         self._act_frame_wizard.setEnabled(has_project)
         self._act_truss_wizard.setEnabled(has_project)
         self._act_check_duplicates.setEnabled(has_project)
+        self._act_table_editing.setEnabled(has_project)
         self._act_check_stability.setEnabled(
             has_project and not self._stability.is_running and not self._runner.is_running
         )
         self._act_mesh.setEnabled(has_project)
         self._act_assign_support.setEnabled(has_project and has_selected_nodes)
         self._act_assign_masses.setEnabled(has_project and has_selected_nodes)
+        self._act_assign_springs.setEnabled(has_project and has_selected_nodes)
         self._act_assign_equal_dof.setEnabled(has_project and n_sel == 2)
         self._act_assign_diaphragm.setEnabled(has_project)
         self._act_assign_rigid_link.setEnabled(has_project and n_sel == 2)

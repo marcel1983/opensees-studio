@@ -17,6 +17,17 @@ refused instead of silently downgraded).
   the eigen determinism rule (solver from `resolve_modal_solver`, a case routed to
   ARPACK runs in a fresh child). Checked against the logarithmic decrement of a
   damped SDOF. A case without it saves byte-identical to before.
+- **Support springs** (Assign → Joint → Springs). Elastic springs to ground per
+  DOF (soil springs, flexible bases, bearing pads): each sprung joint gets a fixed
+  hidden node and a global `zeroLength`, and the spring force is reported as the
+  joint's reaction. Drawn as a green zigzag, exported to IFC as stiffness values.
+  Checked against closed forms (propped cantilever, rotational base spring, mass
+  on springs). A project without springs saves byte-identical to before.
+- **Calculation report** (File → Export → Report, PDF or HTML). The project,
+  the model in numbers, materials, sections, load patterns, cases and
+  combinations, then the results of every case run on the current model: peak
+  displacements, support reactions with their sum, pushover curve, periods,
+  storey table and section cuts. PDF is printed by Qt (A4), no extra dependency.
 
 - **Section cuts** (Define → Section Cuts). The resultant force through a group:
   the end forces of the group's elements at the group's joints, with moments
@@ -31,6 +42,12 @@ refused instead of silently downgraded).
   group again later. Deleting joints or elements takes them out of every group
   (Undo restores them) and Fix Duplicates moves a merged joint's membership to
   the joint it keeps. A project without groups saves byte-identical to before.
+- **Interactive table editing** (Edit → Interactive Table Editing, Ctrl+T).
+  Joints (coordinates, restraints, masses), elements (joints, section, material)
+  and joint loads as spreadsheets: edit cells, copy and paste blocks from Excel,
+  add and delete rows. Only the model's own DOFs are columns. OK validates every
+  cell and reference, names a bad one by table, row and column, and applies the
+  edit as one undo step.
 
 - **IFC export** (File → Export → IFC). An IFC4 file with the physical model
   (columns, beams, members and slabs/walls/plates with their profiles — AISC I
