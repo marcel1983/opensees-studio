@@ -163,6 +163,7 @@ from opensees_studio.core.ground_motion_metadata import (
     significant_duration_5_95,
     total_duration,
 )
+from opensees_studio.core.groups import Group
 from opensees_studio.core.loads import (
     ConstantTimeSeries,
     FloorLoad,
@@ -350,6 +351,7 @@ __all__ = [  # noqa: RUF022 - grouped by domain under section comments, not alph
     "RigidLink",
     # Buildings
     "Storey",
+    "Group",
     "MassSource",
     "MassSourcePattern",
     # ASCE/SEI 7-16 design spectrum
