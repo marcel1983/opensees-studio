@@ -1761,6 +1761,35 @@ instead of a displacement.
             "mechanics.constraints",
             "assign.zero_length_section",
         ),
+        "assign.springs": _t(
+            "Assign → Joint → Springs",
+            "Assign — joints",
+            "Elastic support springs to ground on the selected joints.",
+            """
+A support spring ties a joint to the ground through a stiffness instead of a
+fixed restraint: soil springs under a footing (Winkler), a flexible column base,
+a bearing pad, or a lateral prop.
+
+# Values
+- One **k** per DOF of the model (a 2D frame: Ux, Uz, Ry), in force per length
+  for a translation and moment per radian for a rotation, in the model's units.
+  Zero means no spring. OK replaces the springs of every selected joint; all
+  zero removes them.
+
+# How it is analysed
+- Each sprung joint gets a hidden ground node, fixed in every DOF, joined to it by
+  a `zeroLength` element with one elastic material per sprung DOF, along the
+  global axes.
+- The spring force is reported as the joint's **reaction**, so the reactions
+  still balance the loads. Springs also stiffen a modal analysis (a mass m on a
+  spring k vibrates at √(k/m)).
+- A DOF that is also restrained ignores its spring.
+- The canvas draws a green zigzag under a sprung joint. IFC export writes the
+  stiffness into the support's boundary condition.
+""",
+            "assign.support",
+            "assign.masses",
+        ),
         "assign.masses": _t(
             "Assign → Joint → Masses",
             "Assign — joints",
@@ -3167,6 +3196,7 @@ ACTION_TOPICS: dict[str, str] = {
     # ── Assign: joints ──────────────────────────────────────────────
     "_act_assign_support": "assign.support",
     "_act_assign_masses": "assign.masses",
+    "_act_assign_springs": "assign.springs",
     "_act_assign_equal_dof": "assign.equal_dof",
     "_act_assign_diaphragm": "assign.diaphragm",
     "_act_assign_rigid_link": "assign.rigid_link",

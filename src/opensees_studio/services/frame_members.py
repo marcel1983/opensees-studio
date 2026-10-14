@@ -89,7 +89,7 @@ from opensees_studio.core.area_loads import pattern_distributed_loads
 from opensees_studio.core.diaphragms import constrained_node_ids, diaphragms_supported
 from opensees_studio.core.frame_members import MemberLayout, member_layout, split_member_loads
 from opensees_studio.core.geometry.frame_options import RELEASE_AXIS, RELEASE_DOFS
-from opensees_studio.core.plane import to_solver_coords, to_solver_vector3
+from opensees_studio.core.plane import dof_indices, to_solver_coords, to_solver_vector3
 
 #: Penalty spring for a kept rotation about a skewed axis, as a multiple of the
 #: member's largest rotational stiffness ``4 E I / L`` (or ``G J / L``).
@@ -190,6 +190,8 @@ class FramePlan:
     sections: list[DerivedSection] = field(default_factory=list)
     #: joint → hidden nodes whose reactions belong to it.
     attached: dict[int, list[ExtraNode]] = field(default_factory=dict)
+    #: hidden nodes fixed in every DOF: the ground ends of support springs.
+    grounds: list[int] = field(default_factory=list)
     #: (element id, end) → global rotation DOFs (1-based) the member leaves unstiffened at
     #: that joint; only for ends whose release lines up with the global axes.
     released_dofs: dict[tuple[int, str], set[int]] = field(default_factory=dict)
@@ -486,7 +488,42 @@ def plan_frame_members(project: Project) -> FramePlan:
             if not layout.has_offset(end) and unstiffened is not None:
                 plan.released_dofs[(el.id, end)] = unstiffened
         member.nodes = (nodes[0], nodes[1])
+    _plan_support_springs(project, plan, node_tags, element_tags, material_tags)
     return plan
+
+
+def _plan_support_springs(
+    project: Project,
+    plan: FramePlan,
+    node_tags: _Tags,
+    element_tags: _Tags,
+    material_tags: _Tags,
+) -> None:
+    """A fixed hidden node and a global ``zeroLength`` under every joint with springs.
+
+    The ground node is attached to the joint, so its reaction (the spring force)
+    is reported as the joint's.
+    """
+    slots = dof_indices(project.ndm, project.ndf)
+    for node in project.nodes:
+        dirs = [k + 1 for k, slot in enumerate(slots) if node.spring[slot] > 0]
+        if not dirs:
+            continue
+        ground = ExtraNode(node_tags.take(), to_solver_coords(node.coords, project.ndm), node.id)
+        plan.nodes.append(ground)
+        plan.grounds.append(ground.tag)
+        plan.attached.setdefault(node.id, []).append(ground)
+        plan.springs.append(
+            SpringLink(
+                tag=element_tags.take(),
+                node_a=ground.tag,
+                node_b=node.id,
+                dirs=tuple(dirs),
+                material_tags=tuple(material_tags.take() for _ in dirs),
+                stiffnesses=tuple(float(node.spring[slots[d - 1]]) for d in dirs),
+                orient=(1.0, 0.0, 0.0, 0.0, 1.0, 0.0),
+            )
+        )
 
 
 def _spring_link(

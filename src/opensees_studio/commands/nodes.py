@@ -166,3 +166,32 @@ class SetMassCommand(ProjectCommand):
             if n.id in self._previous:
                 self.project.nodes[i] = n.model_copy(update={"mass": self._previous[n.id]})
         self._notify()
+
+
+class SetSpringCommand(ProjectCommand):
+    """Apply the same support springs (6-tuple of stiffnesses) to a set of nodes."""
+
+    def __init__(
+        self,
+        vm: ProjectViewModel,
+        node_ids: set[int],
+        spring: tuple[float, float, float, float, float, float],
+    ) -> None:
+        super().__init__(vm, f"Set support springs on {len(node_ids)} node(s)")
+        self._node_ids = set(node_ids)
+        self._new_spring = spring
+        self._previous: dict[int, tuple[float, ...]] = {}
+
+    def redo(self) -> None:
+        self._previous.clear()
+        for i, n in enumerate(self.project.nodes):
+            if n.id in self._node_ids:
+                self._previous[n.id] = n.spring
+                self.project.nodes[i] = n.model_copy(update={"spring": self._new_spring})
+        self._notify()
+
+    def undo(self) -> None:
+        for i, n in enumerate(self.project.nodes):
+            if n.id in self._previous:
+                self.project.nodes[i] = n.model_copy(update={"spring": self._previous[n.id]})
+        self._notify()

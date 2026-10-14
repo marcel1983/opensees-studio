@@ -59,6 +59,7 @@ from opensees_studio.commands import (
     SetCoordSystemsCommand,
     SetMassCommand,
     SetRestraintCommand,
+    SetSpringCommand,
 )
 from opensees_studio.commands.buildings import (
     AddDiaphragmCommand,
@@ -171,6 +172,7 @@ from opensees_studio.views.dialogs.area_loads import (
     ImposedDisplacementDialog,
     SurfaceLoadDialog,
 )
+from opensees_studio.views.dialogs.assign_springs import AssignSpringsDialog
 from opensees_studio.views.dialogs.buildings import (
     AssignDiaphragmDialog,
     AssignRigidLinkDialog,
@@ -398,6 +400,7 @@ class MainWindow(QMainWindow):
         # Assign — organized as Joint (nodes) / Frame (elements) for SAP2000 parity.
         self._act_assign_support = QAction("&Restraints…", self, shortcut="Ctrl+R")
         self._act_assign_masses = QAction("&Masses…", self)
+        self._act_assign_springs = QAction("S&prings…", self)
         self._act_assign_equal_dof = QAction("&EqualDOF…", self)
         self._act_assign_diaphragm = QAction("&Diaphragm…", self)
         self._act_assign_rigid_link = QAction("Rigid &Link…", self)
@@ -538,6 +541,7 @@ class MainWindow(QMainWindow):
         m_joint = m_assign.addMenu("&Joint")
         m_joint.addAction(self._act_assign_support)
         m_joint.addAction(self._act_assign_masses)
+        m_joint.addAction(self._act_assign_springs)
         m_joint.addAction(self._act_assign_equal_dof)
         m_joint.addAction(self._act_assign_diaphragm)
         m_joint.addAction(self._act_assign_rigid_link)
@@ -846,6 +850,7 @@ class MainWindow(QMainWindow):
         # Assign
         self._act_assign_support.triggered.connect(self._on_assign_support)
         self._act_assign_masses.triggered.connect(self._on_assign_masses)
+        self._act_assign_springs.triggered.connect(self._on_assign_springs)
         self._act_assign_equal_dof.triggered.connect(self._on_assign_equal_dof)
         self._act_assign_diaphragm.triggered.connect(self._on_assign_diaphragm)
         self._act_assign_rigid_link.triggered.connect(self._on_assign_rigid_link)
@@ -2502,6 +2507,31 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, "Assign Masses failed", str(exc))
 
+    def _on_assign_springs(self) -> None:
+        """Assign → Joint → Springs: elastic support springs on every selected joint."""
+        project = self._vm.project
+        sel_nodes = set(self._canvas.selection.nodes)
+        if not sel_nodes or project is None:
+            QMessageBox.information(self, "Assign Springs", "Select one or more joints first.")
+            return
+        first = next(n for n in project.nodes if n.id in sel_nodes)
+        labels = labels_for(project.meta.units)
+        dlg = AssignSpringsDialog(
+            len(sel_nodes),
+            project.ndm,
+            project.ndf,
+            current=first.spring,
+            units=(f"{labels.force}/{labels.length}", f"{labels.moment}/rad"),
+            parent=self,
+        )
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        try:
+            self._vm.apply_command(SetSpringCommand(self._vm, sel_nodes, dlg.spring_vector()))
+            self._log(f"Assigned support springs to {len(sel_nodes)} joint(s).")
+        except Exception as exc:
+            QMessageBox.critical(self, "Assign Springs failed", str(exc))
+
     def _on_assign_distributed_load(self) -> None:
         sel_elements = set(self._canvas.selection.elements)
         if not sel_elements:
@@ -4022,6 +4052,7 @@ class MainWindow(QMainWindow):
         self._act_mesh.setEnabled(has_project)
         self._act_assign_support.setEnabled(has_project and has_selected_nodes)
         self._act_assign_masses.setEnabled(has_project and has_selected_nodes)
+        self._act_assign_springs.setEnabled(has_project and has_selected_nodes)
         self._act_assign_equal_dof.setEnabled(has_project and n_sel == 2)
         self._act_assign_diaphragm.setEnabled(has_project)
         self._act_assign_rigid_link.setEnabled(has_project and n_sel == 2)

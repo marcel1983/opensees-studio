@@ -11,6 +11,13 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **Support springs** (Assign → Joint → Springs). Elastic springs to ground per
+  DOF (soil springs, flexible bases, bearing pads): each sprung joint gets a fixed
+  hidden node and a global `zeroLength`, and the spring force is reported as the
+  joint's reaction. Drawn as a green zigzag, exported to IFC as stiffness values.
+  Checked against closed forms (propped cantilever, rotational base spring, mass
+  on springs). A project without springs saves byte-identical to before.
+
 - **Section cuts** (Define → Section Cuts). The resultant force through a group:
   the end forces of the group's elements at the group's joints, with moments
   about their centroid or a typed point. Static cases report the six global
