@@ -119,3 +119,11 @@ def test_deleting_a_joint_an_element_uses_is_refused() -> None:
     del rows["Joints"][0]
     with pytest.raises(ValueError, match="missing node 1"):
         apply_tables(project, rows)
+
+
+def test_editing_a_joint_keeps_its_support_springs() -> None:
+    project = _frame()
+    project.nodes[1] = project.nodes[1].model_copy(update={"spring": (5.0, 0, 0, 0, 0, 0)})
+    rows = _rows(project)
+    rows["Joints"][1][3] = "4"
+    assert apply_tables(project, rows).node(2).spring == (5.0, 0, 0, 0, 0, 0)
