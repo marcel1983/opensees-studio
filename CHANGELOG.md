@@ -11,6 +11,12 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **Modal damping for transient cases** (Analyze → Cases → Transient: modal
+  damping ratio ζ and number of modes). OpenSees `modalDamping` gives each of the
+  first N modes exactly ζ, on top of any Rayleigh damping. The eigen solve follows
+  the eigen determinism rule (solver from `resolve_modal_solver`, a case routed to
+  ARPACK runs in a fresh child). Checked against the logarithmic decrement of a
+  damped SDOF. A case without it saves byte-identical to before.
 - **Support springs** (Assign → Joint → Springs). Elastic springs to ground per
   DOF (soil springs, flexible bases, bearing pads): each sprung joint gets a fixed
   hidden node and a global `zeroLength`, and the spring force is reported as the

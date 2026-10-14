@@ -379,6 +379,14 @@ you asked the recorder for.
   periods (or as α and β directly). For one target ratio at one period, β =
   2ζ/ω. The two periods must bracket the range that matters; damping applied to
   a range it was not fitted to is a common source of surprises.
+- **Modal damping** — one ratio ζ for each of the first N modes (OpenSees
+  `modalDamping`), as SAP2000 and ETABS damp a modal history: every mode up to N
+  gets exactly ζ, whatever its period, so no pair of periods has to be chosen.
+  The runner computes the N modes after the preload (dense solver at or below
+  500 free DOF, ARPACK above) and adds the modal damping to any Rayleigh damping;
+  N is capped at the number of free DOF. Modes above N get no modal damping.
+  Checked against the logarithmic decrement of a damped single-DOF free
+  vibration.
 - **Algorithm** — Newmark (average acceleration is the default and is
   unconditionally stable for linear models) or HHT with its α parameter.
 - **Integrator and convergence** — for a non-linear model, the same Newton
