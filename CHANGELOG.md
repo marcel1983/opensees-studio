@@ -11,6 +11,13 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **Modal damping for transient cases** (Analyze → Cases → Transient: modal
+  damping ratio ζ and number of modes). OpenSees `modalDamping` gives each of the
+  first N modes exactly ζ, on top of any Rayleigh damping. The eigen solve follows
+  the eigen determinism rule (solver from `resolve_modal_solver`, a case routed to
+  ARPACK runs in a fresh child). Checked against the logarithmic decrement of a
+  damped SDOF. A case without it saves byte-identical to before.
+
 - **Section cuts** (Define → Section Cuts). The resultant force through a group:
   the end forces of the group's elements at the group's joints, with moments
   about their centroid or a typed point. Static cases report the six global

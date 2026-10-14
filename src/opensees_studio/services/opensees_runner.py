@@ -93,6 +93,7 @@ from opensees_studio.core.frame_members import (
 from opensees_studio.core.geometry.local_axes import frame_vecxz
 from opensees_studio.core.mass_source import effective_nodal_masses
 from opensees_studio.core.modal import (
+    SOLVER_AUTO,
     dof_indices,
     free_dof_count,
     normalize_mode_sign,
@@ -1983,6 +1984,19 @@ class OpenSeesRunner:
                     f"{lam1:.3e} — cannot compute mode-1 Rayleigh damping."
                 )
             beta_k_override = 2.0 * float(damping) / _math.sqrt(float(lam1))
+
+        # Modal damping: ``eigen N`` (solver from resolve_modal_solver, the
+        # one eigen call of this case) then ``modalDamping ζ``.
+        if case.modal_damping is not None:
+            n_free = free_dof_count(self.project)
+            n_modes = min(case.modal_damping_modes, n_free)
+            if n_modes < 1:
+                raise RuntimeError(
+                    f"TransientCase {case.id}: the model has no free DOF to damp modally."
+                )
+            solver, _reason = resolve_modal_solver(SOLVER_AUTO, n_free, n_modes)
+            ops.eigen(f"-{solver}", n_modes)
+            ops.modalDamping(float(case.modal_damping))
 
         # Drop preload patterns the user flagged for removal (classic
         # ``remove loadPattern`` free-vibration idiom).

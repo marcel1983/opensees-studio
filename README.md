@@ -82,6 +82,8 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
 - **Section cuts** — Define → Section Cuts: the force and moment through a group
   (storey or pier shear, overturning moment), in the Results panel of static
   cases.
+- **Modal damping** — a transient case can damp each of its first N modes by
+  the same ratio ζ (OpenSees `modalDamping`), alone or with Rayleigh damping.
 - **Seismic loads by the equivalent lateral force method** — Define → Seismic
   Loads: ASCE/SEI 7-16 §12.8 (Cs with its caps and minimums, k-exponent
   distribution) or TBDY 2018 §4.7 (SaR = Sae / Ra, the 0.04 I SDS minimum, the

@@ -207,6 +207,25 @@ class TransientCase(_SolverOptions):
             "overrides ``rayleigh_beta_k``. ``rayleigh_alpha_m`` still applies."
         ),
     )
+    # Modal damping — OpenSees ``modalDamping`` over the first N modes. Additive:
+    # a case without it saves byte-identical to before (both fields omitted).
+    serialize_without_defaults = omit_when_default(
+        "numberer", "system_args", "modal_damping", "modal_damping_modes"
+    )
+    modal_damping: float | None = Field(
+        default=None,
+        ge=0.0,
+        lt=1.0,
+        description=(
+            "Damping ratio ζ of each of the first ``modal_damping_modes`` modes "
+            "(``eigen N`` then ``modalDamping ζ``), on top of any Rayleigh damping. "
+            "None = no modal damping."
+        ),
+    )
+    modal_damping_modes: PositiveInt = Field(
+        default=10,
+        description="Number of modes the modal damping is applied to (capped at the free DOF).",
+    )
     # Chained analysis — preload + pattern removal before the transient.
     preload_case_ids: list[PositiveInt] = Field(
         default_factory=list,

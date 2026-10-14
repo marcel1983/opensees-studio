@@ -177,13 +177,25 @@ def _uses_eigen(case: Any) -> bool:
 
     if isinstance(case, ModalCase | ResponseSpectrumCase):
         return True
-    return isinstance(case, TransientCase) and case.rayleigh_mode1_damping is not None
+    return isinstance(case, TransientCase) and (
+        case.rayleigh_mode1_damping is not None or case.modal_damping is not None
+    )
 
 
 def _routed_to_arpack(project: Any, case: Any) -> bool:
     """True when ``case`` would run its eigen analysis with ARPACK."""
-    from opensees_studio.core import ModalCase, ResponseSpectrumCase
-    from opensees_studio.core.modal import SOLVER_ARPACK, free_dof_count, resolve_modal_solver
+    from opensees_studio.core import ModalCase, ResponseSpectrumCase, TransientCase
+    from opensees_studio.core.modal import (
+        SOLVER_ARPACK,
+        SOLVER_AUTO,
+        free_dof_count,
+        resolve_modal_solver,
+    )
+
+    if isinstance(case, TransientCase) and case.modal_damping is not None:
+        n_free = free_dof_count(project)
+        n_modes = min(case.modal_damping_modes, max(n_free, 1))
+        return resolve_modal_solver(SOLVER_AUTO, n_free, n_modes)[0] == SOLVER_ARPACK
 
     modal = case
     if isinstance(case, ResponseSpectrumCase):
