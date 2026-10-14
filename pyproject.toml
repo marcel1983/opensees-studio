@@ -43,6 +43,8 @@ gui = [
     "vtk>=9.3",
     "pyqtgraph>=0.13",
     "imageio[ffmpeg]>=2.34",
+    # File → Export → IFC (services/ifc_export.py); imported only when exporting.
+    "ifcopenshell>=0.8.4",
     # scipy and pandas are listed for forward-compatibility; they are not
     # currently imported by any module in this repo (phantom deps as of 2026-06-15).
     "scipy>=1.11",

@@ -161,7 +161,12 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   whole import is one undo step.
 - **Export** — the model, with or without one analysis case, as a plain
   OpenSeesPy script generated from the same command sequence the solver
-  receives, so it reproduces the application's numbers.
+  receives, so it reproduces the application's numbers; or as **IFC4** (File →
+  Export → IFC): the physical BIM model (IfcColumn, IfcBeam, IfcMember, IfcSlab
+  with their profiles and materials, in their storeys) and the structural
+  analysis model (nodes, supports, members with releases, load cases with their
+  loads, combinations), linked element by element. Uses `ifcopenshell`, which
+  the desktop install brings.
 - **Meshing** — Edit → Mesh: split members into pieces no longer than a target
   size (their section, material and distributed loads follow them), subdivide
   shells `m x n` in their own natural coordinates (a general quadrilateral meshes

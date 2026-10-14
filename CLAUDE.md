@@ -64,7 +64,9 @@ job.
 ## Tech stack
 
 - **Python 3.12** (`requires-python = ">=3.12"`), PySide6 (Qt 6), PyVista/VTK,
-  pyqtgraph, OpenSeesPy 3.8.0.0, Pydantic v2, h5py, imageio[ffmpeg].
+  pyqtgraph, OpenSeesPy 3.8.0.0, Pydantic v2, h5py, imageio[ffmpeg], ifcopenshell
+  (File → Export → IFC; imported only inside `services/ifc_export.py` when it
+  runs, so headless installs never need it).
 - Why 3.12: the `openseespywin` and `openseespylinux` 3.8.0.0 wheels both
   declare `Requires-Python >=3.12`. On Windows the wheel ships a single
   `opensees.pyd` linked against `python312.dll`, so use 3.12 exactly (3.13
@@ -184,7 +186,7 @@ These are non-obvious things that are easy to break if you don't know:
   Safe to use headlessly — no Qt, no PyVista, no VTK. Scripts, notebooks,
   and web backends (e.g. opensees-studio-web) install only this tier.
 - **GUI extra** (`pip install -e ".[gui]"`): adds PySide6, pyvista, pyvistaqt,
-  vtk, pyqtgraph, imageio. Required to launch the desktop app.
+  vtk, pyqtgraph, imageio, ifcopenshell. Required to launch the desktop app.
 
 Desktop dev: `pip install -e ".[gui,dev]"`.
 Web / headless: `pip install -e .` (then verify with

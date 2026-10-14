@@ -11,6 +11,18 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **IFC export** (File → Export → IFC). An IFC4 file with the physical model
+  (columns, beams, members and slabs/walls/plates with their profiles — AISC I
+  and channel shapes, rectangles, pipes, angles — materials and storeys) and the
+  structural analysis model (point connections with supports, curve and surface
+  members with releases and thickness, one load case per pattern with nodal,
+  member, point, surface and imposed-displacement loads and the self weight, and
+  load combinations by factor), each analytical member assigned to its physical
+  element. Valid against the IFC4 schema for every bundled example. Adds
+  `ifcopenshell` to the GUI dependencies (and to the packaged bundle).
+
+### Added
+
 - **Seismic loads by the equivalent lateral force method** (Define → Seismic
   Loads). ASCE/SEI 7-16 §12.8 or TBDY 2018 §4.7: base shear from the code
   formulas (with every cap and minimum, and the clause that governs named in the
