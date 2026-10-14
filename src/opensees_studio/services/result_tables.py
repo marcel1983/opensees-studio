@@ -29,6 +29,7 @@ from opensees_studio.core import (
 )
 from opensees_studio.core.mass_source import effective_nodal_masses
 from opensees_studio.core.plane import dof_indices
+from opensees_studio.core.section_cuts import cut_geometry
 from opensees_studio.core.storey_results import (
     BASE_NAME,
     base_shear_from_reactions,
@@ -578,6 +579,41 @@ def storey_table(results: object, project: Project | None) -> ResultTable | None
         )
         return table
     return None
+
+
+def section_cut_table(results: object, project: Project | None) -> ResultTable | None:
+    """Final-step resultant of every section cut (static cases); ``None`` without cuts."""
+    if project is None or not project.section_cuts or not isinstance(results, StaticResults):
+        return None
+    layout = Layout.of(project)
+    slots = dof_indices(project.ndm, project.ndf)
+    table = ResultTable(
+        "Section cut forces (final step)",
+        ["Cut", "Group", "Centre", *(layout.force_column(k + 1) for k in range(len(slots)))],
+    )
+    groups = {g.id: g.name for g in project.groups}
+    length = layout.converter.factor("length")
+    for cut in project.section_cuts:
+        values = results.section_cut_forces.get(cut.id)
+        if values is None:
+            table.notes.append(
+                f"Cut {cut.name or cut.id} needs a re-run: it is newer than the analysis."
+            )
+            continue
+        last = np.atleast_2d(values)[-1]
+        centre = cut_geometry(project, cut).centre
+        table.rows.append(
+            [
+                cut.name or str(cut.id),
+                groups.get(cut.group_id, str(cut.group_id)),
+                "(" + ", ".join(f"{c * length:g}" for c in centre) + ")",
+                *(
+                    float(last[slot]) * layout.force_dof_factor(k + 1)
+                    for k, slot in enumerate(slots)
+                ),
+            ]
+        )
+    return table
 
 
 def node_history_table(

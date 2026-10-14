@@ -55,6 +55,9 @@ class StaticResults:
     """storey_id → shape (n_steps, ndm) storey shear: the global force the members
     cut just above the level below the storey carry (see
     :mod:`core.storey_results`). Empty when the project defines no storeys."""
+    section_cut_forces: dict[int, np.ndarray] = field(default_factory=dict)
+    """section_cut_id → shape (n_steps, 6) global resultant (Fx, Fy, Fz, Mx, My, Mz)
+    of the cut (:mod:`core.section_cuts`). Empty when the project defines none."""
 
     def disp(self, node_id: int, dof: int, step: int = -1) -> float:
         """Convenience: scalar displacement at ``node_id``/``dof``/``step``."""

@@ -234,6 +234,7 @@ from opensees_studio.core.scaling import (
     series_factor,
     unknown_units_message,
 )
+from opensees_studio.core.section_cuts import SectionCut
 from opensees_studio.core.sections import (
     AggregatorDOF,
     AngleShape,
@@ -352,6 +353,7 @@ __all__ = [  # noqa: RUF022 - grouped by domain under section comments, not alph
     # Buildings
     "Storey",
     "Group",
+    "SectionCut",
     "MassSource",
     "MassSourcePattern",
     # ASCE/SEI 7-16 design spectrum
