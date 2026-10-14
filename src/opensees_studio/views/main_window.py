@@ -86,6 +86,7 @@ from opensees_studio.core import (
     make_default_truss_material,
 )
 from opensees_studio.core import selection as selection_queries
+from opensees_studio.core.combinations import model_fingerprint
 from opensees_studio.core.geometry.ordering import QuadOrderError, order_quad_nodes
 from opensees_studio.core.groups import Group, colour_for, group_members
 from opensees_studio.core.help import ACTION_TOPICS, TOPIC_PROPERTY
@@ -198,6 +199,7 @@ from opensees_studio.views.docks import (
     TimeHistoryView,
 )
 from opensees_studio.views.help_window import HelpController
+from opensees_studio.views.report_pdf import write_pdf
 from opensees_studio.views.tools import (
     DrawFrameTool,
     DrawNodeTool,
@@ -224,6 +226,7 @@ class MainWindow(QMainWindow):
         self._latest_results: object = None  # last analysis output (any kind)
         # Every static / response spectrum result of the session, for load combinations.
         self._case_results = CaseResultsCache()
+        self._report_extra: dict[int, tuple[str, Any]] = {}
         self._analysis_error_box: QMessageBox | None = None  # last failure report
         self._stability_box: QMessageBox | None = None  # last stability check answer
         self._run_dialog: RunAnalysisDialog | None = None  # open while a Run dialog is shown
@@ -327,6 +330,7 @@ class MainWindow(QMainWindow):
         self._act_import_dxf = QAction("&DXF Drawing…", self)
         self._act_export_script = QAction("OpenSees &script (.py)…", self)
         self._act_export_ifc = QAction("&IFC (.ifc)…", self)
+        self._act_export_report = QAction("&Report (HTML / PDF)…", self)
         self._act_quit = QAction("&Quit", self, shortcut=QKeySequence.StandardKey.Quit)
 
         # Edit (created from QUndoStack so text auto-tracks "Undo Add 4 nodes" etc.)
@@ -489,6 +493,7 @@ class MainWindow(QMainWindow):
         m_export = m_file.addMenu("&Export")
         m_export.addAction(self._act_export_script)
         m_export.addAction(self._act_export_ifc)
+        m_export.addAction(self._act_export_report)
         m_file.addSeparator()
         m_file.addAction(self._act_quit)
 
@@ -783,6 +788,7 @@ class MainWindow(QMainWindow):
         self._act_import_dxf.triggered.connect(self._on_import_dxf)
         self._act_export_script.triggered.connect(self._on_export_script)
         self._act_export_ifc.triggered.connect(self._on_export_ifc)
+        self._act_export_report.triggered.connect(self._on_export_report)
         self._act_quit.triggered.connect(self._on_quit)
         self._act_about.triggered.connect(self._on_about)
         self._act_help_contents.triggered.connect(self._on_help_contents)
@@ -1116,6 +1122,49 @@ class MainWindow(QMainWindow):
         self._log(report.summary())
         if report.notes:
             QMessageBox.information(self, "Export IFC", report.summary())
+
+    def report_results(self) -> list[Any]:
+        """The results the report includes: every current case, plus the one on screen."""
+        project = self._vm.project
+        if project is None:
+            return []
+        current = dict(self._case_results.current(project))
+        fingerprint = model_fingerprint(project)
+        for case_id, (fp, results) in self._report_extra.items():
+            if fp == fingerprint:
+                current.setdefault(case_id, results)
+        return list(current.values())
+
+    def _on_export_report(self) -> None:
+        """File → Export → Report: model, loads, cases and current results as HTML or PDF."""
+        from opensees_studio.services.report import build_report
+
+        project = self._vm.project
+        if project is None:
+            QMessageBox.information(self, "Export report", "Open or create a project first.")
+            return
+        default = (self._vm.path.stem if self._vm.path is not None else "model") + "-report.pdf"
+        path, chosen = QFileDialog.getSaveFileName(
+            self, "Export report", default, "PDF (*.pdf);;HTML page (*.html)"
+        )
+        if not path:
+            return
+        as_html = path.lower().endswith((".html", ".htm")) or (
+            "HTML" in chosen and not path.lower().endswith(".pdf")
+        )
+        if not path.lower().endswith((".pdf", ".html", ".htm")):
+            path += ".html" if as_html else ".pdf"
+        results = self.report_results()
+        page = build_report(project, results)
+        try:
+            if as_html:
+                Path(path).write_text(page, encoding="utf-8")
+            else:
+                write_pdf(page, path)
+        except OSError as exc:
+            QMessageBox.critical(self, "Export report failed", str(exc))
+            return
+        self._log(f"Report written: {path} ({len(results)} result set(s)).")
 
     def _on_export_script(self) -> None:
         """File → Export → OpenSees script: the model as plain OpenSeesPy.
@@ -3069,8 +3118,11 @@ class MainWindow(QMainWindow):
 
     def _on_case_finished(self, results: object) -> None:
         """Keep each case result of a run for the load combinations."""
-        if self._vm.project is not None:
-            self._case_results.put(self._vm.project, results)
+        if self._vm.project is not None and not self._case_results.put(self._vm.project, results):
+            # Modal, pushover and transient results: kept for the report only.
+            case_id = getattr(results, "case_id", None)
+            if case_id is not None:
+                self._report_extra[case_id] = (model_fingerprint(self._vm.project), results)
 
     # ── slots: load combinations ────────────────────────────────────
     def _on_load_combinations(self) -> None:
@@ -3830,6 +3882,7 @@ class MainWindow(QMainWindow):
     def _on_project_changed(self, project: Project | None) -> None:
         # Results of another project (or of the closed one) never feed a combination.
         self._case_results.clear()
+        self._report_extra.clear()
         self._canvas.show_project(project)
         if project is not None and project.ndm == 2:
             # A 2D model lives in the X-Z plane (core.plane): face on, drawing at y = 0.
@@ -4010,6 +4063,7 @@ class MainWindow(QMainWindow):
         self._act_import_dxf.setEnabled(has_project)
         self._act_export_script.setEnabled(has_project)
         self._act_export_ifc.setEnabled(has_project)
+        self._act_export_report.setEnabled(has_project)
         self._act_grid.setEnabled(True)
         self._act_add_node.setEnabled(True)
         self._act_create_shell.setEnabled(has_project)
