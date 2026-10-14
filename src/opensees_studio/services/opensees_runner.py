@@ -101,6 +101,7 @@ from opensees_studio.core.modal import (
 )
 from opensees_studio.core.modal_combination import DEFAULT_MODAL_DAMPING, closely_spaced_pairs
 from opensees_studio.core.plane import dof_signs, to_solver_coords, to_solver_vector3
+from opensees_studio.core.section_cuts import cut_resultant, section_cuts
 from opensees_studio.core.self_weight import self_weight_loads, shell_self_weight_nodal_loads
 from opensees_studio.core.storey_results import cut_force, storey_cuts
 from opensees_studio.services.catalog_emitters import emit_catalog_material
@@ -1452,6 +1453,9 @@ class OpenSeesRunner:
         element_nodes = {el.id: el.nodes for el in self.project.elements}
         ndm = self.project.ndm
         storey_shear = {cut.storey_id: np.zeros((case.n_steps, ndm)) for cut in cuts}
+        section_cut_geometry = section_cuts(self.project)
+        section_cut_forces = {g.cut_id: np.zeros((case.n_steps, 6)) for g in section_cut_geometry}
+        node_coords = {n.id: n.coords for n in self.project.nodes}
 
         correct = self._needs_correction_solve(case, case.pattern_ids)
         for step in range(case.n_steps):
@@ -1491,6 +1495,13 @@ class OpenSeesRunner:
                 storey_shear[cut.storey_id][step, :] = cut_force(
                     cut, element_nodes, global_forces, ndm
                 )
+            for geometry in section_cut_geometry:
+                for element_id, _positions in geometry.members:
+                    if element_id not in global_forces:
+                        global_forces[element_id] = ops.eleForce(element_id)
+                section_cut_forces[geometry.cut_id][step, :] = cut_resultant(
+                    geometry, element_nodes, global_forces, node_coords, ndm, ndf
+                )
             self._progress(step + 1, case.n_steps)
 
         return StaticResults(
@@ -1502,6 +1513,7 @@ class OpenSeesRunner:
             element_forces=element_forces,
             element_stresses=element_stresses,
             storey_shear=storey_shear,
+            section_cut_forces=section_cut_forces,
         )
 
     def _run_pushover(self, case: PushoverCase) -> PushoverResults:

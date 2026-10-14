@@ -38,6 +38,7 @@ from opensees_studio.services.result_tables import (
     node_history_table,
     pushover_tables,
     response_spectrum_tables,
+    section_cut_table,
     static_tables,
     storey_table,
     write_csv,
@@ -226,6 +227,9 @@ class ResultsPanel(QWidget):
         storeys = storey_table(results, project)
         if storeys is not None:
             self._add_table_tab(storeys, "Storeys")
+        cuts = section_cut_table(results, project)
+        if cuts is not None:
+            self._add_table_tab(cuts, "Section cuts")
         self._export.setEnabled(bool(self.tables()))
 
     def tables(self) -> list[ResultTable]:

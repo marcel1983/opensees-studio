@@ -1,4 +1,4 @@
-"""Group dialogs: Define → Groups and Assign → Assign to Group.
+"""Group dialogs: Define → Groups, Assign → Assign to Group and Define → Section Cuts.
 
 Both edit copies and hand back plain core models (``groups()``) or a choice
 (``group_id``, ``mode``, ``new_name``); the main window wraps the result in an
@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from opensees_studio.core import Group, Project
+from opensees_studio.core import Group, Project, SectionCut
 from opensees_studio.core.groups import colour_for
 from opensees_studio.views.screen_fit import FittedDialog, MessageArea
 
@@ -235,4 +235,114 @@ class AssignGroupDialog(FittedDialog):
             if any(g.name.casefold() == name.casefold() for g in self._project.groups):
                 self.message.show_message(f"A group is already called {name!r}.", "error")
                 return
+        super().accept()
+
+
+# ─────────────────────────── Define → Section Cuts ───────────────────────────
+class SectionCutsDialog(FittedDialog):
+    """Name, group and moment centre of every section cut."""
+
+    def __init__(self, project: Project, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Define Section Cuts")
+        self._project = project
+        self._ids: list[int] = []
+        root = QVBoxLayout(self)
+        root.addWidget(
+            QLabel(
+                "A cut sums the end forces of a group's elements at the group's joints, with "
+                "moments about the centroid of those joints (or the X, Y, Z typed). Results: "
+                "the Section cuts tab of a static case."
+            )
+        )
+        self.table = QTableWidget(0, 5)
+        self.table.setHorizontalHeaderLabels(["Name", "Group", "Centre X", "Centre Y", "Centre Z"])
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        root.addWidget(self.table)
+        row = QHBoxLayout()
+        self.add_button = QPushButton("Add")
+        self.add_button.clicked.connect(self._on_add)
+        self.add_button.setEnabled(bool(project.groups))
+        self.remove_button = QPushButton("Remove")
+        self.remove_button.clicked.connect(self._on_remove)
+        row.addWidget(self.add_button)
+        row.addWidget(self.remove_button)
+        row.addStretch(1)
+        root.addLayout(row)
+        self.message = MessageArea()
+        root.addWidget(self.message)
+        if not project.groups:
+            self.message.show_message(
+                "Define a group first (Define → Groups, Assign → Assign to Group).", "warning"
+            )
+        root.addWidget(_buttons(self))
+        for cut in project.section_cuts:
+            self._append(cut)
+
+    def _append(self, cut: SectionCut) -> None:
+        r = self.table.rowCount()
+        self.table.insertRow(r)
+        self.table.setItem(r, 0, QTableWidgetItem(cut.name))
+        combo = QComboBox()
+        for group in self._project.groups:
+            combo.addItem(group.name, group.id)
+        combo.setCurrentIndex(max(combo.findData(cut.group_id), 0))
+        self.table.setCellWidget(r, 1, combo)
+        for k in range(3):
+            text = "" if cut.centre is None else repr(float(cut.centre[k]))
+            self.table.setItem(r, 2 + k, QTableWidgetItem(text))
+        self._ids.append(cut.id)
+
+    def _on_add(self) -> None:
+        cut_id = max(self._ids, default=0) + 1
+        self._append(
+            SectionCut(id=cut_id, name=f"SCUT{cut_id}", group_id=self._project.groups[0].id)
+        )
+
+    def _on_remove(self) -> None:
+        for r in sorted({i.row() for i in self.table.selectedIndexes()}, reverse=True):
+            self.table.removeRow(r)
+            del self._ids[r]
+
+    def section_cuts(self) -> list[SectionCut]:
+        """The cuts as typed (raises ``ValueError`` on a bad centre or a repeated name)."""
+        out: list[SectionCut] = []
+        names: set[str] = set()
+        for r in range(self.table.rowCount()):
+            item = self.table.item(r, 0)
+            name = item.text().strip() if item is not None else ""
+            if not name:
+                raise ValueError(f"Row {r + 1}: the cut needs a name.")
+            if name.casefold() in names:
+                raise ValueError(f"Two section cuts are called {name!r}.")
+            names.add(name.casefold())
+            combo = self.table.cellWidget(r, 1)
+            assert isinstance(combo, QComboBox)
+            texts = []
+            for k in range(3):
+                cell = self.table.item(r, 2 + k)
+                texts.append(cell.text().strip() if cell is not None else "")
+            if not any(texts):
+                centre = None
+            else:
+                try:
+                    x, y, z = (float(t.replace(",", ".")) for t in texts)
+                except ValueError:
+                    raise ValueError(
+                        f"Row {r + 1}: type all three centre coordinates, or none."
+                    ) from None
+                centre = (x, y, z)
+            out.append(
+                SectionCut(
+                    id=self._ids[r], name=name, group_id=int(combo.currentData()), centre=centre
+                )
+            )
+        return out
+
+    def accept(self) -> None:
+        try:
+            self.section_cuts()
+        except ValueError as exc:
+            self.message.show_message(str(exc), "error")
+            return
         super().accept()
