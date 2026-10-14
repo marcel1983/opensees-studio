@@ -9,6 +9,13 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.12] — 2026-10-14
+
+The building-workflow release: groups, section cuts, spreadsheet editing,
+support springs, modal damping and a calculation report, on top of code seismic
+loads, area loads and IFC export. Every addition is optional in the file: a
+project that does not use one saves exactly as before (schema 3 unchanged).
+
 ### Added
 
 - **Modal damping for transient cases** (Analyze → Cases → Transient: modal
@@ -58,9 +65,6 @@ refused instead of silently downgraded).
   load combinations by factor), each analytical member assigned to its physical
   element. Valid against the IFC4 schema for every bundled example. Adds
   `ifcopenshell` to the GUI dependencies (and to the packaged bundle).
-
-### Added
-
 - **Seismic loads by the equivalent lateral force method** (Define → Seismic
   Loads). ASCE/SEI 7-16 §12.8 or TBDY 2018 §4.7: base shear from the code
   formulas (with every cap and minimum, and the clause that governs named in the
@@ -70,6 +74,19 @@ refused instead of silently downgraded).
   `±e` cases with accidental eccentricity in 3D), applied at a diaphragm's
   retained node or shared by mass between the floor's joints; a pattern of the
   same name is refilled. One undo step.
+- **Surface loads on shells** (Assign → Area → Surface Load on Shells): a
+  uniform pressure along global X, Y, Z or the shell normal, sent to the solver
+  as consistent nodal forces; it follows the shell through Mesh and Replicate.
+- **Floor loads to frames** (Assign → Area → Floor Load to Frames): select a
+  floor's joints and every rectangular bay framed by beams on four sides takes
+  the load, two-way (45° yield lines: trapezoids and triangles) or one-way along
+  X or Y, as trapezoidal member loads in each beam's local axes. Drawn on the
+  canvas with the other member loads, and read by the diagrams and the runner
+  like any trapezoidal load.
+- **Imposed displacements** (Assign → Joint → Imposed Displacement): a static
+  support settlement (`sp` in the pattern) on any DOF; the support's own
+  constraint is removed first, and the case runs with Transformation even when
+  set to Plain, which would ignore a nonzero value.
 
 ## [0.0.11] — 2026-10-13
 
