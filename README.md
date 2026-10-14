@@ -82,6 +82,8 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
 - **Interactive table editing** — Edit → Interactive Table Editing (Ctrl+T):
   joints, elements and joint loads as spreadsheets, with Excel copy and paste,
   added and deleted rows, and one validated undo step.
+- **Calculation report** — File → Export → Report: model, loads, cases and the
+  current results as a PDF or an HTML page.
 - **Section cuts** — Define → Section Cuts: the force and moment through a group
   (storey or pier shear, overturning moment), in the Results panel of static
   cases.
