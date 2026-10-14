@@ -48,6 +48,7 @@ from opensees_studio.commands.grid import (
 from opensees_studio.commands.loads import (
     AddElementLoadsCommand,
     AddNodalLoadsCommand,
+    AddPatternLoadsCommand,
     AddPointElementLoadsCommand,
     AddTrapezoidalElementLoadsCommand,
 )
@@ -92,6 +93,7 @@ __all__ = [
     "AddMaterialsCommand",
     "AddNodalLoadsCommand",
     "AddNodesCommand",
+    "AddPatternLoadsCommand",
     "AddPointElementLoadsCommand",
     "AddRigidLinkCommand",
     "AddSectionsCommand",

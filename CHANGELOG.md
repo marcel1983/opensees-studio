@@ -9,6 +9,22 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Added
+
+- **Surface loads on shells** (Assign → Area → Surface Load on Shells): a
+  uniform pressure along global X, Y, Z or the shell normal, sent to the solver
+  as consistent nodal forces; it follows the shell through Mesh and Replicate.
+- **Floor loads to frames** (Assign → Area → Floor Load to Frames): select a
+  floor's joints and every rectangular bay framed by beams on four sides takes
+  the load, two-way (45° yield lines: trapezoids and triangles) or one-way along
+  X or Y, as trapezoidal member loads in each beam's local axes. Drawn on the
+  canvas with the other member loads, and read by the diagrams and the runner
+  like any trapezoidal load.
+- **Imposed displacements** (Assign → Joint → Imposed Displacement): a static
+  support settlement (`sp` in the pattern) on any DOF; the support's own
+  constraint is removed first, and the case runs with Transformation even when
+  set to Plain, which would ignore a nonzero value.
+
 ## [0.0.11] — 2026-10-13
 
 The Z-up release: every model, 2D included, stands on Z as its elevation axis;

@@ -78,6 +78,7 @@ from opensees_studio.core import (
     ZeroLengthElement,
     ZeroLengthSectionElement,
 )
+from opensees_studio.core.area_loads import pattern_distributed_loads, surface_nodal_loads
 from opensees_studio.core.diaphragms import (
     auto_fixed_slots,
     constrained_node_ids,
@@ -333,9 +334,22 @@ class OpenSeesRunner:
         ``Transformation`` instead.
         """
         needs = bool(self.project.diaphragms or self.project.rigid_links)
+        needs = needs or self._imposes_displacement(case)
         if case.constraints == "Plain" and (needs or self._frame_plan.needs_transformation):
             return "Transformation"
         return str(case.constraints)
+
+    def _imposes_displacement(self, case: Any) -> bool:
+        """Whether ``case`` (or a preload it runs) has a pattern with imposed displacements."""
+        ids = set(getattr(case, "pattern_ids", []) or [])
+        for preload_id in getattr(case, "preload_case_ids", []) or []:
+            preload = next((c for c in self.project.analyses if c.id == preload_id), None)
+            ids.update(getattr(preload, "pattern_ids", []) or [])
+        return any(
+            getattr(p, "imposed_displacements", None)
+            for p in self.project.load_patterns
+            if p.id in ids
+        )
 
     def _emit_mp_constraint(self, mp: Any) -> None:
         self._ops.equalDOF(mp.retained_node, mp.constrained_node, *mp.dofs)
@@ -848,6 +862,23 @@ class OpenSeesRunner:
                 ).items():
                     full = (*(float(f) for f in force), 0.0, 0.0, 0.0)
                     ops.load(node_id, *self._solver_dofs(full))
+                # Pressure on shells: consistent nodal forces (core.area_loads).
+                for node_id, force in surface_nodal_loads(self.project, pat.surface_loads).items():
+                    full = (*(float(f) for f in force), 0.0, 0.0, 0.0)
+                    ops.load(node_id, *self._solver_dofs(full))
+                # Imposed displacements: the support's own (homogeneous) sp goes,
+                # the pattern's takes its place. Plain cannot enforce a nonzero sp,
+                # so such a case runs with Transformation (_constraints_handler).
+                for imposed in pat.imposed_displacements:
+                    node = self.project.node(imposed.node_id)
+                    slot = self._dof_idx[imposed.dof - 1]
+                    if node.restraint[slot]:
+                        ops.remove("sp", imposed.node_id, imposed.dof)
+                    ops.sp(
+                        imposed.node_id,
+                        imposed.dof,
+                        imposed.value * float(self._dof_sign[imposed.dof - 1]),
+                    )
                 # A member with rigid end zones takes its loads through the
                 # split below; every other member exactly as before.
                 rigid = {
@@ -919,7 +950,7 @@ class OpenSeesRunner:
             if ul.element_id in rigid:
                 w = (ul.wx, ul.wy, ul.wz)
                 by_element.setdefault(ul.element_id, ([], []))[0].append((0.0, 1.0, w, w))
-        for dl in pat.distributed_loads:
+        for dl in pattern_distributed_loads(self.project, pat):
             by_element.setdefault(dl.element_id, ([], []))[0].append(
                 (dl.x_start, dl.x_end, dl.start(), dl.end())
             )
@@ -1168,7 +1199,7 @@ class OpenSeesRunner:
             loads = [
                 *getattr(pat, "element_loads", ()),
                 *getattr(pat, "point_loads", ()),
-                *getattr(pat, "distributed_loads", ()),
+                *pattern_distributed_loads(self.project, pat),
                 *self_weight_loads(self.project, getattr(pat, "self_weight", 0.0)),
             ]
             if any(load.element_id in force_based for load in loads):

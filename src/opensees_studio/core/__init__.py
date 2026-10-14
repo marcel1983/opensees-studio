@@ -165,6 +165,8 @@ from opensees_studio.core.ground_motion_metadata import (
 )
 from opensees_studio.core.loads import (
     ConstantTimeSeries,
+    FloorLoad,
+    ImposedDisplacement,
     ImposedSupportMotionPattern,
     LinearTimeSeries,
     LoadPattern,
@@ -173,6 +175,7 @@ from opensees_studio.core.loads import (
     PlainLoadPattern,
     PointElementLoad,
     ResponseSpectrum,
+    SurfaceLoad,
     TimeSeries,
     TrapezoidalElementLoad,
     TrigTimeSeries,
@@ -413,6 +416,9 @@ __all__ = [  # noqa: RUF022 - grouped by domain under section comments, not alph
     "FrameModifiers",
     "FrameReleases",
     "TrapezoidalElementLoad",
+    "SurfaceLoad",
+    "FloorLoad",
+    "ImposedDisplacement",
     "BEAM_INTEGRATION_RULES",
     "GEOM_TRANSF_TYPES",
     "DispBeamColumn",

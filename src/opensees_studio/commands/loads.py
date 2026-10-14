@@ -291,3 +291,29 @@ class AddTrapezoidalElementLoadsCommand(_ElementLoadCommand):
             TrapezoidalElementLoad(element_id=eid, **self._values)
             for eid in sorted(self._element_ids)
         ]
+
+
+class AddPatternLoadsCommand(_ElementLoadCommand):
+    """Append prebuilt loads to one list of a Plain pattern (surface, floor, imposed).
+
+    ``list_name`` is the ``PlainLoadPattern`` field (``surface_loads``,
+    ``floor_loads``, ``imposed_displacements``); with no ``pattern_id`` the
+    first Plain pattern is used, or a default one is created (and removed on
+    undo), as for the other load commands.
+    """
+
+    def __init__(
+        self,
+        vm: ProjectViewModel,
+        list_name: str,
+        loads: list[Any],
+        pattern_id: int | None = None,
+        *,
+        text: str | None = None,
+    ) -> None:
+        super().__init__(vm, text or f"Add {len(loads)} {list_name.replace('_', ' ')}", pattern_id)
+        self._list_name = list_name
+        self._loads = list(loads)
+
+    def _make_loads(self) -> list[Any]:
+        return list(self._loads)

@@ -85,6 +85,7 @@ from opensees_studio.core import (
     FrameMember,
     Project,
 )
+from opensees_studio.core.area_loads import pattern_distributed_loads
 from opensees_studio.core.diaphragms import constrained_node_ids, diaphragms_supported
 from opensees_studio.core.frame_members import MemberLayout, member_layout, split_member_loads
 from opensees_studio.core.geometry.frame_options import RELEASE_AXIS, RELEASE_DOFS
@@ -294,7 +295,7 @@ def _condensable(project: Project, el: Any, layout: MemberLayout) -> bool:
             if ul.element_id == el.id:
                 w = (ul.wx, ul.wy, ul.wz)
                 segments.append((0.0, 1.0, w, w))
-        for dl in getattr(pat, "distributed_loads", ()):
+        for dl in pattern_distributed_loads(project, pat):
             if dl.element_id == el.id:
                 segments.append((dl.x_start, dl.x_end, dl.start(), dl.end()))
         for pl in getattr(pat, "point_loads", ()):

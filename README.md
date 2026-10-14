@@ -47,6 +47,14 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   coordinates), zero-length elements and zero-length sections, restraints,
   equalDOF constraints, uniform, trapezoidal / partial-span and point loads on
   frames, imposed support motion.
+- **Area loads and settlements** — Assign → Area → Surface Load on Shells (a
+  uniform pressure along X, Y, Z or the shell normal, as consistent nodal
+  forces), Assign → Area → Floor Load to Frames (select a floor's joints: every
+  rectangular bay framed by beams takes the load, two-way by 45° yield lines or
+  one-way along X or Y, as trapezoidal loads on its beams) and Assign → Joint →
+  Imposed Displacement (a static support settlement, `sp`, checked against
+  6 E I d / L³ on a two-span beam). Temperature loads are not offered yet: they
+  need OpenSees' thermal elements.
 - **SAP2000-style frame assignments** (Assign → Frame): end releases and
   partial-fixity springs (T, M2, M3 per end), end (length) offsets with a
   rigid-zone factor, cardinal-point insertion, and property modifiers
