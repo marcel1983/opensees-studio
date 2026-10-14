@@ -67,7 +67,11 @@ from opensees_studio.commands.buildings import (
     SetMassSourceCommand,
     SetStoreysCommand,
 )
-from opensees_studio.commands.groups import EditGroupMembersCommand, SetGroupsCommand
+from opensees_studio.commands.groups import (
+    EditGroupMembersCommand,
+    SetGroupsCommand,
+    SetSectionCutsCommand,
+)
 from opensees_studio.commands.tables import ApplyModelTablesCommand
 from opensees_studio.core import (
     SUPPORTED_NDF,
@@ -174,7 +178,12 @@ from opensees_studio.views.dialogs.buildings import (
     MassSourceDialog,
     StoreysDialog,
 )
-from opensees_studio.views.dialogs.groups import NEW_GROUP, AssignGroupDialog, GroupsDialog
+from opensees_studio.views.dialogs.groups import (
+    NEW_GROUP,
+    AssignGroupDialog,
+    GroupsDialog,
+    SectionCutsDialog,
+)
 from opensees_studio.views.dialogs.load_combinations import LoadCombinationsDialog
 from opensees_studio.views.dialogs.model_tables import ModelTablesDialog
 from opensees_studio.views.dialogs.seismic_loads import SeismicLoadsDialog
@@ -370,6 +379,7 @@ class MainWindow(QMainWindow):
         self._act_add_node = QAction("Add &Node…", self, shortcut="Ctrl+N")
         self._act_storeys = QAction("Store&ys…", self)
         self._act_groups = QAction("&Groups…", self)
+        self._act_section_cuts = QAction("Section &Cuts…", self)
         self._act_assign_group = QAction("Assign to &Group…", self)
         self._act_assign_group.setShortcut("Ctrl+G")
         self._act_mass_source = QAction("Mass S&ource…", self)
@@ -503,6 +513,7 @@ class MainWindow(QMainWindow):
         m_define.addAction(self._act_grid)
         m_define.addAction(self._act_storeys)
         m_define.addAction(self._act_groups)
+        m_define.addAction(self._act_section_cuts)
         m_define.addAction(self._act_mass_source)
         m_define.addAction(self._act_seismic_loads)
         m_define.addAction(self._act_add_node)
@@ -847,6 +858,7 @@ class MainWindow(QMainWindow):
         self._act_remove_constraints.triggered.connect(self._on_remove_constraints)
         self._act_storeys.triggered.connect(self._on_define_storeys)
         self._act_groups.triggered.connect(self._on_define_groups)
+        self._act_section_cuts.triggered.connect(self._on_define_section_cuts)
         self._act_assign_group.triggered.connect(self._on_assign_group)
         self._act_mass_source.triggered.connect(self._on_define_mass_source)
         self._act_seismic_loads.triggered.connect(self._on_define_seismic_loads)
@@ -2068,6 +2080,20 @@ class MainWindow(QMainWindow):
             self._log(f"Groups set: {len(project.groups)}.")
         except Exception as exc:
             QMessageBox.critical(self, "Define Groups failed", str(exc))
+
+    def _on_define_section_cuts(self) -> None:
+        """Define → Section Cuts: resultant forces through a group."""
+        project = self._vm.project
+        if project is None:
+            return
+        dlg = SectionCutsDialog(project, self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        try:
+            self._vm.apply_command(SetSectionCutsCommand(self._vm, dlg.section_cuts()))
+            self._log(f"Section cuts set: {len(project.section_cuts)}. Re-run static cases.")
+        except Exception as exc:
+            QMessageBox.critical(self, "Define Section Cuts failed", str(exc))
 
     def _on_assign_group(self) -> None:
         """Assign → Assign to Group: add the selection to a group, remove it, or replace."""
@@ -4026,6 +4052,7 @@ class MainWindow(QMainWindow):
         self._act_remove_constraints.setEnabled(has_project and has_selected_nodes)
         self._act_storeys.setEnabled(has_project)
         self._act_groups.setEnabled(has_project)
+        self._act_section_cuts.setEnabled(has_project)
         self._act_assign_group.setEnabled(has_project and has_selection)
         self._act_mass_source.setEnabled(has_project)
         self._act_seismic_loads.setEnabled(has_project)

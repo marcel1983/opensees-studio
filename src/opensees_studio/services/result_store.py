@@ -117,6 +117,8 @@ def write_results(results: AnyResults, out_dir: str | Path) -> dict[str, Any]:
             _write_int_dict(f, "element_stresses", results.element_stresses)
             if results.storey_shear:
                 _write_int_dict(f, "storey_shear", results.storey_shear)
+            if results.section_cut_forces:
+                _write_int_dict(f, "section_cut_forces", results.section_cut_forces)
         elif isinstance(results, PushoverResults):
             entry["completed_steps"] = results.n_steps
             entry["control_node"] = results.control_node
@@ -201,6 +203,7 @@ def load_results(entry: dict[str, Any], out_dir: str | Path) -> AnyResults:
                 element_forces=_read_int_dict(f, "element_forces"),
                 element_stresses=_read_int_dict(f, "element_stresses"),
                 storey_shear=_read_int_dict(f, "storey_shear"),
+                section_cut_forces=_read_int_dict(f, "section_cut_forces"),
             )
         if kind == "PushoverResults":
             return PushoverResults(

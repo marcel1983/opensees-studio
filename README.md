@@ -82,6 +82,9 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
 - **Interactive table editing** — Edit → Interactive Table Editing (Ctrl+T):
   joints, elements and joint loads as spreadsheets, with Excel copy and paste,
   added and deleted rows, and one validated undo step.
+- **Section cuts** — Define → Section Cuts: the force and moment through a group
+  (storey or pier shear, overturning moment), in the Results panel of static
+  cases.
 - **Seismic loads by the equivalent lateral force method** — Define → Seismic
   Loads: ASCE/SEI 7-16 §12.8 (Cs with its caps and minimums, k-exponent
   distribution) or TBDY 2018 §4.7 (SaR = Sae / Ra, the 0.04 I SDS minimum, the

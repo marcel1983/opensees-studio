@@ -11,6 +11,13 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **Section cuts** (Define → Section Cuts). The resultant force through a group:
+  the end forces of the group's elements at the group's joints, with moments
+  about their centroid or a typed point. Static cases report the six global
+  components in a **Section cuts** tab of the Results panel (checked against
+  hand statics of a 3D cantilever and a 2D portal). A group a cut uses cannot be
+  removed.
+
 - **Groups** (Define → Groups, Assign → Assign to Group (Ctrl+G), Select → By
   Group). Named, coloured sets of joints and elements, as in SAP2000 and ETABS:
   add the selection to a group, remove it or replace the members, and select a
