@@ -425,6 +425,29 @@ class Project(BaseModel):
             for nid in getattr(pat, "node_ids", []):
                 if nid not in node_ids:
                     problems.append(f"Pattern {pat.id} drives missing node {nid}.")
+            for sl in getattr(pat, "surface_loads", []):
+                element = elements_by_id.get(sl.element_id)
+                if element is None or len(element.nodes) != 4:
+                    problems.append(
+                        f"Pattern {pat.id} has a surface load on element {sl.element_id}, "
+                        "which is not a shell."
+                    )
+            for fl in getattr(pat, "floor_loads", []):
+                missing = [n for n in fl.nodes if n not in node_ids]
+                if missing:
+                    problems.append(
+                        f"Pattern {pat.id} has a floor load on missing node(s) {missing}."
+                    )
+            for imposed in getattr(pat, "imposed_displacements", []):
+                if imposed.node_id not in node_ids:
+                    problems.append(
+                        f"Pattern {pat.id} imposes a displacement on missing node {imposed.node_id}."
+                    )
+                elif imposed.dof > self.ndf:
+                    problems.append(
+                        f"Pattern {pat.id} imposes DOF {imposed.dof} on node {imposed.node_id}, "
+                        f"but the model has {self.ndf} DOF per node."
+                    )
 
         for mp in self.mp_constraints:
             if mp.retained_node not in node_ids:

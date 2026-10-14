@@ -271,6 +271,63 @@ class TrapezoidalElementLoad(BaseModel):
         return (self.wx_end, self.wy_end, self.wz_end)
 
 
+class SurfaceLoad(BaseModel):
+    """A uniform pressure on a shell (SAP2000 *Area Uniform* load), force per area.
+
+    ``direction`` ``"normal"`` acts along the shell's own normal (the right-hand
+    turn of its nodes 1-2-3-4, positive along it); ``"X"``, ``"Y"``, ``"Z"``
+    act along a global axis, so a floor's weight is ``direction="Z"`` with a
+    negative value. The runner turns it into consistent nodal forces.
+    """
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    element_id: PositiveInt
+    value: float
+    direction: Literal["normal", "X", "Y", "Z"] = "Z"
+
+
+class FloorLoad(BaseModel):
+    """A floor panel's load handed to the frames around it (SAP2000 *area load to frames*).
+
+    ``nodes`` are the panel's four corners in order, on a horizontal rectangle;
+    ``value`` is the load per area acting **downward** (-Z). ``distribution``:
+
+    - ``"two_way"``: 45° yield lines from the corners — each edge takes the
+      load of its trapezoid (or triangle), ``w(t) = q min(t, L - t, s/2)`` with
+      ``s`` the panel's short side;
+    - ``"one_way_12"``: the slab spans parallel to edge 1-2, so edges 2-3 and
+      4-1 each take ``q |1-2| / 2``, uniform;
+    - ``"one_way_23"``: the slab spans parallel to edge 2-3, so edges 1-2 and
+      3-4 each take ``q |2-3| / 2``.
+
+    Each edge needs frame members along all of it; the loads become
+    trapezoidal member loads (see :mod:`core.area_loads`).
+    """
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    nodes: tuple[PositiveInt, PositiveInt, PositiveInt, PositiveInt]
+    value: float
+    distribution: Literal["two_way", "one_way_12", "one_way_23"] = "two_way"
+
+
+class ImposedDisplacement(BaseModel):
+    """A static displacement imposed on a node DOF (a support settlement), ``sp``.
+
+    ``dof`` is the OpenSees DOF number (1..ndf: a 2D frame's 1, 2, 3 are Ux,
+    Uz, Ry); ``value`` is in the global sign convention (a 2D rotation about
+    +Y). On a restrained DOF the support moves by ``value``; on a free DOF the
+    node is held there for the cases that run this pattern.
+    """
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    node_id: PositiveInt
+    dof: int = Field(..., ge=1, le=6)
+    value: float
+
+
 # ──────────────────────────── Patterns ────────────────────────────
 class PlainLoadPattern(Entity):
     """``pattern Plain`` — links a time series to a set of nodal and element loads."""
@@ -281,17 +338,25 @@ class PlainLoadPattern(Entity):
     element_loads: list[UniformElementLoad] = Field(default_factory=list)
     point_loads: list[PointElementLoad] = Field(default_factory=list)
     distributed_loads: list[TrapezoidalElementLoad] = Field(default_factory=list)
+    surface_loads: list[SurfaceLoad] = Field(default_factory=list)
+    floor_loads: list[FloorLoad] = Field(default_factory=list)
+    imposed_displacements: list[ImposedDisplacement] = Field(default_factory=list)
     self_weight: float = Field(
         default=0.0,
         description=(
             "Self-weight multiplier: the pattern also carries this factor times the "
             "weight of every frame whose section has a unit weight, acting "
-            "downward (-Z in 3D, -Y in 2D). 0 = no self weight."
+            "downward (-Z, in 2D and in 3D). 0 = no self weight."
         ),
     )
 
     serialize_without_defaults = omit_when_default(
-        "point_loads", "distributed_loads", "self_weight"
+        "point_loads",
+        "distributed_loads",
+        "surface_loads",
+        "floor_loads",
+        "imposed_displacements",
+        "self_weight",
     )
 
 

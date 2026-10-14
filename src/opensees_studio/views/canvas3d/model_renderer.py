@@ -37,6 +37,7 @@ from opensees_studio.core import (
     UniformElementLoad,
     ZeroLengthElement,
 )
+from opensees_studio.core.area_loads import AreaLoadError, pattern_distributed_loads
 from opensees_studio.core.diaphragms import constrained_node_ids
 from opensees_studio.core.frame_members import member_layout
 from opensees_studio.core.geometry.local_axes import frame_local_axes
@@ -926,7 +927,12 @@ class ModelRenderer:
             # ── Trapezoidal / partial distributed loads ──
             # Arrows over the loaded part only, each as long as the load there
             # relative to the largest end value, so the shape of the load shows.
-            for dload in pattern.distributed_loads:
+            try:
+                # The floor panels' share on their beams is drawn with the member loads.
+                member_loads = pattern_distributed_loads(project, pattern)
+            except AreaLoadError:
+                member_loads = list(pattern.distributed_loads)
+            for dload in member_loads:
                 if not isinstance(dload, TrapezoidalElementLoad):
                     continue
                 frame = self._element_local_frame(project, dload.element_id)
