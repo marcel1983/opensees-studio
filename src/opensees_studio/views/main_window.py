@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable, Sequence
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -66,6 +67,7 @@ from opensees_studio.commands.buildings import (
     SetMassSourceCommand,
     SetStoreysCommand,
 )
+from opensees_studio.commands.groups import EditGroupMembersCommand, SetGroupsCommand
 from opensees_studio.core import (
     SUPPORTED_NDF,
     ElasticMembranePlateSection,
@@ -81,6 +83,7 @@ from opensees_studio.core import (
 )
 from opensees_studio.core import selection as selection_queries
 from opensees_studio.core.geometry.ordering import QuadOrderError, order_quad_nodes
+from opensees_studio.core.groups import Group, colour_for, group_members
 from opensees_studio.core.help import ACTION_TOPICS, TOPIC_PROPERTY
 from opensees_studio.services import PROJECT_FILE_SUFFIX
 from opensees_studio.services.combination import MissingCaseResultsError
@@ -170,6 +173,7 @@ from opensees_studio.views.dialogs.buildings import (
     MassSourceDialog,
     StoreysDialog,
 )
+from opensees_studio.views.dialogs.groups import NEW_GROUP, AssignGroupDialog, GroupsDialog
 from opensees_studio.views.dialogs.load_combinations import LoadCombinationsDialog
 from opensees_studio.views.dialogs.seismic_loads import SeismicLoadsDialog
 from opensees_studio.views.docks import (
@@ -361,6 +365,9 @@ class MainWindow(QMainWindow):
         self._act_grid = QAction("&Coordinate System/Grids…", self, shortcut="Ctrl+G")
         self._act_add_node = QAction("Add &Node…", self, shortcut="Ctrl+N")
         self._act_storeys = QAction("Store&ys…", self)
+        self._act_groups = QAction("&Groups…", self)
+        self._act_assign_group = QAction("Assign to &Group…", self)
+        self._act_assign_group.setShortcut("Ctrl+G")
         self._act_mass_source = QAction("Mass S&ource…", self)
         self._act_seismic_loads = QAction("Seismic &Loads (Equivalent Lateral Force)…", self)
         self._act_create_shell = QAction("Create S&hell from 4 Nodes…", self)
@@ -490,6 +497,7 @@ class MainWindow(QMainWindow):
         m_define = mb.addMenu("&Define")
         m_define.addAction(self._act_grid)
         m_define.addAction(self._act_storeys)
+        m_define.addAction(self._act_groups)
         m_define.addAction(self._act_mass_source)
         m_define.addAction(self._act_seismic_loads)
         m_define.addAction(self._act_add_node)
@@ -547,6 +555,8 @@ class MainWindow(QMainWindow):
         m_area = m_assign.addMenu("A&rea")
         m_area.addAction(self._act_assign_surface_load)
         m_area.addAction(self._act_assign_floor_load)
+        m_assign.addSeparator()
+        m_assign.addAction(self._act_assign_group)
 
         m_analyze = mb.addMenu("&Analyze")
         m_analyze.addAction(self._act_case_manager)
@@ -830,6 +840,8 @@ class MainWindow(QMainWindow):
         self._act_assign_rigid_link.triggered.connect(self._on_assign_rigid_link)
         self._act_remove_constraints.triggered.connect(self._on_remove_constraints)
         self._act_storeys.triggered.connect(self._on_define_storeys)
+        self._act_groups.triggered.connect(self._on_define_groups)
+        self._act_assign_group.triggered.connect(self._on_assign_group)
         self._act_mass_source.triggered.connect(self._on_define_mass_source)
         self._act_seismic_loads.triggered.connect(self._on_define_seismic_loads)
         self._act_assign_load.triggered.connect(self._on_assign_load)
@@ -1186,6 +1198,7 @@ class MainWindow(QMainWindow):
         self._menu_select_by_section = menu.addMenu("By Se&ction")
         self._menu_select_by_material = menu.addMenu("By Mate&rial")
         self._menu_select_by_pattern = menu.addMenu("By &Load Pattern")
+        self._menu_select_by_group = menu.addMenu("By &Group")
         menu.addSeparator()
         menu.addActions(
             [
@@ -1203,6 +1216,7 @@ class MainWindow(QMainWindow):
             (self._menu_select_by_section, self._fill_select_by_section),
             (self._menu_select_by_material, self._fill_select_by_material),
             (self._menu_select_by_pattern, self._fill_select_by_pattern),
+            (self._menu_select_by_group, self._fill_select_by_group),
         ):
             submenu.aboutToShow.connect(lambda submenu=submenu, fill=fill: fill(submenu))
         menu.aboutToShow.connect(self._refresh_select_menu)
@@ -1220,6 +1234,7 @@ class MainWindow(QMainWindow):
             self._menu_select_by_section,
             self._menu_select_by_material,
             self._menu_select_by_pattern,
+            self._menu_select_by_group,
         ):
             submenu.setEnabled(has)
 
@@ -1293,6 +1308,21 @@ class MainWindow(QMainWindow):
                     lambda nodes=nodes, elements=elements: self._add_to_selection(
                         nodes=nodes, elements=elements
                     ),
+                )
+            )
+        self._fill_submenu(submenu, entries)
+
+    def _fill_select_by_group(self, submenu: Any) -> None:
+        project = self._vm.project
+        if project is None:
+            return
+        entries: list[tuple[str, Callable[[], None]]] = []
+        for group in project.groups:
+            nodes, elements = group_members(project, group.id)
+            entries.append(
+                (
+                    f"{group.name} ({len(nodes)} joint(s), {len(elements)} element(s))",
+                    partial(self._add_to_selection, nodes=nodes, elements=elements),
                 )
             )
         self._fill_submenu(submenu, entries)
@@ -2001,6 +2031,58 @@ class MainWindow(QMainWindow):
             self._log(f"Storeys set: {len(project.storeys)}.")
         except Exception as exc:
             QMessageBox.critical(self, "Define Storeys failed", str(exc))
+
+    def _on_define_groups(self) -> None:
+        """Define → Groups: add, rename, recolour or remove groups."""
+        project = self._vm.project
+        if project is None:
+            return
+        dlg = GroupsDialog(project, self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        try:
+            self._vm.apply_command(SetGroupsCommand(self._vm, dlg.groups()))
+            self._log(f"Groups set: {len(project.groups)}.")
+        except Exception as exc:
+            QMessageBox.critical(self, "Define Groups failed", str(exc))
+
+    def _on_assign_group(self) -> None:
+        """Assign → Assign to Group: add the selection to a group, remove it, or replace."""
+        project = self._vm.project
+        if project is None:
+            return
+        sel = self._canvas.selection
+        nodes, elements = sorted(sel.nodes), sorted(sel.elements)
+        if not nodes and not elements:
+            QMessageBox.information(self, "Assign to Group", "Select joints or elements first.")
+            return
+        dlg = AssignGroupDialog(project, len(nodes), len(elements), self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        group_id, mode = dlg.group_id, dlg.mode
+        try:
+            self._vm.undo_stack.beginMacro("Assign to group")
+            try:
+                if group_id == NEW_GROUP:
+                    group_id = project.next_group_id()
+                    group = Group(
+                        id=group_id,
+                        name=dlg.new_name.text().strip(),
+                        colour=colour_for(len(project.groups)),
+                    )
+                    self._vm.apply_command(SetGroupsCommand(self._vm, [*project.groups, group]))
+                self._vm.apply_command(
+                    EditGroupMembersCommand(self._vm, group_id, nodes, elements, mode=mode)
+                )
+            finally:
+                self._vm.undo_stack.endMacro()
+            group = next(g for g in project.groups if g.id == group_id)
+            self._log(
+                f"Group {group.name}: {len(group.node_ids)} joint(s), "
+                f"{len(group.element_ids)} element(s)."
+            )
+        except Exception as exc:
+            QMessageBox.critical(self, "Assign to Group failed", str(exc))
 
     def _on_define_seismic_loads(self) -> None:
         """Define → Seismic Loads: ELF base shear and storey forces as load patterns."""
@@ -3919,6 +4001,8 @@ class MainWindow(QMainWindow):
         self._act_assign_rigid_link.setEnabled(has_project and n_sel == 2)
         self._act_remove_constraints.setEnabled(has_project and has_selected_nodes)
         self._act_storeys.setEnabled(has_project)
+        self._act_groups.setEnabled(has_project)
+        self._act_assign_group.setEnabled(has_project and has_selection)
         self._act_mass_source.setEnabled(has_project)
         self._act_seismic_loads.setEnabled(has_project)
         self._act_assign_load.setEnabled(has_project and has_selected_nodes)

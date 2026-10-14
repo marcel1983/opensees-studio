@@ -14,7 +14,7 @@ the safe one:
 * **masses that agree are kept once** — a copied node must not weigh twice —
   and **masses that differ are added**, so nothing disappears without a trace;
 * **references follow the keeper**: element nodes, ``equalDOF`` constraints,
-  nodal loads and imposed-support node lists;
+  nodal loads, imposed-support node lists and group membership;
 * **loads that were copies are dropped, not doubled**: two identical loads on
   the keeper are one load, but a load that only existed on the duplicate is
   repointed and kept;
@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, Any
 
 from opensees_studio.commands.base import ProjectCommand, restore_project, snapshot_project
 from opensees_studio.core.duplicates import NodeCluster, check_duplicates, find_element_clusters
+from opensees_studio.core.groups import prune_groups
 from opensees_studio.core.loads import ImposedSupportMotionPattern, PlainLoadPattern
 from opensees_studio.core.project import Project
 
@@ -97,6 +98,7 @@ class FixDuplicatesCommand(ProjectCommand):
         if mapping:
             self._follow_the_keeper(project, mapping)
         self._remove_repeated_elements(project)
+        prune_groups(project)
         self._notify()
 
     def undo(self) -> None:
@@ -160,6 +162,11 @@ class FixDuplicatesCommand(ProjectCommand):
                 self._repoint_nodal_loads(pattern, mapping)
             elif isinstance(pattern, ImposedSupportMotionPattern):
                 pattern.node_ids = sorted({mapping.get(nid, nid) for nid in pattern.node_ids})
+        for index, group in enumerate(project.groups):
+            if any(nid in mapping for nid in group.node_ids):
+                project.groups[index] = group.model_copy(
+                    update={"node_ids": sorted({mapping.get(n, n) for n in group.node_ids})}
+                )
 
     def _repoint_elements(self, project: Project, mapping: dict[int, int]) -> None:
         kept: list[Any] = []

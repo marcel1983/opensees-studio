@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from opensees_studio.commands.base import ProjectCommand
+from opensees_studio.core.groups import Group, prune_groups
 
 if TYPE_CHECKING:
     from opensees_studio.viewmodels import ProjectViewModel
@@ -44,6 +45,7 @@ class DeleteElementsCommand(ProjectCommand):
         super().__init__(vm, f"Delete {len(element_ids)} element(s)")
         self._element_ids = set(element_ids)
         self._removed: list[tuple[int, Any]] = []
+        self._groups: list[Group] = []
 
     def redo(self) -> None:
         self._removed = [
@@ -52,9 +54,12 @@ class DeleteElementsCommand(ProjectCommand):
         self.project.elements[:] = [
             el for el in self.project.elements if el.id not in self._element_ids
         ]
+        self._groups = list(self.project.groups)
+        prune_groups(self.project)
         self._notify()
 
     def undo(self) -> None:
+        self.project.groups[:] = self._groups
         for i, el in self._removed:
             self.project.elements.insert(min(i, len(self.project.elements)), el)
         self._removed.clear()

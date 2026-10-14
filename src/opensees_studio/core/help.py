@@ -73,6 +73,7 @@ GROUP_ORDER: tuple[str, ...] = (
     "Assign — joints",
     "Assign — frame",
     "Assign — areas",
+    "Assign — groups",
     "Analyze",
     "Display",
     "View",
@@ -1021,6 +1022,7 @@ Selection (Esc) to pick one set alone.
   own material fields, or the fibres, patches and layers of its section.
 - **By Load Pattern** — the joints and elements a pattern loads. A pattern with
   a self weight loads every frame whose section has a unit weight.
+- **By Group** — the joints and elements of a group (Define → Groups).
 - **Supported Joints**, **Joints with Mass**, **Elements with Self Weight** (frames and shells).
 - **Joints of Selected Elements** — the end joints of what is selected;
   **Elements between Selected Joints** — the elements whose every joint is
@@ -2807,6 +2809,49 @@ drift ratios all read them.
             "assign.diaphragm",
             "mechanics.buildings",
         ),
+        "define.groups": _t(
+            "Define → Groups",
+            "Define",
+            "Named sets of joints and elements, to select a part of the model again.",
+            """
+A group is a name, a colour and the joints and elements it holds, as in SAP2000
+and ETABS. Groups carry no mechanics: they let you pick a part of the model again
+later. A joint or an element can belong to any number of groups.
+
+# Values
+- **Name** — unique, compared without case. **Colour** — click to change it.
+- **Joints**, **Elements** — how many each group holds (read only). Fill them
+  with Assign → Assign to Group.
+- **Add** / **Remove** — a new empty group, or remove the selected rows. Removing
+  a group never deletes its joints or elements.
+
+# Notes
+- Deleting a joint or an element takes it out of every group; Undo puts it back.
+  Fixing duplicates moves a merged joint's membership to the joint that is kept.
+- Select → By Group selects a group's members (adding to the selection).
+""",
+            "assign.group",
+            "select.menu",
+        ),
+        "assign.group": _t(
+            "Assign → Assign to Group",
+            "Assign — groups",
+            "Add the selected joints and elements to a group, remove them, or replace it.",
+            """
+Works on the current selection (Ctrl+G).
+
+# Values
+- **Group** — an existing group, or **New group…** with the name typed below.
+  A new group gets the next colour and takes the selection.
+- **Add to group** — the selection joins the group's members.
+- **Remove from group** — the selected joints and elements leave the group.
+- **Replace members** — the group holds exactly the selection afterwards.
+
+Creating the group and filling it are one undo step.
+""",
+            "define.groups",
+            "select.menu",
+        ),
         "define.seismic_loads": _t(
             "Define → Seismic Loads (Equivalent Lateral Force)",
             "Define",
@@ -3065,6 +3110,8 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_grid": "define.grid",
     "_act_add_node": "define.add_node",
     "_act_storeys": "define.storeys",
+    "_act_groups": "define.groups",
+    "_act_assign_group": "assign.group",
     "_act_mass_source": "define.mass_source",
     "_act_seismic_loads": "define.seismic_loads",
     "_act_create_shell": "define.create_shell",

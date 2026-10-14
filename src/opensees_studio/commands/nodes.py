@@ -6,7 +6,8 @@ from typing import TYPE_CHECKING
 
 from opensees_studio.commands.base import ProjectCommand
 from opensees_studio.commands.buildings import constraints_without_nodes
-from opensees_studio.core import Node, RigidDiaphragm, RigidLink
+from opensees_studio.core import Group, Node, RigidDiaphragm, RigidLink
+from opensees_studio.core.groups import prune_groups
 
 if TYPE_CHECKING:
     from opensees_studio.viewmodels import ProjectViewModel
@@ -47,6 +48,7 @@ class DeleteNodesCommand(ProjectCommand):
         self._removed_elements: list[tuple[int, object]] = []  # (index, element)
         self._removed_mp_constraints: list[tuple[int, object]] = []
         self._building_constraints: tuple[list[RigidLink], list[RigidDiaphragm]] | None = None
+        self._groups: list[Group] | None = None
 
     def redo(self) -> None:
         # Cascade: snapshot every element that references a doomed node.
@@ -84,9 +86,14 @@ class DeleteNodesCommand(ProjectCommand):
             (i, n) for i, n in enumerate(self.project.nodes) if n.id in self._node_ids
         ]
         self.project.nodes[:] = [n for n in self.project.nodes if n.id not in self._node_ids]
+        self._groups = list(self.project.groups)
+        prune_groups(self.project)
         self._notify()
 
     def undo(self) -> None:
+        if self._groups is not None:
+            self.project.groups[:] = self._groups
+            self._groups = None
         # Re-insert nodes first (elements depend on them).
         for i, n in self._removed_nodes:
             self.project.nodes.insert(min(i, len(self.project.nodes)), n)

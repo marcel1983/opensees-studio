@@ -45,6 +45,7 @@ from opensees_studio.commands.grid import (
     SetCoordSystemsCommand,
     SetGridSystemCommand,
 )
+from opensees_studio.commands.groups import EditGroupMembersCommand, SetGroupsCommand
 from opensees_studio.commands.loads import (
     AddElementLoadsCommand,
     AddNodalLoadsCommand,
@@ -112,6 +113,7 @@ __all__ = [
     "DeleteMaterialsCommand",
     "DeleteNodesCommand",
     "DeleteSectionsCommand",
+    "EditGroupMembersCommand",
     "FixDuplicatesCommand",
     "MeshCommand",
     "MirrorCommand",
@@ -125,6 +127,7 @@ __all__ = [
     "ReplicateCommand",
     "SetCoordSystemsCommand",
     "SetGridSystemCommand",
+    "SetGroupsCommand",
     "SetMassCommand",
     "SetMassSourceCommand",
     "SetPatternNodalLoadsCommand",

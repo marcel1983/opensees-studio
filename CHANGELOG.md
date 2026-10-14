@@ -11,6 +11,13 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **Groups** (Define → Groups, Assign → Assign to Group (Ctrl+G), Select → By
+  Group). Named, coloured sets of joints and elements, as in SAP2000 and ETABS:
+  add the selection to a group, remove it or replace the members, and select a
+  group again later. Deleting joints or elements takes them out of every group
+  (Undo restores them) and Fix Duplicates moves a merged joint's membership to
+  the joint it keeps. A project without groups saves byte-identical to before.
+
 - **IFC export** (File → Export → IFC). An IFC4 file with the physical model
   (columns, beams, members and slabs/walls/plates with their profiles — AISC I
   and channel shapes, rectangles, pipes, angles — materials and storeys) and the

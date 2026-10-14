@@ -38,6 +38,7 @@ from opensees_studio.core.geometry import (
     default_global_system,
 )
 from opensees_studio.core.ground_motion import GroundMotionRecord
+from opensees_studio.core.groups import Group, group_problems
 from opensees_studio.core.loads import LoadPattern, ResponseSpectrum, TimeSeries
 from opensees_studio.core.mass_source import MassSource
 from opensees_studio.core.materials import Material
@@ -79,7 +80,7 @@ class Project(BaseModel):
     # without storeys, diaphragms, rigid links, a mass source or combinations
     # saves byte-identical to before they existed.
     serialize_without_defaults = omit_when_default(
-        "storeys", "diaphragms", "rigid_links", "mass_source", "combinations"
+        "storeys", "diaphragms", "rigid_links", "mass_source", "combinations", "groups"
     )
 
     # 1 = pre ground-motion catalog (records embedded in PathTimeSeries),
@@ -184,6 +185,10 @@ class Project(BaseModel):
         default_factory=list,
         description="Load combinations of analysis-case results (additive, schema 2).",
     )
+    groups: list[Group] = Field(
+        default_factory=list,
+        description="Named sets of joints and elements (Define → Groups; additive).",
+    )
 
     # ─────────────────── invariants ───────────────────
     @model_validator(mode="after")
@@ -212,6 +217,7 @@ class Project(BaseModel):
             ("storey", self.storeys),
             ("diaphragm", self.diaphragms),
             ("load combination", self.combinations),
+            ("group", self.groups),
         ):
             ids = [it.id for it in items]
             if len(ids) != len(set(ids)):
@@ -267,6 +273,9 @@ class Project(BaseModel):
 
     def next_diaphragm_id(self) -> int:
         return self._next_id(self.diaphragms)
+
+    def next_group_id(self) -> int:
+        return self._next_id(self.groups)
 
     # ─────────────────── lookups ───────────────────
     def node(self, node_id: PositiveInt) -> Node:
@@ -479,6 +488,7 @@ class Project(BaseModel):
             )
         problems.extend(diaphragm_problems(self))
         problems.extend(constraint_chain_problems(self))
+        problems.extend(group_problems(self))
 
         if self.mass_source is not None:
             pattern_ids = {p.id for p in self.load_patterns}
