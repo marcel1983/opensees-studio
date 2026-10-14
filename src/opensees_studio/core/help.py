@@ -848,6 +848,38 @@ you drew two hundred has to say so.
             "define.portal_frame",
             "edit.check_duplicates",
         ),
+        "file.export_report": _t(
+            "File → Export → Report (HTML / PDF)",
+            "File",
+            "A calculation report: the model, loads, cases and the results of this session.",
+            """
+Writes one document that reads top to bottom like a calculation report. Choose
+**PDF** (A4, printed by Qt, no browser needed) or an **HTML page** (opens in any
+browser and pastes into Word).
+
+# Contents
+- **Project** — name, description, author, date, units, model type and program
+  version.
+- **Model** — joints, supports, elements by type, materials, sections, patterns,
+  cases, combinations, storeys, groups and section cuts, counted.
+- **Materials** and **Sections** — every one with its values.
+- **Load patterns** — the loads each holds and the sum of its joint loads.
+- **Analysis cases** and **Load combinations** — with their patterns and terms.
+- **Results** — one section per case run in this session *on the model as it is
+  now*: peak displacements (and where), support reactions with their sum, the
+  pushover curve, the periods, the storey table and the section cuts. Values
+  are in the display units, with the Results panel's signs.
+
+# Notes
+- Results computed before the last model change are left out; run the cases again
+  first. Nothing is run by the report itself.
+- Long tables stop at 60 rows; the Results panel exports any table in full (CSV).
+- Values below a billionth of a table's largest one print as 0 (solver
+  round-off).
+""",
+            "file.export_ifc",
+            "display.select_results",
+        ),
         "file.export_ifc": _t(
             "File → Export → IFC",
             "File",
@@ -3146,6 +3178,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_import_dxf": "file.import_dxf",
     "_act_export_script": "file.export_script",
     "_act_export_ifc": "file.export_ifc",
+    "_act_export_report": "file.export_report",
     "_act_quit": "file.quit",
     # ── Edit and tools ──────────────────────────────────────────────
     "_act_undo": "edit.undo",

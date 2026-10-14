@@ -79,6 +79,8 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
 - **Groups** — Define → Groups and Assign → Assign to Group (Ctrl+G): named,
   coloured sets of joints and elements to select again with Select → By Group.
   Deleting a member takes it out of its groups.
+- **Calculation report** — File → Export → Report: model, loads, cases and the
+  current results as a PDF or an HTML page.
 - **Section cuts** — Define → Section Cuts: the force and moment through a group
   (storey or pier shear, overturning moment), in the Results panel of static
   cases.
