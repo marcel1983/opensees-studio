@@ -68,6 +68,7 @@ from opensees_studio.commands.buildings import (
     SetStoreysCommand,
 )
 from opensees_studio.commands.groups import EditGroupMembersCommand, SetGroupsCommand
+from opensees_studio.commands.tables import ApplyModelTablesCommand
 from opensees_studio.core import (
     SUPPORTED_NDF,
     ElasticMembranePlateSection,
@@ -175,6 +176,7 @@ from opensees_studio.views.dialogs.buildings import (
 )
 from opensees_studio.views.dialogs.groups import NEW_GROUP, AssignGroupDialog, GroupsDialog
 from opensees_studio.views.dialogs.load_combinations import LoadCombinationsDialog
+from opensees_studio.views.dialogs.model_tables import ModelTablesDialog
 from opensees_studio.views.dialogs.seismic_loads import SeismicLoadsDialog
 from opensees_studio.views.docks import (
     DeformedShapeView,
@@ -330,6 +332,8 @@ class MainWindow(QMainWindow):
         )
         self._act_clear_selection = QAction("Clear &selection", self, shortcut="Esc")
         self._act_select_all = QAction("Select &all", self, shortcut="Ctrl+A")
+        self._act_table_editing = QAction("Interactive &Table Editing…", self)
+        self._act_table_editing.setShortcut("Ctrl+T")
 
         # Select menu: queries that add to (or invert) the current selection.
         self._act_invert_selection = QAction("&Invert Selection", self, shortcut="Ctrl+I")
@@ -489,6 +493,7 @@ class MainWindow(QMainWindow):
         m_edit.addSeparator()
         m_edit.addActions([self._act_move, self._act_replicate, self._act_mirror])
         m_edit.addSeparator()
+        m_edit.addAction(self._act_table_editing)
         m_edit.addAction(self._act_check_duplicates)
         m_edit.addAction(self._act_mesh)
 
@@ -781,6 +786,7 @@ class MainWindow(QMainWindow):
         self._act_delete.triggered.connect(self._on_delete)
         self._act_clear_selection.triggered.connect(self._on_clear_selection)
         self._act_select_all.triggered.connect(self._on_select_all)
+        self._act_table_editing.triggered.connect(self._on_table_editing)
         self._act_invert_selection.triggered.connect(self._on_invert_selection)
         self._act_previous_selection.triggered.connect(self._on_previous_selection)
         q = selection_queries
@@ -1173,6 +1179,23 @@ class MainWindow(QMainWindow):
             sel.clear()
         except Exception as exc:
             QMessageBox.critical(self, "Delete failed", str(exc))
+
+    def _on_table_editing(self) -> None:
+        """Edit → Interactive Table Editing: joints, elements and joint loads as tables."""
+        project = self._vm.project
+        if project is None:
+            return
+        dlg = ModelTablesDialog(project, self)
+        if dlg.exec() != QDialog.DialogCode.Accepted or dlg.edited is None:
+            return
+        try:
+            self._vm.apply_command(ApplyModelTablesCommand(self._vm, dlg.edited))
+            self._log(
+                f"Tables applied: {len(project.nodes)} joint(s), "
+                f"{len(project.elements)} element(s)."
+            )
+        except Exception as exc:
+            QMessageBox.critical(self, "Interactive Table Editing failed", str(exc))
 
     def _on_select_all(self) -> None:
         """Select all nodes AND all elements in the project."""
@@ -3990,6 +4013,7 @@ class MainWindow(QMainWindow):
         self._act_frame_wizard.setEnabled(has_project)
         self._act_truss_wizard.setEnabled(has_project)
         self._act_check_duplicates.setEnabled(has_project)
+        self._act_table_editing.setEnabled(has_project)
         self._act_check_stability.setEnabled(
             has_project and not self._stability.is_running and not self._runner.is_running
         )

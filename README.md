@@ -79,6 +79,9 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
 - **Groups** — Define → Groups and Assign → Assign to Group (Ctrl+G): named,
   coloured sets of joints and elements to select again with Select → By Group.
   Deleting a member takes it out of its groups.
+- **Interactive table editing** — Edit → Interactive Table Editing (Ctrl+T):
+  joints, elements and joint loads as spreadsheets, with Excel copy and paste,
+  added and deleted rows, and one validated undo step.
 - **Seismic loads by the equivalent lateral force method** — Define → Seismic
   Loads: ASCE/SEI 7-16 §12.8 (Cs with its caps and minimums, k-exponent
   distribution) or TBDY 2018 §4.7 (SaR = Sae / Ra, the 0.04 I SDS minimum, the
