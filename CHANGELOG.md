@@ -11,19 +11,15 @@ refused instead of silently downgraded).
 
 ### Added
 
-- **Surface loads on shells** (Assign → Area → Surface Load on Shells): a
-  uniform pressure along global X, Y, Z or the shell normal, sent to the solver
-  as consistent nodal forces; it follows the shell through Mesh and Replicate.
-- **Floor loads to frames** (Assign → Area → Floor Load to Frames): select a
-  floor's joints and every rectangular bay framed by beams on four sides takes
-  the load, two-way (45° yield lines: trapezoids and triangles) or one-way along
-  X or Y, as trapezoidal member loads in each beam's local axes. Drawn on the
-  canvas with the other member loads, and read by the diagrams and the runner
-  like any trapezoidal load.
-- **Imposed displacements** (Assign → Joint → Imposed Displacement): a static
-  support settlement (`sp` in the pattern) on any DOF; the support's own
-  constraint is removed first, and the case runs with Transformation even when
-  set to Plain, which would ignore a nonzero value.
+- **Seismic loads by the equivalent lateral force method** (Define → Seismic
+  Loads). ASCE/SEI 7-16 §12.8 or TBDY 2018 §4.7: base shear from the code
+  formulas (with every cap and minimum, and the clause that governs named in the
+  preview), shared between the storeys by weight and height (k exponent, or the
+  TBDY ΔFN top force). The period is typed or approximated from the building
+  height. One load pattern and static case per direction (`EQ X`, `EQ Y`, and
+  `±e` cases with accidental eccentricity in 3D), applied at a diaphragm's
+  retained node or shared by mass between the floor's joints; a pattern of the
+  same name is refilled. One undo step.
 
 ## [0.0.11] — 2026-10-13
 

@@ -73,6 +73,7 @@ from opensees_studio.commands.series_and_patterns import (
     AddLoadPatternCommand,
     AddTimeSeriesCommand,
     ReplaceTimeSeriesCommand,
+    SetPatternNodalLoadsCommand,
 )
 from opensees_studio.commands.transforms import (
     MirrorCommand,
@@ -126,6 +127,7 @@ __all__ = [
     "SetGridSystemCommand",
     "SetMassCommand",
     "SetMassSourceCommand",
+    "SetPatternNodalLoadsCommand",
     "SetRestraintCommand",
     "SetStoreysCommand",
     "UpdateAnalysisCaseCommand",
