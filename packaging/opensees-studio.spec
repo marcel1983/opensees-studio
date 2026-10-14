@@ -46,7 +46,9 @@ datas = []
 binaries = []
 hiddenimports = []
 
-for package in ("openseespylinux", "openseespy"):
+# ifcopenshell (File → Export → IFC) is imported lazily and ships a native
+# library plus its schema files, so it is collected whole as well.
+for package in ("openseespylinux", "openseespy", "ifcopenshell"):
     try:
         pkg_datas, pkg_binaries, pkg_hidden = collect_all(package)
     except Exception as exc:  # platform-specific wheel of the other OS

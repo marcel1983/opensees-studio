@@ -313,6 +313,7 @@ class MainWindow(QMainWindow):
         self._act_save_as = QAction("Save &As…", self, shortcut=QKeySequence.StandardKey.SaveAs)
         self._act_import_dxf = QAction("&DXF Drawing…", self)
         self._act_export_script = QAction("OpenSees &script (.py)…", self)
+        self._act_export_ifc = QAction("&IFC (.ifc)…", self)
         self._act_quit = QAction("&Quit", self, shortcut=QKeySequence.StandardKey.Quit)
 
         # Edit (created from QUndoStack so text auto-tracks "Undo Add 4 nodes" etc.)
@@ -470,6 +471,7 @@ class MainWindow(QMainWindow):
         m_import.addAction(self._act_import_dxf)
         m_export = m_file.addMenu("&Export")
         m_export.addAction(self._act_export_script)
+        m_export.addAction(self._act_export_ifc)
         m_file.addSeparator()
         m_file.addAction(self._act_quit)
 
@@ -759,6 +761,7 @@ class MainWindow(QMainWindow):
         self._act_save_as.triggered.connect(self._on_save_as)
         self._act_import_dxf.triggered.connect(self._on_import_dxf)
         self._act_export_script.triggered.connect(self._on_export_script)
+        self._act_export_ifc.triggered.connect(self._on_export_ifc)
         self._act_quit.triggered.connect(self._on_quit)
         self._act_about.triggered.connect(self._on_about)
         self._act_help_contents.triggered.connect(self._on_help_contents)
@@ -1067,6 +1070,28 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Save failed", str(exc))
             return False
         return True
+
+    def _on_export_ifc(self) -> None:
+        """File → Export → IFC: the physical BIM model and the analytical model, IFC4."""
+        from opensees_studio.services.ifc_export import IfcExportError, export_ifc
+
+        if self._vm.project is None:
+            QMessageBox.information(self, "Export IFC", "Open or create a project first.")
+            return
+        default = (self._vm.path.stem if self._vm.path is not None else "model") + ".ifc"
+        path, _ = QFileDialog.getSaveFileName(self, "Export IFC", default, "IFC (*.ifc)")
+        if not path:
+            return
+        if not path.lower().endswith(".ifc"):
+            path += ".ifc"
+        try:
+            report = export_ifc(self._vm.project, path)
+        except (IfcExportError, OSError, ValueError) as exc:
+            QMessageBox.critical(self, "Export IFC failed", str(exc))
+            return
+        self._log(report.summary())
+        if report.notes:
+            QMessageBox.information(self, "Export IFC", report.summary())
 
     def _on_export_script(self) -> None:
         """File → Export → OpenSees script: the model as plain OpenSeesPy.
@@ -3876,6 +3901,7 @@ class MainWindow(QMainWindow):
         self._act_save_as.setEnabled(has_project)
         self._act_import_dxf.setEnabled(has_project)
         self._act_export_script.setEnabled(has_project)
+        self._act_export_ifc.setEnabled(has_project)
         self._act_grid.setEnabled(True)
         self._act_add_node.setEnabled(True)
         self._act_create_shell.setEnabled(has_project)
