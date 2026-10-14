@@ -81,6 +81,7 @@ from opensees_studio.commands.series_and_patterns import (
     ReplaceTimeSeriesCommand,
     SetPatternNodalLoadsCommand,
 )
+from opensees_studio.commands.tables import ApplyModelTablesCommand
 from opensees_studio.commands.transforms import (
     MirrorCommand,
     MoveNodesCommand,
@@ -107,6 +108,7 @@ __all__ = [
     "AddSpectrumCommand",
     "AddTimeSeriesCommand",
     "AddTrapezoidalElementLoadsCommand",
+    "ApplyModelTablesCommand",
     "AssignElementFieldsCommand",
     "AssignMaterialCommand",
     "AssignSectionCommand",
