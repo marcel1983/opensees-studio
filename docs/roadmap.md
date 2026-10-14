@@ -632,6 +632,13 @@ Status legend: ✅ done · 🟡 partial · ⬜ planned · ✂️ deferred / out-
 - ✅ Z as the elevation axis of every model (0.0.11): 2D models in the X-Z plane,
   file schema 3 converts older 2D projects on open (`core.plane`).
 - ✅ Multi-selection editing in the Properties panel (0.0.11).
+- ✅ Seismic loads by the equivalent lateral force method, ASCE 7-16 / TBDY 2018
+  (0.0.12).
+- ✅ Area loads: surface loads on shells, floor loads to frames, imposed
+  displacements (0.0.12).
+- ✅ IFC4 export, physical and analytical model (0.0.12).
+- ✅ Groups, section cuts, interactive table editing, calculation report (PDF /
+  HTML), support springs, modal damping (0.0.12).
 
 ## Maintenance / debt
 - ⬜ Canonical float serialization in `.osmodel` (platform last-digit noise
