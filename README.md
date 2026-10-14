@@ -68,9 +68,17 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   inter-storey drift ratio, storey shear and base shear, for static cases, mode
   shapes, pushovers and response spectrum cases (each quantity combined over the
   modes by SRSS or CQC). Checked against a hand-built OpenSeesPy model.
+- **Seismic loads by the equivalent lateral force method** — Define → Seismic
+  Loads: ASCE/SEI 7-16 §12.8 (Cs with its caps and minimums, k-exponent
+  distribution) or TBDY 2018 §4.7 (SaR = Sae / Ra, the 0.04 I SDS minimum, the
+  ΔFN top force). Storey weights are the masses the analysis uses; the period is
+  typed or taken from the code's empirical formula. A preview shows W, V and the
+  force of every storey; OK writes `EQ X` / `EQ Y` (and `±e` cases with
+  accidental eccentricity in 3D) as load patterns with static cases, refilling a
+  pattern of the same name — such as the combination generator's empty `EQ X`.
 - **A portal frame wizard** (Define → Create Portal Frame): bays and bay width,
   eave height, one slope / two slopes / flat, the column and rafter sections and
-  fixed or pinned bases, in the XY, XZ or YZ plane. Column tops follow the roof
+  fixed or pinned bases, in the XZ or YZ plane (a 2D model always in XZ). Column tops follow the roof
   line, so an interior column comes out as tall as the roof above it, and the
   whole frame is one undoable step that arrives selected for copying.
 - **Materials** — `Steel01`, `Steel02`, `Concrete01`, `Concrete02`,

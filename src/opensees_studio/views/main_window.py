@@ -166,6 +166,7 @@ from opensees_studio.views.dialogs.buildings import (
     StoreysDialog,
 )
 from opensees_studio.views.dialogs.load_combinations import LoadCombinationsDialog
+from opensees_studio.views.dialogs.seismic_loads import SeismicLoadsDialog
 from opensees_studio.views.docks import (
     DeformedShapeView,
     ForceDiagramView,
@@ -355,6 +356,7 @@ class MainWindow(QMainWindow):
         self._act_add_node = QAction("Add &Node…", self, shortcut="Ctrl+N")
         self._act_storeys = QAction("Store&ys…", self)
         self._act_mass_source = QAction("Mass S&ource…", self)
+        self._act_seismic_loads = QAction("Seismic &Loads (Equivalent Lateral Force)…", self)
         self._act_create_shell = QAction("Create S&hell from 4 Nodes…", self)
         self._act_frame_wizard = QAction("Create Portal &Frame…", self)
         self._act_truss_wizard = QAction("Create &Truss…", self)
@@ -479,6 +481,7 @@ class MainWindow(QMainWindow):
         m_define.addAction(self._act_grid)
         m_define.addAction(self._act_storeys)
         m_define.addAction(self._act_mass_source)
+        m_define.addAction(self._act_seismic_loads)
         m_define.addAction(self._act_add_node)
         m_define.addAction(self._act_create_shell)
         m_define.addAction(self._act_frame_wizard)
@@ -812,6 +815,7 @@ class MainWindow(QMainWindow):
         self._act_remove_constraints.triggered.connect(self._on_remove_constraints)
         self._act_storeys.triggered.connect(self._on_define_storeys)
         self._act_mass_source.triggered.connect(self._on_define_mass_source)
+        self._act_seismic_loads.triggered.connect(self._on_define_seismic_loads)
         self._act_assign_load.triggered.connect(self._on_assign_load)
         self._act_assign_zls.triggered.connect(self._on_assign_zls)
         self._act_assign_bearing.triggered.connect(self._on_assign_bearing)
@@ -1954,6 +1958,16 @@ class MainWindow(QMainWindow):
             self._log(f"Storeys set: {len(project.storeys)}.")
         except Exception as exc:
             QMessageBox.critical(self, "Define Storeys failed", str(exc))
+
+    def _on_define_seismic_loads(self) -> None:
+        """Define → Seismic Loads: ELF base shear and storey forces as load patterns."""
+        if self._vm.project is None:
+            return
+        dlg = SeismicLoadsDialog(self._vm, self)
+        if dlg.exec() == QDialog.DialogCode.Accepted and dlg.written:
+            self._log(
+                "Seismic loads written: " + ", ".join(dlg.written) + ". " + dlg.summary.text()
+            )
 
     def _on_define_mass_source(self) -> None:
         project = self._vm.project
@@ -3788,6 +3802,7 @@ class MainWindow(QMainWindow):
         self._act_remove_constraints.setEnabled(has_project and has_selected_nodes)
         self._act_storeys.setEnabled(has_project)
         self._act_mass_source.setEnabled(has_project)
+        self._act_seismic_loads.setEnabled(has_project)
         self._act_assign_load.setEnabled(has_project and has_selected_nodes)
         # Zero-length section needs exactly two selected joints.
         self._act_assign_zls.setEnabled(has_project and n_sel == 2)

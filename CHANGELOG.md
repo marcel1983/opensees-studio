@@ -9,6 +9,18 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Added
+
+- **Seismic loads by the equivalent lateral force method** (Define → Seismic
+  Loads). ASCE/SEI 7-16 §12.8 or TBDY 2018 §4.7: base shear from the code
+  formulas (with every cap and minimum, and the clause that governs named in the
+  preview), shared between the storeys by weight and height (k exponent, or the
+  TBDY ΔFN top force). The period is typed or approximated from the building
+  height. One load pattern and static case per direction (`EQ X`, `EQ Y`, and
+  `±e` cases with accidental eccentricity in 3D), applied at a diaphragm's
+  retained node or shared by mass between the floor's joints; a pattern of the
+  same name is refilled. One undo step.
+
 ## [0.0.11] — 2026-10-13
 
 The Z-up release: every model, 2D included, stands on Z as its elevation axis;
