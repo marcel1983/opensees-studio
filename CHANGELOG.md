@@ -30,6 +30,12 @@ refused instead of silently downgraded).
   group again later. Deleting joints or elements takes them out of every group
   (Undo restores them) and Fix Duplicates moves a merged joint's membership to
   the joint it keeps. A project without groups saves byte-identical to before.
+- **Interactive table editing** (Edit → Interactive Table Editing, Ctrl+T).
+  Joints (coordinates, restraints, masses), elements (joints, section, material)
+  and joint loads as spreadsheets: edit cells, copy and paste blocks from Excel,
+  add and delete rows. Only the model's own DOFs are columns. OK validates every
+  cell and reference, names a bad one by table, row and column, and applies the
+  edit as one undo step.
 
 - **IFC export** (File → Export → IFC). An IFC4 file with the physical model
   (columns, beams, members and slabs/walls/plates with their profiles — AISC I
