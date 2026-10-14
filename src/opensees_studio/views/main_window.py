@@ -159,6 +159,11 @@ from opensees_studio.views.dialogs import (
     UniformExcitationDialog,
     member_sections,
 )
+from opensees_studio.views.dialogs.area_loads import (
+    FloorLoadDialog,
+    ImposedDisplacementDialog,
+    SurfaceLoadDialog,
+)
 from opensees_studio.views.dialogs.buildings import (
     AssignDiaphragmDialog,
     AssignRigidLinkDialog,
@@ -380,6 +385,9 @@ class MainWindow(QMainWindow):
         self._act_assign_rigid_link = QAction("Rigid &Link…", self)
         self._act_remove_constraints = QAction("Remove &Constraints", self)
         self._act_assign_load = QAction("&Point Loads…", self, shortcut="Ctrl+L")
+        self._act_assign_imposed_displacement = QAction("Imposed &Displacement…", self)
+        self._act_assign_surface_load = QAction("&Surface Load on Shells…", self)
+        self._act_assign_floor_load = QAction("&Floor Load to Frames…", self)
         self._act_assign_zls = QAction("&Zero-Length Section…", self)
         self._act_assign_bearing = QAction("&Bearing…", self)
         self._act_assign_distributed_load = QAction("&Distributed Load…", self)
@@ -514,6 +522,7 @@ class MainWindow(QMainWindow):
         m_joint.addAction(self._act_assign_rigid_link)
         m_joint.addAction(self._act_remove_constraints)
         m_joint.addAction(self._act_assign_load)
+        m_joint.addAction(self._act_assign_imposed_displacement)
         m_joint.addAction(self._act_assign_zls)
         m_joint.addAction(self._act_assign_bearing)
         # Frame submenu — operates on selected frame elements.
@@ -532,6 +541,10 @@ class MainWindow(QMainWindow):
         m_frame.addAction(self._act_assign_trapezoidal_load)
         m_frame.addAction(self._act_assign_frame_point_load)
         m_frame.addAction(self._act_assign_hinge)
+
+        m_area = m_assign.addMenu("A&rea")
+        m_area.addAction(self._act_assign_surface_load)
+        m_area.addAction(self._act_assign_floor_load)
 
         m_analyze = mb.addMenu("&Analyze")
         m_analyze.addAction(self._act_case_manager)
@@ -817,6 +830,11 @@ class MainWindow(QMainWindow):
         self._act_mass_source.triggered.connect(self._on_define_mass_source)
         self._act_seismic_loads.triggered.connect(self._on_define_seismic_loads)
         self._act_assign_load.triggered.connect(self._on_assign_load)
+        self._act_assign_imposed_displacement.triggered.connect(
+            self._on_assign_imposed_displacement
+        )
+        self._act_assign_surface_load.triggered.connect(self._on_assign_surface_load)
+        self._act_assign_floor_load.triggered.connect(self._on_assign_floor_load)
         self._act_assign_zls.triggered.connect(self._on_assign_zls)
         self._act_assign_bearing.triggered.connect(self._on_assign_bearing)
         self._act_assign_distributed_load.triggered.connect(self._on_assign_distributed_load)
@@ -2644,6 +2662,80 @@ class MainWindow(QMainWindow):
         shared = values[0] if all(v == values[0] for v in values) else None
         return {el.id for el in frames}, shared
 
+    # ── area loads and imposed displacements ─────────────────────────
+    def _on_assign_surface_load(self) -> None:
+        """Assign > Area > Surface Load on Shells: a uniform pressure on the selected shells."""
+        from opensees_studio.core import SurfaceLoad
+
+        project = self._vm.project
+        if project is None:
+            return
+        selected = set(self._canvas.selection.elements)
+        shells = sorted(
+            el.id
+            for el in project.elements
+            if el.id in selected and isinstance(el, ShellMITC4Element)
+        )
+        if not shells:
+            QMessageBox.information(self, "Surface Load", "Select one or more shells first.")
+            return
+        dlg = SurfaceLoadDialog(len(shells), project, self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        values = dlg.values()
+        loads = [SurfaceLoad(element_id=eid, **values) for eid in shells]
+        self._apply_pattern_loads("surface_loads", loads, dlg.pattern_id(), "Surface Load")
+        self._log(
+            f"Surface load {values['value']:g} ({values['direction']}) on {len(shells)} shell(s)."
+        )
+
+    def _on_assign_floor_load(self) -> None:
+        """Assign > Area > Floor Load to Frames: every bay the selected joints frame."""
+        from opensees_studio.core.area_loads import floor_panels
+
+        project = self._vm.project
+        if project is None:
+            return
+        panels = floor_panels(project, set(self._canvas.selection.nodes))
+        if not panels:
+            QMessageBox.information(
+                self,
+                "Floor Load",
+                "Select the joints of a floor: the load goes to every rectangular bay whose "
+                "four corners are selected and whose four sides are framed by beams.",
+            )
+            return
+        dlg = FloorLoadDialog(panels, project, self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        loads = dlg.loads()
+        self._apply_pattern_loads("floor_loads", loads, dlg.pattern_id(), "Floor Load")
+        self._log(f"Floor load on {len(loads)} bay(s).")
+
+    def _on_assign_imposed_displacement(self) -> None:
+        """Assign > Joint > Imposed Displacement: a static settlement of the selected joints."""
+        project = self._vm.project
+        nodes = sorted(self._canvas.selection.nodes)
+        if project is None or not nodes:
+            return
+        dlg = ImposedDisplacementDialog(len(nodes), project, self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        self._apply_pattern_loads(
+            "imposed_displacements", dlg.loads(nodes), dlg.pattern_id(), "Imposed Displacement"
+        )
+        self._log(f"Imposed displacement on {len(nodes)} joint(s).")
+
+    def _apply_pattern_loads(
+        self, list_name: str, loads: list[Any], pattern_id: int | None, title: str
+    ) -> None:
+        from opensees_studio.commands import AddPatternLoadsCommand
+
+        try:
+            self._vm.apply_command(AddPatternLoadsCommand(self._vm, list_name, loads, pattern_id))
+        except Exception as exc:
+            QMessageBox.critical(self, f"{title} failed", str(exc))
+
     def _on_assign_releases(self) -> None:
         """Assign > Frame > Releases/Partial Fixity."""
         picked = self._frame_option_dialog("Frame Releases", "releases")
@@ -3804,6 +3896,14 @@ class MainWindow(QMainWindow):
         self._act_mass_source.setEnabled(has_project)
         self._act_seismic_loads.setEnabled(has_project)
         self._act_assign_load.setEnabled(has_project and has_selected_nodes)
+        self._act_assign_imposed_displacement.setEnabled(has_project and has_selected_nodes)
+        self._act_assign_surface_load.setEnabled(has_project)
+        self._act_assign_floor_load.setEnabled(
+            has_project
+            and has_selected_nodes
+            and self._vm.project is not None
+            and self._vm.project.ndm == 3
+        )
         # Zero-length section needs exactly two selected joints.
         self._act_assign_zls.setEnabled(has_project and n_sel == 2)
         self._act_assign_bearing.setEnabled(has_project and n_sel == 2)

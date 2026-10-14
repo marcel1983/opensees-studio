@@ -51,6 +51,7 @@ from opensees_studio.core import (
     Project,
     StaticCase,
 )
+from opensees_studio.core.area_loads import pattern_distributed_loads
 from opensees_studio.core.frame_members import (
     ClearPiece,
     ClearPoint,
@@ -202,7 +203,7 @@ def _case_member_loads(
         for ul in uniform:
             w = (scale * ul.wx, scale * ul.wy, scale * ul.wz)
             add(ul.element_id)[0].append((0.0, 1.0, w, w))
-        for dl in pattern.distributed_loads:
+        for dl in pattern_distributed_loads(project, pattern):
             w0 = tuple(scale * v for v in dl.start())
             w1 = tuple(scale * v for v in dl.end())
             add(dl.element_id)[0].append((dl.x_start, dl.x_end, w0, w1))

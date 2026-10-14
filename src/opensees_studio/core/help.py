@@ -72,6 +72,7 @@ GROUP_ORDER: tuple[str, ...] = (
     "Define",
     "Assign — joints",
     "Assign — frame",
+    "Assign — areas",
     "Analyze",
     "Display",
     "View",
@@ -2121,6 +2122,82 @@ to the joint.
             "assign.distributed_load",
             "assign.end_offsets",
         ),
+        "assign.surface_load": _t(
+            "Assign → Area → Surface Load on Shells",
+            "Assign — areas",
+            "A uniform pressure on the selected shells, as consistent nodal forces.",
+            """
+Puts a uniform load per area on every selected shell (`ShellMITC4`), in the load
+pattern you pick. The solver receives it as consistent nodal forces: each corner
+takes the value times the integral of its shape function over the shell, so the
+four add up to value × area also on a warped quad. Beams and other elements in
+the selection are skipped. A shell that is meshed later passes the load to every
+piece, and Edit → Replicate copies it with the shell.
+
+# Values
+- **Value** — force per area, signed along the direction.
+- **Direction** — **Global Z** (a floor's weight is a negative value), **Global
+  X / Y**, or the **shell normal** (local 3: the right-hand turn of its nodes
+  1-2-3-4, so a pressure on a wall or a sloped roof).
+""",
+            "assign.floor_load",
+            "define.create_shell",
+        ),
+        "assign.floor_load": _t(
+            "Assign → Area → Floor Load to Frames",
+            "Assign — areas",
+            "A floor load handed to the beams around each bay, one-way or two-way.",
+            """
+For a floor modelled with beams only (no shells): select the floor's joints and
+the load goes to **every rectangular bay** whose four corners are selected and
+whose four sides are framed by beams. A beam meshed into pieces still counts as
+one side; a joint in the middle of a beam is not a corner. The load acts
+downward (-Z) and reaches the beams as trapezoidal loads in their own local
+axes, drawn on the canvas like any other member load.
+
+# Values
+- **Load** — force per area, downward.
+- **Distribution**
+  - **Two-way** — 45° yield lines from the corners: an edge of length L takes
+    q min(t, L - t, s/2) along its length (s the bay's short side), a trapezoid on
+    a long edge and a triangle on a short one. The four edges carry q × area.
+  - **One-way, spanning along X / Y** — the slab spans in that direction, so the
+    two beams across the span each take q × span / 2, uniform.
+
+# Limits
+A bay must be horizontal, rectangular and axis-aligned to be found from a
+selection; a sloped or irregular area is loaded with shells and a surface load.
+A 3D model only (a 2D frame takes its beam loads directly).
+""",
+            "assign.surface_load",
+            "assign.trapezoidal_load",
+        ),
+        "assign.imposed_displacement": _t(
+            "Assign → Joint → Imposed Displacement",
+            "Assign — joints",
+            "A static displacement of the selected joints: a support settlement.",
+            """
+Imposes a displacement on one DOF of each selected joint, in the load pattern you
+pick (OpenSees `sp` in that pattern). On a **restrained** DOF the support moves by
+that much — a settlement, the classic case. On a **free** DOF the joint is held
+at that value for the cases that run the pattern, as if a support were there.
+
+The application removes the support's own constraint before imposing the new
+value, and runs such a case with the **Transformation** constraint handler even
+when it is set to Plain: Plain silently ignores a nonzero imposed value.
+
+# Values
+- **DOF** — the model's own DOFs: Ux, Uy, Uz, Rx, Ry, Rz in 3D; Ux, Uz, Ry in a
+  2D frame (the X-Z plane).
+- **Value** — length (or radians for a rotation), in the global sign convention:
+  a settlement is negative Uz.
+
+Check: a two-span continuous beam whose middle support settles d has the middle
+reaction 6 E I d / L³ — the application matches it.
+""",
+            "assign.support",
+            "assign.load",
+        ),
         "assign.hinge": _t(
             "Assign → Frame → Hinge",
             "Assign — frame",
@@ -2966,6 +3043,9 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_assign_rigid_link": "assign.rigid_link",
     "_act_remove_constraints": "assign.remove_constraints",
     "_act_assign_load": "assign.load",
+    "_act_assign_imposed_displacement": "assign.imposed_displacement",
+    "_act_assign_surface_load": "assign.surface_load",
+    "_act_assign_floor_load": "assign.floor_load",
     "_act_assign_zls": "assign.zero_length_section",
     "_act_assign_bearing": "assign.bearing",
     # ── Assign: frame ───────────────────────────────────────────────
