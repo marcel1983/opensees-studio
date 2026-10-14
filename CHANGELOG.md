@@ -11,6 +11,12 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **Support springs** (Assign → Joint → Springs). Elastic springs to ground per
+  DOF (soil springs, flexible bases, bearing pads): each sprung joint gets a fixed
+  hidden node and a global `zeroLength`, and the spring force is reported as the
+  joint's reaction. Drawn as a green zigzag, exported to IFC as stiffness values.
+  Checked against closed forms (propped cantilever, rotational base spring, mass
+  on springs). A project without springs saves byte-identical to before.
 - **Calculation report** (File → Export → Report, PDF or HTML). The project,
   the model in numbers, materials, sections, load patterns, cases and
   combinations, then the results of every case run on the current model: peak

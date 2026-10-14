@@ -150,6 +150,8 @@ class _Writer:
             self._derived("PLANARFORCEUNIT", {force: 1, length: -2}),
             self._derived("TORQUEUNIT", {force: 1, length: 1}),
             self._derived("LINEARMOMENTUNIT", {force: 1}),
+            self._derived("LINEARSTIFFNESSUNIT", {force: 1, length: -1}),
+            self._derived("ROTATIONALSTIFFNESSUNIT", {force: 1, length: 1, angle: -1}),
         ]
         api.unit.assign_unit(f, units=[length, force, angle, time, *derived])
         import ifcopenshell.util.unit
@@ -187,6 +189,14 @@ class _Writer:
             storey.Elevation = elevation
             api.aggregate.assign_object(f, products=[storey], relating_object=self.building)
             self.storeys.append((elevation, storey))
+
+    def _support_value(self, node: Any, slot: int, in_model: bool) -> Any:
+        """A DOF of a support: fixed/free (IfcBoolean) or a spring stiffness (IFC4 select)."""
+        f = self.f
+        if in_model and not node.restraint[slot] and node.spring[slot] > 0:
+            measure = "IfcLinearStiffnessMeasure" if slot < 3 else "IfcRotationalStiffnessMeasure"
+            return f.create_entity(measure, float(node.spring[slot]))
+        return f.createIfcBoolean(bool(node.restraint[slot]) and in_model)
 
     def _derived(self, unit_type: str, elements: dict[Any, int]) -> Any:
         return self.api.unit.add_derived_unit(
@@ -444,12 +454,11 @@ class _Writer:
                 None,
                 [api.geometry.add_topology_representation(f, context=self.reference, item=vertex)],
             )
-            if any(node.restraint[i] for i in slots):
-                condition = f.createIfcBoundaryNodeCondition(
+            if any(node.restraint[i] or node.spring[i] > 0 for i in slots):
+                connection.AppliedCondition = f.createIfcBoundaryNodeCondition(
                     f"Support N{node.id}",
-                    *(f.createIfcBoolean(bool(node.restraint[i]) and i in slots) for i in range(6)),
+                    *(self._support_value(node, i, i in slots) for i in range(6)),
                 )
-                connection.AppliedCondition = condition
             self.connections[node.id] = connection
             products.append(connection)
         self.members: dict[int, Any] = {}

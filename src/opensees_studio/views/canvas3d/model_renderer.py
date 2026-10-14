@@ -727,6 +727,20 @@ class ModelRenderer:
             geom.translate(node.coords, inplace=True)
             actor = self._plotter.add_mesh(geom, color=support_color, pickable=False, lighting=True)
             self._aux_actors.append(actor)
+        sprung = [n for n in project.nodes if any(n.spring[i] > 0 for i in dof_idx)]
+        if sprung:
+            zigzags = pv.merge([self._spring_glyph(size).translate(n.coords) for n in sprung])
+            actor = self._plotter.add_mesh(
+                zigzags, color=(0.1, 0.6, 0.2), line_width=2, pickable=False, name="support_springs"
+            )
+            self._aux_actors.append(actor)
+
+    @staticmethod
+    def _spring_glyph(size: float) -> pv.PolyData:
+        """A zigzag hanging below the joint: a support spring."""
+        zs = np.linspace(0.0, -2.5 * size, 8)
+        xs = [0.0, 0.0] + [(-1) ** k * 0.5 * size for k in range(4)] + [0.0, 0.0]
+        return pv.MultipleLines(np.column_stack([xs, np.zeros(8), zs]))
 
     #: Actor names of the constraint overlays (``plotter.actors`` keys).
     DIAPHRAGM_ACTOR = "rigid_diaphragms"

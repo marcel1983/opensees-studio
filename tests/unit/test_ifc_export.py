@@ -297,3 +297,23 @@ def test_what_is_left_out_is_reported(tmp_path: Path) -> None:
     report = export_ifc(load_project(EXAMPLES / "isolated_portal2d.osmodel"), tmp_path / "i.ifc")
     text = report.summary()
     assert "ElastomericBearingPlasticity" in text and "not in the analytical model" in text
+
+
+def test_support_springs_are_stiffness_values(tmp_path: Path) -> None:
+    project = load_project(EXAMPLES / "cantilever.osmodel")
+    base = project.nodes[0]
+    project.nodes[0] = base.model_copy(
+        update={"restraint": (True,) * 4 + (False, True), "spring": (0, 0, 0, 0, 2e3, 0)}
+    )
+    path = tmp_path / "springs.ifc"
+    export_ifc(project, path)
+    assert _validate(path) == []
+    f = ifcopenshell.open(str(path))
+    condition = next(
+        c.AppliedCondition
+        for c in f.by_type("IfcStructuralPointConnection")
+        if c.Name == f"N{base.id}"
+    )
+    assert condition.RotationalStiffnessY.is_a("IfcRotationalStiffnessMeasure")
+    assert condition.RotationalStiffnessY.wrappedValue == pytest.approx(2e3)
+    assert condition.TranslationalStiffnessX.wrappedValue is True

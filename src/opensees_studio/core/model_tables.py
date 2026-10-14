@@ -172,6 +172,8 @@ def joints_from_rows(project: Project, rows: Sequence[Sequence[str]]) -> list[No
                     restraint[5],
                 ),
                 mass=(mass[0], mass[1], mass[2], mass[3], mass[4], mass[5]),
+                # Not a column: an edited joint keeps its support springs.
+                spring=base.spring if base is not None else (0.0,) * 6,
             )
         )
     return nodes
