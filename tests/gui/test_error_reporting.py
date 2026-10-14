@@ -70,6 +70,10 @@ def test_an_unread_failure_report_is_kept_alive(qtbot) -> None:  # type: ignore[
 
     assert box.parent() is mw
     assert box.isVisible()
+    # On macOS a message box with a parent is a window-modal sheet; on a window
+    # that was never shown, its modal session never ends and the next event
+    # pass (pytest-qt's, right after this test) waits forever. Close it here.
+    box.close()
 
 
 @pytest.mark.gui
