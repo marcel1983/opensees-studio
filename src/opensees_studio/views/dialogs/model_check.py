@@ -157,7 +157,7 @@ class ModelCheckDialog(FittedDialog):
 
         if self._report.has_errors:
             level = "error"
-        elif not self._report.is_clean:
+        elif not self._report.is_clean or not self._report.is_complete:
             level = "warning"
         else:
             level = "info"

@@ -135,6 +135,8 @@ class ModelCheckReport:
     part_count: int = 0
     mechanism_count: int = 0
     stability_checked: bool = False
+    stability_skipped_parts: int = 0
+    """Supported parts the stability test left out (over the DOF limit, or switched off)."""
 
     @property
     def errors(self) -> list[Finding]:
@@ -157,9 +159,25 @@ class ModelCheckReport:
         """No error and no warning (information alone does not count)."""
         return not any(f.severity in (Severity.ERROR, Severity.WARNING) for f in self.findings)
 
+    @property
+    def is_complete(self) -> bool:
+        """Every check ran, including stability on every supported part."""
+        return self.stability_checked and self.stability_skipped_parts == 0
+
     def summary(self) -> str:
         errors, warnings = len(self.errors), len(self.warnings)
+        skipped = self.stability_skipped_parts
+        not_checked = (
+            f"stability was not checked for {_plural(skipped, 'part')} of the model"
+            if skipped
+            else "stability was not checked"
+        )
         if errors == 0 and warnings == 0:
+            if not self.is_complete:
+                return (
+                    f"Model check incomplete: {self.node_count} nodes, {self.element_count} "
+                    f"elements; {not_checked}. The checks that ran found no problems."
+                )
             return (
                 f"Model check passed: {self.node_count} nodes, {self.element_count} elements, "
                 "no problems found."
@@ -169,7 +187,10 @@ class ModelCheckReport:
             parts.append(f"{errors} error{'s' if errors != 1 else ''}")
         if warnings:
             parts.append(f"{warnings} warning{'s' if warnings != 1 else ''}")
-        return "Model check: " + ", ".join(parts) + "."
+        text = "Model check: " + ", ".join(parts) + "."
+        if skipped:
+            text += f" Incomplete: {not_checked}."
+        return text
 
 
 # ──────────────────────────── small helpers ────────────────────────────
@@ -223,6 +244,25 @@ def _rotation_dofs(ndm: int, ndf: int) -> dict[int, int]:
     if (ndm, ndf) == (3, 6):
         return {0: 3, 1: 4, 2: 5}
     return {}
+
+
+#: Nodal DOF index (0-based, within ``ndf``) that each zeroLength material direction
+#: acts on, per (ndm, ndf). Directions are not nodal DOF numbers: 1, 2, 3 translate
+#: along and 4, 5, 6 rotate about the element's local x, y, z axes, which are the
+#: global axes here (the runner writes no ``-orient``). OpenSees projects them onto
+#: the nodal DOF (``ZeroLength::setTran1d``), and in 2D it also reads direction 3 as
+#: 6, the rotation about z. A direction missing from a row gets no stiffness.
+_ZERO_LENGTH_DOF: dict[tuple[int, int], dict[int, int]] = {
+    (2, 2): {1: 0, 2: 1},
+    (2, 3): {1: 0, 2: 1, 3: 2, 6: 2},
+    (3, 3): {1: 0, 2: 1, 3: 2},
+    (3, 6): {1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5},
+}
+
+
+def zero_length_dof(ndm: int, ndf: int, direction: int) -> int | None:
+    """The nodal DOF index a zeroLength ``-dir`` acts on, or ``None`` if it has no stiffness."""
+    return _ZERO_LENGTH_DOF.get((ndm, ndf), {}).get(direction)
 
 
 def _complement_rows(basis: np.ndarray) -> np.ndarray:
@@ -349,7 +389,8 @@ def _element_rows(
                 rows.append(row)
         return rows
     if isinstance(element, ZeroLengthElement):
-        return _identity_rows(ids, [d - 1 for d in element.dofs if 1 <= d <= ndf])
+        acted = {zero_length_dof(ndm, ndf, d) for d in element.dofs}
+        return _identity_rows(ids, sorted(dof for dof in acted if dof is not None))
     # Zero-length sections, bearings, and any type this module does not know: a
     # connection that resists every DOF. Over-coupling can hide a mechanism but
     # never reports one that is not there.
@@ -503,14 +544,18 @@ def check_model(
             rejected.append(el)
             continue
         if isinstance(el, ZeroLengthElement):
-            bad = [d for d in el.dofs if d > ndf]
+            bad = [d for d in el.dofs if zero_length_dof(ndm, ndf, d) is None]
             if bad:
                 findings.append(
                     Finding(
                         Severity.ERROR,
                         "dof_mismatch",
-                        f"{label} acts on DOF {_ids(bad)} but the model has only {ndf} DOF per node.",
+                        f"{label} acts in direction{'s' if len(set(bad)) > 1 else ''} "
+                        f"{_ids(bad)}, which OpenSees gives no stiffness in a model with "
+                        f"ndm={ndm}, ndf={ndf}.",
                         element_ids=(el.id,),
+                        hint="zeroLength directions 1-3 are translations along x, y, z and 4-6 "
+                        "rotations about x, y, z; a 2D rotational spring is direction 6.",
                     )
                 )
         usable.append(el)
@@ -619,6 +664,7 @@ def check_model(
     # ── static stability ────────────────────────────────────────────
     mechanisms = 0
     checked = False
+    skipped = 0 if check_stability else len(supported)
     if check_stability:
         limit = max_stability_dof()
         for members in supported:
@@ -634,6 +680,7 @@ def check_model(
                         hint=f"Raise {MAX_DOF_ENV} to check it, or run the model and read the log.",
                     )
                 )
+                skipped += 1
                 continue
             checked = True
             mechanisms += outcome.count
@@ -643,6 +690,7 @@ def check_model(
         part_count=len(part_list),
         mechanism_count=mechanisms,
         stability_checked=checked,
+        stability_skipped_parts=skipped,
     )
 
 

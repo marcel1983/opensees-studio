@@ -345,7 +345,8 @@ class MainWindow(QMainWindow):
 
         # Analyze
         self._act_case_manager = QAction("&Cases…", self, shortcut="Ctrl+Shift+A")
-        self._act_check_model = QAction("Check &Model…", self, shortcut="F6")
+        self._act_check_model = QAction("Check &Model…", self)
+        self._act_check_model.setShortcut("F6")
         self._act_run = QAction("&Run…", self, shortcut="F5")
 
         # View
@@ -2116,6 +2117,11 @@ class MainWindow(QMainWindow):
             return proceed
         for finding in report.warnings:
             self._log(finding.summary())
+        if not report.is_complete:
+            # A partial check is not a pass: say what was left out.
+            for finding in report.infos:
+                self._log(finding.summary())
+            self._log(report.summary())
         return True
 
     def _on_run_analysis(self) -> None:

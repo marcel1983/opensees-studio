@@ -24,6 +24,7 @@ from opensees_studio.core import (
     Project,
     StaticCase,
 )
+from opensees_studio.core.model_check import MAX_DOF_ENV
 from opensees_studio.views.dialogs import ModelCheckDialog
 
 FIXED = (True,) * 6
@@ -98,6 +99,17 @@ def test_a_clean_model_says_so(qtbot) -> None:  # type: ignore[no-untyped-def]
     assert dialog._table.rowCount() == 0
     assert "passed" in dialog._summary.text()
     assert dialog._summary.level == "info"
+
+
+@pytest.mark.gui
+def test_a_partial_check_is_not_shown_as_passed(qtbot, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv(MAX_DOF_ENV, "3")
+    dialog = ModelCheckDialog(_project())
+    qtbot.addWidget(dialog)
+
+    assert "passed" not in dialog._summary.text()
+    assert "incomplete" in dialog._summary.text()
+    assert dialog._summary.level == "warning"
 
 
 @pytest.mark.gui
@@ -241,3 +253,20 @@ def test_warnings_go_to_the_console_and_do_not_interrupt(qtbot, monkeypatch, fak
 
     assert fake_run.created == 1
     assert "Node 9 is fully restrained" in mw._console.toPlainText()
+
+
+@pytest.mark.gui
+def test_run_says_when_stability_was_not_checked(qtbot, monkeypatch, fake_run) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv(MAX_DOF_ENV, "3")
+    mw = _window(qtbot)
+
+    def refuse(self) -> int:  # type: ignore[no-untyped-def]
+        raise AssertionError("a partial check without findings must not stop the run")
+
+    monkeypatch.setattr(ModelCheckDialog, "exec", refuse)
+    mw._act_run.trigger()
+
+    assert fake_run.created == 1
+    console = mw._console.toPlainText()
+    assert "Stability not checked" in console
+    assert "Model check incomplete" in console
