@@ -239,7 +239,8 @@ for f in examples/*.py; do python "$f"; done
 
 ## Branch strategy
 
-- `develop` — active development.
-- `main` — released versions.
+- `main` — the integration branch; pull requests target it.
+- `develop` — the maintainer's personal, experimental branch. Not the
+  integration target; selected changes are brought to `main` by PR.
 - Conventional commit style: `feat:`, `fix:`, `refactor:`, `docs:`,
   `test:`, `chore:`, `ci:`.

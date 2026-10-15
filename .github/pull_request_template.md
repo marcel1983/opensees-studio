@@ -1,6 +1,7 @@
 ## Summary
 
-<!-- One sentence: what does this change? -->
+<!-- One sentence: what does this change? Pull requests target `main`
+     (`develop` is the maintainer's experimental branch). -->
 
 ## Linked issue
 
