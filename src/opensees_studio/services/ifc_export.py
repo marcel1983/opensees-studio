@@ -44,7 +44,6 @@ import numpy as np
 
 from opensees_studio.core import (
     CorotTrussElement,
-    ElasticMembranePlateSection,
     PlainLoadPattern,
     Project,
     ShellMITC4Element,
@@ -56,7 +55,7 @@ from opensees_studio.core.frame_members import section_extents
 from opensees_studio.core.geometry.elements import FRAME_ELEMENT_CLASSES
 from opensees_studio.core.geometry.local_axes import frame_local_axes
 from opensees_studio.core.plane import dof_indices
-from opensees_studio.core.sections import AngleShape, PipeShape, RectShape
+from opensees_studio.core.sections import SHELL_SECTION_CLASSES, AngleShape, PipeShape, RectShape
 from opensees_studio.core.storeys import base_elevation, sorted_storeys
 from opensees_studio.core.units import UnitSystem, length_scale
 
@@ -357,7 +356,7 @@ class _Writer:
             return None
         normal = normal / float(np.linalg.norm(normal))
         section = self.sections.get(element.section_id)
-        thickness = float(section.h) if isinstance(section, ElasticMembranePlateSection) else 0.1
+        thickness = float(section.h) if isinstance(section, SHELL_SECTION_CLASSES) else 0.1
         tilt = math.degrees(math.acos(min(1.0, abs(float(normal[2])))))
         ifc_class = (
             "IfcSlab"
@@ -486,7 +485,7 @@ class _Writer:
                 f, ifc_class="IfcStructuralSurfaceMember", name=f"E{element.id}"
             )
             member.PredefinedType = "SHELL"
-            if isinstance(section, ElasticMembranePlateSection):
+            if isinstance(section, SHELL_SECTION_CLASSES):
                 member.Thickness = float(section.h)
             edges = [
                 f.createIfcOrientedEdge(

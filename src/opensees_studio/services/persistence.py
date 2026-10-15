@@ -47,7 +47,7 @@ from typing import Any
 
 import numpy as np
 
-from opensees_studio.core import Project
+from opensees_studio.core import PathTimeSeries, Project
 from opensees_studio.core.ground_motion import (
     content_hash_of_bytes,
     content_hash_of_file,
@@ -285,7 +285,7 @@ def _write_pending_sidecars(
             (
                 t
                 for t in project.time_series
-                if getattr(t, "record_id", None) == rec.id and t.values
+                if isinstance(t, PathTimeSeries) and t.record_id == rec.id and t.values
             ),
             None,
         )

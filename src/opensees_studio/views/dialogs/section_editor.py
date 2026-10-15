@@ -36,6 +36,8 @@ from opensees_studio.core.sections import (
     FiberSection,
     RectangularPatch,
     StraightLayer,
+    rc_circular_fibres,
+    rc_rectangular_fibres,
     w_shape_patches,
 )
 from opensees_studio.services.section_properties import (
@@ -106,6 +108,7 @@ class FiberSectionEditor(FittedDialog):
         controls_layout.setContentsMargins(0, 0, 0, 0)
 
         controls_layout.addWidget(self._build_template_group())
+        controls_layout.addWidget(self._build_rc_group())
 
         # Add-patch controls
         patch_group = QGroupBox("Add Patch")
@@ -296,6 +299,102 @@ class FiberSectionEditor(FittedDialog):
                     f"W-shape {part}  mat={mid}  y {patch.y_i:.4g}→{patch.y_j:.4g}  "
                     f"{patch.n_fib_y}×{patch.n_fib_z}"
                 ),
+            )
+        self._refresh_preview()
+
+    # ── RC templates ────────────────────────────────────────────────
+    def _material_picker(self) -> QComboBox:
+        combo = QComboBox()
+        for mid in self._material_ids:
+            combo.addItem(f"Material {mid}", mid)
+        if not self._material_ids:
+            combo.addItem("(none)", 1)
+        return combo
+
+    def _build_rc_group(self) -> QGroupBox:
+        """Reinforced concrete templates: a rectangle or a circle with cover, core and bars."""
+        group = QGroupBox("Add RC Template")
+        form = QFormLayout(group)
+        self._rc_kind = QComboBox()
+        self._rc_kind.addItem("Rectangular", "rect")
+        self._rc_kind.addItem("Circular", "circ")
+        form.addRow("Shape:", self._rc_kind)
+        self._rc_core = self._material_picker()
+        self._rc_cover = self._material_picker()
+        self._rc_steel = self._material_picker()
+        form.addRow("Core concrete:", self._rc_core)
+        form.addRow("Cover concrete:", self._rc_cover)
+        form.addRow("Steel:", self._rc_steel)
+        self._rc_h = self._spin(0.5, minimum=1e-12)
+        self._rc_b = self._spin(0.3, minimum=1e-12)
+        self._rc_cover_depth = self._spin(0.05, step=0.005, minimum=1e-12)
+        self._rc_bar_area = self._spin(2.85e-4, step=1e-5, minimum=1e-12)
+        self._rc_top = self._ispin(3)
+        self._rc_bottom = self._ispin(3)
+        self._rc_side = self._ispin(1)
+        self._rc_side.setMinimum(0)
+        self._rc_bars = self._ispin(8)
+        for label, widget in (
+            ("h (y) / diameter:", self._rc_h),
+            ("b (z):", self._rc_b),
+            ("Cover (to bars):", self._rc_cover_depth),
+            ("Bar area:", self._rc_bar_area),
+            ("Top bars:", self._rc_top),
+            ("Bottom bars:", self._rc_bottom),
+            ("Side bars (each):", self._rc_side),
+            ("Bars (circular):", self._rc_bars),
+        ):
+            form.addRow(label, widget)
+        self._rc_error = QLabel("")
+        self._rc_error.setWordWrap(True)
+        self._rc_error.setStyleSheet("color: #c0392b;")
+        form.addRow(self._rc_error)
+        button = QPushButton("Add RC section")
+        button.clicked.connect(self._on_add_rc)
+        form.addRow(button)
+        return group
+
+    def _on_add_rc(self) -> None:
+        """Add the core, cover and bars of the chosen RC template."""
+        materials = {
+            "core_material_id": self._rc_core.currentData() or 1,
+            "cover_material_id": self._rc_cover.currentData() or 1,
+            "steel_material_id": self._rc_steel.currentData() or 1,
+        }
+        try:
+            if self._rc_kind.currentData() == "rect":
+                patches, layers = rc_rectangular_fibres(
+                    **materials,
+                    h=self._rc_h.value(),
+                    b=self._rc_b.value(),
+                    cover=self._rc_cover_depth.value(),
+                    n_top=self._rc_top.value(),
+                    n_bottom=self._rc_bottom.value(),
+                    n_side=self._rc_side.value(),
+                    bar_area=self._rc_bar_area.value(),
+                )
+            else:
+                patches, layers = rc_circular_fibres(  # type: ignore[assignment]
+                    **materials,
+                    diameter=self._rc_h.value(),
+                    cover=self._rc_cover_depth.value(),
+                    n_bars=self._rc_bars.value(),
+                    bar_area=self._rc_bar_area.value(),
+                )
+        except ValueError as exc:
+            self._rc_error.setText(str(exc))
+            return
+        self._rc_error.setText("")
+        at = len(self._patches)
+        for offset, patch in enumerate(patches):
+            self._patches.append(patch)
+            self._item_list.insertItem(
+                at + offset, QListWidgetItem(f"RC {patch.kind} patch  mat={patch.material_id}")
+            )
+        for lay in layers:
+            self._layers.append(lay)
+            self._item_list.addItem(
+                QListWidgetItem(f"RC bars  mat={lay.material_id}  {lay.n_bars} bar(s)")
             )
         self._refresh_preview()
 

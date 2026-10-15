@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 from opensees_studio.commands.base import ProjectCommand
+from opensees_studio.core.custom_commands import CustomCommandBlock
 from opensees_studio.core.groups import Group, with_members
 from opensees_studio.core.section_cuts import SectionCut
 
@@ -94,4 +95,22 @@ class EditGroupMembersCommand(ProjectCommand):
     def undo(self) -> None:
         if self._old is not None:
             self.project.groups[self._index()] = self._old
+        self._notify()
+
+
+class SetCustomCommandsCommand(ProjectCommand):
+    """Replace the custom command blocks (Define → Custom OpenSees Commands)."""
+
+    def __init__(self, vm: ProjectViewModel, blocks: list[CustomCommandBlock]) -> None:
+        super().__init__(vm, f"Set {len(blocks)} custom command block(s)")
+        self._new = list(blocks)
+        self._old: list[CustomCommandBlock] = []
+
+    def redo(self) -> None:
+        self._old = list(self.project.custom_commands)
+        self.project.custom_commands[:] = self._new
+        self._notify()
+
+    def undo(self) -> None:
+        self.project.custom_commands[:] = self._old
         self._notify()

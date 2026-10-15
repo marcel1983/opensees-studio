@@ -9,6 +9,41 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Added
+
+- **24 more uniaxial materials** in the Material Library through one generic form
+  in OpenSees order: ReinforcingSteel, Concrete06, Concrete07, ModIMKPeakOriented,
+  ModIMKPinching, Bilin, Pinching4, ViscousDamper, BilinearOilDamper, Viscous,
+  BoucWen, ElasticBilin, ElasticPPGap, MultiLinear, ElasticMultiLinear, PySimple1,
+  TzSimple1, QzSimple1 and the wrappers Parallel, Series, MinMax,
+  InitStrainMaterial, InitStressMaterial, Fatigue (emitted after what they wrap;
+  the Material Tester runs them with it). Hysteretic and HystereticSM get a form.
+  Each is built by the live solver in a test; the wrappers check by closed form.
+- **Links** (Assign → Joint → Link): `twoNodeLink` with a material per local
+  direction (dampers, gaps, hinge springs) and the **Triple Friction Pendulum**
+  isolator (3D).
+- **Layered shells**: LayeredShell and PlateFiber sections with the plate
+  materials J2Plasticity, PlasticDamageConcretePlaneStress, PlateFiber,
+  PlateFromPlaneStress and PlateRebar, checked against the elastic plate. **RC
+  templates** (rectangular and circular) in the fibre section editor.
+- **Time series and support motion**: Define → Add Function TimeSeries (Constant,
+  Trig, Triangle, Rectangular, Pulse, checked against OpenSees' evaluation) and
+  Define → Add Multi-Support Excitation for the selected supports.
+- **Analysis options**: every system, algorithm, convergence test and integrator
+  OpenSeesPy 3.8 runs (SparseSYM, NewtonLineSearch, SecantNewton, RaphsonNewton,
+  PeriodicNewton, six more tests, MinUnbalDispNorm, GeneralizedAlpha), each run
+  live on a cantilever; the transient parameter rows follow the integrator.
+- **Help: menu map and command glossary.** F1 help gains a menu map (every menu
+  entry in one page) and an annex, "Annex — OpenSees commands": every command
+  family of the OpenSeesPy manual (model, elements, uniaxial and nD materials,
+  sections, loads, analysis, output, utility, research families) with a line on
+  what each does and where it lives in the application — a form, automatic, or a
+  custom block.
+- **Custom OpenSees commands** (Define → Custom OpenSees Commands): Python blocks
+  with `ops` run after the materials or after the elements, with their own tag
+  range; a file's blocks are disabled until you trust them, and the exported
+  script carries them.
+
 ## [0.0.12] — 2026-10-14
 
 The building-workflow release: groups, section cuts, spreadsheet editing,

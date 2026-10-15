@@ -277,6 +277,148 @@ def w_shape_patches(
     ]
 
 
+def rc_rectangular_fibres(
+    *,
+    core_material_id: int,
+    cover_material_id: int,
+    steel_material_id: int,
+    h: float,
+    b: float,
+    cover: float,
+    n_top: int,
+    n_bottom: int,
+    n_side: int,
+    bar_area: float,
+    n_fib_h: int = 20,
+    n_fib_b: int = 10,
+) -> tuple[list[RectangularPatch], list[StraightLayer]]:
+    """Patches and bar layers of a rectangular RC section, depth ``h`` along local y.
+
+    The confined core is the rectangle inside the bar centrelines (``cover`` to the
+    bar centres); the unconfined cover is the four strips around it. ``n_top`` and
+    ``n_bottom`` bars sit on the faces at ±(h/2 - cover), ``n_side`` intermediate bars
+    on each side face (between the corner bars).
+    """
+    if min(h, b, cover, bar_area) <= 0.0:
+        raise ValueError("h, b, cover and the bar area must be positive.")
+    if 2.0 * cover >= min(h, b):
+        raise ValueError("The cover must be less than half the smaller side.")
+    if n_top < 2 or n_bottom < 2 or n_side < 0:
+        raise ValueError("Top and bottom need at least two bars each; side bars may be zero.")
+    yc, zc = 0.5 * h - cover, 0.5 * b - cover
+    ye, ze = 0.5 * h, 0.5 * b
+    fh, fb = max(n_fib_h, 1), max(n_fib_b, 1)
+    cover_fibres = max(1, fh // 10)
+
+    def rect(
+        mid: int, ny: int, nz: int, y1: float, z1: float, y2: float, z2: float
+    ) -> RectangularPatch:
+        return RectangularPatch(
+            material_id=mid, n_fib_y=ny, n_fib_z=nz, y_i=y1, z_i=z1, y_j=y2, z_j=z2
+        )
+
+    patches = [
+        rect(core_material_id, fh, fb, -yc, -zc, yc, zc),
+        rect(cover_material_id, cover_fibres, fb, yc, -ze, ye, ze),  # top strip
+        rect(cover_material_id, cover_fibres, fb, -ye, -ze, -yc, ze),  # bottom strip
+        rect(cover_material_id, fh, cover_fibres, -yc, -ze, yc, -zc),  # left strip
+        rect(cover_material_id, fh, cover_fibres, -yc, zc, yc, ze),  # right strip
+    ]
+    layers = [
+        StraightLayer(
+            material_id=steel_material_id,
+            n_bars=n_top,
+            bar_area=bar_area,
+            y_start=yc,
+            z_start=-zc,
+            y_end=yc,
+            z_end=zc,
+        ),
+        StraightLayer(
+            material_id=steel_material_id,
+            n_bars=n_bottom,
+            bar_area=bar_area,
+            y_start=-yc,
+            z_start=-zc,
+            y_end=-yc,
+            z_end=zc,
+        ),
+    ]
+    if n_side:
+        step = 2.0 * yc / (n_side + 1)
+        for z in (-zc, zc):
+            layers.append(
+                StraightLayer(
+                    material_id=steel_material_id,
+                    n_bars=n_side,
+                    bar_area=bar_area,
+                    y_start=-yc + step,
+                    z_start=z,
+                    y_end=yc - step,
+                    z_end=z,
+                )
+            )
+    return patches, layers
+
+
+def rc_circular_fibres(
+    *,
+    core_material_id: int,
+    cover_material_id: int,
+    steel_material_id: int,
+    diameter: float,
+    cover: float,
+    n_bars: int,
+    bar_area: float,
+    n_fib_circ: int = 16,
+    n_fib_rad: int = 8,
+) -> tuple[list[CircularPatch], list[StraightLayer]]:
+    """Core and cover rings and the bars of a circular RC section."""
+    if min(diameter, cover, bar_area) <= 0.0:
+        raise ValueError("The diameter, cover and bar area must be positive.")
+    if 2.0 * cover >= diameter:
+        raise ValueError("The cover must be less than the radius.")
+    if n_bars < 3:
+        raise ValueError("A circular section needs at least three bars.")
+    import math
+
+    r_out, r_core = 0.5 * diameter, 0.5 * diameter - cover
+    patches = [
+        CircularPatch(
+            material_id=core_material_id,
+            n_fib_circ=n_fib_circ,
+            n_fib_rad=n_fib_rad,
+            r_inner=0.0,
+            r_outer=r_core,
+        ),
+        CircularPatch(
+            material_id=cover_material_id,
+            n_fib_circ=n_fib_circ,
+            n_fib_rad=max(1, n_fib_rad // 4),
+            r_inner=r_core,
+            r_outer=r_out,
+        ),
+    ]
+    # One single-bar straight layer per bar (start = end = the bar), so the fibre
+    # section editor, which edits patches and layers, can hold them.
+    bars = []
+    for k in range(n_bars):
+        y = r_core * math.cos(2.0 * math.pi * k / n_bars)
+        z = r_core * math.sin(2.0 * math.pi * k / n_bars)
+        bars.append(
+            StraightLayer(
+                material_id=steel_material_id,
+                n_bars=1,
+                bar_area=bar_area,
+                y_start=y,
+                z_start=z,
+                y_end=y,
+                z_end=z,
+            )
+        )
+    return patches, bars
+
+
 # ──────────────────────────── plate / shell ────────────────────────────
 class ElasticMembranePlateSection(Entity):
     """Linear-elastic plate section — ``section ElasticMembranePlateSection``.
@@ -302,6 +444,49 @@ class ElasticMembranePlateSection(Entity):
     )
 
     serialize_without_defaults = omit_when_default("unit_weight")
+
+
+class ShellLayer(BaseModel):
+    """One layer of a ``LayeredShell``: a plate nD material and its thickness."""
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    material_id: PositiveInt = Field(
+        ..., description="Plate nD material (PlateFiber, PlateRebar …)."
+    )
+    thickness: PositiveFloat
+
+
+class LayeredShellSection(Entity):
+    """``section LayeredShell`` — a shell through the thickness, layer by layer.
+
+    Layers go from one face to the other. Concrete layers use a plate material
+    (``PlateFromPlaneStress`` of a damage-plasticity concrete, or ``PlateFiber`` of a
+    3D material), rebar layers ``PlateRebar`` with the bars' smeared thickness
+    (area per unit width). OpenSees needs at least three layers.
+    """
+
+    type: Literal["LayeredShell"] = "LayeredShell"
+    layers: list[ShellLayer] = Field(..., min_length=3)
+    unit_weight: float = Field(default=0.0, ge=0.0, description="Weight per unit volume.")
+
+    @property
+    def h(self) -> float:
+        """Total thickness."""
+        return float(sum(layer.thickness for layer in self.layers))
+
+
+class PlateFiberSection(Entity):
+    """``section PlateFiber`` — one plate nD material through the thickness ``h``."""
+
+    type: Literal["PlateFiber"] = "PlateFiber"
+    material_id: PositiveInt = Field(..., description="Plate nD material (PlateFiber of a 3D one).")
+    h: PositiveFloat = Field(..., description="Plate thickness.")
+    unit_weight: float = Field(default=0.0, ge=0.0, description="Weight per unit volume.")
+
+
+#: Sections a shell element takes.
+SHELL_SECTION_CLASSES = (ElasticMembranePlateSection, LayeredShellSection, PlateFiberSection)
 
 
 # ──────────────────────────── Aggregator ────────────────────────────
@@ -335,6 +520,11 @@ class SectionAggregator(Entity):
 
 
 Section = Annotated[
-    ElasticSection | FiberSection | SectionAggregator | ElasticMembranePlateSection,
+    ElasticSection
+    | FiberSection
+    | SectionAggregator
+    | ElasticMembranePlateSection
+    | LayeredShellSection
+    | PlateFiberSection,
     Field(discriminator="type"),
 ]

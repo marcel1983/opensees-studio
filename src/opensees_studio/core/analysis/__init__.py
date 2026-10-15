@@ -30,6 +30,7 @@ SYSTEMS: tuple[str, ...] = (
     "SparseGeneral",
     "UmfPack",
     "FullGeneral",
+    "SparseSYM",
 )
 """Linear solvers offered; each runs in OpenSeesPy 3.8.0 and gives its own result bits.
 
@@ -49,6 +50,78 @@ SYSTEM_NOTES: dict[str, str] = {"SparseGeneral": "partial pivoting is always on 
 
 _RETIRED_SYSTEM_ARGS: dict[str, tuple[str, ...]] = {"SparseGeneral": ("-piv",)}
 """Arguments earlier files may carry that load with a notice and are dropped."""
+
+
+TESTS: tuple[str, ...] = (
+    "NormDispIncr",
+    "NormUnbalance",
+    "EnergyIncr",
+    "RelativeNormDispIncr",
+    "RelativeNormUnbalance",
+    "RelativeEnergyIncr",
+    "RelativeTotalNormDispIncr",
+    "NormDispAndUnbalance",
+    "NormDispOrUnbalance",
+    "FixedNumIter",
+)
+"""Convergence tests offered; every one runs in OpenSeesPy 3.8.0."""
+
+ALGORITHMS: tuple[str, ...] = (
+    "Linear",
+    "Newton",
+    "NewtonLineSearch",
+    "ModifiedNewton",
+    "KrylovNewton",
+    "SecantNewton",
+    "RaphsonNewton",
+    "PeriodicNewton",
+    "BFGS",
+    "Broyden",
+)
+"""Solution algorithms offered; every one runs in OpenSeesPy 3.8.0."""
+
+STATIC_INTEGRATORS: tuple[str, ...] = (
+    "LoadControl",
+    "DisplacementControl",
+    "ArcLength",
+    "MinUnbalDispNorm",
+)
+TRANSIENT_INTEGRATORS: tuple[str, ...] = (
+    "Newmark",
+    "HHT",
+    "GeneralizedAlpha",
+    "CentralDifference",
+    "TRBDF2",
+)
+
+TRANSIENT_PARAMS: dict[str, tuple[tuple[str, float], ...]] = {
+    "Newmark": (("γ", 0.5), ("β", 0.25)),
+    "HHT": (("α", 0.5), ("γ (unused)", 0.25)),
+    "GeneralizedAlpha": (("αM", 1.0), ("αF", 0.8)),
+    "CentralDifference": (),
+    "TRBDF2": (),
+}
+"""The ``integrator_params`` each transient integrator reads, with defaults (labels for the form)."""
+
+
+def test_args(test: str, tolerance: float, max_iter: int) -> tuple[float | int, ...]:
+    """The arguments of ``ops.test(test, ...)``: tolerances and iterations as the test reads them."""
+    if test == "FixedNumIter":
+        return (max_iter,)
+    if test in ("NormDispAndUnbalance", "NormDispOrUnbalance"):
+        return (tolerance, tolerance, max_iter)
+    return (tolerance, max_iter)
+
+
+def transient_integrator_args(case: TransientCase) -> tuple[float, ...]:
+    """The arguments of ``ops.integrator`` for a transient case.
+
+    Newmark and HHT keep what earlier builds sent (both ``integrator_params``);
+    GeneralizedAlpha takes αM, αF; CentralDifference and TRBDF2 take none.
+    """
+    if case.integrator in ("CentralDifference", "TRBDF2"):
+        return ()
+    return tuple(case.integrator_params)
 
 
 class _SolverOptions(Entity):

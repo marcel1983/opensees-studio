@@ -25,6 +25,7 @@ from opensees_studio.core._base import omit_when_default
 from opensees_studio.core.analysis import AnalysisCase
 from opensees_studio.core.combinations import LoadCombination
 from opensees_studio.core.constraints import EqualDOFConstraint, RigidDiaphragm, RigidLink
+from opensees_studio.core.custom_commands import CustomCommandBlock
 from opensees_studio.core.diaphragms import constraint_chain_problems, diaphragm_problems
 from opensees_studio.core.friction import FrictionModel
 from opensees_studio.core.geometry import (
@@ -35,13 +36,15 @@ from opensees_studio.core.geometry import (
     Element,
     GridSystem,
     Node,
+    TripleFrictionPendulumElement,
     default_global_system,
 )
 from opensees_studio.core.ground_motion import GroundMotionRecord
 from opensees_studio.core.groups import Group, group_problems
-from opensees_studio.core.loads import LoadPattern, ResponseSpectrum, TimeSeries
+from opensees_studio.core.loads import LoadPattern, PathTimeSeries, ResponseSpectrum, TimeSeries
 from opensees_studio.core.mass_source import MassSource
 from opensees_studio.core.materials import Material
+from opensees_studio.core.materials.library import material_reference_problems
 from opensees_studio.core.section_cuts import SectionCut, cut_problems
 from opensees_studio.core.sections import Section
 from opensees_studio.core.storeys import Storey
@@ -88,6 +91,7 @@ class Project(BaseModel):
         "combinations",
         "groups",
         "section_cuts",
+        "custom_commands",
     )
 
     # 1 = pre ground-motion catalog (records embedded in PathTimeSeries),
@@ -196,6 +200,10 @@ class Project(BaseModel):
         default_factory=list,
         description="Named sets of joints and elements (Define → Groups; additive).",
     )
+    custom_commands: list[CustomCommandBlock] = Field(
+        default_factory=list,
+        description="Python blocks of OpenSeesPy calls run during the build (additive).",
+    )
     section_cuts: list[SectionCut] = Field(
         default_factory=list,
         description="Resultant forces through a group (Define → Section Cuts; additive).",
@@ -230,6 +238,7 @@ class Project(BaseModel):
             ("load combination", self.combinations),
             ("group", self.groups),
             ("section cut", self.section_cuts),
+            ("custom command block", self.custom_commands),
         ):
             ids = [it.id for it in items]
             if len(ids) != len(set(ids)):
@@ -386,6 +395,17 @@ class Project(BaseModel):
                         f"Element {el.id} ({el.type}) needs t_material_id and my_material_id "
                         "in a 3D model."
                     )
+            if isinstance(el, TripleFrictionPendulumElement):
+                if self.ndm != 3 or self.ndf != 6:
+                    problems.append(
+                        f"Element {el.id} (TripleFrictionPendulum) needs a 3D model with 6 DOF."
+                    )
+                for m in el.material_reference_ids:
+                    if m not in material_ids:
+                        problems.append(f"Element {el.id} refers to missing material {m}.")
+                for fm in el.friction_model_ids:
+                    if fm not in friction_ids:
+                        problems.append(f"Element {el.id} refers to missing friction model {fm}.")
             if isinstance(el, SLIDING_BEARING_CLASSES) and el.friction_model_id not in friction_ids:
                 problems.append(
                     f"Element {el.id} ({el.type}) refers to missing friction model "
@@ -505,6 +525,7 @@ class Project(BaseModel):
         problems.extend(constraint_chain_problems(self))
         problems.extend(group_problems(self))
         problems.extend(cut_problems(self))
+        problems.extend(material_reference_problems(self.materials))
 
         if self.mass_source is not None:
             pattern_ids = {p.id for p in self.load_patterns}
@@ -560,7 +581,7 @@ class Project(BaseModel):
                         "on disk since it was catalogued (content hash mismatch). "
                         "Relink it in Define > Ground Motions to accept the new content."
                     )
-                elif not ts.values:
+                elif isinstance(ts, PathTimeSeries) and not ts.values:
                     problems.append(
                         f"Pattern {pat.id}: ground-motion record {label} has no samples loaded."
                     )
