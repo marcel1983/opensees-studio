@@ -639,6 +639,13 @@ Status legend: ✅ done · 🟡 partial · ⬜ planned · ✂️ deferred / out-
 - ✅ IFC4 export, physical and analytical model (0.0.12).
 - ✅ Groups, section cuts, interactive table editing, calculation report (PDF /
   HTML), support springs, modal damping (0.0.12).
+- ✅ OpenSees command coverage (0.0.13): 24 more uniaxial materials and plate nD
+  materials, twoNodeLink and Triple Friction Pendulum, LayeredShell / PlateFiber
+  sections and RC fibre templates, formula time series and multi-support
+  excitation, every solver option of OpenSeesPy 3.8, Custom OpenSees Commands, and
+  a help glossary of every OpenSeesPy command.
+- ⬜ ElastomericX / LeadRubberX / HDR isolators (vertical response not validated in
+  OpenSees 3.8).
 
 ## Maintenance / debt
 - ⬜ Canonical float serialization in `.osmodel` (platform last-digit noise
