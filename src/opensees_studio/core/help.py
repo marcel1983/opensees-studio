@@ -2618,8 +2618,8 @@ case, a modal case and a pushover, for instance — each with its own settings.
   - algorithms Linear, Newton, NewtonLineSearch, ModifiedNewton, KrylovNewton,
     SecantNewton, RaphsonNewton, PeriodicNewton, BFGS, Broyden;
   - tests NormDispIncr, NormUnbalance, EnergyIncr, the Relative… ones (relative to
-    the first iteration: use about 1e-6, a tighter value can sit below round-off
-    with BFGS or Broyden),
+    the first iteration; on macOS, BFGS and Broyden do not meet the relative
+    displacement and energy tests in OpenSees 3.8: pair them with NormDispIncr),
     NormDispAndUnbalance and NormDispOrUnbalance (the tolerance is used for both
     norms) and FixedNumIter (exactly the max iterations; do not pair it with
     SecantNewton, which divides by zero once converged);
