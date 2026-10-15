@@ -9,6 +9,16 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.13] — 2026-10-15
+
+The OpenSees-coverage release: after a review of the whole OpenSeesPy manual,
+the commands a structural model needs have a form — 24 more materials, links and
+the triple friction pendulum, layered shells, formula time series and support
+motion, every solver option that runs in OpenSeesPy 3.8 — and anything else can
+go into a trusted custom command block. The F1 help gains a menu map and a
+glossary of every OpenSeesPy command saying where it lives in the application.
+Projects that use none of it save exactly as before (schema 3 unchanged).
+
 ### Added
 
 - **24 more uniaxial materials** in the Material Library through one generic form
