@@ -20,6 +20,8 @@ import html
 import re
 from dataclasses import dataclass, field
 
+from opensees_studio.core.help_glossary import GLOSSARY_GROUP, glossary_pages
+
 #: Topic shown when nothing more specific is known.
 DEFAULT_TOPIC = "index"
 
@@ -80,6 +82,7 @@ GROUP_ORDER: tuple[str, ...] = (
     "Options",
     "Help",
     "Mechanics",
+    "Annex — OpenSees commands",
 )
 
 
@@ -195,9 +198,76 @@ commands it emitted to OpenSees.
 # What is not here
 Nothing is unit-aware behind your back: see **Units and the solver**. Nothing is
 solved until you ask: editing the model never starts an analysis.
+
+# Finding your way
+- **Where is each command?** — the menu map lists every menu entry with one line.
+- **I know the OpenSees command, where is it?** — the annex lists every command of
+the OpenSeesPy manual and where it lives (a form, automatic, or a custom block).
 """,
+        "start.menu_map",
+        "annex.index",
         "concepts.units",
         "concepts.model",
+    ),
+    "start.menu_map": _t(
+        "Menu map: where each command is",
+        "Getting started",
+        "Every menu and what its entries do, in one page.",
+        """
+# File
+- New (3D frame, 2D frame, 2D truss), Open, Save, Save As, Quit.
+- Import → DXF drawing. Export → OpenSees script (.py), IFC (.ifc), Report (PDF or HTML).
+
+# Edit
+- Undo / Redo, Delete, Select All, Clear Selection.
+- Move, Replicate, Mirror; Interactive Table Editing (Ctrl+T); Check Model for
+Duplicates; Mesh.
+
+# Select
+- Invert, Previous; All Joints / Elements; By Element Type, Section, Material,
+Load Pattern or Group; Supported Joints, Joints with Mass, Elements with Self
+Weight; Joints of Selected Elements, Elements between Selected Joints.
+
+# Draw
+- Select, Draw Node, Draw Frame, Draw Truss.
+
+# Define
+- Geometry and building: Coordinate System/Grids, Add Node, Storeys, Groups,
+Section Cuts, Mass Source, Seismic Loads (ELF), Create Shell from 4 Nodes,
+Create Portal Frame, Create Truss.
+- Properties: Material Library (40 materials, Material Tester to check one),
+Friction Models, Ground Motions, Section Library (elastic, fibre with W and RC
+templates, aggregator, plate, LayeredShell, PlateFiber, AISC shapes).
+- Loads: Add Linear / Path / Function TimeSeries, Add Plain Load Pattern, Add
+Uniform Excitation, Add Multi-Support Excitation, Load Combinations.
+- Custom OpenSees Commands: Python blocks for anything without a form.
+
+# Assign
+- Joint: Restraints, Masses, Springs, EqualDOF, Diaphragm, Rigid Link, Remove
+Constraints, Point Loads, Imposed Displacement, Zero-Length Section, Bearing,
+Link (twoNodeLink, Triple Friction Pendulum).
+- Frame: Section, Material, Geometric Transformation, Beam Integration,
+Releases/Partial Fixity, End Offsets, Insertion Point, Property Modifiers,
+Distributed, Trapezoidal and Point Loads, Plastic Hinge.
+- Area: Surface Load on Shells, Floor Load to Frames.
+- Assign to Group (Ctrl+G).
+
+# Analyze
+- Cases (static, modal, pushover, transient, response spectrum, with every solver
+option OpenSees 3.8 runs), Check Model Stability, Run.
+
+# Display
+- Show Results Of, Deformed Shape, Animate Mode Shape, Force Diagram, Shell
+Contours, Time-History Plot and Animation, Hysteresis, Pushover Curve, Response
+Spectrum, Display Options, Back to Model View. The Results panel holds the
+tables (storeys, section cuts) and exports them to CSV.
+
+# View, Options, Help
+- Zoom Extents, Isometric / Top / Front / Right, Parallel Projection, Extruded
+Sections; Set Display Units; Help Contents (F1), About.
+""",
+        "index",
+        "annex.index",
     ),
     "concepts.model": _t(
         "The model: nodes, elements, sections, materials, patterns",
@@ -620,6 +690,13 @@ point along the member, so:
   16×16 over a rectangular section is a working range.
 - **Layers** — straight rows of reinforcement, each with an area, a material and
   a position (y, z).
+- **Templates** in the fibre section editor: a W-shape, and two reinforced
+  concrete ones. **RC rectangular**: the confined core inside the bar centrelines,
+  four unconfined cover strips, top and bottom bars and optional side bars (depth
+  h along local y, width b along z, cover to the bar centres). **RC circular**:
+  a confined core disc, an unconfined cover ring and bars evenly around at the
+  cover. Choose the confined concrete (e.g. `Concrete04` with Mander's confined
+  strength), the cover concrete and the steel.
 - **Materials** — the confinement of the core (`Concrete04` with the confined
   properties) and the steel (`Steel02` with `b` for the post-yield slope) decide
   the section's ductility. The section itself has no stiffness beyond them.
@@ -1461,11 +1538,32 @@ Materials are the constitutive laws the elements and fibre sections point at.
   published value beside the one that will be inserted, converted to this
   project's units. Masonry enters as an elastic material: an existing wall's
   nonlinear backbone is a per-building decision, not a table lookup.
-- **Uniaxial** (used by trusses, zero-length elements and fibre sections):
+- **Uniaxial** (used by trusses, zero-length elements, links and fibre sections):
   `Elastic`, `ElasticPP`, `Hardening`, `Steel01`, `Steel02`, `Concrete01`,
-  `Concrete02`, `Concrete04`, `Hysteretic`, `HystereticSM`.
-- **nD** (used by plane elements and by `ElasticMembranePlateSection` if you
-  prefer a material): `ElasticIsotropic`.
+  `Concrete02`, `Concrete04`, `Hysteretic`, `HystereticSM`, and through one
+  generic form, in the order and with the names of the OpenSeesPy manual:
+  - steel and concrete: `ReinforcingSteel`, `Concrete06`, `Concrete07`;
+  - deterioration (plastic hinges): `ModIMKPeakOriented`, `ModIMKPinching`,
+    `Bilin`, `Pinching4` (a symmetric envelope);
+  - dampers and rate models: `ViscousDamper`, `BilinearOilDamper`, `Viscous`,
+    `BoucWen`;
+  - multilinear and gaps: `ElasticBilin`, `ElasticPPGap`, `MultiLinear`,
+    `ElasticMultiLinear` (a table of strain-stress points);
+  - pile springs: `PySimple1`, `TzSimple1`, `QzSimple1`;
+  - wrappers of other materials: `Parallel` (stresses added, optional factors),
+    `Series` (strains added), `MinMax` (failure outside a strain range),
+    `InitStrainMaterial`, `InitStressMaterial`, `Fatigue`. A wrapper is emitted
+    after what it wraps, whatever the list order, and a missing or circular
+    reference is reported before the run.
+- **nD** (plane elements and shell layers): `ElasticIsotropic`, `J2Plasticity`,
+  `PlasticDamageConcretePlaneStress`, and the plate wrappers a layered shell needs:
+  `PlateFiber` (of a 3D material), `PlateFromPlaneStress` (of a plane-stress
+  concrete, with its out-of-plane shear modulus) and `PlateRebar` (a uniaxial
+  steel at an angle).
+
+Every form row shows the parameter's OpenSees name and meaning; each material is
+checked against the live solver, and the Material Tester runs any uniaxial one
+(a wrapper together with what it wraps).
 - A **catalog material** puts one of the gidopensees presets into the project
   with its unit-carrying defaults read out of the schema; the ones whose
   behaviour could not be verified against the solver refuse to be emitted rather
@@ -1567,6 +1665,14 @@ Sections are what frame, shell and zero-length-section elements point at.
 - **Section aggregator** — several responses (axial, bending, shear, torsion)
   combined into one section, each with its own material or section.
 - **Plate section** (shell) — E, ν, thickness h and density ρ.
+- **LayeredShell** (shell) — a table of layers, each a plate material and a
+  thickness, from one face to the other: concrete layers (`PlateFromPlaneStress`
+  of `PlasticDamageConcretePlaneStress`, or `PlateFiber`) and rebar layers
+  (`PlateRebar` at 0° or 90°, thickness = bar area per unit width). At least three
+  layers. OpenSees integrates each layer at its mid-plane, so n equal layers give
+  1 - 1/n² of the bending stiffness: use several thin layers (10 or more) through
+  a concrete wall or slab.
+- **PlateFiber** (shell) — one plate material through the thickness h.
 
 # AISC v16 shapes
 "Add from AISC…" picks a shape by name (1,660 of them, 13 families). The values
@@ -1586,6 +1692,80 @@ shows the values it will insert. Sections inserted by builds before 0.0.11 into 
             "define.material_library",
             "mechanics.fiber_sections",
             "mechanics.shells",
+        ),
+        "define.function_ts": _t(
+            "Define → Add Function TimeSeries",
+            "Define",
+            "Constant, Trig, Triangle, Rectangular or Pulse series.",
+            """
+A time series given by a formula instead of samples. The rows follow the type:
+
+- **Constant** — the factor at every time (a load held in a transient).
+- **Trig** — factor · sin(2π (t - t_start)/T + shift) + zero shift, between start
+  and end (harmonic loads, a sine sweep step).
+- **Triangle** — a triangular wave of period T, peak = factor, between start and end.
+- **Rectangular** — the factor between start and end, zero elsewhere (a step held
+  for a while).
+- **Pulse** — rectangular pulses of period T, on for the width fraction of each
+  period, between start and end (impacts, machine loads).
+
+A static case steps time by its load increment, so these series also shape a
+static load history. Checked against OpenSees' own evaluation.
+""",
+            "define.linear_ts",
+            "define.path_ts",
+        ),
+        "define.multi_support": _t(
+            "Define → Add Multi-Support Excitation",
+            "Define",
+            "Drive the selected supports with a displacement history (MultipleSupport).",
+            """
+Different supports moving differently — a long bridge, a pipe on two
+structures — need the motion applied at the supports instead of as an inertial
+load. Select the supports, then choose the direction, a **displacement** time
+series and a factor. Each selected joint must be restrained in that direction:
+the runner swaps its restraint for the imposed motion when the pattern runs.
+
+Run it in a transient case. The velocity OpenSees also needs is derived from the
+displacement series, which is what carries the motion into
+stiffness-proportional damping of the elements.
+""",
+            "define.uniform_excitation",
+            "define.path_ts",
+        ),
+        "define.custom_commands": _t(
+            "Define → Custom OpenSees Commands",
+            "Define",
+            "OpenSeesPy calls for anything the application has no form for.",
+            """
+Each block is Python run while the model is built, in list order:
+
+- **After the materials** — materials exist, sections and elements do not yet.
+- **After the elements** — the whole model exists, before loads and analysis.
+
+Names a block can use: `ops` (OpenSeesPy), `project` (read it, do not change it),
+`ndm`, `ndf`, and `tag`, the first of the 1000 tags reserved for that block (from
+1 000 000 up), so its objects never collide with the application's. A block that
+raises stops the run with its name and the error; a block with a syntax error is
+refused when you press OK. The exported OpenSees script contains the block's
+commands.
+
+# Safety
+The code runs on this computer with your permissions. When you open a file that
+contains enabled blocks, you are asked whether to trust them; answering No
+disables them until you enable them here. Running a project file with the
+command-line `python -m opensees_studio.run` runs its enabled blocks like any
+script you run.
+
+# Notes
+- With an enabled block, the "no element stiffens this DOF" check is skipped
+  (the block may add that stiffness); the solver itself still reports a
+  singular model.
+- Results are recorded only for the joints and elements of the model; an element
+  a block adds shows up in the joints' displacements and reactions.
+""",
+            "define.material_library",
+            "analyze.cases",
         ),
         "define.linear_ts": _t(
             "Define → Add Linear TimeSeries",
@@ -1967,6 +2147,36 @@ the relative displacement and rotation of the two nodes.
 """,
             "assign.bearing",
             "mechanics.fiber_sections",
+        ),
+        "assign.link": _t(
+            "Assign → Joint → Link",
+            "Assign — joints",
+            "A twoNodeLink or a Triple Friction Pendulum between two selected joints.",
+            """
+# twoNodeLink
+One uniaxial material in each local direction you tick: 1 axial (local x),
+2 and 3 shear, 4 to 6 rotations (2D: axial, shear, rotation). Use it for a
+viscous damper (`ViscousDamper`), a gap or hook (`ElasticPPGap`), a hinge spring
+(`ModIMKPeakOriented`), an isolator made of any hysteretic material, or a panel
+spring. The local axes are OpenSees' (x from i to j); coincident joints need an
+**orientation** "x1 x2 x3 y1 y2 y3" (the dialog proposes x vertical, y along X).
+Optional element mass and stiffness-proportional Rayleigh damping.
+
+# Triple Friction Pendulum (3D)
+Three friction models (surfaces 1 to 3, the two inner surfaces share the first),
+a vertical material and three rotational ones, the effective radii L1 to L3 and
+the displacement limits d1 to d3, the axial load W used for the initial friction,
+the yield displacement uy, the tension stiffness kvt, the minimum vertical force
+and the tolerance. Apply the gravity load in a case of its own, in steps, and use
+it as the **preload** of the dynamic case: the pendulum needs its axial load
+before it can slide (as OpenSees' own examples do).
+
+ElastomericX, LeadRubberX and HDR are not offered yet: with realistic inputs their
+vertical response in OpenSees 3.8 could not be validated; use the elastomeric
+bearings of Assign → Joint → Bearing.
+""",
+            "assign.bearing",
+            "define.friction_library",
         ),
         "assign.bearing": _t(
             "Assign → Joint → Bearing (isolator)",
@@ -2402,7 +2612,20 @@ case, a modal case and a pushover, for instance — each with its own settings.
 - **Steps** and, for a transient, **dt**.
 - **Numberer, system, algorithm, convergence test** — see Numberer, system and
   solver. The defaults are chosen to work; change them for size or for a case
-  that struggles.
+  that struggles. Every option of OpenSeesPy 3.8 that runs is offered:
+  - systems BandGeneral, BandSPD, ProfileSPD, SparseGeneral, SparseSYM, UmfPack,
+    FullGeneral;
+  - algorithms Linear, Newton, NewtonLineSearch, ModifiedNewton, KrylovNewton,
+    SecantNewton, RaphsonNewton, PeriodicNewton, BFGS, Broyden;
+  - tests NormDispIncr, NormUnbalance, EnergyIncr, the Relative… ones,
+    NormDispAndUnbalance and NormDispOrUnbalance (the tolerance is used for both
+    norms) and FixedNumIter (exactly the max iterations; do not pair it with
+    SecantNewton, which divides by zero once converged);
+  - static integrators LoadControl, DisplacementControl, ArcLength,
+    MinUnbalDispNorm; transient Newmark (γ, β), HHT (α), GeneralizedAlpha (αM, αF),
+    CentralDifference and TRBDF2 (no parameters). The parameter rows follow the
+    integrator. Diagonal and ExplicitDifference are not offered: they need mass on
+    every DOF.
 - **Patterns** — which load patterns take part, and in what order.
 - **Recorders** — what to save (node displacements, reactions, element forces).
   Asking for less is faster and produces smaller result files.
@@ -2883,6 +3106,14 @@ page.
     }
 )
 
+# ──────────────────────────── Annex: OpenSees command glossary ────────────────────────────
+TOPICS.update(
+    {
+        page_id: _t(title, GLOSSARY_GROUP, summary, body, *see_also)
+        for page_id, title, summary, body, see_also in glossary_pages()
+    }
+)
+
 #: Menu action (attribute name on the main window) → topic.
 # ──────────────────────────── Buildings ────────────────────────────
 TOPICS.update(
@@ -3268,6 +3499,10 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_section_library": "define.section_library",
     "_act_add_linear_ts": "define.linear_ts",
     "_act_add_path_ts": "define.path_ts",
+    "_act_add_function_ts": "define.function_ts",
+    "_act_add_multi_support": "define.multi_support",
+    "_act_custom_commands": "define.custom_commands",
+    "_act_assign_link": "assign.link",
     "_act_add_plain_pattern": "define.plain_pattern",
     "_act_add_uniform_excitation": "define.uniform_excitation",
     "_act_load_combinations": "define.load_combinations",

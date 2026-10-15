@@ -25,7 +25,7 @@ from opensees_studio.commands import (
     UpdateSectionCommand,
 )
 from opensees_studio.viewmodels import ProjectViewModel
-from opensees_studio.views.dialogs.section_forms import FORM_REGISTRY, form_for
+from opensees_studio.views.dialogs.section_forms import FORM_REGISTRY, form_for, make_form
 from opensees_studio.views.screen_fit import FittedDialog
 
 
@@ -137,7 +137,7 @@ class SectionLibraryDialog(FittedDialog):
             old = self._stack.widget(0)
             self._stack.removeWidget(old)
             old.deleteLater()
-        form = form_for(section)
+        form = form_for(section, self._vm.project)
         self._stack.addWidget(form)
         self._stack.setCurrentWidget(form)
         self._type_label.setText(form.type_label)
@@ -171,7 +171,7 @@ class SectionLibraryDialog(FittedDialog):
         if not ok:
             return
         new_id = self._vm.project.next_section_id()
-        form = FORM_REGISTRY[kind]()
+        form = make_form(FORM_REGISTRY[kind], self._vm.project)
         form._section_id = new_id
         try:
             new_section = form.read()

@@ -58,27 +58,36 @@ from opensees_studio.core import (
     FiberSection,
     ForceBeamColumn,
     ImposedSupportMotionPattern,
+    LayeredShellSection,
     LinearTimeSeries,
     ModalCase,
     PathTimeSeries,
     PlainLoadPattern,
+    PlateFiberSection,
     Project,
+    PulseTimeSeries,
     PushoverCase,
     QuadElement,
+    RectangularTimeSeries,
     ResponseSpectrumCase,
     SectionAggregator,
     ShellMITC4Element,
     StaticCase,
     TransientCase,
+    TriangleTimeSeries,
     TrigTimeSeries,
+    TripleFrictionPendulumElement,
     TrussElement,
+    TwoNodeLinkElement,
     UniformExcitationPattern,
     VelDependentFriction,
     VelNormalFrcDepFriction,
     ZeroLengthElement,
     ZeroLengthSectionElement,
 )
+from opensees_studio.core.analysis import test_args, transient_integrator_args
 from opensees_studio.core.area_loads import pattern_distributed_loads, surface_nodal_loads
+from opensees_studio.core.custom_commands import block_tag_base
 from opensees_studio.core.diaphragms import (
     auto_fixed_slots,
     constrained_node_ids,
@@ -92,6 +101,7 @@ from opensees_studio.core.frame_members import (
 )
 from opensees_studio.core.geometry.local_axes import frame_vecxz
 from opensees_studio.core.mass_source import effective_nodal_masses
+from opensees_studio.core.materials.library import materials_in_emission_order
 from opensees_studio.core.modal import (
     SOLVER_AUTO,
     dof_indices,
@@ -229,8 +239,9 @@ class OpenSeesRunner:
             if np.any(self._node_mass[node.id]):
                 self._emit_mass(node)
 
-        for material in self.project.materials:
+        for material in materials_in_emission_order(self.project.materials):
             self._emit_material(material)
+        self._run_custom_commands("after_materials")
         for spring in plan.springs:
             for mat_tag, k in zip(spring.material_tags, spring.stiffnesses, strict=True):
                 ops.uniaxialMaterial("Elastic", mat_tag, k)
@@ -271,6 +282,30 @@ class OpenSeesRunner:
                 "-orient",
                 *spring.orient,
             )
+        self._run_custom_commands("after_elements")
+
+    def _run_custom_commands(self, stage: str) -> None:
+        """Execute the enabled custom blocks of ``stage`` (Define → Custom OpenSees Commands)."""
+        for index, block in enumerate(self.project.custom_commands):
+            if not block.enabled or block.stage != stage or not block.code.strip():
+                continue
+            namespace = {
+                "ops": self._ops,
+                "project": self.project,
+                "ndm": self.project.ndm,
+                "ndf": self.project.ndf,
+                "tag": block_tag_base(index),
+            }
+            try:
+                exec(
+                    compile(block.code, f"<custom block {block.name or block.id}>", "exec"),
+                    namespace,
+                )
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Custom command block {block.name or block.id!r} ({stage}) failed: "
+                    f"{type(exc).__name__}: {exc}"
+                ) from exc
 
     def run(self, case: Any, results_dir: Path | None = None) -> Any:
         """Build the model and run the requested analysis case.
@@ -399,6 +434,13 @@ class OpenSeesRunner:
         ops = self._ops
         if isinstance(sec, ElasticMembranePlateSection):
             self._emit_plate_section(sec)
+            return
+        if isinstance(sec, LayeredShellSection):
+            layers = [v for layer in sec.layers for v in (layer.material_id, layer.thickness)]
+            ops.section("LayeredShell", sec.id, len(sec.layers), *layers)
+            return
+        if isinstance(sec, PlateFiberSection):
+            ops.section("PlateFiber", sec.id, sec.material_id, sec.h)
             return
         match sec:
             case ElasticSection():
@@ -723,6 +765,10 @@ class OpenSeesRunner:
                 ops.element(*zl_args)
             case el if isinstance(el, BEARING_CLASSES):
                 ops.element(*self._bearing_args(el))
+            case TwoNodeLinkElement():
+                ops.element("twoNodeLink", el.id, *el.nodes, *el.opensees_args(self.project.ndm))
+            case TripleFrictionPendulumElement():
+                ops.element("TripleFrictionPendulum", el.id, *el.nodes, *el.opensees_args())
             case ZeroLengthSectionElement():
                 # element zeroLengthSection $eleTag $iNode $jNode $secTag
                 ops.element(
@@ -847,6 +893,38 @@ class OpenSeesRunner:
                     ts.factor,
                     "-shift",
                     ts.shift,
+                    "-zeroShift",
+                    ts.zero_shift,
+                )
+            case TriangleTimeSeries():
+                ops.timeSeries(
+                    "Triangle",
+                    ts.id,
+                    ts.t_start,
+                    ts.t_end,
+                    ts.period,
+                    "-factor",
+                    ts.factor,
+                    "-shift",
+                    ts.shift,
+                    "-zeroShift",
+                    ts.zero_shift,
+                )
+            case RectangularTimeSeries():
+                ops.timeSeries("Rectangular", ts.id, ts.t_start, ts.t_end, "-factor", ts.factor)
+            case PulseTimeSeries():
+                ops.timeSeries(
+                    "Pulse",
+                    ts.id,
+                    ts.t_start,
+                    ts.t_end,
+                    ts.period,
+                    "-width",
+                    ts.width,
+                    "-shift",
+                    ts.shift,
+                    "-factor",
+                    ts.factor,
                     "-zeroShift",
                     ts.zero_shift,
                 )
@@ -1279,12 +1357,12 @@ class OpenSeesRunner:
         ops.system(case.system, *case.system_args)
         ops.numberer(case.numberer)
         self._constraints(case)
-        ops.test(case.test, case.tolerance, case.max_iter)
+        ops.test(case.test, *test_args(case.test, case.tolerance, case.max_iter))
         ops.algorithm(case.algorithm)
         if isinstance(case, StaticCase):
             ops.integrator(case.integrator, case.load_factor_increment)
         elif isinstance(case, TransientCase):
-            ops.integrator(case.integrator, *case.integrator_params)
+            ops.integrator(case.integrator, *transient_integrator_args(case))
             # Apply Rayleigh damping (C = alphaM*M + betaK*K) in a SINGLE
             # ``rayleigh`` call (a second call silently replaces the first). The
             # four args are alphaM and the betaK multipliers on current-K /
@@ -1320,6 +1398,9 @@ class OpenSeesRunner:
             ZeroLengthSectionElement,
         )
 
+        if any(block.enabled for block in self.project.custom_commands):
+            # A custom block may add the stiffness itself; the solver will say if not.
+            return
         truss_types = (TrussElement, CorotTrussElement)
         frame_types = (
             ElasticBeamColumn,
@@ -1590,7 +1671,7 @@ class OpenSeesRunner:
                 ops.system(case.system, *case.system_args)
                 ops.numberer(case.numberer)
                 self._constraints(case)
-                ops.test(case.test, case.tolerance, case.max_iter)
+                ops.test(case.test, *test_args(case.test, case.tolerance, case.max_iter))
                 ops.algorithm(case.algorithm)
                 ops.integrator("LoadControl", 0.0)
                 ops.analysis("Static")
@@ -1612,7 +1693,7 @@ class OpenSeesRunner:
         ops.system(case.system, *case.system_args)
         ops.numberer(case.numberer)
         self._constraints(case)
-        ops.test(case.test, case.tolerance, case.max_iter)
+        ops.test(case.test, *test_args(case.test, case.tolerance, case.max_iter))
         ops.algorithm(case.algorithm)
         ops.integrator(
             "DisplacementControl",
@@ -1679,7 +1760,7 @@ class OpenSeesRunner:
                 # Convergence fallback mirrors the OpenSees portal-frame
                 # tutorials: initial-tangent Newton, then Broyden, then
                 # Newton with line search.
-                ops.test(case.test, case.tolerance, 2000)
+                ops.test(case.test, *test_args(case.test, case.tolerance, 2000))
                 ops.algorithm("Newton", "-initial")
                 status = ops.analyze(1)
                 if status != 0:
@@ -1688,7 +1769,7 @@ class OpenSeesRunner:
                 if status != 0:
                     ops.algorithm("NewtonLineSearch", 0.8)
                     status = ops.analyze(1)
-                ops.test(case.test, case.tolerance, case.max_iter)
+                ops.test(case.test, *test_args(case.test, case.tolerance, case.max_iter))
                 ops.algorithm(case.algorithm)
             if status != 0:
                 # Still failed — trim output to where we got, then stop.
@@ -2053,7 +2134,7 @@ class OpenSeesRunner:
         for _step in range(case.n_steps):
             status = ops.analyze(1, case.dt)
             if status != 0:
-                ops.test(case.test, case.tolerance, 1000)
+                ops.test(case.test, *test_args(case.test, case.tolerance, 1000))
                 ops.algorithm("Newton", "-initial")
                 status = ops.analyze(1, case.dt)
                 if status != 0:
@@ -2062,7 +2143,7 @@ class OpenSeesRunner:
                 if status != 0:
                     ops.algorithm("NewtonLineSearch", 0.8)
                     status = ops.analyze(1, case.dt)
-                ops.test(case.test, case.tolerance, case.max_iter)
+                ops.test(case.test, *test_args(case.test, case.tolerance, case.max_iter))
                 ops.algorithm(case.algorithm)
             if status != 0:
                 break

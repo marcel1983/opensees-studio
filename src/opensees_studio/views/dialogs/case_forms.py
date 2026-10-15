@@ -32,6 +32,13 @@ from opensees_studio.core import (
     StaticCase,
     TransientCase,
 )
+from opensees_studio.core.analysis import (
+    ALGORITHMS,
+    STATIC_INTEGRATORS,
+    TESTS,
+    TRANSIENT_INTEGRATORS,
+    TRANSIENT_PARAMS,
+)
 from opensees_studio.core.modal import (
     SOLVER_ARPACK,
     SOLVER_AUTO,
@@ -187,9 +194,9 @@ class _SolverRows:
 
 
 _CONSTRAINTS = ["Plain", "Lagrange", "Penalty", "Transformation"]
-_INTEGRATORS_STATIC = ["LoadControl", "DisplacementControl", "ArcLength"]
-_ALGORITHMS = ["Linear", "Newton", "ModifiedNewton", "KrylovNewton", "BFGS", "Broyden"]
-_TESTS = ["NormDispIncr", "NormUnbalance", "EnergyIncr", "RelativeNormDispIncr"]
+_INTEGRATORS_STATIC = list(STATIC_INTEGRATORS)
+_ALGORITHMS = list(ALGORITHMS)
+_TESTS = list(TESTS)
 
 
 class StaticCaseForm(CaseFormBase):
@@ -307,7 +314,7 @@ class ModalCaseForm(CaseFormBase):
 
 
 # ─────────────────────────── Transient ───────────────────────────
-_INTEGRATORS_TRANSIENT = ["Newmark", "HHT", "CentralDifference", "TRBDF2"]
+_INTEGRATORS_TRANSIENT = list(TRANSIENT_INTEGRATORS)
 
 
 class TransientCaseForm(CaseFormBase):
@@ -363,6 +370,8 @@ class TransientCaseForm(CaseFormBase):
         self._layout.addRow("Integrator:", self._integrator)
         self._layout.addRow("Newmark γ:", self._gamma)
         self._layout.addRow("Newmark β:", self._beta)
+        self._populating = False
+        self._integrator.currentTextChanged.connect(self._on_integrator)
         self._layout.addRow("Algorithm:", self._algorithm)
         self._layout.addRow("Test:", self._test)
         self._layout.addRow("Tolerance:", self._tol)
@@ -385,6 +394,25 @@ class TransientCaseForm(CaseFormBase):
             )
         )
 
+    def _relabel(self, integrator: str) -> None:
+        """Name the two parameter rows after what ``integrator`` reads (hide unused ones)."""
+        params = TRANSIENT_PARAMS.get(integrator, ())
+        for k, field in enumerate((self._gamma, self._beta)):
+            label = self._layout.labelForField(field)
+            used = k < len(params) and "unused" not in params[k][0]
+            if label is not None:
+                label.setText(f"{integrator} {params[k][0]}:" if k < len(params) else "(not used):")
+                label.setVisible(used)
+            field.setVisible(used)
+
+    def _on_integrator(self, integrator: str) -> None:
+        self._relabel(integrator)
+        if not self._populating:
+            for field, (_name, default) in zip(
+                (self._gamma, self._beta), TRANSIENT_PARAMS.get(integrator, ()), strict=False
+            ):
+                field.setValue(default)
+
     def _populate_specific(self, c: TransientCase) -> None:
         _select_pattern_ids(self._patterns_picker, c.pattern_ids)
         _select_case_ids(self._preload_picker, c.preload_case_ids)
@@ -393,7 +421,10 @@ class TransientCaseForm(CaseFormBase):
         self._n_steps.setValue(c.n_steps)
         self._solver.populate(c)
         self._constraints.setCurrentText(c.constraints)
+        self._populating = True
         self._integrator.setCurrentText(c.integrator)
+        self._populating = False
+        self._relabel(c.integrator)
         self._gamma.setValue(c.integrator_params[0])
         self._beta.setValue(c.integrator_params[1])
         self._algorithm.setCurrentText(c.algorithm)

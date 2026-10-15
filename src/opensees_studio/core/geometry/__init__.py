@@ -55,6 +55,7 @@ from opensees_studio.core.geometry.grid import (
     default_global_system,
     make_grid_lines,
 )
+from opensees_studio.core.geometry.links import TripleFrictionPendulumElement, TwoNodeLinkElement
 from opensees_studio.core.geometry.node import Node
 
 __all__ = [
@@ -92,7 +93,9 @@ __all__ = [
     "ShellMITC4Element",
     "SingleFPBearingElement",
     "SlidingBearingElement",
+    "TripleFrictionPendulumElement",
     "TrussElement",
+    "TwoNodeLinkElement",
     "ZeroLengthElement",
     "ZeroLengthSectionElement",
     "bearing_effective_stiffness",

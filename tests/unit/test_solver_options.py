@@ -70,6 +70,7 @@ def test_offered_options() -> None:
         "SparseGeneral",
         "UmfPack",
         "FullGeneral",
+        "SparseSYM",
     )
     # -piv is not offered: the build ignores it and always pivots
     assert SYSTEM_ARGS == {}

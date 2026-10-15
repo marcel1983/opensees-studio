@@ -47,6 +47,7 @@ from opensees_studio.commands.grid import (
 )
 from opensees_studio.commands.groups import (
     EditGroupMembersCommand,
+    SetCustomCommandsCommand,
     SetGroupsCommand,
     SetSectionCutsCommand,
 )
@@ -133,6 +134,7 @@ __all__ = [
     "ReplaceTimeSeriesCommand",
     "ReplicateCommand",
     "SetCoordSystemsCommand",
+    "SetCustomCommandsCommand",
     "SetGridSystemCommand",
     "SetGroupsCommand",
     "SetMassCommand",

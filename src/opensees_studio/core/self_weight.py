@@ -34,7 +34,7 @@ import numpy as np
 from opensees_studio.core.geometry.elements import FRAME_ELEMENT_CLASSES, ShellMITC4Element
 from opensees_studio.core.geometry.local_axes import frame_local_axes
 from opensees_studio.core.loads import UniformElementLoad
-from opensees_studio.core.sections import ElasticMembranePlateSection, ElasticSection
+from opensees_studio.core.sections import SHELL_SECTION_CLASSES, ElasticSection
 
 if TYPE_CHECKING:
     from opensees_studio.core.project import Project
@@ -93,7 +93,7 @@ def weight_per_area(project: Project, element: object) -> float:
     if not isinstance(element, ShellMITC4Element):
         return 0.0
     section = next((s for s in project.sections if s.id == element.section_id), None)
-    if not isinstance(section, ElasticMembranePlateSection):
+    if not isinstance(section, SHELL_SECTION_CLASSES):
         return 0.0
     return section.unit_weight * section.h
 

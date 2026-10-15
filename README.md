@@ -91,6 +91,13 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   the same ratio ζ (OpenSees `modalDamping`), alone or with Rayleigh damping.
 - **Support springs** — Assign → Joint → Springs: elastic springs to ground per
   DOF, their force reported as the joint's reaction.
+- **OpenSees coverage** — 24 more uniaxial materials (IMK, Pinching4, dampers,
+  pile springs, Parallel/Series/MinMax wrappers …) in one generic form; twoNodeLink
+  and Triple Friction Pendulum links; LayeredShell / PlateFiber shells with plate
+  materials and RC fibre templates; Constant, Trig, Triangle, Rectangular and
+  Pulse series and multi-support excitation; every solver option OpenSeesPy 3.8
+  runs; and Custom OpenSees Commands for anything else. The F1 help has a menu
+  map and a glossary of every OpenSeesPy command saying where it lives in the app.
 - **Seismic loads by the equivalent lateral force method** — Define → Seismic
   Loads: ASCE/SEI 7-16 §12.8 (Cs with its caps and minimums, k-exponent
   distribution) or TBDY 2018 §4.7 (SaR = Sae / Ra, the 0.04 I SDS minimum, the

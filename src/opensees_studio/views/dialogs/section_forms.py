@@ -272,7 +272,27 @@ FORM_REGISTRY: dict[str, type[SectionFormBase]] = {
 }
 
 
-def form_for(section: Any) -> SectionFormBase:
+def _register_shell_forms() -> None:
+    from opensees_studio.views.dialogs.shell_section_forms import (
+        LayeredShellForm,
+        PlateFiberSectionForm,
+    )
+
+    FORM_REGISTRY["LayeredShell"] = LayeredShellForm
+    FORM_REGISTRY["PlateFiber"] = PlateFiberSectionForm
+
+
+_register_shell_forms()
+
+
+def make_form(cls: type[SectionFormBase], project: Any = None) -> SectionFormBase:
+    """A new form of ``cls``; the shell forms get ``project`` for their material choices."""
+    if getattr(cls, "needs_project", False):
+        return cls(project=project)  # type: ignore[call-arg]
+    return cls()
+
+
+def form_for(section: Any, project: Any = None) -> SectionFormBase:
     cls = FORM_REGISTRY.get(section.type)
     if cls is None:
         # Graceful fallback — unknown section types display a minimal
@@ -285,6 +305,6 @@ def form_for(section: Any) -> SectionFormBase:
         form._name_edit.setText(getattr(section, "name", "") or "")
         form._name_edit.setEnabled(False)
         return form
-    form = cls()
+    form = make_form(cls, project)
     form.populate(section)
     return form

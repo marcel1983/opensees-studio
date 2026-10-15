@@ -170,8 +170,51 @@ class TrigTimeSeries(Entity):
             raise ValueError(f"t_end ({self.t_end}) must be greater than t_start ({self.t_start}).")
 
 
+class _WindowedSeries(Entity):
+    """A series non-zero only for ``t_start <= t <= t_end`` (Triangle, Rectangular, Pulse)."""
+
+    factor: float = 1.0
+    t_start: float = Field(default=0.0, ge=0.0)
+    t_end: float = Field(..., gt=0.0)
+
+    def model_post_init(self, _ctx) -> None:  # type: ignore[no-untyped-def]
+        if self.t_end <= self.t_start:
+            raise ValueError(f"t_end ({self.t_end}) must be greater than t_start ({self.t_start}).")
+
+
+class TriangleTimeSeries(_WindowedSeries):
+    """``timeSeries Triangle`` - a triangular wave of ``period`` between t_start and t_end."""
+
+    type: Literal["Triangle"] = "Triangle"
+    period: float = Field(..., gt=0.0)
+    shift: float = Field(default=0.0, description="Phase shift in radians.")
+    zero_shift: float = Field(default=0.0, description="Constant offset added to the wave.")
+
+
+class RectangularTimeSeries(_WindowedSeries):
+    """``timeSeries Rectangular`` - ``factor`` between t_start and t_end, zero elsewhere."""
+
+    type: Literal["Rectangular"] = "Rectangular"
+
+
+class PulseTimeSeries(_WindowedSeries):
+    """``timeSeries Pulse`` - rectangular pulses of ``period``, on for ``width`` of each period."""
+
+    type: Literal["Pulse"] = "Pulse"
+    period: float = Field(..., gt=0.0)
+    width: float = Field(default=0.5, gt=0.0, lt=1.0, description="Fraction of the period on.")
+    shift: float = Field(default=0.0, description="Time shift of the pulses.")
+    zero_shift: float = Field(default=0.0, description="Constant offset added to the pulses.")
+
+
 TimeSeries = Annotated[
-    LinearTimeSeries | ConstantTimeSeries | PathTimeSeries | TrigTimeSeries,
+    LinearTimeSeries
+    | ConstantTimeSeries
+    | PathTimeSeries
+    | TrigTimeSeries
+    | TriangleTimeSeries
+    | RectangularTimeSeries
+    | PulseTimeSeries,
     Field(discriminator="type"),
 ]
 

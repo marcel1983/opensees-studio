@@ -76,7 +76,6 @@ from opensees_studio.commands.groups import (
 from opensees_studio.commands.tables import ApplyModelTablesCommand
 from opensees_studio.core import (
     SUPPORTED_NDF,
-    ElasticMembranePlateSection,
     Project,
     ShellMITC4Element,
     UnitConverter,
@@ -92,6 +91,8 @@ from opensees_studio.core.combinations import model_fingerprint
 from opensees_studio.core.geometry.ordering import QuadOrderError, order_quad_nodes
 from opensees_studio.core.groups import Group, colour_for, group_members
 from opensees_studio.core.help import ACTION_TOPICS, TOPIC_PROPERTY
+from opensees_studio.core.materials.library import is_uniaxial
+from opensees_studio.core.sections import SHELL_SECTION_CLASSES
 from opensees_studio.services import PROJECT_FILE_SUFFIX
 from opensees_studio.services.combination import MissingCaseResultsError
 from opensees_studio.services.deformation import (
@@ -386,6 +387,7 @@ class MainWindow(QMainWindow):
         self._act_storeys = QAction("Store&ys…", self)
         self._act_groups = QAction("&Groups…", self)
         self._act_section_cuts = QAction("Section &Cuts…", self)
+        self._act_custom_commands = QAction("Custom OpenSees Co&mmands…", self)
         self._act_assign_group = QAction("Assign to &Group…", self)
         self._act_assign_group.setShortcut("Ctrl+G")
         self._act_mass_source = QAction("Mass S&ource…", self)
@@ -400,6 +402,10 @@ class MainWindow(QMainWindow):
         self._act_section_library = QAction("&Section Library…", self, shortcut="Ctrl+Shift+S")
         self._act_add_linear_ts = QAction("Add &Linear TimeSeries…", self)
         self._act_add_path_ts = QAction("Add &Path TimeSeries…", self)
+        self._act_add_function_ts = QAction(
+            "Add &Function TimeSeries (Constant, Trig, Pulse…)…", self
+        )
+        self._act_add_multi_support = QAction("Add &Multi-Support Excitation…", self)
         self._act_add_plain_pattern = QAction("Add &Plain Load Pattern…", self)
         self._act_add_uniform_excitation = QAction("Add &Uniform Excitation…", self)
         self._act_load_combinations = QAction("Load &Combinations…", self)
@@ -419,6 +425,7 @@ class MainWindow(QMainWindow):
         self._act_assign_floor_load = QAction("&Floor Load to Frames…", self)
         self._act_assign_zls = QAction("&Zero-Length Section…", self)
         self._act_assign_bearing = QAction("&Bearing…", self)
+        self._act_assign_link = QAction("&Link (twoNodeLink / TFP)…", self)
         self._act_assign_distributed_load = QAction("&Distributed Load…", self)
         self._act_assign_frame_point_load = QAction("&Point Load…", self)
         self._act_assign_hinge = QAction("Plastic &Hinge…", self)
@@ -541,10 +548,14 @@ class MainWindow(QMainWindow):
         m_define.addSeparator()
         m_define.addAction(self._act_add_linear_ts)
         m_define.addAction(self._act_add_path_ts)
+        m_define.addAction(self._act_add_function_ts)
         m_define.addAction(self._act_add_plain_pattern)
         m_define.addAction(self._act_add_uniform_excitation)
+        m_define.addAction(self._act_add_multi_support)
         m_define.addSeparator()
         m_define.addAction(self._act_load_combinations)
+        m_define.addSeparator()
+        m_define.addAction(self._act_custom_commands)
 
         m_assign = mb.addMenu("&Assign")
         # Joint submenu — operates on selected nodes.
@@ -560,6 +571,7 @@ class MainWindow(QMainWindow):
         m_joint.addAction(self._act_assign_imposed_displacement)
         m_joint.addAction(self._act_assign_zls)
         m_joint.addAction(self._act_assign_bearing)
+        m_joint.addAction(self._act_assign_link)
         # Frame submenu — operates on selected frame elements.
         m_frame = m_assign.addMenu("&Frame")
         m_frame.addAction(self._act_assign_section)
@@ -853,6 +865,8 @@ class MainWindow(QMainWindow):
         self._act_section_library.triggered.connect(self._on_section_library)
         self._act_add_linear_ts.triggered.connect(self._on_add_linear_ts)
         self._act_add_path_ts.triggered.connect(self._on_add_path_ts)
+        self._act_add_function_ts.triggered.connect(self._on_add_function_ts)
+        self._act_add_multi_support.triggered.connect(self._on_add_multi_support)
         self._act_add_plain_pattern.triggered.connect(self._on_add_plain_pattern)
         self._act_add_uniform_excitation.triggered.connect(
             self._on_add_uniform_excitation,
@@ -870,6 +884,7 @@ class MainWindow(QMainWindow):
         self._act_storeys.triggered.connect(self._on_define_storeys)
         self._act_groups.triggered.connect(self._on_define_groups)
         self._act_section_cuts.triggered.connect(self._on_define_section_cuts)
+        self._act_custom_commands.triggered.connect(self._on_custom_commands)
         self._act_assign_group.triggered.connect(self._on_assign_group)
         self._act_mass_source.triggered.connect(self._on_define_mass_source)
         self._act_seismic_loads.triggered.connect(self._on_define_seismic_loads)
@@ -881,6 +896,7 @@ class MainWindow(QMainWindow):
         self._act_assign_floor_load.triggered.connect(self._on_assign_floor_load)
         self._act_assign_zls.triggered.connect(self._on_assign_zls)
         self._act_assign_bearing.triggered.connect(self._on_assign_bearing)
+        self._act_assign_link.triggered.connect(self._on_assign_link)
         self._act_assign_distributed_load.triggered.connect(self._on_assign_distributed_load)
         self._act_assign_frame_point_load.triggered.connect(self._on_assign_frame_point_load)
         self._act_assign_hinge.triggered.connect(self._on_assign_hinge)
@@ -1010,6 +1026,7 @@ class MainWindow(QMainWindow):
             return False
         snapshot = self._vm.pending_run_snapshot()
         if snapshot is None:
+            self._confirm_custom_commands()
             return True
         if self._ask_restore_snapshot(snapshot):
             try:
@@ -1020,7 +1037,32 @@ class MainWindow(QMainWindow):
         else:
             self._vm.discard_run_snapshot()
             self._log(f"Discarded {snapshot.name}.")
+        self._confirm_custom_commands()
         return True
+
+    def _confirm_custom_commands(self) -> None:
+        """A file's custom Python blocks run only once the user trusts them."""
+        project = self._vm.project
+        blocks = [b for b in project.custom_commands if b.enabled] if project is not None else []
+        if not blocks:
+            return
+        names = ", ".join(b.name or str(b.id) for b in blocks)
+        answer = QMessageBox.warning(
+            self,
+            "Custom OpenSees commands",
+            f"This project contains {len(blocks)} custom Python block(s) ({names}) that run "
+            "on this computer when the model is analysed.\n\nRun them only if you trust "
+            "where the file came from. Enable them?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            for block in blocks:
+                block.enabled = False
+            self._log(
+                f"Custom command blocks disabled: {names}. "
+                "Enable them in Define → Custom OpenSees Commands."
+            )
 
     def _ask_restore_snapshot(self, snapshot: Path) -> bool:
         """Ask whether the newer pre-run snapshot should replace the file's content."""
@@ -1616,7 +1658,7 @@ class MainWindow(QMainWindow):
                 f"Select exactly four nodes first (you have {len(selected)}).",
             )
             return
-        plate_sections = [s for s in project.sections if isinstance(s, ElasticMembranePlateSection)]
+        plate_sections = [s for s in project.sections if isinstance(s, SHELL_SECTION_CLASSES)]
         if not plate_sections:
             QMessageBox.information(
                 self,
@@ -1807,7 +1849,7 @@ class MainWindow(QMainWindow):
             )
             return
 
-        sections = [s for s in project.sections if not isinstance(s, ElasticMembranePlateSection)]
+        sections = [s for s in project.sections if not isinstance(s, SHELL_SECTION_CLASSES)]
         wizard = FrameWizard(
             sections,
             ndm=project.ndm,
@@ -1871,7 +1913,7 @@ class MainWindow(QMainWindow):
         material (creating the default truss steel *inside* the macro when the
         project has no uniaxial material) and inserts the result.
         """
-        from opensees_studio.core import TRUSS_NDF, ElasticIsotropic, build_truss
+        from opensees_studio.core import TRUSS_NDF, build_truss
         from opensees_studio.views.dialogs.truss_wizard import TrussWizard
 
         project = self._vm.project
@@ -1886,7 +1928,7 @@ class MainWindow(QMainWindow):
                 f"this project is ndm = {project.ndm}, ndf = {project.ndf}.",
             )
             return
-        materials = [m for m in project.materials if not isinstance(m, ElasticIsotropic)]
+        materials = [m for m in project.materials if is_uniaxial(m)]
         wizard = TrussWizard(
             materials,
             ndm=project.ndm,
@@ -2034,6 +2076,59 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, "Add Plain Load Pattern failed", str(exc))
 
+    def _on_add_function_ts(self) -> None:
+        """Define → Add Function TimeSeries: Constant, Trig, Triangle, Rectangular, Pulse."""
+        from opensees_studio.commands import AddTimeSeriesCommand
+        from opensees_studio.views.dialogs.function_time_series import FunctionTimeSeriesDialog
+
+        if self._vm.project is None:
+            self._on_new()
+        proj = self._vm.project
+        assert proj is not None
+        dlg = FunctionTimeSeriesDialog(next_ts_id=proj.next_time_series_id(), parent=self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        try:
+            ts = dlg.time_series()
+            self._vm.apply_command(AddTimeSeriesCommand(self._vm, ts))
+            self._log(f"Added {ts.type} TimeSeries #{ts.id} '{ts.name}'.")
+        except Exception as exc:
+            QMessageBox.critical(self, "Add TimeSeries failed", str(exc))
+
+    def _on_add_multi_support(self) -> None:
+        """Define → Add Multi-Support Excitation: imposed motion of the selected supports."""
+        from opensees_studio.commands import AddLoadPatternCommand
+        from opensees_studio.views.dialogs.uniform_excitation import MultiSupportExcitationDialog
+
+        proj = self._vm.project
+        if proj is None:
+            return
+        nodes = sorted(self._canvas.selection.nodes)
+        if not nodes:
+            QMessageBox.information(
+                self, "Multi-Support Excitation", "Select the supports to drive first."
+            )
+            return
+        if not proj.time_series:
+            QMessageBox.information(
+                self,
+                "Multi-Support Excitation",
+                "Define a displacement time series first (Define → Add Path TimeSeries…).",
+            )
+            return
+        dlg = MultiSupportExcitationDialog(proj, proj.next_pattern_id(), nodes, self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        try:
+            pat = dlg.pattern()
+            self._vm.apply_command(AddLoadPatternCommand(self._vm, pat))
+            self._log(
+                f"Added MultipleSupport pattern #{pat.id} '{pat.name}' on "
+                f"{len(pat.node_ids)} support(s), DOF {pat.direction}."
+            )
+        except Exception as exc:
+            QMessageBox.critical(self, "Add Multi-Support Excitation failed", str(exc))
+
     def _on_add_uniform_excitation(self) -> None:
         """Define → Add Uniform Excitation… — base ground-motion pattern."""
         from opensees_studio.commands import AddLoadPatternCommand
@@ -2148,6 +2243,24 @@ class MainWindow(QMainWindow):
             self._log(f"Section cuts set: {len(project.section_cuts)}. Re-run static cases.")
         except Exception as exc:
             QMessageBox.critical(self, "Define Section Cuts failed", str(exc))
+
+    def _on_custom_commands(self) -> None:
+        """Define → Custom OpenSees Commands: Python blocks run while the model is built."""
+        from opensees_studio.commands import SetCustomCommandsCommand
+        from opensees_studio.views.dialogs.custom_commands import CustomCommandsDialog
+
+        project = self._vm.project
+        if project is None:
+            return
+        dlg = CustomCommandsDialog(project, self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        try:
+            self._vm.apply_command(SetCustomCommandsCommand(self._vm, dlg.blocks()))
+            enabled = sum(1 for b in project.custom_commands if b.enabled)
+            self._log(f"Custom command blocks: {len(project.custom_commands)} ({enabled} enabled).")
+        except Exception as exc:
+            QMessageBox.critical(self, "Custom OpenSees Commands failed", str(exc))
 
     def _on_assign_group(self) -> None:
         """Assign → Assign to Group: add the selection to a group, remove it, or replace."""
@@ -2495,6 +2608,26 @@ class MainWindow(QMainWindow):
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
         self._create_bearing_from_dialog(dlg)
+
+    def _on_assign_link(self) -> None:
+        """Assign > Joint > Link: a twoNodeLink or a Triple Friction Pendulum between two joints."""
+        from opensees_studio.commands import AddElementsCommand
+        from opensees_studio.views.dialogs.assign_link import AssignLinkDialog
+
+        sel = sorted(self._canvas.selection.nodes)
+        project = self._vm.project
+        if len(sel) != 2 or project is None:
+            QMessageBox.information(self, "Assign Link", "Select exactly two joints first.")
+            return
+        dlg = AssignLinkDialog(project, (sel[0], sel[1]), parent=self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        try:
+            element = dlg.build_element(project.next_element_id())
+            self._vm.apply_command(AddElementsCommand(self._vm, [element]))
+            self._log(f"Created {element.type} {element.id} between joints {sel[0]}-{sel[1]}.")
+        except Exception as exc:
+            QMessageBox.critical(self, "Assign Link failed", str(exc))
 
     def _create_bearing_from_dialog(self, dlg: AssignElastomericBearingDialog) -> bool:
         """Build the bearing the dialog describes and add it undoably."""
@@ -4129,6 +4262,7 @@ class MainWindow(QMainWindow):
         )
         self._act_mesh.setEnabled(has_project)
         self._act_assign_support.setEnabled(has_project and has_selected_nodes)
+        self._act_add_multi_support.setEnabled(has_project and has_selected_nodes)
         self._act_assign_masses.setEnabled(has_project and has_selected_nodes)
         self._act_assign_springs.setEnabled(has_project and has_selected_nodes)
         self._act_assign_equal_dof.setEnabled(has_project and n_sel == 2)
@@ -4138,6 +4272,7 @@ class MainWindow(QMainWindow):
         self._act_storeys.setEnabled(has_project)
         self._act_groups.setEnabled(has_project)
         self._act_section_cuts.setEnabled(has_project)
+        self._act_custom_commands.setEnabled(has_project)
         self._act_assign_group.setEnabled(has_project and has_selection)
         self._act_mass_source.setEnabled(has_project)
         self._act_seismic_loads.setEnabled(has_project)
@@ -4153,6 +4288,7 @@ class MainWindow(QMainWindow):
         # Zero-length section needs exactly two selected joints.
         self._act_assign_zls.setEnabled(has_project and n_sel == 2)
         self._act_assign_bearing.setEnabled(has_project and n_sel == 2)
+        self._act_assign_link.setEnabled(has_project and n_sel == 2)
         self._act_assign_distributed_load.setEnabled(has_project and has_selected_elements)
         self._act_assign_frame_point_load.setEnabled(has_project and has_selected_elements)
         self._act_assign_hinge.setEnabled(has_project and has_selected_elements)
