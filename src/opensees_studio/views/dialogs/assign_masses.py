@@ -49,11 +49,15 @@ class AssignMassesDialog(FittedDialog):
         )
 
         form = QFormLayout()
-        fields = ("_mx", "_my", "_mz", "_mxx", "_myy", "_mzz")
+        self._mx = self._spin()
+        self._my = self._spin()
+        self._mz = self._spin()
+        self._mxx = self._spin()
+        self._myy = self._spin()
+        self._mzz = self._spin()
+        fields = (self._mx, self._my, self._mz, self._mxx, self._myy, self._mzz)
         labels = ("Ux", "Uy", "Uz", "Rx (Ixx)", "Ry (Iyy)", "Rz (Izz)")
-        for i, (name, label) in enumerate(zip(fields, labels, strict=True)):
-            field = self._spin()
-            setattr(self, name, field)
+        for i, (field, label) in enumerate(zip(fields, labels, strict=True)):
             if i in self._active:
                 form.addRow(f"{label}:", field)
         root.addLayout(form)

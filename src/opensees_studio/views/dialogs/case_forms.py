@@ -143,6 +143,10 @@ def _select_case_ids(picker: QListWidget, ids: list[int]) -> None:
 # ─────────────────────────── base ───────────────────────────
 class CaseFormBase(QWidget):
     type_label: str = "Analysis case"
+    # Created by the stepped forms (Static, Transient, Pushover); Modal and
+    # Response Spectrum never call _update_algorithm_args.
+    _algorithm: QComboBox
+    _algorithm_args: QComboBox
 
     def __init__(
         self,

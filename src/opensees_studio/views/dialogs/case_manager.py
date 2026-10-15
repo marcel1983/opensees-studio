@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from pydantic import ValidationError
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -24,6 +26,7 @@ from opensees_studio.commands import (
     UpdateAnalysisCaseCommand,
 )
 from opensees_studio.core import (
+    AnalysisCase,
     ModalCase,
     PushoverCase,
     ResponseSpectrumCase,
@@ -34,7 +37,7 @@ from opensees_studio.viewmodels import ProjectViewModel
 from opensees_studio.views.dialogs.case_forms import form_for
 from opensees_studio.views.screen_fit import FittedDialog, MessageArea, scroll_area
 
-_DEFAULTS = {
+_DEFAULTS: dict[str, Callable[[int], AnalysisCase]] = {
     "Static": lambda cid: StaticCase(id=cid, name="Static", pattern_ids=[1]),
     "Modal": lambda cid: ModalCase(id=cid, name="Modal", n_modes=3),
     "Transient": lambda cid: TransientCase(
@@ -71,7 +74,7 @@ class AnalysisCaseManagerDialog(FittedDialog):
         self.setWindowTitle("Analysis Cases")
         self.resize(820, 580)
         self._vm = vm
-        self._draft_case = None
+        self._draft_case: AnalysisCase | None = None
         self._build_ui()
         self._refresh_list()
         self._vm.modelMutated.connect(self._refresh_list)
@@ -124,12 +127,13 @@ class AnalysisCaseManagerDialog(FittedDialog):
         if self._list.currentItem() is not None:
             selected_id = self._list.currentItem().data(Qt.ItemDataRole.UserRole)
         self._list.clear()
-        cases = list(self._vm.project.analyses) if self._vm.project else []
+        project = self._vm.project
+        cases = list(project.analyses) if project else []
         if self._draft_case is not None:
             cases.append(self._draft_case)
         for c in cases:
             label = f"#{c.id}  {c.name or '(unnamed)'}  [{c.type}]"
-            errors = self._vm.project.case_reference_errors(c)
+            errors = project.case_reference_errors(c) if project else []
             if errors:
                 label += " [Invalid references]"
             item = QListWidgetItem(label)
@@ -168,12 +172,13 @@ class AnalysisCaseManagerDialog(FittedDialog):
         self._message.clear_message()
 
     def _on_apply(self) -> None:
-        if self._stack.count() == 0:
+        project = self._vm.project
+        if self._stack.count() == 0 or project is None:
             return
         form = self._stack.currentWidget()
         try:
             new_case = form.read()
-            self._vm.project.validate_case_references(new_case)
+            project.validate_case_references(new_case)
             if self._draft_case is not None and self._draft_case.id == new_case.id:
                 self._draft_case = None
                 self._vm.apply_command(AddAnalysisCasesCommand(self._vm, [new_case]))
