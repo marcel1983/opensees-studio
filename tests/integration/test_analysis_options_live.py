@@ -57,7 +57,12 @@ def _cantilever(case) -> Project:  # type: ignore[no-untyped-def]
 def test_every_test_and_algorithm_gives_the_cantilever_tip(test: str, algorithm: str) -> None:
     if (algorithm, test) == ("SecantNewton", "FixedNumIter"):
         pytest.skip("OpenSees divides by a zero secant update after convergence: NaN")
-    case = StaticCase(id=1, name="s", pattern_ids=[1], algorithm=algorithm, test=test)
+    # A relative test divides by the first increment's norm: 1e-8 is below the round-off
+    # BFGS / Broyden reach on some platforms (macOS BLAS), 1e-6 is a realistic tolerance.
+    tolerance = 1e-6 if test.startswith("Relative") else 1e-8
+    case = StaticCase(
+        id=1, name="s", pattern_ids=[1], algorithm=algorithm, test=test, tolerance=tolerance
+    )
     results = OpenSeesRunner(_cantilever(case)).run(case)
     assert float(results.node_disp[2][-1][0]) == pytest.approx(P * L**3 / (3 * E * I), rel=1e-6)
 

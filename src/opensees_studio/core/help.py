@@ -2617,7 +2617,9 @@ case, a modal case and a pushover, for instance — each with its own settings.
     FullGeneral;
   - algorithms Linear, Newton, NewtonLineSearch, ModifiedNewton, KrylovNewton,
     SecantNewton, RaphsonNewton, PeriodicNewton, BFGS, Broyden;
-  - tests NormDispIncr, NormUnbalance, EnergyIncr, the Relative… ones,
+  - tests NormDispIncr, NormUnbalance, EnergyIncr, the Relative… ones (relative to
+    the first iteration: use about 1e-6, a tighter value can sit below round-off
+    with BFGS or Broyden),
     NormDispAndUnbalance and NormDispOrUnbalance (the tolerance is used for both
     norms) and FixedNumIter (exactly the max iterations; do not pair it with
     SecantNewton, which divides by zero once converged);
