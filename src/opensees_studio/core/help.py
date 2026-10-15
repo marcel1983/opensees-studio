@@ -1366,6 +1366,23 @@ linear time series when the first load is applied.
             "define.plain_pattern",
             "mechanics.static",
         ),
+        "define.constant_ts": _t(
+            "Define → Time Series → Constant",
+            "Define",
+            "A load that stays at one factor for the whole case: a preload.",
+            """
+`Constant` keeps the pattern at the same factor through every step, so the
+loads are there in full from the first step and do not ramp. Use it for a
+preload (an axial force before a pushover, gravity before a transient) that
+a later case continues from.
+
+The dialog lists the project's Constant series; Add creates one with the
+name and factor entered, Apply replaces the selected one, and Delete refuses
+while a load pattern still refers to it.
+""",
+            "define.linear_ts",
+            "define.plain_pattern",
+        ),
         "define.path_ts": _t(
             "Define → Add Path TimeSeries",
             "Define",
@@ -2250,6 +2267,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_section_library": "define.section_library",
     "_act_add_linear_ts": "define.linear_ts",
     "_act_add_path_ts": "define.path_ts",
+    "_act_constant_ts": "define.constant_ts",
     "_act_add_plain_pattern": "define.plain_pattern",
     "_act_add_uniform_excitation": "define.uniform_excitation",
     # ── Assign: joints ──────────────────────────────────────────────

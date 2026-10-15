@@ -426,8 +426,10 @@ class MainWindow(QMainWindow):
             ]
         )
         m_define.addSeparator()
-        m_define.addAction(self._act_add_linear_ts)
-        m_define.addAction(self._act_add_path_ts)
+        time_series_menu = m_define.addMenu("Time Series")
+        time_series_menu.addAction(self._act_add_linear_ts)
+        time_series_menu.addAction(self._act_add_path_ts)
+        self._act_constant_ts = time_series_menu.addAction("Constant...", self._on_constant_ts)
         m_define.addAction(self._act_add_plain_pattern)
         m_define.addAction(self._act_add_uniform_excitation)
 
@@ -902,6 +904,7 @@ class MainWindow(QMainWindow):
         if self._vm.path is None:
             return self._on_save_as()
         try:
+            self._warn_case_references()
             self._vm.save()
             self._log(f"Saved: {self._vm.path}")
         except Exception as exc:
@@ -919,6 +922,7 @@ class MainWindow(QMainWindow):
         if not path:
             return False
         try:
+            self._warn_case_references()
             out = self._vm.save(path)
             self._log(f"Saved: {out}")
         except Exception as exc:
@@ -980,6 +984,16 @@ class MainWindow(QMainWindow):
         return True, analyses[labels.index(choice) - 1]
 
     # ── slots: edit ──────────────────────────────────────────────────
+    def _warn_case_references(self) -> None:
+        project = self._vm.project
+        if project is None:
+            return
+        errors = [
+            error for case in project.analyses for error in project.case_reference_errors(case)
+        ]
+        if errors:
+            QMessageBox.warning(self, "Saving with invalid case references", "\n".join(errors))
+
     def _on_delete(self) -> None:
         if self._vm.project is None:
             return
@@ -1444,6 +1458,13 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, "Add Node failed", str(exc))
 
+    def _on_constant_ts(self) -> None:
+        if self._vm.project is None:
+            return
+        from opensees_studio.views.dialogs.constant_time_series import ConstantTimeSeriesDialog
+
+        ConstantTimeSeriesDialog(self._vm, self).exec()
+
     def _on_add_linear_ts(self) -> None:
         """Define → Add Linear TimeSeries…"""
         from opensees_studio.commands import AddTimeSeriesCommand
@@ -1850,7 +1871,9 @@ class MainWindow(QMainWindow):
                 "Select one or more nodes first.",
             )
             return
-        dlg = AssignMassesDialog(len(sel_nodes), ndf=self._vm.project.ndf, parent=self)
+        dlg = AssignMassesDialog(
+            len(sel_nodes), ndf=self._vm.project.ndf, ndm=self._vm.project.ndm, parent=self
+        )
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
         try:

@@ -553,8 +553,10 @@ say hi:
   toolbar icons, and overall visual language.
 
 Open issues, bug reports, and reproducible test cases are just as
-valuable as code. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the dev
-setup and the architectural rules enforced in review.
+valuable as code. Pull requests target `main`; `develop` is the
+maintainer's experimental branch, not the integration target. See
+[`CONTRIBUTING.md`](CONTRIBUTING.md) for the dev setup and the architectural
+rules enforced in review.
 
 ## License
 
