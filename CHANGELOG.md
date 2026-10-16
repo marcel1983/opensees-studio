@@ -9,6 +9,13 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.14] — 2026-10-16
+
+The grids release: radial (cylindrical) grids, a Grid Wizard, labels at the
+ends of the grid lines, a Grid Line View that isolates the objects on one grid
+line, and a right-click menu on the model view that follows the selection.
+Projects that use none of it save exactly as before (schema 3 unchanged).
+
 ### Added
 
 - **Radial (cylindrical) grids**: a coordinate system's grid can be Cylindrical —
