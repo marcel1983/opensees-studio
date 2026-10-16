@@ -646,6 +646,9 @@ Status legend: ✅ done · 🟡 partial · ⬜ planned · ✂️ deferred / out-
   a help glossary of every OpenSeesPy command.
 - ⬜ ElastomericX / LeadRubberX / HDR isolators (vertical response not validated in
   OpenSees 3.8).
+- ✅ Grid tools (0.0.14): radial grids, Grid Wizard, grid labels, Add Row that
+  continues the grid, Show/Hide grids, Grid Line View (objects on one grid line
+  within a window), selection-aware right-click menu.
 
 ## Maintenance / debt
 - ⬜ Canonical float serialization in `.osmodel` (platform last-digit noise
