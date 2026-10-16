@@ -17,7 +17,7 @@ from typing import Any
 
 import numpy as np
 import shiboken6
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QAction, QActionGroup, QKeySequence
 from PySide6.QtWidgets import (
     QComboBox,
@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
     QInputDialog,
     QLabel,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPlainTextEdit,
     QToolBar,
@@ -182,6 +183,7 @@ from opensees_studio.views.dialogs.buildings import (
     MassSourceDialog,
     StoreysDialog,
 )
+from opensees_studio.views.dialogs.grid_wizard import GridWizardDialog
 from opensees_studio.views.dialogs.groups import (
     NEW_GROUP,
     AssignGroupDialog,
@@ -383,13 +385,15 @@ class MainWindow(QMainWindow):
 
         # Define
         self._act_grid = QAction("&Coordinate System/Grids…", self, shortcut="Ctrl+G")
+        self._act_grid_wizard = QAction("Grid &Wizard…", self)
         self._act_add_node = QAction("Add &Node…", self, shortcut="Ctrl+N")
         self._act_storeys = QAction("Store&ys…", self)
         self._act_groups = QAction("&Groups…", self)
         self._act_section_cuts = QAction("Section &Cuts…", self)
         self._act_custom_commands = QAction("Custom OpenSees Co&mmands…", self)
         self._act_assign_group = QAction("Assign to &Group…", self)
-        self._act_assign_group.setShortcut("Ctrl+G")
+        # Ctrl+G is Coordinate System/Grids: a shared shortcut fires neither.
+        self._act_assign_group.setShortcut("Ctrl+Shift+G")
         self._act_mass_source = QAction("Mass S&ource…", self)
         self._act_seismic_loads = QAction("Seismic &Loads (Equivalent Lateral Force)…", self)
         self._act_create_shell = QAction("Create S&hell from 4 Nodes…", self)
@@ -466,6 +470,10 @@ class MainWindow(QMainWindow):
         self._act_view_right = QAction("&Right (YZ)", self, shortcut="Ctrl+4")
         self._act_toggle_parallel = QAction("&Parallel projection", self, checkable=True)
         self._act_show_extruded = QAction("Show &Extruded Sections", self, checkable=True)
+        self._act_show_grids = QAction("Show &Grids", self, checkable=True, checked=True)
+        self._act_show_grid_labels = QAction(
+            "Show Grid &Labels", self, checkable=True, checked=True
+        )
 
         self._act_about = QAction("&About OpenSees Studio…", self)
         self._act_help_contents = QAction("&Help Contents (F1)", self)
@@ -526,6 +534,7 @@ class MainWindow(QMainWindow):
 
         m_define = mb.addMenu("&Define")
         m_define.addAction(self._act_grid)
+        m_define.addAction(self._act_grid_wizard)
         m_define.addAction(self._act_storeys)
         m_define.addAction(self._act_groups)
         m_define.addAction(self._act_section_cuts)
@@ -627,6 +636,9 @@ class MainWindow(QMainWindow):
         m_view.addSeparator()
         m_view.addAction(self._act_toggle_parallel)
         m_view.addAction(self._act_show_extruded)
+        m_view.addSeparator()
+        m_view.addAction(self._act_show_grids)
+        m_view.addAction(self._act_show_grid_labels)
 
         m_options = mb.addMenu("&Options")
         m_options.addAction(self._act_set_units)
@@ -854,6 +866,10 @@ class MainWindow(QMainWindow):
 
         # Define
         self._act_grid.triggered.connect(self._on_grid_system)
+        self._act_grid_wizard.triggered.connect(self._on_grid_wizard)
+        self._act_show_grids.triggered.connect(self._set_grids_shown)
+        self._act_show_grid_labels.triggered.connect(self._set_grid_labels_shown)
+        self._canvas.contextMenuRequested.connect(self._on_canvas_context_menu)
         self._act_add_node.triggered.connect(self._on_add_node)
         self._act_create_shell.triggered.connect(self._on_create_shell)
         self._act_frame_wizard.triggered.connect(self._on_frame_wizard)
@@ -1569,12 +1585,7 @@ class MainWindow(QMainWindow):
         project = self._vm.project
         if project is None:
             return False
-        return any(
-            cs.grid.visible
-            and not cs.grid.hide_all
-            and bool(cs.grid.x_lines or cs.grid.y_lines or cs.grid.z_lines)
-            for cs in project.coord_systems
-        )
+        return any(cs.grid.shown for cs in project.coord_systems)
 
     def _abort_tool_activation(self) -> None:
         """Fall back to Select when a draw tool refused to arm."""
@@ -1965,6 +1976,95 @@ class MainWindow(QMainWindow):
             {node.id for node in truss.nodes}, {element.id for element in truss.elements}
         )
         self._log(f"{truss.summary()} Left selected.")
+
+    def _on_grid_wizard(self) -> None:
+        """Define → Grid Wizard: a regular Cartesian or radial grid, one undo step."""
+        if self._vm.project is None:
+            self._on_new()
+        project = self._vm.project
+        assert project is not None
+        dlg = GridWizardDialog(project.coord_systems, ndm=project.ndm, parent=self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        target = dlg.target()
+        if target:
+            systems = [
+                cs.model_copy(update={"grid": dlg.grid_system()}) if cs.name == target else cs
+                for cs in project.coord_systems
+            ]
+            name = target
+        else:
+            new = dlg.system()
+            systems = [*project.coord_systems, new]
+            name = new.name
+        self._vm.apply_command(SetCoordSystemsCommand(self._vm, systems))
+        self._log(f"Grid Wizard: grid of '{name}' set.")
+
+    def _set_grids_shown(self, shown: bool, name: str | None = None) -> None:
+        """Show or hide the grids (all, or the system called ``name``): an undo step.
+
+        The same flag as the Hide All Grid Lines box of the grid dialog.
+        """
+        project = self._vm.project
+        if project is None:
+            return
+        systems = [
+            cs.model_copy(update={"grid": cs.grid.model_copy(update={"hide_all": not shown})})
+            if name is None or cs.name == name
+            else cs
+            for cs in project.coord_systems
+        ]
+        if systems != project.coord_systems:
+            self._vm.apply_command(SetCoordSystemsCommand(self._vm, systems))
+        self._sync_grid_actions()
+
+    def _set_grid_labels_shown(self, shown: bool) -> None:
+        project = self._vm.project
+        if project is None:
+            return
+        systems = [
+            cs.model_copy(update={"grid": cs.grid.model_copy(update={"show_labels": shown})})
+            for cs in project.coord_systems
+        ]
+        if systems != project.coord_systems:
+            self._vm.apply_command(SetCoordSystemsCommand(self._vm, systems))
+        self._sync_grid_actions()
+
+    def _sync_grid_actions(self) -> None:
+        """Tick View → Show Grids / Labels from the project (checked when any shows)."""
+        project = self._vm.project
+        systems = project.coord_systems if project is not None else []
+        self._act_show_grids.setChecked(any(not cs.grid.hide_all for cs in systems))
+        self._act_show_grid_labels.setChecked(any(cs.grid.show_labels for cs in systems))
+
+    def _on_canvas_context_menu(self, pos: QPoint) -> None:
+        """Right-click on the model view: grid visibility, labels and grid editing."""
+        menu = self._canvas_context_menu()
+        menu.exec(pos)
+        menu.deleteLater()
+
+    def _canvas_context_menu(self) -> QMenu:
+        menu = QMenu(self)
+        project = self._vm.project
+        if project is not None:
+            self._sync_grid_actions()
+            menu.addAction(self._act_show_grids)
+            if len(project.coord_systems) > 1:
+                per_system = menu.addMenu("Grids by system")
+                for cs in project.coord_systems:
+                    action = per_system.addAction(cs.name)
+                    action.setCheckable(True)
+                    action.setChecked(not cs.grid.hide_all)
+                    action.triggered.connect(
+                        lambda checked, name=cs.name: self._set_grids_shown(checked, name)
+                    )
+            menu.addAction(self._act_show_grid_labels)
+            menu.addSeparator()
+        menu.addAction(self._act_grid)
+        menu.addAction(self._act_grid_wizard)
+        menu.addSeparator()
+        menu.addAction(self._act_zoom_extents)
+        return menu
 
     def _on_add_node(self) -> None:
         if self._vm.project is None:
@@ -4024,9 +4124,10 @@ class MainWindow(QMainWindow):
         attr = axis_to_attr[plane]
         acc: set[float] = set()
         for cs in self._vm.project.coord_systems:
-            if not cs.grid.visible or cs.grid.hide_all:
+            if not cs.grid.shown or (cs.grid.is_cylindrical and plane != "XY"):
+                # A cylindrical grid has levels (Z) but no X or Y lines.
                 continue
-            ords = getattr(cs.grid, attr)
+            ords = cs.grid.visible_ordinates()[{"x_lines": 0, "y_lines": 1, "z_lines": 2}[attr]]
             # For non-Global systems we'd need to transform through the
             # coord system's origin+rotation. For the first cut we apply
             # a simple translation (ignore rotation) since only the
@@ -4066,6 +4167,7 @@ class MainWindow(QMainWindow):
         self._canvas.set_working_plane(plane, float(data))
 
     def _on_project_changed(self, project: Project | None) -> None:
+        self._sync_grid_actions()
         # Results of another project (or of the closed one) never feed a combination.
         self._case_results.clear()
         self._report_extra.clear()

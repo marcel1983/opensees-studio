@@ -232,7 +232,7 @@ Weight; Joints of Selected Elements, Elements between Selected Joints.
 - Select, Draw Node, Draw Frame, Draw Truss.
 
 # Define
-- Geometry and building: Coordinate System/Grids, Add Node, Storeys, Groups,
+- Geometry and building: Coordinate System/Grids, Grid Wizard, Add Node, Storeys, Groups,
 Section Cuts, Mass Source, Seismic Loads (ELF), Create Shell from 4 Nodes,
 Create Portal Frame, Create Truss.
 - Properties: Material Library (40 materials, Material Tester to check one),
@@ -250,7 +250,7 @@ Link (twoNodeLink, Triple Friction Pendulum).
 Releases/Partial Fixity, End Offsets, Insertion Point, Property Modifiers,
 Distributed, Trapezoidal and Point Loads, Plastic Hinge.
 - Area: Surface Load on Shells, Floor Load to Frames.
-- Assign to Group (Ctrl+G).
+- Assign to Group (Ctrl+Shift+G).
 
 # Analyze
 - Cases (static, modal, pushover, transient, response spectrum, with every solver
@@ -264,7 +264,11 @@ tables (storeys, section cuts) and exports them to CSV.
 
 # View, Options, Help
 - Zoom Extents, Isometric / Top / Front / Right, Parallel Projection, Extruded
-Sections; Set Display Units; Help Contents (F1), About.
+Sections, Show Grids, Show Grid Labels; Set Display Units; Help Contents (F1),
+About.
+- **Right-click** on the model view (without dragging: a right drag zooms) opens
+the view menu: show or hide the grids (all, or one system), the grid labels,
+and the grid dialogs.
 """,
         "index",
         "annex.index",
@@ -1419,16 +1423,89 @@ They do not create nodes by themselves (unless you ask the dialog to).
 # Values
 - **Coordinate system** — a name, an origin and a rotation. `Global` is at the
   world origin with identity rotation and cannot be deleted.
-- **Grid lines per axis** — each line has an id (the bubble label), an ordinate,
-  Primary/Secondary, visibility and a bubble end. The ordinates are what the
-  tools snap to.
+- **System type** — *Cartesian* (X, Y and Z lines) or *Cylindrical* (radial):
+  the three tabs become **R** (rings: radii about the system's local Z axis),
+  **T** (radial lines: angles in degrees from local +X towards +Y) and **Z**
+  (levels). Rings close into full circles when the radial lines go all the way
+  round (e.g. 8 lines at 45°), otherwise they are arcs between the first and
+  last angle. The draw tools snap to the ring × radial-line crossings.
+- **Grid lines per axis** — each line has an id (its label), an ordinate,
+  Primary/Secondary, visibility, the end its label is shown at (**Start**,
+  **End** or **Both**) and a colour. The ordinates are what the tools snap to; a
+  line whose Visibility is off is neither drawn nor snapped to.
+- **Add Row** continues the grid: the new line goes one *last spacing* beyond
+  the last line (lines at 0, 6, 12 → 18) and takes the next id (X3 → X4, C → D,
+  Z → AA). Edit it if that is not where you want it.
 - Lines are per axis: X lines are planes of constant X, and so on.
-- **Working plane** — View → Top (XY), Front (XZ) or Right (YZ) chooses which
-  pair of axes is the drawing plane, and the Level combo chooses which level of
-  the third axis is active.
+- **Hide All Grid Lines** — the system is neither drawn nor snapped to (the same
+  switch as View → Show Grids and the right-click menu).
+
+# Grid labels
+- **Show grid labels** — the bubbles at the ends of the lines.
+- **Content** — `ID` (A, 1, X3), `ID + coordinate` (`A (6)`) or `Coordinate`.
+  A radial line shows its angle with a degree sign.
+- **Size** (points) and **Colour** of the label text.
+- **Position** + *Apply to all lines* — put every label at the Start, the End or
+  Both ends at once (each row can still be changed on its own).
+- Z levels are labelled once, beside the first corner of the plan.
+
+# Working plane
+- View → Top (XY), Front (XZ) or Right (YZ) chooses which pair of axes is the
+  drawing plane, and the Level combo chooses which level of the third axis is
+  active. A cylindrical grid offers its Z levels in plan (Top) only.
 """,
             "tools.draw_node",
             "file.new_2d_frame",
+            "define.grid_wizard",
+            "view.grids",
+        ),
+        "define.grid_wizard": _t(
+            "Define → Grid Wizard",
+            "Define",
+            "A whole Cartesian or radial grid from a few numbers.",
+            """
+For a regular grid you do not want to type line by line. One undo step.
+
+# Values
+- **Put it in** — a new coordinate system, or *Replace the grid of* an existing
+  one (its origin and rotation are kept). A new project's empty Global grid is
+  offered first.
+- **New system name** and **Origin** — only for a new system.
+- **Grid type** — *Cartesian* (X lines, Y lines, Z levels) or *Cylindrical*
+  (rings by radius, radial lines by angle in degrees, Z levels). A 2D model is
+  Cartesian in the X-Z plane, so its Y row is off.
+- Per row: **Number** of lines (0 = none on that axis), **Spacing**, where the
+  **First** line is, and the **Names**: `A, B, C …`, `1, 2, 3 …` or `X1, X2 …`.
+- **Labels** — on/off, content (ID, ID + coordinate, coordinate) and position
+  (Start, End, Both); size and colour are in the grid dialog.
+
+The preview lists the lines before anything is created. Rings need radii of 0 or
+more, and the radial lines cannot go past a full turn: 8 lines at 45° close the
+circle, 9 would put two on top of each other.
+
+Afterwards, Define → Coordinate System/Grids edits any line one by one.
+""",
+            "define.grid",
+            "tools.draw_frame",
+        ),
+        "view.grids": _t(
+            "View → Show Grids / Show Grid Labels",
+            "View",
+            "Hide or show the grids and their labels, also from the right-click menu.",
+            """
+- **Show Grids** — draws (or hides) every coordinate system's grid. A hidden grid
+  is not snapped to either, so the draw tools then land on the working plane.
+  It is the same switch as *Hide All Grid Lines* in the grid dialog, it is saved
+  with the model and Ctrl+Z undoes it.
+- **Show Grid Labels** — the line ids/coordinates at the ends of the lines.
+- **Right-click** on the model view (a click, not a drag: a right drag zooms)
+  opens the same switches, plus *Grids by system* to hide one coordinate system
+  and keep the others, and shortcuts to Coordinate System/Grids and Grid Wizard.
+
+The menu ticks show whether at least one grid (label) is visible.
+""",
+            "define.grid",
+            "define.grid_wizard",
         ),
         "define.add_node": _t(
             "Define → Add Node",
@@ -3212,7 +3289,7 @@ column with a lateral load P and a weight W at its top, cut at its base, reports
             "Assign — groups",
             "Add the selected joints and elements to a group, remove them, or replace it.",
             """
-Works on the current selection (Ctrl+G).
+Works on the current selection (Ctrl+Shift+G).
 
 # Values
 - **Group** — an existing group, or **New group…** with the name typed below.
@@ -3484,6 +3561,9 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_tool_draw_truss": "tools.draw_truss",
     # ── Define ──────────────────────────────────────────────────────
     "_act_grid": "define.grid",
+    "_act_grid_wizard": "define.grid_wizard",
+    "_act_show_grids": "view.grids",
+    "_act_show_grid_labels": "view.grids",
     "_act_add_node": "define.add_node",
     "_act_storeys": "define.storeys",
     "_act_groups": "define.groups",

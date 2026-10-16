@@ -70,13 +70,9 @@ def _snap_with_distance(
     best_d2 = float("inf")
     for cs in systems:
         grid = cs.grid
-        if not grid.visible:
+        if not grid.shown:
             continue
-        if not (grid.x_lines or grid.y_lines or grid.z_lines):
-            continue
-        lx, ly, lz = cs.coord.world_to_local(world)
-        sl = _snap_to_grid(lx, ly, lz, grid.x_lines, grid.y_lines, grid.z_lines)
-        candidate = cs.coord.local_to_world(sl)
+        candidate = cs.coord.local_to_world(grid.snap_local(cs.coord.world_to_local(world)))
         d2 = (
             (candidate[0] - world[0]) ** 2
             + (candidate[1] - world[1]) ** 2
@@ -96,9 +92,11 @@ def _min_grid_spacing(systems: list[CoordinateGridSystem]) -> float | None:
     smallest: float | None = None
     for cs in systems:
         grid = cs.grid
-        if not grid.visible:
+        if not grid.shown:
             continue
-        for lines in (grid.x_lines, grid.y_lines, grid.z_lines):
+        radial, angular, levels = grid.visible_ordinates()
+        # An angle is not a length: a cylindrical grid measures rings and levels only.
+        for lines in (radial, levels) if grid.is_cylindrical else (radial, angular, levels):
             for i in range(1, len(lines)):
                 d = abs(lines[i] - lines[i - 1])
                 if d > 0 and (smallest is None or d < smallest):

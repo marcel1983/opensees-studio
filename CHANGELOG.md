@@ -9,6 +9,33 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Added
+
+- **Radial (cylindrical) grids**: a coordinate system's grid can be Cylindrical —
+  rings by radius, radial lines by angle and Z levels. Rings close into circles
+  when the radial lines go all the way round; the draw tools and Add Node snap
+  to the ring × radial-line crossings.
+- **Define → Grid Wizard**: a whole Cartesian or radial grid from the number of
+  lines, spacing, first position and naming style (A, B, C / 1, 2, 3 / X1, X2)
+  per axis, with a preview; into a new system or replacing an existing grid,
+  one undo step.
+- **Grid labels** at the ends of the lines: ID, ID + coordinate or coordinate,
+  with size and colour, at the Start, End or Both ends (per line, or for every
+  line at once).
+- **Add Row** in the grid table continues the grid: the new line goes one last
+  spacing beyond the last line and takes the next id (X3 → X4, C → D).
+- **View → Show Grids / Show Grid Labels** and a **right-click menu** on the
+  model view with the same switches, a per-system grid toggle and the grid
+  dialogs.
+
+### Fixed
+
+- **Hide All Grid Lines** (and a line's Visibility) now hide the grid: they were
+  saved but the view still drew the lines, and the snap still used them.
+- **Assign to Group** moves to Ctrl+Shift+G: it shared Ctrl+G with Coordinate
+  System/Grids, so neither shortcut did anything.
+- Editing a grid in the grid dialog no longer turns a hidden system visible.
+
 ## [0.0.13] — 2026-10-15
 
 The OpenSees-coverage release: after a review of the whole OpenSeesPy manual,

@@ -24,13 +24,6 @@ from opensees_studio.views.float_field import FloatField
 from opensees_studio.views.screen_fit import FittedDialog
 
 
-def _snap(value: float, lines: list[float]) -> float:
-    """Return the grid line closest to ``value`` (or value if list is empty)."""
-    if not lines:
-        return value
-    return min(lines, key=lambda c: abs(c - value))
-
-
 class AddNodeDialog(FittedDialog):
     """Create one :class:`Node` at (x, y, z) optionally snapped to grid."""
 
@@ -86,9 +79,7 @@ class AddNodeDialog(FittedDialog):
         """Return the constructed Node (snapped if requested)."""
         x, y, z = self._x.value(), self._y.value(), self._z.value()
         if self._snap_cb.isChecked():
-            x = _snap(x, self._grid.x_lines)
-            y = _snap(y, self._grid.y_lines)
-            z = _snap(z, self._grid.z_lines)
+            x, y, z = self._grid.snap_local((x, y, z))
         if self._ndm == 2:
             y = 0.0
         return Node(id=self._next_id, coords=(x, y, z))

@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import contextlib
 import enum
-from collections.abc import Callable
 from typing import Any, ClassVar
 
 import numpy as np
@@ -477,40 +476,21 @@ class ModelRenderer:
 
         for idx, cs in enumerate(coord_systems):
             grid = cs.grid
-            if not grid.visible:
-                continue
-            xs = list(grid.x_lines)
-            ys = list(grid.y_lines)
-            zs = list(grid.z_lines)
-            if not xs and not ys and not zs:
+            if not grid.shown:
                 continue
 
             palette_idx = 0 if cs.is_global() else (idx % (len(derived_palette) - 1)) + 1
             grid_color, intersection_color = derived_palette[palette_idx]
 
-            xmin, xmax = (min(xs), max(xs)) if xs else (-1.0, 1.0)
-            ymin, ymax = (min(ys), max(ys)) if ys else (-1.0, 1.0)
-            if xmin == xmax:
-                xmin, xmax = xmin - 1.0, xmax + 1.0
-            if ymin == ymax:
-                ymin, ymax = ymin - 1.0, ymax + 1.0
+            # Active-plane check: lines on the current level are drawn bold and
+            # the others dim, without dropping them (keeps scene bounds stable).
+            plane_axis: int | None = None
+            plane_offset_local: float | None = None
+            if self._working_plane is not None:
+                plane_name, plane_off = self._working_plane
+                plane_axis = {"XY": 2, "XZ": 1, "YZ": 0}[plane_name]
+                plane_offset_local = plane_off - cs.coord.origin[plane_axis]
 
-            # Active-plane check: build per-level visibility keys so we
-            # can draw the current level bold and the others dim without
-            # dropping them (keeps scene bounds stable for the camera).
-            plane_filter = self._working_plane
-            plane_axis = None  # index into (x, y, z) that the plane
-            # is orthogonal to (None = iso mode)
-            plane_offset_local = None
-            if plane_filter is not None:
-                plane_name, plane_off = plane_filter
-                axis_idx = {"XY": 2, "XZ": 1, "YZ": 0}[plane_name]
-                cs_shift = cs.coord.origin[axis_idx]
-                plane_axis = axis_idx
-                plane_offset_local = plane_off - cs_shift
-
-            # Loop variables are bound as keyword defaults (B023): the helpers
-            # keep this iteration's values even if one ever outlives it.
             def _on_active_plane(
                 local_pt: tuple[float, float, float],
                 *,
@@ -521,106 +501,83 @@ class ModelRenderer:
                     return True
                 return abs(local_pt[_axis] - _offset) < 1e-6
 
-            # Collect active + dim segments separately so they get their
-            # own polydata + actor (different opacity / color).
             active_pts: list[tuple[float, float, float]] = []
-            active_cells: list[int] = []
             dim_pts: list[tuple[float, float, float]] = []
-            dim_cells: list[int] = []
+            for p1, p2 in grid.segments():
+                if plane_axis is not None and p1[2] != p2[2] and plane_axis == 2:
+                    # Verticals add only clutter while a plan level is active.
+                    continue
+                bucket = active_pts if _on_active_plane(p1) and _on_active_plane(p2) else dim_pts
+                bucket.append(cs.coord.local_to_world(p1))
+                bucket.append(cs.coord.local_to_world(p2))
 
-            def add_seg(
-                p1: tuple[float, float, float],
-                p2: tuple[float, float, float],
-                *,
-                _is_active: Callable[[tuple[float, float, float]], bool] = _on_active_plane,
-                _to_world: Callable[..., tuple[float, float, float]] = cs.coord.local_to_world,
-                _active_pts: list[tuple[float, float, float]] = active_pts,
-                _active_cells: list[int] = active_cells,
-                _dim_pts: list[tuple[float, float, float]] = dim_pts,
-                _dim_cells: list[int] = dim_cells,
-            ) -> None:
-                on_active = _is_active(p1) and _is_active(p2)
-                bucket_pts = _active_pts if on_active else _dim_pts
-                bucket_cells = _active_cells if on_active else _dim_cells
-                i = len(bucket_pts)
-                bucket_pts.append(_to_world(p1))
-                bucket_pts.append(_to_world(p2))
-                bucket_cells.extend([2, i, i + 1])
-
-            z_planes = zs if zs else [0.0]
-            for z in z_planes:
-                for x in xs:
-                    add_seg((x, ymin, z), (x, ymax, z))
-                for y in ys:
-                    add_seg((xmin, y, z), (xmax, y, z))
-            # Vertical connectors — drop when a plane filter is active
-            # (they'd mostly be dim clutter and the active plane is flat).
-            if plane_filter is None and zs and xs and ys:
-                for x in xs:
-                    for y in ys:
-                        add_seg((x, y, zs[0]), (x, y, zs[-1]))
-
-            # Render dim first (other levels), then active (top of stack).
-            if dim_pts:
+            for pts, width, opacity in ((dim_pts, 0.8, 0.18), (active_pts, 1.8, 1.0)):
+                if not pts:
+                    continue
+                n = len(pts) // 2
                 pd = pv.PolyData()
-                pd.points = np.array(dim_pts, dtype=float)
-                pd.lines = np.array(dim_cells, dtype=np.int64)
-                actor = self._plotter.add_mesh(
-                    pd,
-                    color=grid_color,
-                    line_width=0.8,
-                    opacity=0.18,
-                    pickable=False,
-                    lighting=False,
+                pd.points = np.array(pts, dtype=float)
+                pd.lines = np.column_stack(
+                    [np.full(n, 2), np.arange(0, 2 * n, 2), np.arange(1, 2 * n, 2)]
+                ).ravel()
+                self._aux_actors.append(
+                    self._plotter.add_mesh(
+                        pd,
+                        color=grid_color,
+                        line_width=width,
+                        opacity=opacity,
+                        pickable=False,
+                        lighting=False,
+                    )
                 )
-                self._aux_actors.append(actor)
-            if active_pts:
-                pd = pv.PolyData()
-                pd.points = np.array(active_pts, dtype=float)
-                pd.lines = np.array(active_cells, dtype=np.int64)
-                actor = self._plotter.add_mesh(
-                    pd,
-                    color=grid_color,
-                    line_width=1.8,
-                    opacity=1.0,
-                    pickable=False,
-                    lighting=False,
-                )
-                self._aux_actors.append(actor)
 
             # Intersection dots — active level bright, others dim.
             active_dots: list[tuple[float, float, float]] = []
             dim_dots: list[tuple[float, float, float]] = []
-            for z in z_planes:
-                for x in xs or [0.0]:
-                    for y in ys or [0.0]:
-                        if _on_active_plane((x, y, z)):
-                            active_dots.append(cs.coord.local_to_world((x, y, z)))
-                        else:
-                            dim_dots.append(cs.coord.local_to_world((x, y, z)))
+            for local in grid.intersections():
+                world = cs.coord.local_to_world(local)
+                (active_dots if _on_active_plane(local) else dim_dots).append(world)
             if dim_dots:
-                ipd = pv.PolyData(np.array(dim_dots, dtype=float))
-                actor_pts = self._plotter.add_mesh(
-                    ipd,
-                    color=(0.6, 0.6, 0.6),
-                    point_size=4.0,
-                    render_points_as_spheres=True,
-                    opacity=0.35,
-                    pickable=False,
-                    lighting=False,
+                self._aux_actors.append(
+                    self._plotter.add_mesh(
+                        pv.PolyData(np.array(dim_dots, dtype=float)),
+                        color=(0.6, 0.6, 0.6),
+                        point_size=4.0,
+                        render_points_as_spheres=True,
+                        opacity=0.35,
+                        pickable=False,
+                        lighting=False,
+                    )
                 )
-                self._aux_actors.append(actor_pts)
             if active_dots:
-                ipd = pv.PolyData(np.array(active_dots, dtype=float))
-                actor_pts = self._plotter.add_mesh(
-                    ipd,
-                    color=intersection_color,
-                    point_size=7.0,
-                    render_points_as_spheres=True,
-                    pickable=False,
-                    lighting=False,
+                self._aux_actors.append(
+                    self._plotter.add_mesh(
+                        pv.PolyData(np.array(active_dots, dtype=float)),
+                        color=intersection_color,
+                        point_size=7.0,
+                        render_points_as_spheres=True,
+                        pickable=False,
+                        lighting=False,
+                    )
                 )
-                self._aux_actors.append(actor_pts)
+
+            # Bubble labels: grid id and/or coordinate at the end(s) of each line.
+            labels = grid.labels()
+            if labels:
+                self._aux_actors.append(
+                    self._plotter.add_point_labels(
+                        np.array([cs.coord.local_to_world(a) for a, _ in labels], dtype=float),
+                        [text for _, text in labels],
+                        font_size=grid.label_size,
+                        text_color=grid.label_color,
+                        shape="rounded_rect",
+                        shape_color="white",
+                        shape_opacity=0.85,
+                        show_points=False,
+                        always_visible=True,
+                        pickable=False,
+                    )
+                )
 
     def _build_section_extrusions(self, project: Project) -> None:
         """Draw a semi-transparent box along each frame element whose
@@ -1179,21 +1136,13 @@ class ModelRenderer:
         if self._project is not None:
             for cs in getattr(self._project, "coord_systems", []) or []:
                 grid = cs.grid
-                if not grid.visible or grid.hide_all:
+                if not grid.shown:
                     continue
-                xs = grid.x_lines or [0.0]
-                ys = grid.y_lines or [0.0]
-                zs = grid.z_lines or [0.0]
-                corners = np.array(
-                    [
-                        cs.coord.local_to_world((x, y, z))
-                        for x in (xs[0], xs[-1])
-                        for y in (ys[0], ys[-1])
-                        for z in (zs[0], zs[-1])
-                    ],
-                    dtype=float,
-                )
-                candidates.append(corners)
+                points = grid.intersections()
+                if points:
+                    candidates.append(
+                        np.array([cs.coord.local_to_world(p) for p in points], dtype=float)
+                    )
         if not candidates:
             return 0.05
         all_pts = np.vstack(candidates)
