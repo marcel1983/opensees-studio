@@ -50,8 +50,11 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
 - **Grids** — Cartesian or radial (cylindrical: rings, radial lines, levels)
   coordinate/grid systems; Define → Grid Wizard builds one from counts and
   spacings; Add Row continues the last spacing; labels (ID, ID + coordinate)
-  at either or both ends with size and colour; View → Show Grids and the
-  right-click menu on the model view hide or show them.
+  at either or both ends with size and colour; View → Show Grids hides or
+  shows them; View → Grid Line View shows only the objects on one grid line
+  (± 50 mm by default). Right-click on the model view lists the options of the
+  selected joints/frames/shells, or the grid and view options when nothing is
+  selected.
 - **Area loads and settlements** — Assign → Area → Surface Load on Shells (a
   uniform pressure along X, Y, Z or the shell normal, as consistent nodal
   forces), Assign → Area → Floor Load to Frames (select a floor's joints: every

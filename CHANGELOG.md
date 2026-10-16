@@ -27,6 +27,14 @@ refused instead of silently downgraded).
 - **View → Show Grids / Show Grid Labels** and a **right-click menu** on the
   model view with the same switches, a per-system grid toggle and the grid
   dialogs.
+- **View → Grid Line View**: pick a grid line by its label and see only the
+  joints within a window either side of it (50 mm by default, adjustable, in
+  the model's unit) and the elements on them, face on with that line as the
+  working plane; View → Show All Objects brings the rest back. Works for
+  Cartesian lines, Z levels, rings and radial lines.
+- The **right-click menu follows the selection**: with joints, frames or shells
+  selected it lists their Assign options plus group, move, replicate, mirror,
+  delete; with nothing selected, the grid and view options.
 
 ### Fixed
 

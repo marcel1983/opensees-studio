@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import contextlib
 import enum
+from collections.abc import Callable
 from typing import Any, ClassVar
 
 import numpy as np
@@ -113,6 +114,9 @@ class ModelRenderer:
         self._plotter = plotter
         self._style = style or RenderStyle()
         self._project: Project | None = None
+        #: The project as given, before :attr:`_view_filter` (View → Grid Line View).
+        self._source_project: Project | None = None
+        self._view_filter: Callable[[Project], Project] | None = None
         self._mode = RendererMode.MODEL
         self._deformation: DeformationSource | None = None
 
@@ -152,6 +156,9 @@ class ModelRenderer:
     # ── public API ───────────────────────────────────────────────────
     def render(self, project: Project | None) -> None:
         """Full render: rebuild everything. Call when topology changes."""
+        self._source_project = project
+        if project is not None and self._view_filter is not None:
+            project = self._view_filter(project)
         self._project = project
         self._teardown_all()
         if project is None:
@@ -174,6 +181,12 @@ class ModelRenderer:
         self._apply_mode_to_points()
         self._rebuild_labels()
 
+    def set_view_filter(self, view_filter: Callable[[Project], Project] | None) -> None:
+        """Draw only what ``view_filter(project)`` keeps (None: everything); re-renders."""
+        self._view_filter = view_filter
+        if self._source_project is not None:
+            self.render(self._source_project)
+
     def set_display_options(self, *, show_node_labels: bool, show_element_labels: bool) -> None:
         """Toggle viewport labels and update the current scene immediately."""
         self._show_node_labels = show_node_labels
@@ -191,7 +204,7 @@ class ModelRenderer:
             return
         self._show_section_extrusions = on
         if self._project is not None:
-            self.render(self._project)
+            self.render(self._source_project)
 
     def set_working_plane(self, plane: tuple[str, float] | None) -> None:
         """Update the working-plane filter and rebuild the grid overlay.
@@ -206,7 +219,7 @@ class ModelRenderer:
             return
         self._working_plane = plane
         if self._project is not None:
-            self.render(self._project)
+            self.render(self._source_project)
 
     def update_selection(self, node_ids: frozenset[int], element_ids: frozenset[int]) -> None:
         """In-place selection update — no full re-render."""

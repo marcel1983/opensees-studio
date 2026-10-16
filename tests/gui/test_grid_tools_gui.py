@@ -193,3 +193,95 @@ def test_context_menu_lists_grid_switches(qtbot) -> None:  # type: ignore[no-unt
     for expected in ("Show &Grids", "Grids by system", "Show Grid &Labels", "Grid &Wizard…"):
         assert expected in texts
     menu.deleteLater()
+
+
+# ───────────────────── Grid Line View and the selection menu ─────────────────────
+def _building(qtbot):  # type: ignore[no-untyped-def]
+    from pathlib import Path
+
+    mw = _window(qtbot)
+    mw._vm.open(Path(__file__).parents[2] / "examples" / "building_3storey_diaphragm.osmodel")
+    return mw
+
+
+@pytest.mark.gui
+def test_grid_line_view_shows_only_one_frame_line(qtbot, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from opensees_studio.views.dialogs.grid_line_view import GridLineViewDialog
+
+    mw = _building(qtbot)
+    project = mw._vm.project
+
+    def pick(self):  # type: ignore[no-untyped-def]
+        self.line_combo.setCurrentIndex(self.line_combo.findData("Global: X X2 (6)"))
+        assert self.tolerance() == pytest.approx(0.05)  # 50 mm in a model in m
+        assert "joint(s)" in self.count.text()
+        return 1
+
+    monkeypatch.setattr(GridLineViewDialog, "exec", pick)
+    mw._on_grid_line_view()
+    shown = mw._canvas._renderer._project
+    assert shown is not None and shown is not project
+    assert shown.nodes and all(abs(n.coords[0] - 6.0) <= 0.05 for n in shown.nodes)
+    assert len(shown.elements) < len(project.elements)
+    assert mw._canvas.working_plane_type() == "YZ"  # an X line is seen from the right
+    assert mw._act_show_all_objects.isEnabled()
+    # The model is untouched, and Show All brings everything back.
+    assert len(mw._vm.project.elements) == len(project.elements)
+    mw._act_show_all_objects.trigger()
+    assert len(mw._canvas._renderer._project.elements) == len(project.elements)
+    assert not mw._act_show_all_objects.isEnabled()
+
+
+@pytest.mark.gui
+def test_grid_line_view_level_and_window(qtbot, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from opensees_studio.views.dialogs.grid_line_view import GridLineViewDialog
+
+    mw = _building(qtbot)
+
+    def pick(self):  # type: ignore[no-untyped-def]
+        self.line_combo.setCurrentIndex(self.line_combo.findData("Global: Z Z2 (3.5)"))
+        self.window_field.setValue(0.2)
+        return 1
+
+    monkeypatch.setattr(GridLineViewDialog, "exec", pick)
+    mw._on_grid_line_view()
+    shown = mw._canvas._renderer._project
+    assert {round(n.coords[2], 6) for n in shown.nodes} == {3.5}
+    assert mw._canvas.working_plane_type() == "XY"
+    assert mw._grid_view == ("Global: Z Z2 (3.5)", 0.2)
+    # The window is remembered for the next time.
+    seen: list[float] = []
+    monkeypatch.setattr(GridLineViewDialog, "exec", lambda self: seen.append(self.tolerance()) or 0)
+    mw._on_grid_line_view()
+    assert seen == [0.2]
+
+
+@pytest.mark.gui
+def test_selection_menu_lists_joint_options(qtbot) -> None:  # type: ignore[no-untyped-def]
+    mw = _building(qtbot)
+    node = mw._vm.project.nodes[0].id
+    mw._canvas.selection.set_selection({node}, set())
+    menu = mw._canvas_context_menu()
+    texts = [a.text() for a in menu.actions()]
+    assert texts[0] == "1 joint(s) selected"
+    assert mw._act_assign_support.text() in texts
+    assert mw._act_assign_section.text() not in texts
+    assert mw._act_delete.text() in texts
+    assert mw._act_show_grids.text() not in texts
+    menu.deleteLater()
+
+
+@pytest.mark.gui
+def test_selection_menu_with_joints_and_frames_uses_submenus(qtbot) -> None:  # type: ignore[no-untyped-def]
+    mw = _building(qtbot)
+    project = mw._vm.project
+    mw._canvas.selection.set_selection({project.nodes[0].id}, {project.elements[0].id})
+    menu = mw._canvas_context_menu()
+    texts = [a.text() for a in menu.actions()]
+    assert texts[0] == "1 joint(s), 1 element(s) selected"
+    assert "Joint" in texts and "Frame" in texts
+    menu.deleteLater()
+    mw._canvas.selection.clear()
+    menu = mw._canvas_context_menu()
+    assert mw._act_show_grids.text() in [a.text() for a in menu.actions()]
+    menu.deleteLater()

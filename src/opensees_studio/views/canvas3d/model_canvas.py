@@ -529,6 +529,16 @@ class ModelCanvas(QtInteractor):
             self.reset_camera()
         self.render()
 
+    def set_view_filter(self, view_filter: Callable[[Project], Project] | None) -> None:
+        """Show only what ``view_filter`` keeps of the project (None: all of it)."""
+        self._renderer.set_view_filter(view_filter)
+        self.render()
+
+    def reframe(self) -> None:
+        """Fit the camera to what is drawn now."""
+        self.renderer.reset_camera()
+        self.render()
+
     def clear_model(self) -> None:
         """Remove the current model but keep the grid/axes furniture."""
         self.selection.clear()

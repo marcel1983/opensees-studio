@@ -264,11 +264,12 @@ tables (storeys, section cuts) and exports them to CSV.
 
 # View, Options, Help
 - Zoom Extents, Isometric / Top / Front / Right, Parallel Projection, Extruded
-Sections, Show Grids, Show Grid Labels; Set Display Units; Help Contents (F1),
-About.
-- **Right-click** on the model view (without dragging: a right drag zooms) opens
-the view menu: show or hide the grids (all, or one system), the grid labels,
-and the grid dialogs.
+Sections, Show Grids, Show Grid Labels, Grid Line View, Show All Objects; Set
+Display Units; Help Contents (F1), About.
+- **Right-click** on the model view (without dragging: a right drag zooms): with
+something selected, what can be assigned or edited on it (joint, frame or area
+options, group, move, replicate, mirror, delete); with nothing selected, the
+grid and view options.
 """,
         "index",
         "annex.index",
@@ -1499,13 +1500,52 @@ Afterwards, Define → Coordinate System/Grids edits any line one by one.
   with the model and Ctrl+Z undoes it.
 - **Show Grid Labels** — the line ids/coordinates at the ends of the lines.
 - **Right-click** on the model view (a click, not a drag: a right drag zooms)
-  opens the same switches, plus *Grids by system* to hide one coordinate system
-  and keep the others, and shortcuts to Coordinate System/Grids and Grid Wizard.
+  with **nothing selected** opens the same switches, plus *Grids by system* to
+  hide one coordinate system and keep the others, the grid dialogs, Grid Line
+  View and the standard views.
+- With **something selected** the right-click lists what can be done to it
+  instead: the line at the top says what is selected; joints get the
+  Assign → Joint options (restraints, masses, springs, constraints, loads,
+  links…), frames the Assign → Frame options (section, releases, offsets,
+  modifiers, member loads, hinges), shells the Area loads — directly when only
+  one kind is selected, in a submenu per kind when several are — then Assign to
+  Group, Move, Replicate, Mirror, Delete and Clear Selection. Press Esc or click
+  empty space to clear the selection and get the grid menu back.
 
 The menu ticks show whether at least one grid (label) is visible.
 """,
             "define.grid",
             "define.grid_wizard",
+        ),
+        "view.grid_line_view": _t(
+            "View → Grid Line View",
+            "View",
+            "Only the objects lying on one grid line, looked at face on.",
+            """
+Pick a grid line by its label — `Global: X A (6)`, `Global: Z Z2 (3)`, or a ring
+or radial line of a cylindrical grid — and the view keeps only the joints within
+the **window** either side of it and the elements all of whose joints are kept.
+Everything else is hidden from the view (not from the model: the analysis and
+the tables still see all of it).
+
+# Values
+- **Grid line** — every line of every coordinate system, by system, axis, id and
+  ordinate.
+- **Window either side** — how far from the line a joint may be, in the model's
+  length unit. Default **50 mm** (0.05 in a model in m, 50 in mm, converted for
+  ft and in). The dialog remembers the last value and counts what will be shown.
+
+# What the view does
+- An X line is looked at from the Right (YZ), a Y line from the Front (XZ) and a
+  Z level from the Top (XY), with that line as the working plane, so you can
+  draw on it straight away. A ring or radial line keeps the isometric view.
+- The filter follows the model while you work: a member drawn on the line
+  appears, one moved off it disappears. The status bar says what is shown.
+- **View → Show All Objects** (or the right-click menu) brings everything back.
+  Opening another project does too.
+""",
+            "view.grids",
+            "define.grid",
         ),
         "define.add_node": _t(
             "Define → Add Node",
@@ -3564,6 +3604,8 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_grid_wizard": "define.grid_wizard",
     "_act_show_grids": "view.grids",
     "_act_show_grid_labels": "view.grids",
+    "_act_grid_line_view": "view.grid_line_view",
+    "_act_show_all_objects": "view.grid_line_view",
     "_act_add_node": "define.add_node",
     "_act_storeys": "define.storeys",
     "_act_groups": "define.groups",
