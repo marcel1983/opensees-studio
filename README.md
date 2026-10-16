@@ -47,6 +47,14 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   coordinates), zero-length elements and zero-length sections, restraints,
   equalDOF constraints, uniform, trapezoidal / partial-span and point loads on
   frames, imposed support motion.
+- **Grids** — Cartesian or radial (cylindrical: rings, radial lines, levels)
+  coordinate/grid systems; Define → Grid Wizard builds one from counts and
+  spacings; Add Row continues the last spacing; labels (ID, ID + coordinate)
+  at either or both ends with size and colour; View → Show Grids hides or
+  shows them; View → Grid Line View shows only the objects on one grid line
+  (± 50 mm by default). Right-click on the model view lists the options of the
+  selected joints/frames/shells, or the grid and view options when nothing is
+  selected.
 - **Area loads and settlements** — Assign → Area → Surface Load on Shells (a
   uniform pressure along X, Y, Z or the shell normal, as consistent nodal
   forces), Assign → Area → Floor Load to Frames (select a floor's joints: every
@@ -76,7 +84,7 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   inter-storey drift ratio, storey shear and base shear, for static cases, mode
   shapes, pushovers and response spectrum cases (each quantity combined over the
   modes by SRSS or CQC). Checked against a hand-built OpenSeesPy model.
-- **Groups** — Define → Groups and Assign → Assign to Group (Ctrl+G): named,
+- **Groups** — Define → Groups and Assign → Assign to Group (Ctrl+Shift+G): named,
   coloured sets of joints and elements to select again with Select → By Group.
   Deleting a member takes it out of its groups.
 - **Interactive table editing** — Edit → Interactive Table Editing (Ctrl+T):

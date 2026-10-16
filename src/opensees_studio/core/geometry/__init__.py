@@ -53,7 +53,11 @@ from opensees_studio.core.geometry.grid import (
     GridLine,
     GridSystem,
     default_global_system,
+    grid_line_ids,
     make_grid_lines,
+    next_grid_id,
+    next_grid_ordinate,
+    regular_grid_lines,
 )
 from opensees_studio.core.geometry.links import TripleFrictionPendulumElement, TwoNodeLinkElement
 from opensees_studio.core.geometry.node import Node
@@ -105,8 +109,12 @@ __all__ = [
     "bilinear_cycle_energy",
     "default_global_system",
     "friction_cycle_energy",
+    "grid_line_ids",
     "make_grid_lines",
+    "next_grid_id",
+    "next_grid_ordinate",
     "pendulum_period",
     "pendulum_restoring_stiffness",
+    "regular_grid_lines",
     "sliding_yield_displacement",
 ]

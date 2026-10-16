@@ -57,6 +57,9 @@ class ModelCanvas(QtInteractor):
     #: Emitted when a press/release moved too far to be a click while a
     #: pick-consuming tool was armed, so the user learns why nothing happened.
     dragNotAClick = Signal()
+    #: A right-click that did not zoom (VTK zooms on a right drag): the global
+    #: screen position to open the view's context menu at.
+    contextMenuRequested = Signal(QPoint)
     #: Emitted when the user clicks an empty area of the viewport.
     #: Payload: world-space (x, y, z) obtained by unprojecting the click
     #: onto the Z=0 plane. Tools use this to place new geometry.
@@ -115,6 +118,9 @@ class ModelCanvas(QtInteractor):
             self._press_pos = event.position()
             self._press_modifiers = event.modifiers()
             self._press_camera = self._camera_state()
+        elif event.button() == Qt.MouseButton.RightButton:
+            self._right_press_pos = event.position()
+            self._right_press_camera = self._camera_state()
         super().mousePressEvent(event)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
@@ -122,6 +128,18 @@ class ModelCanvas(QtInteractor):
         # rotation as the button goes up, so the pick is handled afterwards:
         # anything restored before that would be overwritten.
         super().mouseReleaseEvent(event)
+        if event.button() == Qt.MouseButton.RightButton:
+            press = getattr(self, "_right_press_pos", None)
+            self.__dict__.pop("_right_press_pos", None)
+            if press is not None:
+                pos = event.position()
+                drift = ((pos.x() - press.x()) ** 2 + (pos.y() - press.y()) ** 2) ** 0.5
+                if drift <= CLICK_MAX_DRIFT_PX:
+                    # A click, not a zoom drag: undo the bit of zoom VTK applied.
+                    self._restore_camera(getattr(self, "_right_press_camera", None))
+                    self.render()
+                    self.contextMenuRequested.emit(self.mapToGlobal(pos.toPoint()))
+            return
         if event.button() == Qt.MouseButton.LeftButton:
             release_pos = event.position()
             press = getattr(self, "_press_pos", None)
@@ -434,18 +452,8 @@ class ModelCanvas(QtInteractor):
         systems = getattr(project, "coord_systems", None) or []
         rows: list[tuple[float, float, float]] = []
         for cs in systems:
-            grid = cs.grid
-            if not grid.visible or grid.hide_all:
-                continue
-            xs = grid.x_lines or [0.0]
-            ys = grid.y_lines or [0.0]
-            zs = grid.z_lines or [0.0]
-            if not (grid.x_lines or grid.y_lines or grid.z_lines):
-                continue
-            for z in zs:
-                for x in xs:
-                    for y in ys:
-                        rows.append(cs.coord.local_to_world((x, y, z)))
+            if cs.grid.shown:
+                rows.extend(cs.coord.local_to_world(p) for p in cs.grid.intersections())
         if not rows:
             return None
         pts = np.asarray(rows, dtype=float)
@@ -478,18 +486,10 @@ class ModelCanvas(QtInteractor):
         best: tuple[float, float, float] | None = None
         best_d2 = float("inf")
         for system in getattr(project, "coord_systems", []) or []:
-            grid = system.grid
-            if not grid.visible or grid.hide_all:
-                continue
-            if not (grid.x_lines or grid.y_lines or grid.z_lines):
+            if not system.grid.shown:
                 continue
             local = system.coord.world_to_local(point)
-            lines = (grid.x_lines, grid.y_lines, grid.z_lines)
-            snapped = list(local)
-            for axis in in_plane:
-                if lines[axis]:
-                    snapped[axis] = min(lines[axis], key=lambda c: abs(c - local[axis]))
-            candidate = system.coord.local_to_world(tuple(snapped))
+            candidate = system.coord.local_to_world(system.grid.snap_local(local, in_plane))
             d2 = sum((candidate[i] - point[i]) ** 2 for i in range(3))
             if d2 < best_d2:
                 best, best_d2 = candidate, d2
@@ -527,6 +527,16 @@ class ModelCanvas(QtInteractor):
         self._renderer.render(project)
         if project is not None and project.nodes:
             self.reset_camera()
+        self.render()
+
+    def set_view_filter(self, view_filter: Callable[[Project], Project] | None) -> None:
+        """Show only what ``view_filter`` keeps of the project (None: all of it)."""
+        self._renderer.set_view_filter(view_filter)
+        self.render()
+
+    def reframe(self) -> None:
+        """Fit the camera to what is drawn now."""
+        self.renderer.reset_camera()
         self.render()
 
     def clear_model(self) -> None:

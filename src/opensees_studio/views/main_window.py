@@ -17,7 +17,7 @@ from typing import Any
 
 import numpy as np
 import shiboken6
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QAction, QActionGroup, QKeySequence
 from PySide6.QtWidgets import (
     QComboBox,
@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
     QInputDialog,
     QLabel,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPlainTextEdit,
     QToolBar,
@@ -182,6 +183,8 @@ from opensees_studio.views.dialogs.buildings import (
     MassSourceDialog,
     StoreysDialog,
 )
+from opensees_studio.views.dialogs.grid_line_view import GridLineViewDialog
+from opensees_studio.views.dialogs.grid_wizard import GridWizardDialog
 from opensees_studio.views.dialogs.groups import (
     NEW_GROUP,
     AssignGroupDialog,
@@ -217,6 +220,15 @@ from opensees_studio.views.tools import (
 EXPORT_MODEL_ONLY = "Model only"
 
 
+def _add_actions(menu: QMenu, actions: Sequence[QAction | None]) -> None:
+    """Add ``actions`` to ``menu``; ``None`` is a separator."""
+    for action in actions:
+        if action is None:
+            menu.addSeparator()
+        else:
+            menu.addAction(action)
+
+
 class MainWindow(QMainWindow):
     """Top-level application shell."""
 
@@ -232,6 +244,9 @@ class MainWindow(QMainWindow):
         # Every static / response spectrum result of the session, for load combinations.
         self._case_results = CaseResultsCache()
         self._report_extra: dict[int, tuple[str, Any]] = {}
+        #: View → Grid Line View: (line label, window) while active, else None.
+        self._grid_view: tuple[str, float] | None = None
+        self._grid_view_window: float | None = None
         self._analysis_error_box: QMessageBox | None = None  # last failure report
         self._stability_box: QMessageBox | None = None  # last stability check answer
         self._run_dialog: RunAnalysisDialog | None = None  # open while a Run dialog is shown
@@ -383,13 +398,15 @@ class MainWindow(QMainWindow):
 
         # Define
         self._act_grid = QAction("&Coordinate System/Grids…", self, shortcut="Ctrl+G")
+        self._act_grid_wizard = QAction("Grid &Wizard…", self)
         self._act_add_node = QAction("Add &Node…", self, shortcut="Ctrl+N")
         self._act_storeys = QAction("Store&ys…", self)
         self._act_groups = QAction("&Groups…", self)
         self._act_section_cuts = QAction("Section &Cuts…", self)
         self._act_custom_commands = QAction("Custom OpenSees Co&mmands…", self)
         self._act_assign_group = QAction("Assign to &Group…", self)
-        self._act_assign_group.setShortcut("Ctrl+G")
+        # Ctrl+G is Coordinate System/Grids: a shared shortcut fires neither.
+        self._act_assign_group.setShortcut("Ctrl+Shift+G")
         self._act_mass_source = QAction("Mass S&ource…", self)
         self._act_seismic_loads = QAction("Seismic &Loads (Equivalent Lateral Force)…", self)
         self._act_create_shell = QAction("Create S&hell from 4 Nodes…", self)
@@ -466,6 +483,13 @@ class MainWindow(QMainWindow):
         self._act_view_right = QAction("&Right (YZ)", self, shortcut="Ctrl+4")
         self._act_toggle_parallel = QAction("&Parallel projection", self, checkable=True)
         self._act_show_extruded = QAction("Show &Extruded Sections", self, checkable=True)
+        self._act_show_grids = QAction("Show &Grids", self, checkable=True, checked=True)
+        self._act_grid_line_view = QAction("Grid &Line View…", self)
+        self._act_show_all_objects = QAction("Show &All Objects", self)
+        self._act_show_all_objects.setEnabled(False)
+        self._act_show_grid_labels = QAction(
+            "Show Grid &Labels", self, checkable=True, checked=True
+        )
 
         self._act_about = QAction("&About OpenSees Studio…", self)
         self._act_help_contents = QAction("&Help Contents (F1)", self)
@@ -526,6 +550,7 @@ class MainWindow(QMainWindow):
 
         m_define = mb.addMenu("&Define")
         m_define.addAction(self._act_grid)
+        m_define.addAction(self._act_grid_wizard)
         m_define.addAction(self._act_storeys)
         m_define.addAction(self._act_groups)
         m_define.addAction(self._act_section_cuts)
@@ -559,39 +584,46 @@ class MainWindow(QMainWindow):
 
         m_assign = mb.addMenu("&Assign")
         # Joint submenu — operates on selected nodes.
-        m_joint = m_assign.addMenu("&Joint")
-        m_joint.addAction(self._act_assign_support)
-        m_joint.addAction(self._act_assign_masses)
-        m_joint.addAction(self._act_assign_springs)
-        m_joint.addAction(self._act_assign_equal_dof)
-        m_joint.addAction(self._act_assign_diaphragm)
-        m_joint.addAction(self._act_assign_rigid_link)
-        m_joint.addAction(self._act_remove_constraints)
-        m_joint.addAction(self._act_assign_load)
-        m_joint.addAction(self._act_assign_imposed_displacement)
-        m_joint.addAction(self._act_assign_zls)
-        m_joint.addAction(self._act_assign_bearing)
-        m_joint.addAction(self._act_assign_link)
+        # The same lists feed the right-click menu of a selection (None = separator).
+        self._joint_actions: list[QAction | None] = [
+            self._act_assign_support,
+            self._act_assign_masses,
+            self._act_assign_springs,
+            self._act_assign_equal_dof,
+            self._act_assign_diaphragm,
+            self._act_assign_rigid_link,
+            self._act_remove_constraints,
+            self._act_assign_load,
+            self._act_assign_imposed_displacement,
+            self._act_assign_zls,
+            self._act_assign_bearing,
+            self._act_assign_link,
+        ]
+        self._frame_actions: list[QAction | None] = [
+            self._act_assign_section,
+            self._act_assign_material,
+            self._act_assign_geom_transf,
+            self._act_assign_integration,
+            None,
+            self._act_assign_releases,
+            self._act_assign_end_offsets,
+            self._act_assign_insertion,
+            self._act_assign_modifiers,
+            None,
+            self._act_assign_distributed_load,
+            self._act_assign_trapezoidal_load,
+            self._act_assign_frame_point_load,
+            self._act_assign_hinge,
+        ]
+        self._area_actions: list[QAction | None] = [
+            self._act_assign_surface_load,
+            self._act_assign_floor_load,
+        ]
+        # Joint submenu — operates on selected nodes.
+        _add_actions(m_assign.addMenu("&Joint"), self._joint_actions)
         # Frame submenu — operates on selected frame elements.
-        m_frame = m_assign.addMenu("&Frame")
-        m_frame.addAction(self._act_assign_section)
-        m_frame.addAction(self._act_assign_material)
-        m_frame.addAction(self._act_assign_geom_transf)
-        m_frame.addAction(self._act_assign_integration)
-        m_frame.addSeparator()
-        m_frame.addAction(self._act_assign_releases)
-        m_frame.addAction(self._act_assign_end_offsets)
-        m_frame.addAction(self._act_assign_insertion)
-        m_frame.addAction(self._act_assign_modifiers)
-        m_frame.addSeparator()
-        m_frame.addAction(self._act_assign_distributed_load)
-        m_frame.addAction(self._act_assign_trapezoidal_load)
-        m_frame.addAction(self._act_assign_frame_point_load)
-        m_frame.addAction(self._act_assign_hinge)
-
-        m_area = m_assign.addMenu("A&rea")
-        m_area.addAction(self._act_assign_surface_load)
-        m_area.addAction(self._act_assign_floor_load)
+        _add_actions(m_assign.addMenu("&Frame"), self._frame_actions)
+        _add_actions(m_assign.addMenu("A&rea"), self._area_actions)
         m_assign.addSeparator()
         m_assign.addAction(self._act_assign_group)
 
@@ -627,6 +659,12 @@ class MainWindow(QMainWindow):
         m_view.addSeparator()
         m_view.addAction(self._act_toggle_parallel)
         m_view.addAction(self._act_show_extruded)
+        m_view.addSeparator()
+        m_view.addAction(self._act_show_grids)
+        m_view.addAction(self._act_show_grid_labels)
+        m_view.addSeparator()
+        m_view.addAction(self._act_grid_line_view)
+        m_view.addAction(self._act_show_all_objects)
 
         m_options = mb.addMenu("&Options")
         m_options.addAction(self._act_set_units)
@@ -854,6 +892,12 @@ class MainWindow(QMainWindow):
 
         # Define
         self._act_grid.triggered.connect(self._on_grid_system)
+        self._act_grid_wizard.triggered.connect(self._on_grid_wizard)
+        self._act_show_grids.triggered.connect(self._set_grids_shown)
+        self._act_show_grid_labels.triggered.connect(self._set_grid_labels_shown)
+        self._act_grid_line_view.triggered.connect(self._on_grid_line_view)
+        self._act_show_all_objects.triggered.connect(self._clear_grid_line_view)
+        self._canvas.contextMenuRequested.connect(self._on_canvas_context_menu)
         self._act_add_node.triggered.connect(self._on_add_node)
         self._act_create_shell.triggered.connect(self._on_create_shell)
         self._act_frame_wizard.triggered.connect(self._on_frame_wizard)
@@ -1569,12 +1613,7 @@ class MainWindow(QMainWindow):
         project = self._vm.project
         if project is None:
             return False
-        return any(
-            cs.grid.visible
-            and not cs.grid.hide_all
-            and bool(cs.grid.x_lines or cs.grid.y_lines or cs.grid.z_lines)
-            for cs in project.coord_systems
-        )
+        return any(cs.grid.shown for cs in project.coord_systems)
 
     def _abort_tool_activation(self) -> None:
         """Fall back to Select when a draw tool refused to arm."""
@@ -1965,6 +2004,229 @@ class MainWindow(QMainWindow):
             {node.id for node in truss.nodes}, {element.id for element in truss.elements}
         )
         self._log(f"{truss.summary()} Left selected.")
+
+    def _on_grid_wizard(self) -> None:
+        """Define → Grid Wizard: a regular Cartesian or radial grid, one undo step."""
+        if self._vm.project is None:
+            self._on_new()
+        project = self._vm.project
+        assert project is not None
+        dlg = GridWizardDialog(project.coord_systems, ndm=project.ndm, parent=self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        target = dlg.target()
+        if target:
+            systems = [
+                cs.model_copy(update={"grid": dlg.grid_system()}) if cs.name == target else cs
+                for cs in project.coord_systems
+            ]
+            name = target
+        else:
+            new = dlg.system()
+            systems = [*project.coord_systems, new]
+            name = new.name
+        self._vm.apply_command(SetCoordSystemsCommand(self._vm, systems))
+        self._log(f"Grid Wizard: grid of '{name}' set.")
+
+    def _set_grids_shown(self, shown: bool, name: str | None = None) -> None:
+        """Show or hide the grids (all, or the system called ``name``): an undo step.
+
+        The same flag as the Hide All Grid Lines box of the grid dialog.
+        """
+        project = self._vm.project
+        if project is None:
+            return
+        systems = [
+            cs.model_copy(update={"grid": cs.grid.model_copy(update={"hide_all": not shown})})
+            if name is None or cs.name == name
+            else cs
+            for cs in project.coord_systems
+        ]
+        if systems != project.coord_systems:
+            self._vm.apply_command(SetCoordSystemsCommand(self._vm, systems))
+        self._sync_grid_actions()
+
+    def _set_grid_labels_shown(self, shown: bool) -> None:
+        project = self._vm.project
+        if project is None:
+            return
+        systems = [
+            cs.model_copy(update={"grid": cs.grid.model_copy(update={"show_labels": shown})})
+            for cs in project.coord_systems
+        ]
+        if systems != project.coord_systems:
+            self._vm.apply_command(SetCoordSystemsCommand(self._vm, systems))
+        self._sync_grid_actions()
+
+    def _sync_grid_actions(self) -> None:
+        """Tick View → Show Grids / Labels from the project (checked when any shows)."""
+        project = self._vm.project
+        systems = project.coord_systems if project is not None else []
+        self._act_show_grids.setChecked(any(not cs.grid.hide_all for cs in systems))
+        self._act_show_grid_labels.setChecked(any(cs.grid.show_labels for cs in systems))
+
+    def _on_canvas_context_menu(self, pos: QPoint) -> None:
+        """Right-click on the model view: grid visibility, labels and grid editing."""
+        menu = self._canvas_context_menu()
+        menu.exec(pos)
+        menu.deleteLater()
+
+    def _canvas_context_menu(self) -> QMenu:
+        """What the right-click shows: the selection's options, or grids and view."""
+        selection = self._canvas.selection
+        if not selection.is_empty:
+            return self._selection_context_menu(selection.nodes, selection.elements)
+        menu = QMenu(self)
+        project = self._vm.project
+        if project is not None:
+            self._sync_grid_actions()
+            menu.addAction(self._act_show_grids)
+            if len(project.coord_systems) > 1:
+                per_system = menu.addMenu("Grids by system")
+                for cs in project.coord_systems:
+                    action = per_system.addAction(cs.name)
+                    action.setCheckable(True)
+                    action.setChecked(not cs.grid.hide_all)
+                    action.triggered.connect(
+                        lambda checked, name=cs.name: self._set_grids_shown(checked, name)
+                    )
+            menu.addAction(self._act_show_grid_labels)
+            menu.addSeparator()
+        menu.addAction(self._act_grid)
+        menu.addAction(self._act_grid_wizard)
+        menu.addSeparator()
+        menu.addAction(self._act_grid_line_view)
+        menu.addAction(self._act_show_all_objects)
+        menu.addSeparator()
+        menu.addActions(
+            [self._act_view_iso, self._act_view_top, self._act_view_front, self._act_view_right]
+        )
+        menu.addAction(self._act_zoom_extents)
+        return menu
+
+    def _selection_context_menu(self, nodes: frozenset[int], elements: frozenset[int]) -> QMenu:
+        """Right-click with something selected: what can be assigned or edited on it."""
+        from opensees_studio.core.geometry import (
+            FRAME_ELEMENT_CLASSES,
+            QuadElement,
+            ShellMITC4Element,
+        )
+
+        self._refresh_action_enablement()
+        menu = QMenu(self)
+        project = self._vm.project
+        kinds = [
+            type(e) for e in (project.elements if project is not None else []) if e.id in elements
+        ]
+        frames = sum(1 for k in kinds if issubclass(k, FRAME_ELEMENT_CLASSES))
+        areas = sum(1 for k in kinds if issubclass(k, QuadElement | ShellMITC4Element))
+        parts = [f"{len(nodes)} joint(s)"] if nodes else []
+        if elements:
+            parts.append(f"{len(elements)} element(s)")
+        header = menu.addAction(", ".join(parts) + " selected")
+        header.setEnabled(False)
+        menu.addSeparator()
+        groups = [
+            ("Joint", self._joint_actions, bool(nodes)),
+            ("Frame", self._frame_actions, frames > 0),
+            ("Area", self._area_actions, areas > 0),
+        ]
+        wanted = [(title, actions) for title, actions, on in groups if on]
+        for title, actions in wanted:
+            # One kind selected: its options straight in the menu; several: a submenu each.
+            _add_actions(menu if len(wanted) == 1 else menu.addMenu(title), actions)
+        if wanted:
+            menu.addSeparator()
+        menu.addAction(self._act_assign_group)
+        menu.addSeparator()
+        menu.addActions([self._act_move, self._act_replicate, self._act_mirror])
+        menu.addSeparator()
+        menu.addAction(self._act_delete)
+        menu.addAction(self._act_clear_selection)
+        return menu
+
+    # ── View → Grid Line View ───────────────────────────────────────
+    def _on_grid_line_view(self) -> None:
+        """Show only the objects on one grid line (± a window) and look at it face on."""
+        project = self._vm.project
+        if project is None:
+            return
+        current = self._grid_view[0] if self._grid_view is not None else None
+        dlg = GridLineViewDialog(
+            project, current=current, window=self._grid_view_window, parent=self
+        )
+        if dlg.exec() != QDialog.DialogCode.Accepted or dlg.line() is None:
+            return
+        ref = dlg.line()
+        assert ref is not None
+        self._grid_view_window = dlg.tolerance()
+        self._grid_view = (ref.label, self._grid_view_window)
+        self._apply_grid_line_view()
+        self._face_grid_line(ref)
+
+    def _apply_grid_line_view(self) -> None:
+        """(Re)install the canvas filter for the current grid line view, if any."""
+        from opensees_studio.core.grid_view import (
+            filtered_project,
+            find_grid_line,
+            objects_on_line,
+        )
+
+        project = self._vm.project
+        state = self._grid_view
+        ref = find_grid_line(project, state[0]) if project is not None and state else None
+        if state is None or ref is None:
+            if state is not None:
+                self._log(f"Grid line view: '{state[0]}' no longer exists, showing everything.")
+            self._grid_view = None
+            self._canvas.set_view_filter(None)
+            self._act_show_all_objects.setEnabled(False)
+            return
+        window = state[1]
+
+        def keep(full: Project) -> Project:
+            nodes, elements = objects_on_line(full, ref, window)
+            return filtered_project(full, nodes, elements)
+
+        self._canvas.set_view_filter(keep)
+        self._act_show_all_objects.setEnabled(True)
+        nodes, elements = objects_on_line(project, ref, window)  # type: ignore[arg-type]
+        self.statusBar().showMessage(
+            f"Grid line view {ref.label} ± {window:g}: {len(nodes)} joint(s), "
+            f"{len(elements)} element(s). View → Show All Objects to see everything."
+        )
+
+    def _face_grid_line(self, ref: Any) -> None:
+        """Look at a plane line face on, with its level as the working plane."""
+        if ref.cylindrical and ref.axis != 2:
+            self._on_view_iso()
+            return
+        plane = ("YZ", "XZ", "XY")[ref.axis]
+        project = self._vm.project
+        system = next(cs for cs in project.coord_systems if cs.name == ref.system)  # type: ignore[union-attr]
+        point = [0.0, 0.0, 0.0]
+        point[ref.axis] = ref.ordinate
+        offset = system.coord.local_to_world((point[0], point[1], point[2]))[ref.axis]
+        {"YZ": self._on_view_right, "XZ": self._on_view_front, "XY": self._on_view_top}[plane]()
+        index = next(
+            (
+                i
+                for i in range(self._level_combo.count())
+                if abs(float(self._level_combo.itemData(i)) - offset) < 1e-6
+            ),
+            -1,
+        )
+        if index >= 0:
+            self._level_combo.setCurrentIndex(index)
+        else:
+            self._canvas.set_working_plane(plane, offset)
+        self._canvas.reframe()
+
+    def _clear_grid_line_view(self) -> None:
+        self._grid_view = None
+        self._apply_grid_line_view()
+        self._canvas.reframe()
+        self.statusBar().showMessage("Showing all objects.", 3000)
 
     def _on_add_node(self) -> None:
         if self._vm.project is None:
@@ -4024,9 +4286,10 @@ class MainWindow(QMainWindow):
         attr = axis_to_attr[plane]
         acc: set[float] = set()
         for cs in self._vm.project.coord_systems:
-            if not cs.grid.visible or cs.grid.hide_all:
+            if not cs.grid.shown or (cs.grid.is_cylindrical and plane != "XY"):
+                # A cylindrical grid has levels (Z) but no X or Y lines.
                 continue
-            ords = getattr(cs.grid, attr)
+            ords = cs.grid.visible_ordinates()[{"x_lines": 0, "y_lines": 1, "z_lines": 2}[attr]]
             # For non-Global systems we'd need to transform through the
             # coord system's origin+rotation. For the first cut we apply
             # a simple translation (ignore rotation) since only the
@@ -4066,6 +4329,12 @@ class MainWindow(QMainWindow):
         self._canvas.set_working_plane(plane, float(data))
 
     def _on_project_changed(self, project: Project | None) -> None:
+        self._sync_grid_actions()
+        # Another project: its grid lines are not the ones being viewed.
+        self._grid_view = None
+        self._grid_view_window = None
+        self._canvas.set_view_filter(None)
+        self._act_show_all_objects.setEnabled(False)
         # Results of another project (or of the closed one) never feed a combination.
         self._case_results.clear()
         self._report_extra.clear()
@@ -4083,9 +4352,13 @@ class MainWindow(QMainWindow):
         # Same project, contents changed: re-render but DON'T reset camera.
         # We still clear and re-add actors, which loses selection — but the
         # selection state persists, so highlights re-apply.
-        if self._vm.project is not None:
+        if self._grid_view is not None:
+            # The line may have moved or gone: re-resolve it (this redraws).
+            self._apply_grid_line_view()
+        elif self._vm.project is not None:
             self._canvas._renderer.render(self._vm.project)
             self._canvas.render()
+        self._sync_grid_actions()
         self._refresh_tree(self._vm.project)
         # Update the property editor with the (possibly new) entity values
         # at the current selection.
