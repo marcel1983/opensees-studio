@@ -4358,6 +4358,7 @@ class MainWindow(QMainWindow):
         elif self._vm.project is not None:
             self._canvas._renderer.render(self._vm.project)
             self._canvas.render()
+        self._sync_grid_actions()
         self._refresh_tree(self._vm.project)
         # Update the property editor with the (possibly new) entity values
         # at the current selection.

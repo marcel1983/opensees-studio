@@ -134,6 +134,7 @@ def test_hide_grids_from_view_menu_is_undoable(qtbot) -> None:  # type: ignore[n
     assert not mw._act_show_grids.isChecked()
     mw._vm.undo_stack.undo()
     assert not any(cs.grid.hide_all for cs in mw._vm.project.coord_systems)
+    assert mw._act_show_grids.isChecked()  # the tick follows Ctrl+Z
     mw._set_grids_shown(False, "B")
     hidden = {cs.name: cs.grid.hide_all for cs in mw._vm.project.coord_systems}
     assert hidden == {"Global": False, "B": True}

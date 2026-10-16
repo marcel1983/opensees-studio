@@ -25,24 +25,6 @@ if TYPE_CHECKING:
     from opensees_studio.views.canvas3d import ModelCanvas
 
 
-def _snap_to_grid(
-    x: float,
-    y: float,
-    z: float,
-    x_lines: list[float],
-    y_lines: list[float],
-    z_lines: list[float],
-) -> tuple[float, float, float]:
-    """Snap each coordinate to its closest grid line (identity on empty axes)."""
-
-    def nearest(v: float, lines: list[float]) -> float:
-        if not lines:
-            return v
-        return min(lines, key=lambda c: abs(c - v))
-
-    return nearest(x, x_lines), nearest(y, y_lines), nearest(z, z_lines)
-
-
 def _snap_across_systems(
     world: tuple[float, float, float],
     systems: list[CoordinateGridSystem],

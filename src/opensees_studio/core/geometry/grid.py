@@ -250,12 +250,13 @@ class GridSystem(BaseModel):
 
         ``axes`` are the local Cartesian coordinates allowed to move (the
         working plane's two in-plane axes; all three by default). A cylindrical
-        grid snaps radius and angle together when X or Y may move.
+        grid snaps radius and angle together, and only when both X and Y may move:
+        in an elevation it snaps the level alone, so the point stays on the plane.
         """
         xs, ys, zs = self.visible_ordinates()
         out = list(point)
         if self.is_cylindrical:
-            if 0 in axes or 1 in axes:
+            if 0 in axes and 1 in axes:
                 r = math.hypot(point[0], point[1])
                 a = math.degrees(math.atan2(point[1], point[0]))
                 r = _nearest(r, xs)

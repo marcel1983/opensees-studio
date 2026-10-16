@@ -50,6 +50,8 @@ def test_radial_snap_moves_radius_and_angle_together() -> None:
     assert grid.snap_local((6.0, 6.5, 0.2)) == (0.0, 10.0, 0.0)
     # Working plane XY: the elevation stays where it is.
     assert grid.snap_local((-4.0, 0.5, 1.2), axes=(0, 1)) == (-5.0, 0.0, 1.2)
+    # Elevation (XZ): the point stays on its plane, only the level snaps.
+    assert grid.snap_local((6.0, 0.0, 2.6), axes=(0, 2)) == (6.0, 0.0, 3.0)
     # Angles wrap: -80° is closest to 270°.
     snapped = grid.snap_local((1.0, -6.0, 0.0))
     assert snapped == (0.0, -5.0, 0.0)
