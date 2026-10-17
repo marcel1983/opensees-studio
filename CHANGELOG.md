@@ -9,6 +9,14 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Analyze → Run All Cases and Run Selected Cases came back disabled after a
+  run.** The window refreshed its menus on the runner's `finished` signal, which
+  fires while the run still reports itself as running; the flag only drops in
+  the teardown that follows, and nothing listened to it. The menu state now
+  refreshes on `runningChanged` too.
+
 ## [0.0.16] — 2026-10-17
 
 ### Added

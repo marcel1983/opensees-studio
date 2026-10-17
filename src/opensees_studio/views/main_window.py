@@ -1073,6 +1073,10 @@ class MainWindow(QMainWindow):
         self._stability.finished.connect(self._on_stability_report)
         self._stability.failed.connect(self._on_stability_failed)
         self._stability.runningChanged.connect(lambda _running: self._refresh_action_enablement())
+        # The runner's own flag flips to False only after ``finished`` has been
+        # handled (teardown emits it), so the batch actions would stay disabled
+        # for the rest of the session without this connection.
+        self._runner.runningChanged.connect(lambda _running: self._refresh_action_enablement())
 
         # Display
         self._act_select_results.triggered.connect(self._on_select_results)
