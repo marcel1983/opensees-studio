@@ -9,6 +9,14 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Display → Export animation** no longer fails when the viewport height or
+  width is odd. libx264 with the `yuv420p` pixel format — the one every player
+  decodes — needs both dimensions even, so a 1200×537 window aborted with
+  "height not divisible by 2" and a broken pipe. Frames are now padded by the
+  one pixel needed; a frame that already fits is written at its own size.
+
 ## [0.0.14] — 2026-10-16
 
 The grids release: radial (cylindrical) grids, a Grid Wizard, labels at the
