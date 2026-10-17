@@ -649,6 +649,14 @@ Status legend: ✅ done · 🟡 partial · ⬜ planned · ✂️ deferred / out-
 - ✅ Grid tools (0.0.14): radial grids, Grid Wizard, grid labels, Add Row that
   continues the grid, Show/Hide grids, Grid Line View (objects on one grid line
   within a window), selection-aware right-click menu.
+- ✅ View toolkit and results archive (0.0.15): a second (third, …) viewport on
+  the same model in its own window, sharing the selection; per-viewport
+  visibility switches (grids, nodes, frames, shells, restraints, constraints,
+  assignments, loads, labels, extrusions), hide selected and invert, zoom in/out
+  and editable colours; only File and Help enabled until a project exists; every
+  finished run appended to a queryable SQLite database (`<project>_results.sqlite`)
+  with all node and element results; Analyze → Run All Cases and Run Selected
+  Cases. Also fixes MP4 export failing on an odd viewport height.
 
 ## Maintenance / debt
 - ⬜ Canonical float serialization in `.osmodel` (platform last-digit noise

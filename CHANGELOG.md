@@ -9,6 +9,8 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.15] — 2026-10-17
+
 The view toolkit — a second viewport on the same model, per-viewport visibility
 switches, hiding and inverting what is drawn, zoom and custom colours — plus a
 queryable results database and batch run doors.
