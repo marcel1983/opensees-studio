@@ -37,6 +37,7 @@ query never scans the file end to end.
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -158,7 +159,7 @@ def record_results(
     """
     path = Path(db_path) if db_path is not None else database_path(project_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(path) as con:
+    with closing(sqlite3.connect(path)) as con, con:
         _ensure_schema(con)
         if isinstance(results, CombinationResults):
             first = _record_static(
@@ -540,12 +541,12 @@ def read_runs(db_path: str | Path) -> list[sqlite3.Row]:
     path = Path(db_path)
     if not path.exists():
         return []
-    with sqlite3.connect(path) as con:
+    with closing(sqlite3.connect(path)) as con, con:
         con.row_factory = sqlite3.Row
         return list(con.execute("SELECT * FROM runs ORDER BY run_id"))
 
 
 def count_rows(db_path: str | Path, table: str) -> int:
     """Row count of ``table`` (a diagnostic, and what the tests assert on)."""
-    with sqlite3.connect(Path(db_path)) as con:
+    with closing(sqlite3.connect(Path(db_path))) as con, con:
         return int(con.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
