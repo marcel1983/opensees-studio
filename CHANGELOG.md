@@ -9,23 +9,9 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
-### Added
-
-- **Results database.** Every finished case is appended to
-  `<project>_results.sqlite` beside the model: one row per node, element and
-  step — displacements, reactions, local forces, shell resultants, storey shear,
-  section cuts, modal eigenvalues and mode shapes — with an append-only `runs`
-  history and indexes on the ids. Load combinations record their two bounds; a
-  response spectrum records its peaks; a transient records its HDF5 path and
-  indexes the node displacement history. A database that cannot be written is a
-  warning, never a failed run.
-- **Analyze → Run All Cases** (`Shift+F5`) and **Analyze → Run Selected
-  Cases…**, which run the whole model or a ticked subset in one child process.
-
-The view toolkit: a second viewport on the same model, per-viewport visibility
-switches, hiding and inverting what is drawn, zoom in/out, custom colours, and a
-menu bar that only offers File and Help until a project exists. Projects that
-customise none of it save exactly as before (schema 3 unchanged).
+The view toolkit — a second viewport on the same model, per-viewport visibility
+switches, hiding and inverting what is drawn, zoom and custom colours — plus a
+queryable results database and batch run doors.
 
 ### Added
 
@@ -44,6 +30,16 @@ customise none of it save exactly as before (schema 3 unchanged).
   Extents.
 - **View → Colors…**: the background gradient, node, frame, shell and
   selection-highlight colours, per viewport.
+- **Results database.** Every finished case is appended to
+  `<project>_results.sqlite` beside the model: one row per node, element and
+  step — displacements, reactions, local forces, shell resultants, storey shear,
+  section cuts, modal eigenvalues and mode shapes — with an append-only `runs`
+  history and indexes on the ids. Load combinations record their two bounds; a
+  response spectrum records its peaks; a transient records its HDF5 path and
+  indexes the node displacement history. A database that cannot be written is a
+  warning, never a failed run.
+- **Analyze → Run All Cases** (`Shift+F5`) and **Analyze → Run Selected
+  Cases…**, which run the whole model or a ticked subset in one child process.
 - The `.osmodel` payload records the primary viewport's display settings under
   `view`, omitted while they are the defaults, so an untouched project still
   saves byte-identical. Window geometry and the default viewport persist
@@ -53,6 +49,13 @@ customise none of it save exactly as before (schema 3 unchanged).
 
 - The menu bar enables only **File** and **Help** until a project is created or
   opened; the rest light up with the first New or Open.
+
+### Fixed
+
+- **Display → Export animation** no longer fails when the viewport height or
+  width is odd. libx264 with the `yuv420p` pixel format needs both dimensions
+  even, so a 1200×537 window aborted with "height not divisible by 2" and a
+  broken pipe; frames are now padded by the one pixel needed.
 
 ## [0.0.14] — 2026-10-16
 
