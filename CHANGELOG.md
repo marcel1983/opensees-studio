@@ -9,6 +9,43 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.18] — 2026-10-17
+
+A render performance pass, measured before it was optimised. A model of 1.5k
+nodes and 4.3k members now builds in ~51 ms with 7 draw calls, down from 606 ms
+and 202; a supported 500-node model went from 292 ms to 21 ms. The roadmap
+target — 10k nodes / 20k frames at 30 fps — is not reached yet, and the roadmap
+lists what is left.
+
+### Added
+
+- **`tools/render_bench.py` and a render budget.** The benchmark builds
+  synthetic node/frame grids and measures the geometry build and the number of
+  actors without opening a GPU context, so it runs in CI. `tools/render-budget.txt`
+  records the ceilings and `tests/tools/test_render_budget.py` fails when one is
+  exceeded: the actor count is exact, the time ceilings carry margin for a busy
+  runner.
+
+### Changed
+
+- **Frame assignments no longer validate a pydantic model per member.**
+  `_Options.is_default()` built a throwaway model and compared it with `==` —
+  27k calls on a 13.6k-member model, 241 ms of the 269 ms base render. It now
+  compares against a per-class cached field dict: 606 → 446 ms on 1.5k nodes /
+  4.3k frames.
+- **Supports and section extrusions batch their geometry.** One actor per
+  support kind instead of one per restrained joint, and a single merged
+  `UnstructuredGrid` for the extrusion overlay: 202 → 7 actors and 492 → 71 ms
+  on the same model.
+- **The joint marker is cached and lighter.** Its sphere template is built once
+  per radius and drops from 8×8 to 6×6: 76 → 51 ms on the same model.
+
+### Known limitations
+
+- Loads still draw one actor per arrow, `update_selection` re-glyphs the whole
+  node cloud on every selection change, and every edit rebuilds all categories.
+  Those three are the next steps of the pass, listed in the roadmap.
+
 ## [0.0.17] — 2026-10-17
 
 ### Added
