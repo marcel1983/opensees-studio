@@ -23,7 +23,7 @@ from PySide6.QtWidgets import QLabel, QToolTip, QWidget
 from pyvistaqt import QtInteractor
 
 from opensees_studio.core import Project
-from opensees_studio.core.selection import elements_with_nodes_inside
+from opensees_studio.core.selection import box_selection
 from opensees_studio.core.view_settings import ViewSettings
 from opensees_studio.views.canvas3d.model_renderer import ModelRenderer
 from opensees_studio.views.canvas3d.selection import SelectionState
@@ -174,7 +174,7 @@ class ModelCanvas(QtInteractor):
         elif event.button() == Qt.MouseButton.RightButton:
             self._right_press_pos = event.position()
             self._right_press_camera = self._camera_state()
-        super().mousePressEvent(event)
+        super().mousePressEvent(event)  # type: ignore[no-untyped-call]
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         # VTK finishes its interaction inside `super()` and may still apply the
@@ -201,7 +201,7 @@ class ModelCanvas(QtInteractor):
             )
             super().mouseReleaseEvent(forwarded)  # type: ignore[no-untyped-call]
             return
-        super().mouseReleaseEvent(event)
+        super().mouseReleaseEvent(event)  # type: ignore[no-untyped-call]
         if event.button() == Qt.MouseButton.RightButton:
             press = getattr(self, "_right_press_pos", None)
             self.__dict__.pop("_right_press_pos", None)
@@ -256,7 +256,7 @@ class ModelCanvas(QtInteractor):
         if self._box_origin is not None:
             self._show_rubber_band(self._box_origin, event.position())
             return
-        super().mouseMoveEvent(event)
+        super().mouseMoveEvent(event)  # type: ignore[no-untyped-call]
         if self.element_tooltip is not None:
             self._update_element_tooltip(event.position().x(), event.position().y())
         if not self._snap_preview_enabled:
@@ -406,11 +406,12 @@ class ModelCanvas(QtInteractor):
             self._rubber_band.hide()
 
     def _select_in_box(self, rect: QRectF) -> None:
-        """Select every joint inside the box, and the members whose joints both are.
+        """Select what the rubber-band rectangle encloses.
 
-        The rectangle is in Qt logical pixels; the projection below is in device
-        pixels with the origin at the bottom-left, so it is converted once. A
-        member counts when *both* of its joints fall inside.
+        Dragging downwards takes only what is fully inside; dragging upwards
+        also takes what the box merely touches, so a member that crosses it is
+        picked. The rectangle is in Qt logical pixels; the projection is in
+        device pixels with the origin at the bottom-left.
         """
         project = self._renderer._source_project
         if project is None or not project.nodes:
@@ -423,19 +424,38 @@ class ModelCanvas(QtInteractor):
         bottom = (height - rect.bottom()) * dpr
 
         coords = np.asarray([node.coords for node in project.nodes], dtype=float)
-        try:
-            display = np.asarray(self.renderer.world_to_display(coords), dtype=float)
-        except Exception:
-            return
-        inside = (
-            (display[:, 0] >= min(left, right))
-            & (display[:, 0] <= max(left, right))
-            & (display[:, 1] >= min(top, bottom))
-            & (display[:, 1] <= max(top, bottom))
+        display = np.asarray(self.renderer.world_to_display(coords), dtype=float)[:, :2]
+        # VTK reports device pixels; some PyVista paths normalise to 0-1. Bring
+        # both to pixels once, or the rectangle matches nothing at all.
+        window = self.render_window
+        if window is not None and display.size and float(np.max(np.abs(display))) <= 1.5:
+            width_px, height_px = window.GetSize()[:2]
+            display = display * np.array([float(width_px), float(height_px)])
+        screen = {
+            node.id: (float(point[0]), float(point[1]))
+            for node, point in zip(project.nodes, display, strict=True)
+        }
+
+        # Qt's y grows downwards: a downwards drag has release.y > press.y, so
+        # the (already normalised) rect has top < bottom.
+        crossing = rect.top() < rect.bottom()
+        box_rect = (
+            min(left, right),
+            max(left, right),
+            min(top, bottom),
+            max(top, bottom),
         )
-        selected_nodes = {node.id for node, hit in zip(project.nodes, inside, strict=True) if hit}
-        selected_elements = elements_with_nodes_inside(project, selected_nodes)
-        self.selection.set_selection(selected_nodes, selected_elements)
+        picked_nodes, picked_elements = box_selection(project, screen, box_rect, crossing=crossing)
+        if self._is_additive_modifier():
+            self.selection.set_selection(
+                set(self.selection.nodes) - picked_nodes,
+                set(self.selection.elements) - picked_elements,
+            )
+        else:
+            self.selection.set_selection(
+                set(self.selection.nodes) | picked_nodes,
+                set(self.selection.elements) | picked_elements,
+            )
 
     def _handle_click(self, qt_x: float, qt_y: float) -> None:
         """Run our screen-space picking from Qt-coordinate (top-left origin).
@@ -869,20 +889,25 @@ class ModelCanvas(QtInteractor):
         return (float(point[0]), float(point[1]), float(point[2]))
 
     def _dispatch_pick(self, kind: str, entity_id: int) -> None:
-        additive = self._is_additive_modifier()
+        # A click accumulates: the usual gesture is building a selection, not
+        # restarting it. Ctrl takes one item out, and Ctrl on something that is
+        # not selected does nothing.
+        remove = self._is_additive_modifier()
         if kind == "node":
             if self._default_selection_enabled:
-                if additive:
-                    self.selection.toggle_node(entity_id)
+                if remove:
+                    if entity_id in self.selection.nodes:
+                        self.selection.toggle_node(entity_id)
                 else:
-                    self.selection.select_node(entity_id)
+                    self.selection.select_node(entity_id, additive=True)
             self.nodePicked.emit(entity_id)
         elif kind == "element":
             if self._default_selection_enabled:
-                if additive:
-                    self.selection.toggle_element(entity_id)
+                if remove:
+                    if entity_id in self.selection.elements:
+                        self.selection.toggle_element(entity_id)
                 else:
-                    self.selection.select_element(entity_id)
+                    self.selection.select_element(entity_id, additive=True)
             self.elementPicked.emit(entity_id)
 
     def _is_additive_modifier(self) -> bool:

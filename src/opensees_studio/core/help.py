@@ -1345,11 +1345,12 @@ One undo step takes the whole repair back.
             "Edit and tools",
             "The default tool: click to select, drag a box, middle-drag to orbit, wheel to zoom.",
             """
-Clicking a node or an element selects it; Ctrl+click adds to the selection;
-clicking empty space clears it. Dragging with the left button draws a selection
-box: every joint inside is selected, and a member joins when **both** its joints
-are inside, so one that merely crosses the box is left out. The camera turns
-with a middle-button drag, which the left button no longer does.
+Clicking a node or an element **adds** it to the selection, so building one is
+just clicking; Ctrl+click takes an item out, and clicking empty space clears the
+lot. Dragging with the left button draws a box: dragged **downwards** it takes
+only what is fully inside; dragged **upwards** it also takes what the box
+touches, so a member that crosses it is picked. The camera turns with a
+middle-button drag, which the left button no longer does.
 
 With nothing else active this is also what unlocks the model for inspection:
 hovering an element shows its properties, and the property dock follows the
