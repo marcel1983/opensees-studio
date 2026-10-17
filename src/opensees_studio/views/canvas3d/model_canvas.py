@@ -23,6 +23,7 @@ from PySide6.QtWidgets import QToolTip, QWidget
 from pyvistaqt import QtInteractor
 
 from opensees_studio.core import Project
+from opensees_studio.core.view_settings import ViewSettings
 from opensees_studio.views.canvas3d.model_renderer import ModelRenderer
 from opensees_studio.views.canvas3d.selection import SelectionState
 from opensees_studio.views.canvas3d.style import RenderStyle
@@ -76,8 +77,9 @@ class ModelCanvas(QtInteractor):
     ) -> None:
         super().__init__(parent)
         self._style = style or RenderStyle()
+        self._settings = ViewSettings()
         self.selection = selection or SelectionState(self)
-        self._renderer = ModelRenderer(self, self._style)
+        self._renderer = ModelRenderer(self, self._style, self._settings)
         self._default_selection_enabled = True
         self._snap_preview_enabled = False  # toggled by Draw tools
         #: Optional provider of hover text per element id (set by the main
@@ -539,6 +541,11 @@ class ModelCanvas(QtInteractor):
         self.renderer.reset_camera()
         self.render()
 
+    def refresh(self, project: Project | None) -> None:
+        """Re-render ``project`` without moving the camera (model edits)."""
+        self._renderer.render(project)
+        self.render()
+
     def clear_model(self) -> None:
         """Remove the current model but keep the grid/axes furniture."""
         self.selection.clear()
@@ -598,6 +605,49 @@ class ModelCanvas(QtInteractor):
             show_node_labels=show_node_labels,
             show_element_labels=show_element_labels,
         )
+        self._settings = self._renderer.settings
+        self.render()
+
+    # ── per-viewport settings, hiding and zoom ──────────────────────
+    @property
+    def view_settings(self) -> ViewSettings:
+        """Visibility toggles and colours of this viewport."""
+        return self._settings
+
+    def set_view_settings(self, settings: ViewSettings) -> None:
+        """Adopt ``settings``: background, colours and visibility in one go."""
+        self._settings = settings
+        # QtInteractor.set_background is typed through a descriptor wrapper that
+        # mypy cannot resolve; the call itself is the one the scene furniture
+        # already makes.
+        self.set_background(settings.background_bottom, top=settings.background_top)  # type: ignore[arg-type]
+        self._renderer.set_settings(settings)
+        self.render()
+
+    def set_hidden(self, *, nodes: set[int], elements: set[int]) -> None:
+        """Hide these ids in this viewport only (the project is untouched)."""
+        self._renderer.set_hidden(nodes, elements)
+        self.render()
+
+    @property
+    def hidden(self) -> tuple[frozenset[int], frozenset[int]]:
+        """``(nodes, elements)`` hidden in this viewport."""
+        return self._renderer.hidden
+
+    def zoom_in(self, factor: float = 1.25) -> None:
+        """Dolly the camera towards the model."""
+        camera = self.camera
+        if camera is None:
+            return
+        camera.Zoom(factor)
+        self.render()
+
+    def zoom_out(self, factor: float = 1.25) -> None:
+        """Dolly the camera away from the model."""
+        camera = self.camera
+        if camera is None:
+            return
+        camera.Zoom(1.0 / factor)
         self.render()
 
     def set_default_selection_enabled(self, enabled: bool) -> None:

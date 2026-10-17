@@ -50,6 +50,7 @@ from opensees_studio.core.sections import Section
 from opensees_studio.core.storeys import Storey
 from opensees_studio.core.target_spectrum import TargetSpectrum
 from opensees_studio.core.units import UnitSystem
+from opensees_studio.core.view_settings import ViewSettings
 
 
 class ProjectMeta(BaseModel):
@@ -92,6 +93,7 @@ class Project(BaseModel):
         "groups",
         "section_cuts",
         "custom_commands",
+        "view",
     )
 
     # 1 = pre ground-motion catalog (records embedded in PathTimeSeries),
@@ -114,6 +116,14 @@ class Project(BaseModel):
     )
     nodes: list[Node] = Field(default_factory=list)
     materials: list[Material] = Field(default_factory=list)
+
+    view: ViewSettings | None = None
+    """Display settings of the primary viewport (View → Visibility / Colors).
+
+    ``None`` — the default, and what every file written before this field
+    existed means — renders with :class:`ViewSettings` defaults, so an
+    untouched project still saves byte-identical.
+    """
 
     @model_validator(mode="before")
     @classmethod

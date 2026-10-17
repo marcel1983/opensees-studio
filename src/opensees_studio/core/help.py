@@ -3166,6 +3166,68 @@ transparently. Two things become visible that are hard to see otherwise:
             "display.options",
             "assign.geom_transf",
         ),
+        "view.visibility": _t(
+            "View → Visibility",
+            "View",
+            "Show or hide model categories in this viewport.",
+            """
+One checkbox per category: grids, nodes, frames, shells, restraints, constraints,
+frame assignments, loads, node and element labels, and extruded sections. A
+change is **per viewport** — the model keeps every entity, so the tree, the
+analysis and the other views are unaffected.
+
+- **Hide Selected** (Ctrl+H) hides what is selected now, adding it to what is
+  already hidden.
+- **Invert Visible** swaps the two sets: what is drawn disappears and what was
+  hidden comes back.
+- **Show All Objects** restores everything.
+
+Hiding is how to look inside a dense model (the framing under a slab, the inside
+of a wall of shells) without deleting or filtering anything.
+""",
+            "view.colors",
+            "view.grid_line_view",
+        ),
+        "view.colors": _t(
+            "View → Colors",
+            "View",
+            "Change the viewport background and entity colours.",
+            """
+Six colours, all per viewport: background top and bottom (the gradient behind
+the model), nodes, frames, shells, and the selection highlight. Useful when a
+model is projected or printed and the default palette does not read well, and to
+tell two viewports apart at a glance.
+""",
+            "view.visibility",
+            "display.options",
+        ),
+        "view.new_window": _t(
+            "View → New View Window",
+            "View",
+            "Open a second viewport on the same project.",
+            """
+Each window is an independent viewport: its own camera, colours and Visibility
+toggles. The model is shared, and so is the selection — clicking a joint or an
+element highlights it in **every** window at once, which is how two angles of the
+same model stay in step while you work.
+
+Use it to keep a plan view and an isometric one side by side, or to put one
+window on a second monitor. The file stores the primary window's display
+settings; secondary windows live for the session.
+""",
+            "view.visibility",
+            "view.colors",
+        ),
+        "view.close_window": _t(
+            "View → Close View Window",
+            "View",
+            "Close the viewport the View menu is acting on.",
+            """
+Closes the active secondary viewport. The main window's viewport cannot be
+closed, and closing the main window closes every secondary one with it.
+""",
+            "view.new_window",
+        ),
         # ──────────────────────────── Options and Help ────────────────────────────
         "options.units": _t(
             "Options → Set Display Units",
@@ -3682,6 +3744,25 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_view_right": "view.right",
     "_act_toggle_parallel": "view.parallel",
     "_act_show_extruded": "view.show_extruded",
+    "_act_zoom_in": "view.zoom_extents",
+    "_act_zoom_out": "view.zoom_extents",
+    "_act_hide_selected": "view.visibility",
+    "_act_invert_visible": "view.visibility",
+    "_act_view_colors": "view.colors",
+    "_act_new_view": "view.new_window",
+    "_act_close_view": "view.close_window",
+    "_act_vis_grids": "view.visibility",
+    "_act_vis_grid_labels": "view.visibility",
+    "_act_vis_nodes": "view.visibility",
+    "_act_vis_frames": "view.visibility",
+    "_act_vis_surfaces": "view.visibility",
+    "_act_vis_supports": "view.visibility",
+    "_act_vis_constraints": "view.visibility",
+    "_act_vis_frame_assignments": "view.visibility",
+    "_act_vis_loads": "view.visibility",
+    "_act_vis_node_labels": "view.visibility",
+    "_act_vis_element_labels": "view.visibility",
+    "_act_vis_extruded": "view.show_extruded",
     # ── Options and Help ────────────────────────────────────────────
     "_act_set_units": "options.units",
     "_act_help_contents": "help.contents",
