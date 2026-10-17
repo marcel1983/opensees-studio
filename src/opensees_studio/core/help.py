@@ -1192,10 +1192,14 @@ Selection (Esc) to pick one set alone.
         "edit.move": _t(
             "Edit → Move",
             "Edit and tools",
-            "Translate the selected nodes in place by (dx, dy, dz).",
+            "Translate the selected nodes or members in place by (dx, dy, dz).",
             """
-Moves the selected nodes, and with them every element that uses them: this is
+Moves the selection, and with it every element that uses those nodes: this is
 the transform that changes the model rather than copying it.
+
+Selecting a member is enough: its joints move with it, so you do not have to
+pick the nodes first. A joint shared with a member you did not select moves as
+well, and that member follows its joint.
 
 # Values
 - **dX, dY, dZ** — the displacement, in project units. Positive X is to the

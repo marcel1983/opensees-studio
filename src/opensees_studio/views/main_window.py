@@ -1709,10 +1709,28 @@ class MainWindow(QMainWindow):
         self._tool_controller.cancel()
 
     # ── slots: edit → transforms ────────────────────────────────────
+    def _selection_nodes(self) -> set[int]:
+        """Selected nodes, plus the joints of every selected element.
+
+        A frame is defined by its joints, so selecting members and asking to
+        move, copy or mirror them means acting on those joints: the user does
+        not have to pick the nodes first. A joint shared with a member that is
+        not selected still moves, which is how a joint edit behaves in a frame
+        program — the connected member follows its joint.
+        """
+        project = self._vm.project
+        if project is None:
+            return set(self._canvas.selection.nodes)
+        return selection_queries.implied_node_ids(
+            project,
+            self._canvas.selection.nodes,
+            self._canvas.selection.elements,
+        )
+
     def _on_move(self) -> None:
-        sel_nodes = set(self._canvas.selection.nodes)
+        sel_nodes = self._selection_nodes()
         if not sel_nodes:
-            QMessageBox.information(self, "Move", "Select one or more nodes first.")
+            QMessageBox.information(self, "Move", "Select nodes or frame elements first.")
             return
         dlg = MoveDialog(len(sel_nodes), self)
         if dlg.exec() != QDialog.DialogCode.Accepted:
@@ -1723,10 +1741,10 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Move failed", str(exc))
 
     def _on_replicate(self) -> None:
-        sel_nodes = set(self._canvas.selection.nodes)
+        sel_nodes = self._selection_nodes()
         sel_elements = set(self._canvas.selection.elements)
         if not sel_nodes:
-            QMessageBox.information(self, "Replicate", "Select one or more nodes first.")
+            QMessageBox.information(self, "Replicate", "Select nodes or frame elements first.")
             return
         # Forgiving: if the user selected only nodes, include any element whose
         # endpoints are all in the node selection.
@@ -1747,10 +1765,10 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Replicate failed", str(exc))
 
     def _on_mirror(self) -> None:
-        sel_nodes = set(self._canvas.selection.nodes)
+        sel_nodes = self._selection_nodes()
         sel_elements = set(self._canvas.selection.elements)
         if not sel_nodes:
-            QMessageBox.information(self, "Mirror", "Select one or more nodes first.")
+            QMessageBox.information(self, "Mirror", "Select nodes or frame elements first.")
             return
         if not sel_elements and self._vm.project is not None:
             sel_elements = {
@@ -5027,9 +5045,9 @@ class MainWindow(QMainWindow):
         ):
             action.setEnabled(has_project and has_selected_elements)
         self._act_delete.setEnabled(has_project and has_selection)
-        self._act_move.setEnabled(has_project and has_selected_nodes)
-        self._act_replicate.setEnabled(has_project and has_selected_nodes)
-        self._act_mirror.setEnabled(has_project and has_selected_nodes)
+        self._act_move.setEnabled(has_project and has_selection)
+        self._act_replicate.setEnabled(has_project and has_selection)
+        self._act_mirror.setEnabled(has_project and has_selection)
         self._act_tool_draw_frame.setEnabled(has_project)
         self._act_tool_draw_node.setEnabled(has_project)
         self._act_tool_draw_truss.setEnabled(has_project)

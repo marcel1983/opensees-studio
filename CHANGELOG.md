@@ -11,6 +11,11 @@ refused instead of silently downgraded).
 
 ### Changed
 
+- **Move, Replicate and Mirror accept a frame selection.** They required
+  selected nodes, so the element-first workflow — select the members, transform
+  them — found the three commands disabled. A member now brings its joints, and
+  the actions enable on any selection. A joint shared with an unselected member
+  moves too; that member follows its joint, as in a frame program.
 - **Selecting a node no longer rebuilds the whole glyph.** `update_selection`
   re-ran the glyph filter over every node sphere on each click; it now writes
   the state array onto the existing glyph, repeated by its stride — 39 ms to

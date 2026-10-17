@@ -169,3 +169,26 @@ def invert(
         {node.id for node in project.nodes} - set(nodes),
         {element.id for element in project.elements} - set(elements),
     )
+
+
+def implied_node_ids(
+    project: Project,
+    node_ids: Iterable[int],
+    element_ids: Iterable[int],
+) -> set[int]:
+    """Selected nodes plus the joints of every selected element.
+
+    A frame is defined by its joints, so moving, copying or mirroring a member
+    means acting on those joints and the user should not have to pick the nodes
+    first. A joint shared with an element that is not selected still moves:
+    that is how a joint edit behaves in a frame program, the connected member
+    follows its joint.
+    """
+    nodes = set(node_ids)
+    wanted = set(element_ids)
+    if not wanted:
+        return nodes
+    for element in project.elements:
+        if element.id in wanted:
+            nodes.update(element.nodes)
+    return nodes

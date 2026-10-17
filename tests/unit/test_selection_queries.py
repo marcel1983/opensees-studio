@@ -89,3 +89,35 @@ def test_node_queries() -> None:
 def test_invert() -> None:
     project = _project()
     assert q.invert(project, {1, 2}, {3}) == ({3, 4}, {1, 2})
+
+
+def test_a_selected_member_brings_its_joints() -> None:
+    """Move/copy/mirror act on a member's joints, so the selection must imply them."""
+    project = _project()
+
+    joints = q.implied_node_ids(project, node_ids=set(), element_ids={1})
+
+    element = next(e for e in project.elements if e.id == 1)
+    assert joints == set(element.nodes)
+
+
+def test_implied_joints_union_the_explicit_node_selection() -> None:
+    project = _project()
+    element = next(e for e in project.elements if e.id == 1)
+    explicit = {99}
+
+    joints = q.implied_node_ids(project, node_ids=explicit, element_ids={element.id})
+
+    assert joints == set(element.nodes) | explicit
+
+
+def test_without_elements_the_selection_is_untouched() -> None:
+    project = _project()
+
+    assert q.implied_node_ids(project, node_ids={3, 4}, element_ids=set()) == {3, 4}
+
+
+def test_an_unknown_element_id_adds_nothing() -> None:
+    project = _project()
+
+    assert q.implied_node_ids(project, node_ids={1}, element_ids={12345}) == {1}
