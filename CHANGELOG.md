@@ -9,6 +9,8 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.17] — 2026-10-17
+
 ### Added
 
 - **Wait cursor while the application works.** Starting the application, opening

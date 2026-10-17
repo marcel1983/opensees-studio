@@ -660,6 +660,10 @@ Status legend: ✅ done · 🟡 partial · ⬜ planned · ✂️ deferred / out-
 - ✅ Results feedback (0.0.16): a caption in each viewport naming the case or
   combination on screen, Analyze → Delete All Results, and one run per case in
   the results database (re-running replaces instead of appending).
+- ✅ Wait cursor (0.0.17) while the application starts, opens a project, runs an
+  analysis or the stability check, or exports an animation, with a status-bar
+  message and a counted nesting so it is restored exactly once. Also fixes the
+  batch run actions staying disabled after a run.
 
 ## Maintenance / debt
 - ⬜ Canonical float serialization in `.osmodel` (platform last-digit noise
