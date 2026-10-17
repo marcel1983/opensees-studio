@@ -11,6 +11,10 @@ refused instead of silently downgraded).
 
 ### Changed
 
+- **Selecting a node no longer rebuilds the whole glyph.** `update_selection`
+  re-ran the glyph filter over every node sphere on each click; it now writes
+  the state array onto the existing glyph, repeated by its stride — 39 ms to
+  0.2 ms on 4.840 nodes.
 - **Load arrows batch into three actors.** A pattern that loads every joint and
   every member drew one actor per arrow — 1.374 draw calls and 2.1 s to build on
   a 108-node model. The arrows now go into three point clouds (nodal, element,

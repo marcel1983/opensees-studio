@@ -271,8 +271,7 @@ class ModelRenderer:
                 if row is not None:
                     states[row] = 1
             self._node_pd["_oss_state"] = states
-            # Re-glyph so the LUT-coloured sphere instances refresh.
-            self._reglyph_nodes()
+            self._apply_node_states(states)
 
         if self._frame_pd is not None and self._frame_ids_ordered:
             states = np.zeros(len(self._frame_ids_ordered), dtype=np.int8)
@@ -349,6 +348,9 @@ class ModelRenderer:
     #: does, and six-by-six is enough for a joint marker the size of a few pixels.
     _sphere_cache: tuple[float, pv.PolyData] | None = None
 
+    #: Points of the node glyph per input node (0 when the glyph is not usable).
+    _node_state_stride: int = 0
+
     def _node_sphere(self, radius: float) -> pv.PolyData:
         """The joint marker template, built once per radius."""
         cached = self._sphere_cache
@@ -357,6 +359,23 @@ class ModelRenderer:
         sphere = pv.Sphere(radius=radius, theta_resolution=6, phi_resolution=6)
         type(self)._sphere_cache = (radius, sphere)
         return sphere
+
+    def _apply_node_states(self, states: np.ndarray) -> None:
+        """Recolour the existing node glyph instead of rebuilding it.
+
+        ``_node_pd.glyph()`` returns a materialised copy, so marking the input
+        modified does not refresh it. Each output point belongs to one input
+        point and a strategy keeps the order, so the state array is the input's
+        repeated by the glyph stride.
+        """
+        glyph = self._node_glyph
+        stride = self._node_state_stride
+        if glyph is None or stride <= 0:
+            # Unknown stride (template or count changed): fall back to a rebuild.
+            self._reglyph_nodes()
+            return
+        glyph["_oss_state"] = np.repeat(states, stride)
+        glyph.Modified()
 
     def _reglyph_nodes(self) -> None:
         """Rebuild the glyph polydata after points or state change."""
@@ -368,6 +387,13 @@ class ModelRenderer:
             with contextlib.suppress(Exception):
                 self._plotter.remove_actor(self._node_actor, render=False)
         self._node_glyph = glyph
+        # The glyph duplicates each input point into a whole sphere, so the
+        # output's points are the input's in order, each repeated. Recording the
+        # stride is what lets update_selection recolour instead of rebuilding.
+        count = len(self._node_ids_ordered)
+        self._node_state_stride = (
+            glyph.n_points // count if count and glyph.n_points % count == 0 else 0
+        )
         self._node_actor = self._plotter.add_mesh(
             glyph,
             scalars="_oss_state",
