@@ -655,6 +655,9 @@ class ModelRenderer:
         """
         from opensees_studio.services.section_bbox import bbox_for_section
 
+        # Every box goes into one UnstructuredGrid: one actor instead of one per
+        # member, which is what keeps the draw calls flat when the overlay is on.
+        boxes: list[pv.UnstructuredGrid] = []
         for el in project.elements:
             if not isinstance(el, _FRAME_CLASSES):
                 continue
@@ -718,19 +721,22 @@ class ModelRenderer:
             #   [8, p0, p1, p2, p3, p4, p5, p6, p7]
             cells = np.array([8, 0, 1, 2, 3, 4, 5, 6, 7], dtype=np.int64)
             cell_types = np.array([12], dtype=np.uint8)  # VTK_HEXAHEDRON
-            ugrid = pv.UnstructuredGrid(cells, cell_types, corners)
+            boxes.append(pv.UnstructuredGrid(cells, cell_types, corners))
 
-            actor = self._plotter.add_mesh(
-                ugrid,
-                color=(0.35, 0.60, 0.85),  # cool steel-blue
-                opacity=0.22,
-                show_edges=True,
-                edge_color=(0.15, 0.25, 0.45),
-                line_width=1.0,
-                pickable=False,
-                lighting=True,
-            )
-            self._aux_actors.append(actor)
+        if not boxes:
+            return
+        merged = boxes[0] if len(boxes) == 1 else pv.merge(boxes)
+        actor = self._plotter.add_mesh(
+            merged,
+            color=(0.35, 0.60, 0.85),  # cool steel-blue
+            opacity=0.22,
+            show_edges=True,
+            edge_color=(0.15, 0.25, 0.45),
+            line_width=1.0,
+            pickable=False,
+            lighting=True,
+        )
+        self._aux_actors.append(actor)
 
     def _build_supports(self, project: Project) -> None:
         if not project.nodes or self._node_original_points is None:
@@ -739,13 +745,21 @@ class ModelRenderer:
         dof_idx = _dof_indices(project.ndm, ndf)
         size = max(self._diag_of_points(self._node_original_points) * 0.015, 1e-6)
         support_color = (1.0, 0.5, 0.1)
+        # One actor per support kind, not one per support: a glyph filter places
+        # every copy in a single PolyData, which is what keeps the draw calls
+        # flat on a model with hundreds of restrained joints.
+        buckets: dict[str, list[np.ndarray]] = {}
         for node in project.nodes:
             if not any(node.restraint[i] for i in dof_idx):
                 continue
             kind = _classify_support(node.restraint, dof_idx)
-            geom = self._support_glyph(kind, size)
-            geom.translate(node.coords, inplace=True)
-            actor = self._plotter.add_mesh(geom, color=support_color, pickable=False, lighting=True)
+            buckets.setdefault(kind, []).append(np.asarray(node.coords, dtype=float))
+        for kind, points in buckets.items():
+            cloud = pv.PolyData(np.asarray(points, dtype=float))
+            glyphs = cloud.glyph(geom=self._support_glyph(kind, size), scale=False, orient=False)
+            actor = self._plotter.add_mesh(
+                glyphs, color=support_color, pickable=False, lighting=True
+            )
             self._aux_actors.append(actor)
         sprung = [n for n in project.nodes if any(n.spring[i] > 0 for i in dof_idx)]
         if sprung:
