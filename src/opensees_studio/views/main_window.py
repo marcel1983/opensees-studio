@@ -245,7 +245,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("OpenSees Studio")
+        self.setWindowTitle(f"OpenSees Studio v{__version__}")
         self.resize(1600, 1000)
 
         self._vm = ProjectViewModel(self)

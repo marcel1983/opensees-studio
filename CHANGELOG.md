@@ -11,6 +11,9 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **The version, in the title bar.** The window is `OpenSees Studio v0.0.18`, so
+  a screenshot says which build produced it — the same reason the console now
+  prints the version on startup.
 - **Node reactions, as a table and as a drawing.** The **Reactions** tab, next to
   Console and Results, lists Fx, Fy, Fz, Mx, My and Mz of every restrained node
   in the case on screen; *Display → Show Reactions* draws a force arrow and a
