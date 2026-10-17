@@ -117,7 +117,10 @@ Status legend: ✅ done · 🟡 partial · ⬜ planned · ✂️ deferred / out-
     492 → 71 ms on the same model.
   - ✅ Joint marker cached, 6×6 — 76 → 51 ms. Net: 606 ms / 202 actors →
     51 ms / 7 actors.
-  - ⬜ Loads still draw one actor per arrow: the last per-entity path.
+  - ✅ Loads batch into three glyph actors (nodal, element, point) instead of
+    one per arrow — a pattern loading every joint and member went from 1.374
+    actors and 2.1 s to 8 actors and 54 ms on 108 nodes / 252 frames. The
+    geometry is pinned by `tests/tools/test_load_arrows.py`.
   - ⬜ `update_selection` re-glyphs the whole node cloud on every click; marking
     the array modified should be enough. Needs a visual check on a real display
     before it lands.

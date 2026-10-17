@@ -9,6 +9,15 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Changed
+
+- **Load arrows batch into three actors.** A pattern that loads every joint and
+  every member drew one actor per arrow — 1.374 draw calls and 2.1 s to build on
+  a 108-node model. The arrows now go into three point clouds (nodal, element,
+  point) that a single glyph places, rotates and scales: 8 actors and 54 ms.
+  The geometry is pinned by tests on the resulting bounds, so a tip that stops
+  landing on its joint fails the suite.
+
 ## [0.0.18] — 2026-10-17
 
 A render performance pass, measured before it was optimised. A model of 1.5k
