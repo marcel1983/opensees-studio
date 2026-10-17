@@ -9,6 +9,19 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Added
+
+- **Results database.** Every finished case is appended to
+  `<project>_results.sqlite` beside the model: one row per node, element and
+  step — displacements, reactions, local forces, shell resultants, storey shear,
+  section cuts, modal eigenvalues and mode shapes — with an append-only `runs`
+  history and indexes on the ids. Load combinations record their two bounds; a
+  response spectrum records its peaks; a transient records its HDF5 path and
+  indexes the node displacement history. A database that cannot be written is a
+  warning, never a failed run.
+- **Analyze → Run All Cases** (`Shift+F5`) and **Analyze → Run Selected
+  Cases…**, which run the whole model or a ticked subset in one child process.
+
 The view toolkit: a second viewport on the same model, per-viewport visibility
 switches, hiding and inverting what is drawn, zoom in/out, custom colours, and a
 menu bar that only offers File and Help until a project exists. Projects that

@@ -158,6 +158,14 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   TS 500 / TBDY 2018 (G+nQ±E, 0.9G±E) from cases tagged Dead, Live, Roof live,
   Snow, Rain, Wind and Earthquake, wind and static earthquake both ways, with an
   optional 100% + 30% orthogonal earthquake rule, and an envelope per group.
+- **Results database** — every finished case is appended to
+  `<project>_results.sqlite` beside the model: one row per node, element and
+  step (displacements, reactions, local forces, shell resultants, storey shear,
+  section cuts, modes and mode shapes), an append-only `runs` history, and
+  indexes for the usual lookups. It is a plain SQLite file, so a notebook, a
+  spreadsheet or `sqlite3` can ask questions without opening the application.
+  **Analyze → Run All Cases** (`Shift+F5`) and **Run Selected Cases…** run a
+  whole batch in one child process.
 - **Response spectra, by hand or by code** — in Ground Motions → Target
   spectrum: a **user table** (period in s, Sa in g), a spectrum from **ASCE/SEI
   7-16** (the mapped Ss and S1 with a site class, using Tables 11.4-1 and 11.4-2
