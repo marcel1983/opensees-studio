@@ -9,6 +9,8 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.16] — 2026-10-17
+
 ### Added
 
 - **Viewport caption.** Every 3D view shows, top-left, which results are on
