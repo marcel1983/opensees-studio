@@ -44,6 +44,10 @@ def run(argv: list[str]) -> int:
 
     app = QApplication(argv)
     app.setApplicationName("OpenSees Studio")
+    # Qt appends the display name to every window title it shows; the title
+    # already carries the name and the version, so an empty one avoids
+    # "OpenSees Studio v0.0.18 — OpenSees Studio".
+    app.setApplicationDisplayName("")
     app.setOrganizationName("OpenSees Studio")
     app.setApplicationDisplayName("OpenSees Studio")
 
