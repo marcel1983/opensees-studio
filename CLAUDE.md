@@ -284,7 +284,11 @@ user-visible features:
 
 ## Branch strategy
 
-- `develop` — active development.
-- `main` — released versions.
+- `main` is the only integration branch: a short-lived branch per change
+  (`feat/`, `fix/`, `chore/`, …) merged by pull request.
+- Releases are tags on `main` (`v0.0.x`). **Pushing the tag is what publishes**:
+  `desktop.yml` builds the three bundles, writes `SHA256SUMS.txt` and the
+  `publish` job creates the release with the notes taken from `CHANGELOG.md`.
+  Do not write the release body by hand — the workflow overwrites it.
 - Conventional commit style: `feat:`, `fix:`, `refactor:`, `docs:`,
   `test:`, `chore:`, `ci:`.
