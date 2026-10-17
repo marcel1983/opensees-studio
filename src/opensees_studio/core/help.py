@@ -3035,6 +3035,22 @@ raise it.
 """,
             "display.reactions",
         ),
+        "display.reactions_dialog": _t(
+            "Display → Reactions…",
+            "Display",
+            "The same reactions as the tab, in a window you can close.",
+            """
+A modal window with one row per restrained node and the six global components
+of the case on screen. It is the tab's table in a window, for reading without
+switching the bottom dock over the console.
+
+Use it when you want the numbers in front of you for a moment: the model stays
+behind, and closing it puts you back where you were. For a table that stays open
+beside the model, use *Display → Reactions Table*, which raises the tab.
+""",
+            "display.reactions_table",
+            "display.reactions",
+        ),
         "display.force_diagram": _t(
             "Display → Force Diagram",
             "Display",
@@ -3891,6 +3907,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_show_force_diagram": "display.force_diagram",
     "_act_show_reactions": "display.reactions",
     "_act_reactions_table": "display.reactions_table",
+    "_act_reactions_dialog": "display.reactions_dialog",
     "_act_shell_contours": "display.shell_contours",
     "_act_show_time_history": "display.time_history",
     "_act_export_th_animation": "display.export_animation",

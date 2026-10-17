@@ -198,6 +198,7 @@ from opensees_studio.views.dialogs.groups import (
 )
 from opensees_studio.views.dialogs.load_combinations import LoadCombinationsDialog
 from opensees_studio.views.dialogs.model_tables import ModelTablesDialog
+from opensees_studio.views.dialogs.reactions import ReactionsDialog
 from opensees_studio.views.dialogs.run_cases import RunCasesDialog
 from opensees_studio.views.dialogs.seismic_loads import SeismicLoadsDialog
 from opensees_studio.views.dialogs.view_colors import ViewColorsDialog
@@ -494,6 +495,7 @@ class MainWindow(QMainWindow):
         self._act_show_reactions = QAction("Show &Reactions", self)
         self._act_show_reactions.setCheckable(True)
         self._act_reactions_table = QAction("Reactions &Table", self)
+        self._act_reactions_dialog = QAction("R&eactions…", self)
         self._act_shell_contours = QAction("Show Shell &Contours…", self)
         self._act_show_time_history = QAction("&Time-History Plot…", self)
         self._act_export_th_animation = QAction("Export Time-History &Animation…", self)
@@ -717,7 +719,9 @@ class MainWindow(QMainWindow):
         m_display.addSeparator()
         m_display.addActions([self._act_show_deformed, self._act_show_mode_shape])
         m_display.addAction(self._act_show_force_diagram)
-        m_display.addActions([self._act_show_reactions, self._act_reactions_table])
+        m_display.addActions(
+            [self._act_show_reactions, self._act_reactions_table, self._act_reactions_dialog]
+        )
         m_display.addAction(self._act_shell_contours)
         m_display.addSeparator()
         m_display.addAction(self._act_show_time_history)
@@ -1099,6 +1103,7 @@ class MainWindow(QMainWindow):
         self._act_show_force_diagram.triggered.connect(self._on_show_force_diagram)
         self._act_show_reactions.toggled.connect(self._on_show_reactions)
         self._act_reactions_table.triggered.connect(self._on_reactions_table)
+        self._act_reactions_dialog.triggered.connect(self._on_reactions_dialog)
         self._act_shell_contours.triggered.connect(self._on_show_shell_contours)
         self._act_show_time_history.triggered.connect(self._on_show_time_history)
         self._act_export_th_animation.triggered.connect(self._on_export_th_animation)
@@ -4360,11 +4365,16 @@ class MainWindow(QMainWindow):
         enabled = bool(rows)
         self._act_show_reactions.setEnabled(enabled)
         self._act_reactions_table.setEnabled(enabled)
+        self._act_reactions_dialog.setEnabled(enabled)
         if not enabled and self._act_show_reactions.isChecked():
             self._act_show_reactions.setChecked(False)
 
     def _on_show_reactions(self, checked: bool) -> None:
         self._canvas.set_reactions(self._reaction_rows(), show=checked)
+
+    def _on_reactions_dialog(self) -> None:
+        dialog = ReactionsDialog(self._reaction_rows(), self)
+        dialog.exec()
 
     def _on_reactions_table(self) -> None:
         self._reactions_dock.show()
