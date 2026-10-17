@@ -161,8 +161,9 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
 - **Results database** — every finished case is appended to
   `<project>_results.sqlite` beside the model: one row per node, element and
   step (displacements, reactions, local forces, shell resultants, storey shear,
-  section cuts, modes and mode shapes), an append-only `runs` history, and
-  indexes for the usual lookups. It is a plain SQLite file, so a notebook, a
+  section cuts, modes and mode shapes) with indexes for the usual lookups. One
+  run per case: re-running a case replaces its numbers, and
+  **Analyze → Delete All Results** clears the file. It is a plain SQLite file, so a notebook, a
   spreadsheet or `sqlite3` can ask questions without opening the application.
   **Analyze → Run All Cases** (`Shift+F5`) and **Run Selected Cases…** run a
   whole batch in one child process.

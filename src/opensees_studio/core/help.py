@@ -2853,6 +2853,25 @@ and the log in front of you) and **Run All Cases** (everything).
             "analyze.run_all",
             "analyze.results_database",
         ),
+        "analyze.clear_results": _t(
+            "Analyze → Delete All Results",
+            "Analyze",
+            "Forget every stored result: the session's and the project's database.",
+            """
+Removes the results of this session from memory (what Display can show and what
+the reports use) and deletes the project's `<project>_results.sqlite` file. The
+model, its analysis cases and its load combinations are untouched, so the next
+run starts from a clean slate.
+
+It asks first: there is no undo. A different project's database is never
+touched, because the file lives beside its own model.
+
+To replace one case's numbers, just run it again — a case keeps one run, which
+is overwritten (see *Analysis results database*).
+""",
+            "analyze.results_database",
+            "analyze.run",
+        ),
         "analyze.results_database": _t(
             "Analysis results database",
             "Analyze",
@@ -2865,8 +2884,10 @@ model writes thousands of rows and a time history writes far more: one file,
 indexed, readable by a notebook, a spreadsheet or the `sqlite3` CLI, and safe to
 interrupt.
 
-The file is **append-only history**: every run adds a row to `runs`, and its
-results carry that `run_id`. Re-running a case keeps the earlier numbers.
+There is **one run per case**: re-running a case replaces its previous rows, so
+the file always reflects the latest run of each case. Different cases coexist;
+**Analyze → Delete All Results** removes both the session's results and the
+file.
 
 | Table | One row per |
 |---|---|
@@ -3803,6 +3824,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_run": "analyze.run",
     "_act_run_all": "analyze.run_all",
     "_act_run_selected": "analyze.run_selected",
+    "_act_clear_results": "analyze.clear_results",
     "_act_check_stability": "analyze.stability",
     # ── Display ─────────────────────────────────────────────────────
     "_act_select_results": "display.select_results",

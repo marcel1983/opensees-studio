@@ -58,7 +58,7 @@ from opensees_studio.services.results import (
 DB_SUFFIX = "_results.sqlite"
 
 #: Bumped when the schema changes in a way old files cannot be read with.
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 #: Widest DOF set a node can carry (ndf = 6).
 _NDF = 6
@@ -82,7 +82,8 @@ CREATE TABLE IF NOT EXISTS runs (
     n_steps      INTEGER,
     dt           REAL,
     h5_path      TEXT,
-    notes        TEXT
+    notes        TEXT,
+    dedupe_key   TEXT
 );
 CREATE TABLE IF NOT EXISTS node_disp (
     run_id INTEGER NOT NULL, node_id INTEGER NOT NULL, step INTEGER NOT NULL,
@@ -160,8 +161,20 @@ def record_results(
     with sqlite3.connect(path) as con:
         _ensure_schema(con)
         if isinstance(results, CombinationResults):
-            first = _record_static(con, results.max, project_path, kind="combination:max")
-            _record_static(con, results.min, project_path, kind="combination:min")
+            first = _record_static(
+                con,
+                results.max,
+                project_path,
+                kind="combination:max",
+                dedupe_key=f"combination:{results.combination_id}:max",
+            )
+            _record_static(
+                con,
+                results.min,
+                project_path,
+                kind="combination:min",
+                dedupe_key=f"combination:{results.combination_id}:min",
+            )
             return first
         if isinstance(results, PushoverResults):
             return _record_pushover(con, results, project_path)
@@ -179,6 +192,11 @@ def record_results(
 # ── schema ──────────────────────────────────────────────────────────
 def _ensure_schema(con: sqlite3.Connection) -> None:
     con.executescript(_SCHEMA)
+    # A file written by the first schema lacks dedupe_key; add it in place rather
+    # than throwing the recorded results away.
+    columns = {row[1] for row in con.execute("PRAGMA table_info(runs)")}
+    if "dedupe_key" not in columns:
+        con.execute("ALTER TABLE runs ADD COLUMN dedupe_key TEXT")
     con.execute(
         "INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', ?)",
         (str(SCHEMA_VERSION),),
@@ -186,6 +204,31 @@ def _ensure_schema(con: sqlite3.Connection) -> None:
     con.execute(
         "INSERT OR REPLACE INTO meta(key, value) VALUES ('written_by', 'OpenSees Studio')",
     )
+
+
+def _delete_runs(con: sqlite3.Connection, run_ids: list[int]) -> None:
+    """Remove ``run_ids`` and every result row that belongs to them."""
+    for run_id in run_ids:
+        for table in _RESULT_TABLES:
+            con.execute(f"DELETE FROM {table} WHERE run_id = ?", (run_id,))
+    con.executemany("DELETE FROM runs WHERE run_id = ?", [(run_id,) for run_id in run_ids])
+
+
+def _delete_by_key(con: sqlite3.Connection, key: str) -> None:
+    """Drop the run recorded under ``key`` (a case re-run replaces it)."""
+    ids = [
+        int(row[0]) for row in con.execute("SELECT run_id FROM runs WHERE dedupe_key = ?", (key,))
+    ]
+    _delete_runs(con, ids)
+
+
+def delete_all_results(db_path: str | Path) -> bool:
+    """Delete the results file. True when there was one to delete."""
+    path = Path(db_path)
+    if not path.exists():
+        return False
+    path.unlink()
+    return True
 
 
 def _insert_run(
@@ -200,12 +243,16 @@ def _insert_run(
     dt: float | None = None,
     h5_path: str | Path | None = None,
     notes: str | None = None,
+    dedupe_key: str | None = None,
 ) -> int:
+    # Re-running a case replaces its previous rows: one run per dedupe key.
+    if dedupe_key is not None:
+        _delete_by_key(con, dedupe_key)
     cursor = con.execute(
         """
         INSERT INTO runs (case_id, case_name, case_type, kind, recorded_at,
-                          project_path, n_steps, dt, h5_path, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                          project_path, n_steps, dt, h5_path, notes, dedupe_key)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             case_id,
@@ -218,6 +265,7 @@ def _insert_run(
             dt,
             None if h5_path is None else str(h5_path),
             notes,
+            dedupe_key,
         ),
     )
     return int(cursor.lastrowid or 0)
@@ -263,6 +311,18 @@ def _write_rows(
 
 
 # ── per-kind writers ────────────────────────────────────────────────
+#: Every table keyed by run_id, for the replace and delete paths.
+_RESULT_TABLES = (
+    "node_disp",
+    "node_reaction",
+    "element_forces",
+    "element_stresses",
+    "storey_shear",
+    "section_cut_forces",
+    "mode_shapes",
+    "modal",
+)
+
 _DOF_COLUMNS = ["ux", "uy", "uz", "rx", "ry", "rz"]
 _FORCE_COLUMNS = [f"c{i}" for i in range(1, _MAX_FORCE_COMPONENTS + 1)]
 _STRESS_COLUMNS = ["n11", "n22", "n12", "m11", "m22", "m12", "v13", "v23"]
@@ -324,6 +384,7 @@ def _record_static(
     project_path: str | Path | None,
     *,
     kind: str,
+    dedupe_key: str | None = None,
 ) -> int:
     run_id = _insert_run(
         con,
@@ -333,6 +394,7 @@ def _record_static(
         case_type="Static",
         project_path=project_path,
         n_steps=results.n_steps,
+        dedupe_key=dedupe_key or f"case:{results.case_id}",
     )
     _write_static_bodies(con, run_id, results, results.n_steps)
     return run_id
@@ -353,6 +415,7 @@ def _record_pushover(
         project_path=project_path,
         n_steps=steps,
         notes=f"control node {results.control_node}, DOF {results.control_dof}",
+        dedupe_key=f"case:{results.case_id}",
     )
     _write_static_bodies(con, run_id, results, steps)
     return run_id
@@ -373,6 +436,7 @@ def _record_modal(
         project_path=project_path,
         n_steps=n_modes,
         notes=f"solver {results.solver}, {results.n_free_dof} free DOF",
+        dedupe_key=f"case:{results.case_id}",
     )
     modal_rows = [
         (
@@ -417,6 +481,7 @@ def _record_spectrum(
             f"direction {results.direction}, {results.combination}, "
             f"{len(results.modes)} mode(s), solver {results.solver}"
         ),
+        dedupe_key=f"case:{results.case_id}",
     )
     # The spectrum container names its peaks combined_disp; the shared writer
     # expects the static names, so hand it a shim. One pseudo-step: they are
@@ -448,6 +513,7 @@ def _record_transient(
         dt=results.dt,
         h5_path=results.h5_path,
         notes=results.steps_summary(),
+        dedupe_key=f"case:{results.case_id}",
     )
     # The displacement history is the one series worth indexing; the lossless
     # copy (velocity, acceleration, element state) stays in the HDF5 file.

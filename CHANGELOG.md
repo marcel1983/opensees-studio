@@ -9,6 +9,21 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Added
+
+- **Viewport caption.** Every 3D view shows, top-left, which results are on
+  screen — the case name and kind, or the combination and whether it is an
+  envelope — and nothing when the model itself is shown.
+- **Analyze → Delete All Results…** clears the session's results and deletes the
+  project's results database, after asking. The model and the cases are
+  untouched.
+
+### Changed
+
+- **Re-running a case replaces its results.** The results database keeps one run
+  per case instead of an append-only history, so the file always reflects the
+  latest run; different cases still coexist.
+
 ## [0.0.15] — 2026-10-17
 
 The view toolkit — a second viewport on the same model, per-viewport visibility
