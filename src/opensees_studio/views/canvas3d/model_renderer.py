@@ -917,40 +917,43 @@ class ModelRenderer:
             self._aux_actors.append(actor)
 
     def _build_loads(self, project: Project) -> None:
+        """Load arrows, one actor per family instead of one per arrow.
+
+        A pattern with a load on every joint and every member used to draw over
+        a thousand actors — each one a draw call and a freshly built arrow mesh.
+        The arrows now go into three point clouds (nodal, element, point) and a
+        single glyph places, rotates and scales every copy.
+        """
         if not project.load_patterns or self._node_original_points is None:
             return
         scale = max(self._diag_of_points(self._node_original_points) * 0.05, 1e-6)
         load_color = (0.2, 0.85, 0.2)
+        elem_load_color = (1.0, 0.55, 0.2)  # orange
+        point_load_color = (0.85, 0.2, 0.75)  # magenta
+        n_arrows_per_elem = 5
+
+        nodes = {node.id: node for node in project.nodes}
+        nodal: list[tuple[np.ndarray, np.ndarray]] = []
+        element: list[tuple[np.ndarray, np.ndarray, float]] = []
+        point: list[tuple[np.ndarray, np.ndarray]] = []
+
         for pattern in project.load_patterns:
             if not isinstance(pattern, PlainLoadPattern):
                 continue
+
             for nload in pattern.nodal_loads:
                 if not isinstance(nload, NodalLoad):
                     continue
-                node = next((n for n in project.nodes if n.id == nload.node_id), None)
+                node = nodes.get(nload.node_id)
                 if node is None:
                     continue
-                f = np.asarray(nload.forces[:3], dtype=float)
-                mag = float(np.linalg.norm(f))
-                if mag < 1e-12:
+                force = np.asarray(nload.forces[:3], dtype=float)
+                magnitude = float(np.linalg.norm(force))
+                if magnitude < 1e-12:
                     continue
-                direction = f / mag
-                arrow = pv.Arrow(
-                    start=tuple(np.array(node.coords) - direction * scale),
-                    direction=tuple(direction),
-                    scale=scale,
-                )
-                actor = self._plotter.add_mesh(
-                    arrow, color=load_color, pickable=False, lighting=True
-                )
-                self._aux_actors.append(actor)
+                nodal.append((np.asarray(node.coords, dtype=float), force / magnitude))
 
-            # ── Distributed (uniform element) loads ──
-            # Draw N arrows along the element span, each perpendicular
-            # to the axis in the direction of the load. Uses the same
-            # orange-green palette as nodal loads but with shorter arrows.
-            elem_load_color = (1.0, 0.55, 0.2)  # orange
-            n_arrows_per_elem = 5
+            # Uniform load: a row of short arrows along the member.
             for eload in pattern.element_loads:
                 if not isinstance(eload, UniformElementLoad):
                     continue
@@ -958,38 +961,20 @@ class ModelRenderer:
                 if frame is None:
                     continue
                 pi, axis, (x_local, y_local, z_local) = frame
-                L = float(np.linalg.norm(axis))
-
-                # Load vector in global = wx·x_local + wy·y_local + wz·z_local.
+                length = float(np.linalg.norm(axis))
                 load_vec = eload.wx * x_local + eload.wy * y_local + eload.wz * z_local
-                mag = float(np.linalg.norm(load_vec))
-                if mag < 1e-12:
+                magnitude = float(np.linalg.norm(load_vec))
+                if magnitude < 1e-12:
                     continue
-                direction = load_vec / mag
-
-                # Arrow length fixed (a fraction of element length).
-                arrow_len = max(0.4 * scale, L / (n_arrows_per_elem * 4))
+                direction = load_vec / magnitude
+                arrow_len = max(0.4 * scale, length / (n_arrows_per_elem * 4))
                 for k in range(n_arrows_per_elem):
                     t = (k + 0.5) / n_arrows_per_elem
-                    pt = pi + t * axis
-                    arrow = pv.Arrow(
-                        start=tuple(pt - direction * arrow_len),
-                        direction=tuple(direction),
-                        scale=arrow_len,
-                    )
-                    actor = self._plotter.add_mesh(
-                        arrow,
-                        color=elem_load_color,
-                        pickable=False,
-                        lighting=True,
-                    )
-                    self._aux_actors.append(actor)
+                    element.append((pi + t * axis, direction, arrow_len))
 
-            # ── Trapezoidal / partial distributed loads ──
-            # Arrows over the loaded part only, each as long as the load there
-            # relative to the largest end value, so the shape of the load shows.
+            # Trapezoidal / partial: arrows over the loaded part, as long as the
+            # load there relative to the largest end value.
             try:
-                # The floor panels' share on their beams is drawn with the member loads.
                 member_loads = pattern_distributed_loads(project, pattern)
             except AreaLoadError:
                 member_loads = list(pattern.distributed_loads)
@@ -1000,36 +985,24 @@ class ModelRenderer:
                 if frame is None:
                     continue
                 pi, axis, (x_local, y_local, z_local) = frame
-                L = float(np.linalg.norm(axis))
+                length = float(np.linalg.norm(axis))
                 ends = [np.asarray(w, dtype=float) for w in (dload.start(), dload.end())]
                 peak = max(float(np.linalg.norm(w)) for w in ends)
                 if peak < 1e-12:
                     continue
-                full_len = max(0.4 * scale, L / (n_arrows_per_elem * 4))
+                full_len = max(0.4 * scale, length / (n_arrows_per_elem * 4))
                 for k in range(n_arrows_per_elem):
                     t = (k + 0.5) / n_arrows_per_elem
                     wx, wy, wz = ends[0] + t * (ends[1] - ends[0])
                     load_vec = wx * x_local + wy * y_local + wz * z_local
-                    mag = float(np.linalg.norm(load_vec))
-                    if mag < 1e-12 * peak:
+                    magnitude = float(np.linalg.norm(load_vec))
+                    if magnitude < 1e-12 * peak:
                         continue
-                    direction = load_vec / mag
-                    arrow_len = full_len * mag / peak
-                    pt = pi + (dload.x_start + t * (dload.x_end - dload.x_start)) * axis
-                    arrow = pv.Arrow(
-                        start=tuple(pt - direction * arrow_len),
-                        direction=tuple(direction),
-                        scale=arrow_len,
+                    x_at = dload.x_start + t * (dload.x_end - dload.x_start)
+                    element.append(
+                        (pi + x_at * axis, load_vec / magnitude, full_len * magnitude / peak)
                     )
-                    actor = self._plotter.add_mesh(
-                        arrow, color=elem_load_color, pickable=False, lighting=True
-                    )
-                    self._aux_actors.append(actor)
 
-            # ── Point loads inside frame elements ──
-            # One full-size arrow ending at the load point, in the element's
-            # local frame (same axes as the distributed loads above).
-            point_load_color = (0.85, 0.2, 0.75)  # magenta
             for pload in pattern.point_loads:
                 if not isinstance(pload, PointElementLoad):
                     continue
@@ -1038,20 +1011,59 @@ class ModelRenderer:
                     continue
                 pi, axis, (x_local, y_local, z_local) = frame
                 load_vec = pload.px * x_local + pload.py * y_local + pload.pz * z_local
-                mag = float(np.linalg.norm(load_vec))
-                if mag < 1e-12:
+                magnitude = float(np.linalg.norm(load_vec))
+                if magnitude < 1e-12:
                     continue
-                direction = load_vec / mag
-                pt = pi + pload.x * axis
-                arrow = pv.Arrow(
-                    start=tuple(pt - direction * scale),
-                    direction=tuple(direction),
-                    scale=scale,
-                )
-                actor = self._plotter.add_mesh(
-                    arrow, color=point_load_color, pickable=False, lighting=True
-                )
-                self._aux_actors.append(actor)
+                point.append((pi + pload.x * axis, load_vec / magnitude))
+
+        self._add_arrow_batch(
+            [p for p, _ in nodal],
+            [d for _, d in nodal],
+            [scale] * len(nodal),
+            load_color,
+            "loads_nodal",
+        )
+        self._add_arrow_batch(
+            [p for p, _, _ in element],
+            [d for _, d, _ in element],
+            [length for _, _, length in element],
+            elem_load_color,
+            "loads_element",
+        )
+        self._add_arrow_batch(
+            [p for p, _ in point],
+            [d for _, d in point],
+            [scale] * len(point),
+            point_load_color,
+            "loads_point",
+        )
+
+    def _add_arrow_batch(
+        self,
+        points: list[np.ndarray],
+        directions: list[np.ndarray],
+        lengths: list[float],
+        color: tuple[float, float, float],
+        name: str,
+    ) -> None:
+        """Draw a family of load arrows as one glyph actor.
+
+        The glyph filter aligns the template's **x axis** with the vector, so the
+        template points along +X with its tip at the origin: a copy oriented
+        along the load ends on the joint, where the per-arrow version put it, and
+        the per-point length scales it.
+        """
+        if not points:
+            return
+        cloud = pv.PolyData(np.asarray(points, dtype=float))
+        cloud["vectors"] = np.asarray(directions, dtype=float)
+        cloud["length"] = np.asarray(lengths, dtype=float)
+        template = pv.Arrow(start=(-1.0, 0.0, 0.0), direction=(1.0, 0.0, 0.0), scale=1.0)
+        glyphs = cloud.glyph(orient="vectors", scale="length", geom=template)
+        actor = self._plotter.add_mesh(
+            glyphs, color=color, pickable=False, lighting=True, name=name
+        )
+        self._aux_actors.append(actor)
 
     @staticmethod
     def _element_local_frame(

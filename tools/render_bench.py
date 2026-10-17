@@ -25,8 +25,12 @@ from typing import Any
 from opensees_studio.core import (
     ElasticBeamColumn,
     ElasticSection,
+    LinearTimeSeries,
+    NodalLoad,
     Node,
+    PlainLoadPattern,
     Project,
+    UniformElementLoad,
 )
 from opensees_studio.views.canvas3d.model_renderer import ModelRenderer
 
@@ -37,9 +41,18 @@ class RecordingPlotter:
     def __init__(self) -> None:
         self.meshes = 0
         self.labels = 0
+        #: The datasets handed to add_mesh, so a test can inspect the geometry.
+        self.datasets: list[Any] = []
+        #: The same, keyed by the actor name the renderer passed (when it did).
+        self.named: dict[str, list[Any]] = {}
 
-    def add_mesh(self, *_args: Any, **_kwargs: Any) -> object:
+    def add_mesh(self, mesh: Any = None, *_args: Any, **kwargs: Any) -> object:
         self.meshes += 1
+        if mesh is not None:
+            self.datasets.append(mesh)
+            name = kwargs.get("name")
+            if isinstance(name, str):
+                self.named.setdefault(name, []).append(mesh)
         return object()
 
     def add_point_labels(self, *_args: Any, **_kwargs: Any) -> object:
@@ -72,11 +85,20 @@ class BenchResult:
     labels: int
 
 
-def build_model(nx: int, ny: int, nz: int, *, restrained: bool = False) -> Project:
+def build_model(
+    nx: int,
+    ny: int,
+    nz: int,
+    *,
+    restrained: bool = False,
+    loads: bool = False,
+) -> Project:
     """A full grid of nodes joined along the three axes by elastic frames.
 
     ``restrained`` fixes the base level, which is what makes the supports path
     matter: one support glyph per node is where the draw calls multiply.
+    ``loads`` adds a pattern with a nodal load per node and a uniform load per
+    member, which is the densest overlay the renderer draws.
     """
     nodes: list[Node] = []
     index: dict[tuple[int, int, int], int] = {}
@@ -100,8 +122,29 @@ def build_model(nx: int, ny: int, nz: int, *, restrained: bool = False) -> Proje
                 elements.append(ElasticBeamColumn(id=element_id, nodes=(start, end), section_id=1))
                 element_id += 1
 
+    patterns: list[PlainLoadPattern] = []
+    time_series: list[LinearTimeSeries] = []
+    if loads:
+        patterns = [
+            PlainLoadPattern(
+                id=1,
+                name="Bench",
+                time_series_id=1,
+                nodal_loads=[
+                    NodalLoad(node_id=node.id, forces=(0.0, 0.0, -1000.0, 0.0, 0.0, 0.0))
+                    for node in nodes
+                ],
+                element_loads=[
+                    UniformElementLoad(element_id=element.id, wy=-1000.0) for element in elements
+                ],
+            )
+        ]
+        time_series = [LinearTimeSeries(id=1)]
+
     return Project(
         nodes=nodes,
+        time_series=time_series,
+        load_patterns=patterns,
         sections=[
             ElasticSection(
                 id=1,
@@ -135,22 +178,25 @@ def measure(project: Project, name: str) -> BenchResult:
     )
 
 
-#: The models the benchmark and the budget test use: (label, nx, ny, nz, restrained).
-MODELS: tuple[tuple[str, int, int, int, bool], ...] = (
-    ("grid-6x6x3", 6, 6, 3, False),
-    ("grid-6x6x3-supported", 6, 6, 3, True),
-    ("grid-10x10x5-supported", 10, 10, 5, True),
+#: The models the benchmark and the budget test use:
+#: (label, nx, ny, nz, restrained, loads).
+MODELS: tuple[tuple[str, int, int, int, bool, bool], ...] = (
+    ("grid-6x6x3", 6, 6, 3, False, False),
+    ("grid-6x6x3-supported", 6, 6, 3, True, False),
+    ("grid-6x6x3-loaded", 6, 6, 3, False, True),
+    ("grid-10x10x5-supported", 10, 10, 5, True, False),
     # Near the roadmap target and big enough to show per-member work: this is the
     # case where a regression in the per-element paths is visible.
-    ("grid-14x14x8-supported", 14, 14, 8, True),
+    ("grid-14x14x8-supported", 14, 14, 8, True, False),
 )
 
 
 def run() -> list[BenchResult]:
     """Measure every model in :data:`MODELS`."""
     results: list[BenchResult] = []
-    for label, nx, ny, nz, restrained in MODELS:
-        results.append(measure(build_model(nx, ny, nz, restrained=restrained), label))
+    for label, nx, ny, nz, restrained, loads in MODELS:
+        project = build_model(nx, ny, nz, restrained=restrained, loads=loads)
+        results.append(measure(project, label))
     return results
 
 
