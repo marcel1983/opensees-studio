@@ -50,9 +50,14 @@ def test_a_failing_block_still_restores_the_cursor(qtbot) -> None:  # type: igno
     from PySide6.QtWidgets import QApplication
 
     window = _window(qtbot)
+    failure: RuntimeError | None = None
 
-    with pytest.raises(RuntimeError), window._busy("boom"):
-        raise RuntimeError("boom")
+    try:
+        with window._busy("boom"):
+            raise RuntimeError("boom")
+    except RuntimeError as exc:  # the block failed: the cursor must still come back
+        failure = exc
 
+    assert failure is not None
     assert QApplication.overrideCursor() is None
     assert window._busy_depth == 0
