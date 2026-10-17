@@ -9,6 +9,7 @@ Adds on top of Phase 3:
 
 from __future__ import annotations
 
+import contextlib
 import math
 from collections.abc import Callable, Sequence
 from functools import partial
@@ -17,7 +18,7 @@ from typing import Any
 
 import numpy as np
 import shiboken6
-from PySide6.QtCore import QPoint, Qt
+from PySide6.QtCore import QEvent, QPoint, QSettings, Qt
 from PySide6.QtGui import QAction, QActionGroup, QKeySequence
 from PySide6.QtWidgets import (
     QComboBox,
@@ -94,6 +95,7 @@ from opensees_studio.core.groups import Group, colour_for, group_members
 from opensees_studio.core.help import ACTION_TOPICS, TOPIC_PROPERTY
 from opensees_studio.core.materials.library import is_uniaxial
 from opensees_studio.core.sections import SHELL_SECTION_CLASSES
+from opensees_studio.core.view_settings import ViewSettings
 from opensees_studio.services import PROJECT_FILE_SUFFIX
 from opensees_studio.services.combination import MissingCaseResultsError
 from opensees_studio.services.deformation import (
@@ -194,6 +196,7 @@ from opensees_studio.views.dialogs.groups import (
 from opensees_studio.views.dialogs.load_combinations import LoadCombinationsDialog
 from opensees_studio.views.dialogs.model_tables import ModelTablesDialog
 from opensees_studio.views.dialogs.seismic_loads import SeismicLoadsDialog
+from opensees_studio.views.dialogs.view_colors import ViewColorsDialog
 from opensees_studio.views.docks import (
     DeformedShapeView,
     ForceDiagramView,
@@ -215,6 +218,7 @@ from opensees_studio.views.tools import (
     SelectTool,
     ToolController,
 )
+from opensees_studio.views.view_window import ViewWindow
 
 #: First entry of the export dialog's case list: no analysis block in the script.
 EXPORT_MODEL_ONLY = "Model only"
@@ -256,6 +260,11 @@ class MainWindow(QMainWindow):
         self._show_node_labels = False
         self._show_element_labels = False
         self._user_close_requested = False  # File → Quit sets this before close()
+        #: Top-level menus by role, so the startup gate can disable them all at
+        #: once instead of grey-out every action they contain.
+        self._menus: dict[str, QMenu] = {}
+        #: Secondary viewports on the same project (View → New View Window).
+        self._view_windows: list[ViewWindow] = []
 
         self._build_central_canvas()
         self._tool_controller = ToolController(self._canvas, self._vm, self)
@@ -274,14 +283,23 @@ class MainWindow(QMainWindow):
         self._build_status_bar()
         self._wire()
         self._refresh_action_enablement()
+        self._restore_session_state()
 
     # ── construction ─────────────────────────────────────────────────
     def _build_central_canvas(self) -> None:
-        self._canvas = ModelCanvas(self)
-        self.setCentralWidget(self._canvas)
+        self._main_canvas = ModelCanvas(self)
+        #: The viewport the menus and the tools act on. It starts as the main
+        #: one and follows focus to a secondary ViewWindow when one is active.
+        self._active_canvas: ModelCanvas = self._main_canvas
+        self.setCentralWidget(self._main_canvas)
         # Diagram overlay paints onto the same plotter as the model.
-        self._diagram_renderer = DiagramRenderer(self._canvas)
-        self._contour_renderer = ShellContourRenderer(self._canvas)
+        self._diagram_renderer = DiagramRenderer(self._main_canvas)
+        self._contour_renderer = ShellContourRenderer(self._main_canvas)
+
+    @property
+    def _canvas(self) -> ModelCanvas:
+        """The focused viewport: where View-menu actions and picking land."""
+        return self._active_canvas
 
     def _build_docks(self) -> None:
         # Model tree (left)
@@ -491,6 +509,42 @@ class MainWindow(QMainWindow):
             "Show Grid &Labels", self, checkable=True, checked=True
         )
 
+        # Camera dolly. The canvas multiplies its current zoom, so holding the
+        # shortcut zooms smoothly rather than jumping to a fixed scale.
+        self._act_zoom_in = QAction("Zoom &In", self, shortcut=QKeySequence("Ctrl++"))
+        self._act_zoom_out = QAction("Zoom &Out", self, shortcut=QKeySequence("Ctrl+-"))
+
+        # Per-viewport hiding. These never touch the project: the ids stay in
+        # the model, they are only not drawn in this one canvas.
+        self._act_hide_selected = QAction("&Hide Selected", self, shortcut=QKeySequence("Ctrl+H"))
+        self._act_invert_visible = QAction("&Invert Visible", self)
+        self._act_view_colors = QAction("&Colors…", self)
+
+        # A second (third, …) viewport on the same project, in its own window.
+        self._act_new_view = QAction(
+            "New View &Window", self, shortcut=QKeySequence("Ctrl+Shift+N")
+        )
+        self._act_close_view = QAction("Close View Window", self)
+        self._act_close_view.setEnabled(False)
+
+        # Visibility toggles, one per ViewSettings field. _sync_visibility_actions
+        # keeps their ticks truthful after any change, whichever path made it.
+        self._act_vis_grids = QAction("Grids", self, checkable=True, checked=True)
+        self._act_vis_grid_labels = QAction("Grid Labels", self, checkable=True, checked=True)
+        self._act_vis_nodes = QAction("Nodes", self, checkable=True, checked=True)
+        self._act_vis_frames = QAction("Frames", self, checkable=True, checked=True)
+        self._act_vis_surfaces = QAction("Shells", self, checkable=True, checked=True)
+        self._act_vis_supports = QAction("Restraints", self, checkable=True, checked=True)
+        self._act_vis_constraints = QAction("Constraints", self, checkable=True, checked=True)
+        self._act_vis_frame_assignments = QAction(
+            "Frame Assignments", self, checkable=True, checked=True
+        )
+        self._act_vis_loads = QAction("Loads", self, checkable=True, checked=True)
+        # Labels are off by default, matching ViewSettings.
+        self._act_vis_node_labels = QAction("Node Labels", self, checkable=True)
+        self._act_vis_element_labels = QAction("Element Labels", self, checkable=True)
+        self._act_vis_extruded = QAction("Extruded Sections", self, checkable=True)
+
         self._act_about = QAction("&About OpenSees Studio…", self)
         self._act_help_contents = QAction("&Help Contents (F1)", self)
         self._act_set_units = QAction("Set Display &Units…", self)
@@ -546,7 +600,8 @@ class MainWindow(QMainWindow):
         m_edit.addAction(self._act_check_duplicates)
         m_edit.addAction(self._act_mesh)
 
-        self._build_select_menu(mb.addMenu("&Select"))
+        m_select = mb.addMenu("&Select")
+        self._build_select_menu(m_select)
 
         m_define = mb.addMenu("&Define")
         m_define.addAction(self._act_grid)
@@ -651,6 +706,8 @@ class MainWindow(QMainWindow):
         m_display.addAction(self._act_back_to_model)
 
         m_view = mb.addMenu("&View")
+        m_view.addAction(self._act_zoom_in)
+        m_view.addAction(self._act_zoom_out)
         m_view.addAction(self._act_zoom_extents)
         m_view.addSeparator()
         m_view.addActions(
@@ -660,11 +717,38 @@ class MainWindow(QMainWindow):
         m_view.addAction(self._act_toggle_parallel)
         m_view.addAction(self._act_show_extruded)
         m_view.addSeparator()
+        # The model's own grid (a project entity) keeps its place next to the
+        # other view furniture; the per-viewport toggles live in Visibility.
         m_view.addAction(self._act_show_grids)
         m_view.addAction(self._act_show_grid_labels)
         m_view.addSeparator()
-        m_view.addAction(self._act_grid_line_view)
+        m_visibility = m_view.addMenu("&Visibility")
+        m_visibility.addActions(
+            [
+                self._act_vis_grids,
+                self._act_vis_grid_labels,
+                self._act_vis_nodes,
+                self._act_vis_frames,
+                self._act_vis_surfaces,
+                self._act_vis_supports,
+                self._act_vis_constraints,
+                self._act_vis_frame_assignments,
+                self._act_vis_loads,
+                self._act_vis_node_labels,
+                self._act_vis_element_labels,
+                self._act_vis_extruded,
+            ]
+        )
+        m_view.addSeparator()
+        m_view.addAction(self._act_hide_selected)
+        m_view.addAction(self._act_invert_visible)
         m_view.addAction(self._act_show_all_objects)
+        m_view.addSeparator()
+        m_view.addAction(self._act_grid_line_view)
+        m_view.addAction(self._act_view_colors)
+        m_view.addSeparator()
+        m_view.addAction(self._act_new_view)
+        m_view.addAction(self._act_close_view)
 
         m_options = mb.addMenu("&Options")
         m_options.addAction(self._act_set_units)
@@ -673,6 +757,19 @@ class MainWindow(QMainWindow):
         m_help.addAction(self._act_help_contents)
         m_help.addSeparator()
         m_help.addAction(self._act_about)
+
+        self._menus = {
+            "file": m_file,
+            "edit": m_edit,
+            "select": m_select,
+            "define": m_define,
+            "assign": m_assign,
+            "analyze": m_analyze,
+            "display": m_display,
+            "view": m_view,
+            "options": m_options,
+            "help": m_help,
+        }
 
     def _build_view_toolbar(self) -> None:
         tb = QToolBar("View", self)
@@ -991,7 +1088,31 @@ class MainWindow(QMainWindow):
         self._act_view_front.triggered.connect(self._on_view_front)
         self._act_view_right.triggered.connect(self._on_view_right)
         self._act_toggle_parallel.toggled.connect(self._on_toggle_parallel)
-        self._act_show_extruded.toggled.connect(self._canvas.set_show_section_extrusions)
+        self._act_zoom_in.triggered.connect(self._canvas.zoom_in)
+        self._act_zoom_out.triggered.connect(self._canvas.zoom_out)
+        self._act_hide_selected.triggered.connect(self._on_hide_selected)
+        self._act_invert_visible.triggered.connect(self._on_invert_visible)
+        self._act_view_colors.triggered.connect(self._on_view_colors)
+        self._act_new_view.triggered.connect(self._on_new_view_window)
+        self._act_close_view.triggered.connect(self._on_close_view_window)
+        # "Show Extruded Sections" and its Visibility twin are the same state,
+        # so both drive it and _sync_visibility_actions keeps both ticked.
+        self._act_show_extruded.toggled.connect(self._on_vis_extruded)
+        self._act_vis_extruded.toggled.connect(self._on_vis_extruded)
+        for action, field in (
+            (self._act_vis_grids, "show_grids"),
+            (self._act_vis_grid_labels, "show_grid_labels"),
+            (self._act_vis_nodes, "show_nodes"),
+            (self._act_vis_frames, "show_frames"),
+            (self._act_vis_surfaces, "show_surfaces"),
+            (self._act_vis_supports, "show_supports"),
+            (self._act_vis_constraints, "show_constraints"),
+            (self._act_vis_frame_assignments, "show_frame_assignments"),
+            (self._act_vis_loads, "show_loads"),
+        ):
+            action.toggled.connect(partial(self._on_visibility_toggle, field))
+        self._act_vis_node_labels.toggled.connect(self._on_vis_node_labels)
+        self._act_vis_element_labels.toggled.connect(self._on_vis_element_labels)
 
         # ViewModel
         self._vm.projectChanged.connect(self._on_project_changed)
@@ -1070,6 +1191,7 @@ class MainWindow(QMainWindow):
             return False
         snapshot = self._vm.pending_run_snapshot()
         if snapshot is None:
+            self._apply_project_view_settings()
             self._confirm_custom_commands()
             return True
         if self._ask_restore_snapshot(snapshot):
@@ -1081,6 +1203,7 @@ class MainWindow(QMainWindow):
         else:
             self._vm.discard_run_snapshot()
             self._log(f"Discarded {snapshot.name}.")
+        self._apply_project_view_settings()
         self._confirm_custom_commands()
         return True
 
@@ -1137,7 +1260,24 @@ class MainWindow(QMainWindow):
             event.ignore()
             return
         self._vm.discard_run_snapshot()
+        self._save_session_state()
+        # Secondary viewports are children of the same session: they go with it.
+        for window in list(self._view_windows):
+            window.close()
+        self._view_windows.clear()
         super().closeEvent(event)
+
+    def changeEvent(self, event: QEvent) -> None:
+        """Give the menus back to the main canvas when this window is activated."""
+        if event.type() == QEvent.Type.ActivationChange and self.isActiveWindow():
+            main = getattr(self, "_main_canvas", None)
+            active = getattr(self, "_active_canvas", None)
+            if main is not None and active is not None and active is not main:
+                self._active_canvas = main
+                self._act_close_view.setEnabled(False)
+                self._sync_visibility_actions()
+                self._refresh_action_enablement()
+        super().changeEvent(event)
 
     def _on_quit(self) -> None:
         """File → Quit — a user gesture, so unsaved changes are confirmed."""
@@ -1174,6 +1314,7 @@ class MainWindow(QMainWindow):
         if self._vm.path is None:
             return self._on_save_as()
         try:
+            self._store_view_settings_in_project()
             self._vm.save()
             self._log(f"Saved: {self._vm.path}")
         except Exception as exc:
@@ -1191,6 +1332,7 @@ class MainWindow(QMainWindow):
         if not path:
             return False
         try:
+            self._store_view_settings_in_project()
             out = self._vm.save(path)
             self._log(f"Saved: {out}")
         except Exception as exc:
@@ -2065,6 +2207,170 @@ class MainWindow(QMainWindow):
         self._act_show_grids.setChecked(any(not cs.grid.hide_all for cs in systems))
         self._act_show_grid_labels.setChecked(any(cs.grid.show_labels for cs in systems))
 
+    # ── View → zoom, hiding and per-viewport settings ───────────────
+    def _apply_view_settings(self, **changes: object) -> None:
+        """Apply ``changes`` to this viewport's settings and resync the ticks."""
+        self._canvas.set_view_settings(self._canvas.view_settings.with_changes(**changes))
+        self._sync_visibility_actions()
+
+    def _sync_visibility_actions(self) -> None:
+        """Tick every visibility action from the canvas without re-firing it."""
+        settings = self._canvas.view_settings
+        pairs: tuple[tuple[QAction, bool], ...] = (
+            (self._act_vis_grids, settings.show_grids),
+            (self._act_vis_grid_labels, settings.show_grid_labels),
+            (self._act_vis_nodes, settings.show_nodes),
+            (self._act_vis_frames, settings.show_frames),
+            (self._act_vis_surfaces, settings.show_surfaces),
+            (self._act_vis_supports, settings.show_supports),
+            (self._act_vis_constraints, settings.show_constraints),
+            (self._act_vis_frame_assignments, settings.show_frame_assignments),
+            (self._act_vis_loads, settings.show_loads),
+            (self._act_vis_node_labels, settings.show_node_labels),
+            (self._act_vis_element_labels, settings.show_element_labels),
+            (self._act_vis_extruded, settings.show_extruded),
+            # "Show Extruded Sections" is the same field, so it ticks too.
+            (self._act_show_extruded, settings.show_extruded),
+        )
+        for action, checked in pairs:
+            action.blockSignals(True)
+            action.setChecked(checked)
+            action.blockSignals(False)
+
+    def _on_visibility_toggle(self, field: str, checked: bool) -> None:
+        """Apply one Visibility-menu toggle to the viewport."""
+        self._apply_view_settings(**{field: checked})
+
+    def _on_vis_node_labels(self, checked: bool) -> None:
+        """Node labels, keeping the Display Options dialog's state in step."""
+        self._show_node_labels = checked
+        self._apply_view_settings(show_node_labels=checked)
+
+    def _on_vis_element_labels(self, checked: bool) -> None:
+        """Element labels, keeping the Display Options dialog's state in step."""
+        self._show_element_labels = checked
+        self._apply_view_settings(show_element_labels=checked)
+
+    def _on_vis_extruded(self, checked: bool) -> None:
+        """Show Extruded Sections, from either of its two actions."""
+        self._apply_view_settings(show_extruded=checked)
+
+    def _on_hide_selected(self) -> None:
+        """Hide the selection in this viewport; the project keeps the entities."""
+        selection = self._canvas.selection
+        hidden_nodes, hidden_elements = self._canvas.hidden
+        self._canvas.set_hidden(
+            nodes=set(hidden_nodes) | set(selection.nodes),
+            elements=set(hidden_elements) | set(selection.elements),
+        )
+        self._refresh_action_enablement()
+
+    def _on_invert_visible(self) -> None:
+        """Swap what this viewport shows: hidden becomes visible and vice versa."""
+        project = self._vm.project
+        if project is None:
+            return
+        hidden_nodes, hidden_elements = self._canvas.hidden
+        self._canvas.set_hidden(
+            nodes={n.id for n in project.nodes} - hidden_nodes,
+            elements={e.id for e in project.elements} - hidden_elements,
+        )
+        self._refresh_action_enablement()
+
+    def _on_view_colors(self) -> None:
+        """View → Colors: edit the six viewport colours in one dialog."""
+        dialog = ViewColorsDialog(self._canvas.view_settings, parent=self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        self._apply_view_settings(**dialog.colors())
+
+    # ── View → secondary windows ────────────────────────────────────
+    def _on_new_view_window(self) -> None:
+        """Open another viewport on the same project, in its own window."""
+        window = ViewWindow(self._main_canvas.selection, self._active_canvas.view_settings, self)
+        window.activated.connect(self._on_view_window_activated)
+        window.closed.connect(self._on_view_window_closed)
+        # The right-click menu is the main window's, so every viewport gets the
+        # same actions (assign, hide, delete) on the shared selection.
+        window.canvas.contextMenuRequested.connect(self._on_canvas_context_menu)
+        self._view_windows.append(window)
+        window.show_project(self._vm.project)
+        window.show()
+        self._on_view_window_activated(window)
+
+    def _on_close_view_window(self) -> None:
+        """Close the viewport the menu targets; the main canvas never closes."""
+        if self._active_canvas is self._main_canvas:
+            return
+        for window in list(self._view_windows):
+            if window.canvas is self._active_canvas:
+                window.close()
+                return
+
+    def _on_view_window_activated(self, window: object) -> None:
+        """Follow focus: the View menu now acts on that window's canvas."""
+        if not isinstance(window, ViewWindow):
+            return
+        self._active_canvas = window.canvas
+        self._act_close_view.setEnabled(True)
+        self._sync_visibility_actions()
+        self._refresh_action_enablement()
+
+    def _on_view_window_closed(self, window: object) -> None:
+        """Forget a closed window and hand the menus back to the main canvas."""
+        if not isinstance(window, ViewWindow):
+            return
+        if window in self._view_windows:
+            self._view_windows.remove(window)
+        if self._active_canvas is window.canvas:
+            self._active_canvas = self._main_canvas
+        self._act_close_view.setEnabled(False)
+        self._sync_visibility_actions()
+
+    def _refresh_view_windows(self, project: Project | None) -> None:
+        """Re-render every secondary viewport, keeping its camera where it was."""
+        for window in list(self._view_windows):
+            window.refresh(project)
+
+    # ── View settings that live in the project file ─────────────────
+    def _apply_project_view_settings(self) -> None:
+        """Adopt the display settings the project carries."""
+        project = self._vm.project
+        stored = project.view if project is not None else None
+        self._main_canvas.set_view_settings(stored if stored is not None else ViewSettings())
+        self._sync_visibility_actions()
+
+    def _store_view_settings_in_project(self) -> None:
+        """Write the primary viewport's settings into the model before saving.
+
+        A viewport that was never customised stores ``None``, so the file stays
+        byte-identical to one written before this feature existed.
+        """
+        project = self._vm.project
+        if project is None:
+            return
+        settings = self._main_canvas.view_settings
+        project.view = None if settings == ViewSettings() else settings
+
+    # ── display state that outlives the process ─────────────────────
+    def _restore_session_state(self) -> None:
+        """Restore last session's geometry and default viewport."""
+        settings = QSettings()
+        geometry = settings.value("window/geometry")
+        if geometry is not None:
+            with contextlib.suppress(Exception):  # a corrupt stored value
+                self.restoreGeometry(geometry)
+        raw = settings.value("view/default")
+        if isinstance(raw, str) and raw:
+            with contextlib.suppress(Exception):  # a settings format change
+                self._main_canvas.set_view_settings(ViewSettings.model_validate_json(raw))
+
+    def _save_session_state(self) -> None:
+        """Persist the geometry and the default viewport for the next launch."""
+        settings = QSettings()
+        settings.setValue("window/geometry", self.saveGeometry())
+        settings.setValue("view/default", self._main_canvas.view_settings.model_dump_json())
+
     def _on_canvas_context_menu(self, pos: QPoint) -> None:
         """Right-click on the model view: grid visibility, labels and grid editing."""
         menu = self._canvas_context_menu()
@@ -2141,6 +2447,10 @@ class MainWindow(QMainWindow):
         menu.addSeparator()
         menu.addActions([self._act_move, self._act_replicate, self._act_mirror])
         menu.addSeparator()
+        if elements:
+            hide = menu.addAction("Hide Selected Elements")
+            hide.triggered.connect(self._on_hide_selected)
+            menu.addSeparator()
         menu.addAction(self._act_delete)
         menu.addAction(self._act_clear_selection)
         return menu
@@ -3741,7 +4051,7 @@ class MainWindow(QMainWindow):
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
         self._show_node_labels, self._show_element_labels = dlg.values()
-        self._canvas.set_display_options(
+        self._apply_view_settings(
             show_node_labels=self._show_node_labels,
             show_element_labels=self._show_element_labels,
         )
@@ -4333,12 +4643,13 @@ class MainWindow(QMainWindow):
         # Another project: its grid lines are not the ones being viewed.
         self._grid_view = None
         self._grid_view_window = None
-        self._canvas.set_view_filter(None)
+        self._main_canvas.set_view_filter(None)
         self._act_show_all_objects.setEnabled(False)
         # Results of another project (or of the closed one) never feed a combination.
         self._case_results.clear()
         self._report_extra.clear()
-        self._canvas.show_project(project)
+        self._main_canvas.show_project(project)
+        self._refresh_view_windows(project)
         if project is not None and project.ndm == 2:
             # A 2D model lives in the X-Z plane (core.plane): face on, drawing at y = 0.
             self._on_view_front()
@@ -4597,6 +4908,23 @@ class MainWindow(QMainWindow):
         self._act_show_response_spectrum.setEnabled(has_rs)
         self._act_display_options.setEnabled(has_project)
         self._act_back_to_model.setEnabled(self._post_dock is not None)
+        # Startup gate: with no project open only File and Help stay usable. The
+        # whole menu is disabled rather than every action inside it, so it cannot
+        # open onto a wall of grey entries.
+        for role in (
+            "edit",
+            "select",
+            "define",
+            "assign",
+            "analyze",
+            "display",
+            "view",
+            "options",
+        ):
+            menu = self._menus.get(role)
+            if menu is not None:
+                menu.setEnabled(has_project)
+        self._sync_visibility_actions()
 
     def _log(self, message: str) -> None:
         self._console.appendPlainText(message)

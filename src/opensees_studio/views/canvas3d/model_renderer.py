@@ -42,6 +42,7 @@ from opensees_studio.core.diaphragms import constrained_node_ids
 from opensees_studio.core.frame_members import member_layout
 from opensees_studio.core.geometry.local_axes import frame_local_axes
 from opensees_studio.core.plane import dof_indices as plane_dof_indices
+from opensees_studio.core.view_settings import ViewSettings
 from opensees_studio.services.deformation import DeformationSource
 from opensees_studio.views.canvas3d.style import RenderStyle
 
@@ -110,9 +111,19 @@ class ModelRenderer:
     _FRAME_LUT: ClassVar[list[str]] = ["#338cd9", "#00ffff"]  # blue normal, cyan selected
     _SURFACE_LUT: ClassVar[list[str]] = ["#a8b6c4", "#00ffff"]  # steel grey, cyan selected
 
-    def __init__(self, plotter: Any, style: RenderStyle | None = None) -> None:
+    def __init__(
+        self,
+        plotter: Any,
+        style: RenderStyle | None = None,
+        settings: ViewSettings | None = None,
+    ) -> None:
         self._plotter = plotter
         self._style = style or RenderStyle()
+        #: Visibility/colour settings of the viewport that owns this renderer.
+        self._settings = settings or ViewSettings()
+        #: Ids the user hid in this viewport (View → Hide Selected / Invert).
+        self._hidden_nodes: set[int] = set()
+        self._hidden_elements: set[int] = set()
         self._project: Project | None = None
         #: The project as given, before :attr:`_view_filter` (View → Grid Line View).
         self._source_project: Project | None = None
@@ -139,12 +150,9 @@ class ModelRenderer:
         self._surface_id_to_row: dict[int, int] = {}
         self._node_label_actor: Any = None
         self._element_label_actor: Any = None
-        self._show_node_labels: bool = False
-        self._show_element_labels: bool = False
 
         self._aux_actors: list[Any] = []
         self._hover_actor: Any = None  # single yellow-ring snap marker
-        self._show_section_extrusions: bool = False
         # SAP2000-style working plane: when set, the grid renders ONLY
         # the lines / intersections lying on this plane so a user in
         # plan view at Z=3 doesn't see the Z=0 grid cluttering the view.
@@ -165,18 +173,26 @@ class ModelRenderer:
             return
         # Grid renders even when there are no nodes yet — so the user sees
         # the grid before they place any geometry.
-        self._build_grid(project)
+        if self._settings.show_grids:
+            self._build_grid(project)
         self._build_origin_triad(project)
         if not project.nodes:
             return
-        self._build_node_polydata(project)
-        self._build_frame_polydata(project)
-        self._build_surface_polydata(project)
-        self._build_supports(project)
-        self._build_constraints(project)
-        self._build_frame_assignments(project)
-        self._build_loads(project)
-        if self._show_section_extrusions:
+        if self._settings.show_nodes:
+            self._build_node_polydata(project)
+        if self._settings.show_frames:
+            self._build_frame_polydata(project)
+        if self._settings.show_surfaces:
+            self._build_surface_polydata(project)
+        if self._settings.show_supports:
+            self._build_supports(project)
+        if self._settings.show_constraints:
+            self._build_constraints(project)
+        if self._settings.show_frame_assignments:
+            self._build_frame_assignments(project)
+        if self._settings.show_loads:
+            self._build_loads(project)
+        if self._settings.show_extruded:
             self._build_section_extrusions(project)
         self._apply_mode_to_points()
         self._rebuild_labels()
@@ -188,23 +204,48 @@ class ModelRenderer:
             self.render(self._source_project)
 
     def set_display_options(self, *, show_node_labels: bool, show_element_labels: bool) -> None:
-        """Toggle viewport labels and update the current scene immediately."""
-        self._show_node_labels = show_node_labels
-        self._show_element_labels = show_element_labels
-        self._rebuild_labels()
+        """Toggle viewport labels (kept for the Display Options dialog)."""
+        self.set_settings(
+            self._settings.with_changes(
+                show_node_labels=show_node_labels,
+                show_element_labels=show_element_labels,
+            )
+        )
 
     def set_show_section_extrusions(self, on: bool) -> None:
-        """Toggle the SAP2000-style "Show Extruded View" overlay.
+        """Toggle the SAP2000-style "Show Extruded View" overlay."""
+        self.set_settings(self._settings.with_changes(show_extruded=on))
 
-        Triggers a rebuild if a project is already loaded so the change
-        shows up immediately — otherwise the flag is stored for the
-        next full render.
-        """
-        if self._show_section_extrusions == on:
+    @property
+    def settings(self) -> ViewSettings:
+        """The visibility/colour settings this renderer draws with."""
+        return self._settings
+
+    def set_settings(self, settings: ViewSettings) -> None:
+        """Adopt ``settings`` and redraw (no-op when the instance is unchanged)."""
+        if settings is self._settings:
             return
-        self._show_section_extrusions = on
-        if self._project is not None:
+        self._settings = settings
+        if self._source_project is not None:
             self.render(self._source_project)
+
+    def set_hidden(self, nodes: set[int], elements: set[int]) -> None:
+        """Hide these ids in this viewport and redraw.
+
+        Hiding is a per-viewport concern: it never touches the project, so the
+        model tree, the other viewports and the analysis are unaffected.
+        """
+        if nodes == self._hidden_nodes and elements == self._hidden_elements:
+            return
+        self._hidden_nodes = set(nodes)
+        self._hidden_elements = set(elements)
+        if self._source_project is not None:
+            self.render(self._source_project)
+
+    @property
+    def hidden(self) -> tuple[frozenset[int], frozenset[int]]:
+        """``(nodes, elements)`` hidden in this viewport."""
+        return frozenset(self._hidden_nodes), frozenset(self._hidden_elements)
 
     def set_working_plane(self, plane: tuple[str, float] | None) -> None:
         """Update the working-plane filter and rebuild the grid overlay.
@@ -289,8 +330,9 @@ class ModelRenderer:
 
     # ── builders ────────────────────────────────────────────────────
     def _build_node_polydata(self, project: Project) -> None:
-        ids = [n.id for n in project.nodes]
-        coords = np.array([n.coords for n in project.nodes], dtype=float)
+        visible = [n for n in project.nodes if n.id not in self._hidden_nodes]
+        ids = [n.id for n in visible]
+        coords = np.array([n.coords for n in visible], dtype=float)
         self._node_ids_ordered = ids
         self._node_id_to_row = {nid: i for i, nid in enumerate(ids)}
         self._node_original_points = coords.copy()
@@ -316,7 +358,7 @@ class ModelRenderer:
         self._node_actor = self._plotter.add_mesh(
             glyph,
             scalars="_oss_state",
-            cmap=self._NODE_LUT,
+            cmap=self._settings.node_lut,
             clim=[0, 1],
             show_scalar_bar=False,
             pickable=True,
@@ -324,7 +366,11 @@ class ModelRenderer:
         )
 
     def _build_frame_polydata(self, project: Project) -> None:
-        frames = [el for el in project.elements if isinstance(el, _FRAME_CLASSES)]
+        frames = [
+            el
+            for el in project.elements
+            if isinstance(el, _FRAME_CLASSES) and el.id not in self._hidden_elements
+        ]
         if not frames or self._node_original_points is None:
             return
         cells: list[int] = []
@@ -352,7 +398,7 @@ class ModelRenderer:
         self._frame_actor = self._plotter.add_mesh(
             pd,
             scalars="_oss_state",
-            cmap=self._FRAME_LUT,
+            cmap=self._settings.frame_lut,
             clim=[0, 1],
             show_scalar_bar=False,
             line_width=3.0,
@@ -368,7 +414,11 @@ class ModelRenderer:
         selection work the same way, and points shared with the node cloud so
         a deformed shape moves the faces with it.
         """
-        surfaces = [el for el in project.elements if isinstance(el, _SURFACE_CLASSES)]
+        surfaces = [
+            el
+            for el in project.elements
+            if isinstance(el, _SURFACE_CLASSES) and el.id not in self._hidden_elements
+        ]
         if not surfaces or self._node_original_points is None:
             return
         cells: list[int] = []
@@ -397,7 +447,7 @@ class ModelRenderer:
         self._surface_actor = self._plotter.add_mesh(
             pd,
             scalars="_oss_state",
-            cmap=self._SURFACE_LUT,
+            cmap=self._settings.surface_lut,
             clim=[0, 1],
             show_scalar_bar=False,
             show_edges=True,
@@ -1067,9 +1117,9 @@ class ModelRenderer:
         self._clear_label_actors()
         if self._project is None:
             return
-        if self._show_node_labels:
+        if self._settings.show_node_labels:
             self._node_label_actor = self._add_node_labels(self._project)
-        if self._show_element_labels:
+        if self._settings.show_element_labels:
             self._element_label_actor = self._add_element_labels(self._project)
 
     def _add_node_labels(self, project: Project) -> Any:
