@@ -4441,6 +4441,7 @@ class MainWindow(QMainWindow):
         self._latest_results = results
         self._results_panel.show_results(results, self._vm.project)
         self._refresh_reactions()
+        self._refresh_case_combo()
         self._set_result_caption(self._caption_for(results))
         self._refresh_action_enablement()
         self._refresh_step_buttons()
