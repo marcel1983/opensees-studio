@@ -443,13 +443,13 @@ class ModelCanvas(QtInteractor):
         bottom = (height - rect.bottom()) * dpr
 
         coords = np.asarray([node.coords for node in project.nodes], dtype=float)
-        display = np.asarray(self.renderer.world_to_display(coords), dtype=float)[:, :2]
-        # VTK reports device pixels; some PyVista paths normalise to 0-1. Bring
-        # both to pixels once, or the rectangle matches nothing at all.
-        window = self.render_window
-        if window is not None and display.size and float(np.max(np.abs(display))) <= 1.5:
-            width_px, height_px = window.GetSize()[:2]
-            display = display * np.array([float(width_px), float(height_px)])
+        try:
+            display = self._project_to_display(coords)
+        except (AttributeError, TypeError, ValueError) as exc:
+            # Never fail silently again: a broken projection is a bug, and the
+            # console is where the previous one went unnoticed.
+            print(f"[box-select] projection failed: {exc!r}")
+            return
         screen = {
             node.id: (float(point[0]), float(point[1]))
             for node, point in zip(project.nodes, display, strict=True)
