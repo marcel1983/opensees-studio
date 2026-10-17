@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QToolBar,
+    QToolButton,
     QTreeWidget,
     QTreeWidgetItem,
     QWidget,
@@ -95,6 +96,7 @@ from opensees_studio.core.geometry.ordering import QuadOrderError, order_quad_no
 from opensees_studio.core.groups import Group, colour_for, group_members
 from opensees_studio.core.help import ACTION_TOPICS, TOPIC_PROPERTY
 from opensees_studio.core.materials.library import is_uniaxial
+from opensees_studio.core.reactions import ReactionRow, reaction_rows
 from opensees_studio.core.sections import SHELL_SECTION_CLASSES
 from opensees_studio.core.view_settings import ViewSettings
 from opensees_studio.services import PROJECT_FILE_SUFFIX
@@ -197,6 +199,7 @@ from opensees_studio.views.dialogs.groups import (
 )
 from opensees_studio.views.dialogs.load_combinations import LoadCombinationsDialog
 from opensees_studio.views.dialogs.model_tables import ModelTablesDialog
+from opensees_studio.views.dialogs.reactions import ReactionsDialog
 from opensees_studio.views.dialogs.run_cases import RunCasesDialog
 from opensees_studio.views.dialogs.seismic_loads import SeismicLoadsDialog
 from opensees_studio.views.dialogs.view_colors import ViewColorsDialog
@@ -207,6 +210,7 @@ from opensees_studio.views.docks import (
     ModeShapeAnimator,
     PropertyEditorDock,
     PushoverCurveView,
+    ReactionsPanel,
     ResponseSpectrumView,
     ResultsPanel,
     ShellContourView,
@@ -241,7 +245,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("OpenSees Studio")
+        self.setWindowTitle(f"OpenSees Studio v{__version__}")
         self.resize(1600, 1000)
 
         self._vm = ProjectViewModel(self)
@@ -281,6 +285,7 @@ class MainWindow(QMainWindow):
         self._ground_motions_dlg: GroundMotionsDialog | None = None  # non-modal, reused
 
         self._build_docks()
+        self._log(f"OpenSees Studio {__version__} started.")
         self._build_actions()
         self._build_menu_bar()
         self._build_view_toolbar()
@@ -359,7 +364,12 @@ class MainWindow(QMainWindow):
         results_dock = QDockWidget("Results", self)
         results_dock.setWidget(self._results_panel)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, results_dock)
+        self._reactions_panel = ReactionsPanel()
+        self._reactions_dock = QDockWidget("Reactions", self)
+        self._reactions_dock.setWidget(self._reactions_panel)
+        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self._reactions_dock)
         self.tabifyDockWidget(console_dock, results_dock)
+        self.tabifyDockWidget(results_dock, self._reactions_dock)
         console_dock.raise_()
 
     def _build_actions(self) -> None:
@@ -484,6 +494,10 @@ class MainWindow(QMainWindow):
         self._act_show_deformed = QAction("Show &Deformed Shape", self)
         self._act_show_mode_shape = QAction("&Animate Mode Shape", self)
         self._act_show_force_diagram = QAction("Show &Force Diagram…", self)
+        self._act_show_reactions = QAction("Show &Reactions", self)
+        self._act_show_reactions.setCheckable(True)
+        self._act_reactions_table = QAction("Reactions &Table", self)
+        self._act_reactions_dialog = QAction("R&eactions…", self)
         self._act_shell_contours = QAction("Show Shell &Contours…", self)
         self._act_show_time_history = QAction("&Time-History Plot…", self)
         self._act_export_th_animation = QAction("Export Time-History &Animation…", self)
@@ -707,6 +721,9 @@ class MainWindow(QMainWindow):
         m_display.addSeparator()
         m_display.addActions([self._act_show_deformed, self._act_show_mode_shape])
         m_display.addAction(self._act_show_force_diagram)
+        m_display.addActions(
+            [self._act_show_reactions, self._act_reactions_table, self._act_reactions_dialog]
+        )
         m_display.addAction(self._act_shell_contours)
         m_display.addSeparator()
         m_display.addAction(self._act_show_time_history)
@@ -808,6 +825,32 @@ class MainWindow(QMainWindow):
         )
         self._level_combo.currentIndexChanged.connect(self._on_level_changed)
         tb.addWidget(self._level_combo)
+        tb.addSeparator()
+        # Which results case the viewport represents: the layers (deformed
+        # shape, diagrams, reactions) follow it.
+        tb.addWidget(QLabel("Case: "))
+        self._case_combo = QComboBox()
+        self._case_combo.setMinimumWidth(190)
+        self._case_combo.setToolTip(
+            "Results case shown in the viewport. Deformed shape, force diagram, "
+            "contours and reactions all read this case."
+        )
+        self._case_combo.currentIndexChanged.connect(self._on_case_changed)
+        tb.addWidget(self._case_combo)
+        self._step_back = QToolButton()
+        self._step_back.setText("\u25c0")
+        self._step_back.setToolTip("Previous step of this case")
+        self._step_back.setEnabled(False)
+        self._step_back.clicked.connect(lambda: self._shift_step(-1))
+        tb.addWidget(self._step_back)
+        self._step_forward = QToolButton()
+        self._step_forward.setText("\u25b6")
+        self._step_forward.setToolTip("Next step of this case")
+        self._step_forward.setEnabled(False)
+        self._step_forward.clicked.connect(lambda: self._shift_step(1))
+        tb.addWidget(self._step_forward)
+        self._step_label = QLabel("")
+        tb.addWidget(self._step_label)
         tb.addSeparator()
         tb.addAction(self._act_toggle_parallel)
         tb.addAction(self._act_show_extruded)
@@ -1086,6 +1129,9 @@ class MainWindow(QMainWindow):
         self._act_show_deformed.triggered.connect(self._on_show_deformed)
         self._act_show_mode_shape.triggered.connect(self._on_show_mode_shape)
         self._act_show_force_diagram.triggered.connect(self._on_show_force_diagram)
+        self._act_show_reactions.toggled.connect(self._on_show_reactions)
+        self._act_reactions_table.triggered.connect(self._on_reactions_table)
+        self._act_reactions_dialog.triggered.connect(self._on_reactions_dialog)
         self._act_shell_contours.triggered.connect(self._on_show_shell_contours)
         self._act_show_time_history.triggered.connect(self._on_show_time_history)
         self._act_export_th_animation.triggered.connect(self._on_export_th_animation)
@@ -1709,10 +1755,28 @@ class MainWindow(QMainWindow):
         self._tool_controller.cancel()
 
     # ── slots: edit → transforms ────────────────────────────────────
+    def _selection_nodes(self) -> set[int]:
+        """Selected nodes, plus the joints of every selected element.
+
+        A frame is defined by its joints, so selecting members and asking to
+        move, copy or mirror them means acting on those joints: the user does
+        not have to pick the nodes first. A joint shared with a member that is
+        not selected still moves, which is how a joint edit behaves in a frame
+        program — the connected member follows its joint.
+        """
+        project = self._vm.project
+        if project is None:
+            return set(self._canvas.selection.nodes)
+        return selection_queries.implied_node_ids(
+            project,
+            self._canvas.selection.nodes,
+            self._canvas.selection.elements,
+        )
+
     def _on_move(self) -> None:
-        sel_nodes = set(self._canvas.selection.nodes)
+        sel_nodes = self._selection_nodes()
         if not sel_nodes:
-            QMessageBox.information(self, "Move", "Select one or more nodes first.")
+            QMessageBox.information(self, "Move", "Select nodes or frame elements first.")
             return
         dlg = MoveDialog(len(sel_nodes), self)
         if dlg.exec() != QDialog.DialogCode.Accepted:
@@ -1723,10 +1787,10 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Move failed", str(exc))
 
     def _on_replicate(self) -> None:
-        sel_nodes = set(self._canvas.selection.nodes)
+        sel_nodes = self._selection_nodes()
         sel_elements = set(self._canvas.selection.elements)
         if not sel_nodes:
-            QMessageBox.information(self, "Replicate", "Select one or more nodes first.")
+            QMessageBox.information(self, "Replicate", "Select nodes or frame elements first.")
             return
         # Forgiving: if the user selected only nodes, include any element whose
         # endpoints are all in the node selection.
@@ -1747,10 +1811,10 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Replicate failed", str(exc))
 
     def _on_mirror(self) -> None:
-        sel_nodes = set(self._canvas.selection.nodes)
+        sel_nodes = self._selection_nodes()
         sel_elements = set(self._canvas.selection.elements)
         if not sel_nodes:
-            QMessageBox.information(self, "Mirror", "Select one or more nodes first.")
+            QMessageBox.information(self, "Mirror", "Select nodes or frame elements first.")
             return
         if not sel_elements and self._vm.project is not None:
             sel_elements = {
@@ -3929,8 +3993,7 @@ class MainWindow(QMainWindow):
         return self
 
     def _on_analysis_finished(self, results) -> None:  # type: ignore[no-untyped-def]
-        self._latest_results = results
-        self._results_panel.show_results(results, self._vm.project)
+        self._display_results(results)
         self._log(f"Analysis complete: {type(results).__name__}.")
         if isinstance(results, TransientResults) and results.early_stop:
             self._log(f"Warning: transient run did not converge ({results.steps_summary()}).")
@@ -3985,6 +4048,8 @@ class MainWindow(QMainWindow):
         self._case_results.clear()
         self._report_extra.clear()
         self._latest_results = None
+        self._refresh_reactions()
+        self._refresh_case_combo()
         self._on_back_to_model()
         self._results_panel.show_results(None, project)
         removed = delete_all_results(db_path)
@@ -4310,6 +4375,107 @@ class MainWindow(QMainWindow):
                 f"Could not write the animation:\n\n{exc}\n\n"
                 "MP4 export requires FFmpeg via imageio. Try .gif as a fallback.",
             )
+
+    def _reaction_rows(self) -> list[ReactionRow]:
+        """The reactions of the case on screen, or none when there are no results."""
+        project = self._vm.project
+        results = self._latest_results
+        if project is None or results is None:
+            return []
+        return reaction_rows(project, getattr(results, "node_reaction", None))
+
+    def _refresh_reactions(self) -> None:
+        """Keep the table and the overlay on the same case, and enable the actions."""
+        rows = self._reaction_rows()
+        self._reactions_panel.set_rows(rows)
+        self._canvas.set_reactions(rows, show=self._act_show_reactions.isChecked())
+        enabled = bool(rows)
+        self._act_show_reactions.setEnabled(enabled)
+        self._act_reactions_table.setEnabled(enabled)
+        self._act_reactions_dialog.setEnabled(enabled)
+        if not enabled and self._act_show_reactions.isChecked():
+            self._act_show_reactions.setChecked(False)
+
+    def _on_show_reactions(self, checked: bool) -> None:
+        self._canvas.set_reactions(self._reaction_rows(), show=checked)
+
+    def _on_reactions_dialog(self) -> None:
+        dialog = ReactionsDialog(self._reaction_rows(), self)
+        dialog.exec()
+
+    def _on_reactions_table(self) -> None:
+        self._reactions_dock.show()
+        self._reactions_dock.raise_()
+
+    def _refresh_case_combo(self) -> None:
+        """List the cases that still hold results for this model, newest order."""
+        project = self._vm.project
+        entries = self._case_results.current(project) if project is not None else {}
+        current = getattr(self._latest_results, "case_id", None)
+        self._case_combo.blockSignals(True)
+        self._case_combo.clear()
+        for case_id, results in sorted(entries.items()):
+            kind = type(results).__name__.removesuffix("Results")
+            name = getattr(results, "case_name", None) or f"Case {case_id}"
+            self._case_combo.addItem(f"{name} · {kind}", case_id)
+        if current is not None:
+            index = self._case_combo.findData(current)
+            if index >= 0:
+                self._case_combo.setCurrentIndex(index)
+        self._case_combo.blockSignals(False)
+        self._case_combo.setEnabled(bool(entries))
+        self._refresh_step_buttons()
+
+    def _on_case_changed(self, index: int) -> None:
+        """Show the chosen case; the layers read it from `_latest_results`."""
+        case_id = self._case_combo.itemData(index)
+        project = self._vm.project
+        if case_id is None or project is None:
+            return
+        results = self._case_results.current(project).get(case_id)
+        if results is not None and results is not self._latest_results:
+            self._display_results(results)
+
+    def _display_results(self, results: object) -> None:
+        """Point the whole window at one results case."""
+        self._latest_results = results
+        self._results_panel.show_results(results, self._vm.project)
+        self._refresh_reactions()
+        self._refresh_case_combo()
+        self._set_result_caption(self._caption_for(results))
+        self._refresh_action_enablement()
+        self._refresh_step_buttons()
+
+    def _refresh_step_buttons(self) -> None:
+        """Enable the step arrows only when the shown case has more than one."""
+        steps = int(getattr(self._latest_results, "n_steps", 1) or 1)
+        # Only a layer that knows how to redraw itself at another step registers
+        # an applier; until one does, the arrows must not pretend to work.
+        steppable = steps > 1 and getattr(self, "_step_apply", None) is not None
+        self._step_index = min(getattr(self, "_step_index", 0), max(steps - 1, 0))
+        self._step_back.setEnabled(steppable)
+        self._step_forward.setEnabled(steppable)
+        if steps > 1:
+            self._step_label.setText(f"Step {self._step_index + 1}/{steps}")
+        else:
+            self._step_label.setText("")
+
+    def _shift_step(self, delta: int) -> None:
+        steps = int(getattr(self._latest_results, "n_steps", 1) or 1)
+        if steps <= 1:
+            return
+        target = min(max(self._step_index + delta, 0), steps - 1)
+        if target == self._step_index:
+            return
+        self._step_index = target
+        self._refresh_step_buttons()
+        self._apply_step()
+
+    def _apply_step(self) -> None:
+        """Re-draw the step-based layer at the current step, if one is showing."""
+        apply = getattr(self, "_step_apply", None)
+        if apply is not None:
+            apply(self._step_index)
 
     def _on_show_force_diagram(self) -> None:
         if self._static_result() is None or self._vm.project is None:
@@ -5027,9 +5193,9 @@ class MainWindow(QMainWindow):
         ):
             action.setEnabled(has_project and has_selected_elements)
         self._act_delete.setEnabled(has_project and has_selection)
-        self._act_move.setEnabled(has_project and has_selected_nodes)
-        self._act_replicate.setEnabled(has_project and has_selected_nodes)
-        self._act_mirror.setEnabled(has_project and has_selected_nodes)
+        self._act_move.setEnabled(has_project and has_selection)
+        self._act_replicate.setEnabled(has_project and has_selection)
+        self._act_mirror.setEnabled(has_project and has_selection)
         self._act_tool_draw_frame.setEnabled(has_project)
         self._act_tool_draw_node.setEnabled(has_project)
         self._act_tool_draw_truss.setEnabled(has_project)

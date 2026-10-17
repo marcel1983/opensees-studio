@@ -169,3 +169,113 @@ def invert(
         {node.id for node in project.nodes} - set(nodes),
         {element.id for element in project.elements} - set(elements),
     )
+
+
+def implied_node_ids(
+    project: Project,
+    node_ids: Iterable[int],
+    element_ids: Iterable[int],
+) -> set[int]:
+    """Selected nodes plus the joints of every selected element.
+
+    A frame is defined by its joints, so moving, copying or mirroring a member
+    means acting on those joints and the user should not have to pick the nodes
+    first. A joint shared with an element that is not selected still moves:
+    that is how a joint edit behaves in a frame program, the connected member
+    follows its joint.
+    """
+    nodes = set(node_ids)
+    wanted = set(element_ids)
+    if not wanted:
+        return nodes
+    for element in project.elements:
+        if element.id in wanted:
+            nodes.update(element.nodes)
+    return nodes
+
+
+def elements_with_nodes_inside(project: Project, node_ids: Iterable[int]) -> set[int]:
+    """Elements whose every joint is in ``node_ids``.
+
+    The rule for a box selection: a member counts only when both of its ends
+    are inside, so a member that merely crosses the rectangle is left out.
+    """
+    inside = set(node_ids)
+    return {
+        element.id
+        for element in project.elements
+        if element.nodes and all(nid in inside for nid in element.nodes)
+    }
+
+
+def _segment_hits_rect(
+    a: tuple[float, float],
+    b: tuple[float, float],
+    rect: tuple[float, float, float, float],
+) -> bool:
+    """True when the segment ``a-b`` enters the rectangle (Liang-Barsky)."""
+    xmin, xmax, ymin, ymax = rect
+    dx = b[0] - a[0]
+    dy = b[1] - a[1]
+    t0, t1 = 0.0, 1.0
+    for p, q in (
+        (-dx, a[0] - xmin),
+        (dx, xmax - a[0]),
+        (-dy, a[1] - ymin),
+        (dy, ymax - a[1]),
+    ):
+        if abs(p) < 1e-12:
+            if q < 0:
+                return False
+            continue
+        t = q / p
+        if p < 0:
+            t0 = max(t0, t)
+        else:
+            t1 = min(t1, t)
+        if t0 > t1:
+            return False
+    return True
+
+
+def box_selection(
+    project: Project,
+    display: dict[int, tuple[float, float]],
+    rect: tuple[float, float, float, float],
+    *,
+    crossing: bool,
+) -> tuple[set[int], set[int]]:
+    """Select what a rubber-band rectangle encloses.
+
+    ``display`` maps node id to its screen position; ``rect`` is
+    ``(xmin, xmax, ymin, ymax)`` in the same space. A node is selected when it
+    falls inside. An element is selected when every one of its joints is inside,
+    and — when ``crossing`` is true — also when one of its edges merely crosses
+    the rectangle, which is what the "select what it touches" drag does.
+    """
+    xmin, xmax, ymin, ymax = rect
+
+    def inside(node_id: int) -> bool:
+        point = display.get(node_id)
+        if point is None:
+            return False
+        return xmin <= point[0] <= xmax and ymin <= point[1] <= ymax
+
+    nodes = {node_id for node_id in display if inside(node_id)}
+    elements: set[int] = set()
+    for element in project.elements:
+        joints = [node_id for node_id in element.nodes if node_id in display]
+        if not joints:
+            continue
+        if all(inside(node_id) for node_id in element.nodes):
+            elements.add(element.id)
+            continue
+        if not crossing:
+            continue
+        if any(inside(node_id) for node_id in joints):
+            elements.add(element.id)
+            continue
+        points = [display[node_id] for node_id in joints]
+        if any(_segment_hits_rect(points[k], points[k + 1], rect) for k in range(len(points) - 1)):
+            elements.add(element.id)
+    return nodes, elements

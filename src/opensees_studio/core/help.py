@@ -1192,10 +1192,14 @@ Selection (Esc) to pick one set alone.
         "edit.move": _t(
             "Edit → Move",
             "Edit and tools",
-            "Translate the selected nodes in place by (dx, dy, dz).",
+            "Translate the selected nodes or members in place by (dx, dy, dz).",
             """
-Moves the selected nodes, and with them every element that uses them: this is
+Moves the selection, and with it every element that uses those nodes: this is
 the transform that changes the model rather than copying it.
+
+Selecting a member is enough: its joints move with it, so you do not have to
+pick the nodes first. A joint shared with a member you did not select moves as
+well, and that member follows its joint.
 
 # Values
 - **dX, dY, dZ** — the displacement, in project units. Positive X is to the
@@ -1339,10 +1343,14 @@ One undo step takes the whole repair back.
         "tools.select": _t(
             "Tools → Select",
             "Edit and tools",
-            "The default tool: click to select, drag to orbit, wheel to zoom.",
+            "The default tool: click to select, drag a box, middle-drag to orbit, wheel to zoom.",
             """
-Clicking a node or an element selects it; Ctrl+click adds to the selection;
-clicking empty space clears it. A box drag selects everything inside it.
+Clicking a node or an element **adds** it to the selection, so building one is
+just clicking; Ctrl+click takes an item out, and clicking empty space clears the
+lot. Dragging with the left button draws a box: dragged **downwards** it takes
+only what is fully inside; dragged **upwards** it also takes what the box
+touches, so a member that crosses it is picked. The camera turns with a
+middle-button drag, which the left button no longer does.
 
 With nothing else active this is also what unlocks the model for inspection:
 hovering an element shows its properties, and the property dock follows the
@@ -2977,6 +2985,72 @@ reported so the mode can be identified.
             "mechanics.modal",
             "display.deformed",
         ),
+        "display.reactions": _t(
+            "Display → Show Reactions",
+            "Display",
+            "The support reactions of the case on screen, as arrows and arcs.",
+            """
+Draws, at every restrained node, a red arrow for the reaction force and a
+violet circle for the reaction moment, both **proportional to their
+magnitude**: the largest force and the largest moment of the case set the
+length and the radius, so the picture compares nodes with each other rather than
+with an absolute value.
+
+# Reading it
+- The arrow points along the reaction: the force the support applies to the
+  structure. An arrow that ends on the joint is a force pulling that way.
+- The circle lies in the plane perpendicular to the moment, and you read its
+  turning sense with the right hand: thumb along the moment, fingers curling the
+  way it acts.
+- The case shown is the one in the caption (top left). Change case and the
+  overlay follows.
+- The numbers of the same case are in the **Reactions** tab and in
+  *Display → Reactions Table*.
+
+Nothing is drawn when the case reports no reactions (a free-floating model, or
+element types that do not deliver them).
+""",
+            "display.reactions_table",
+            "analyze.results_database",
+        ),
+        "display.reactions_table": _t(
+            "Display → Reactions Table",
+            "Display",
+            "The reactions of the case being shown, one row per restrained node.",
+            """
+Brings the **Reactions** tab of the bottom dock to the front: node, Fx, Fy, Fz,
+Mx, My and Mz in global components, in project units. It follows the case on
+screen, so it updates when the displayed result changes.
+
+# Reading it
+- Only nodes that report a reaction appear; a free joint is not listed as a row
+  of zeros.
+- A case with a time axis shows the **final step**, the same one the arrows draw.
+- A 2D model stores three components (Ux, Uz, Ry), so it shows **Fz** and
+  **Mz**, with Fy and Mx at zero.
+- The arrows in *Display → Show Reactions* are built from exactly these numbers.
+
+The tab lives with Console and Results: click its header, or use this action to
+raise it.
+""",
+            "display.reactions",
+        ),
+        "display.reactions_dialog": _t(
+            "Display → Reactions…",
+            "Display",
+            "The same reactions as the tab, in a window you can close.",
+            """
+A modal window with one row per restrained node and the six global components
+of the case on screen. It is the tab's table in a window, for reading without
+switching the bottom dock over the console.
+
+Use it when you want the numbers in front of you for a moment: the model stays
+behind, and closing it puts you back where you were. For a table that stays open
+beside the model, use *Display → Reactions Table*, which raises the tab.
+""",
+            "display.reactions_table",
+            "display.reactions",
+        ),
         "display.force_diagram": _t(
             "Display → Force Diagram",
             "Display",
@@ -3831,6 +3905,9 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_show_deformed": "display.deformed",
     "_act_show_mode_shape": "display.mode_shape",
     "_act_show_force_diagram": "display.force_diagram",
+    "_act_show_reactions": "display.reactions",
+    "_act_reactions_table": "display.reactions_table",
+    "_act_reactions_dialog": "display.reactions_dialog",
     "_act_shell_contours": "display.shell_contours",
     "_act_show_time_history": "display.time_history",
     "_act_export_th_animation": "display.export_animation",

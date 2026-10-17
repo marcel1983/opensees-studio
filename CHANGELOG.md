@@ -9,8 +9,33 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Added
+
+- **The version, in the title bar.** The window is `OpenSees Studio v0.0.18`, so
+  a screenshot says which build produced it — the same reason the console now
+  prints the version on startup.
+- **Node reactions, as a table and as a drawing.** The **Reactions** tab, next to
+  Console and Results, lists Fx, Fy, Fz, Mx, My and Mz of every restrained node
+  in the case on screen; *Display → Show Reactions* draws a force arrow and a
+  moment circle at each of them, proportional to the largest value of that case,
+  and *Display → Reactions Table* raises the tab. The table and the drawing
+  share one function, so a number and the picture cannot disagree.
+
 ### Changed
 
+- **Clicking accumulates, Ctrl removes.** A click used to replace the selection
+  unless Ctrl was held; it now adds, so a selection is built by clicking, and
+  Ctrl+click takes an item out. Clicking empty space still clears everything.
+- **A left drag draws a selection box.** Dragged downwards it takes only what is
+  fully inside (joints, members and shells whose joints are all inside); dragged
+  upwards it also takes whatever the box touches, so a member that crosses it is
+  picked. Ctrl+drag subtracts. The camera turns with a middle-button drag,
+  because the left button is the box; the wheel still zooms.
+- **Move, Replicate and Mirror accept a frame selection.** They required
+  selected nodes, so the element-first workflow — select the members, transform
+  them — found the three commands disabled. A member now brings its joints, and
+  the actions enable on any selection. A joint shared with an unselected member
+  moves too; that member follows its joint, as in a frame program.
 - **Selecting a node no longer rebuilds the whole glyph.** `update_selection`
   re-ran the glyph filter over every node sphere on each click; it now writes
   the state array onto the existing glyph, repeated by its stride — 39 ms to

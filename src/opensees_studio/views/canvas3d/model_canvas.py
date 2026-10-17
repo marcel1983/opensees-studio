@@ -17,12 +17,14 @@ from collections.abc import Callable
 from typing import Any
 
 import numpy as np
-from PySide6.QtCore import QPoint, Qt, Signal
-from PySide6.QtGui import QMouseEvent, QResizeEvent
+from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, Signal
+from PySide6.QtGui import QColor, QMouseEvent, QPainter, QPen, QResizeEvent
 from PySide6.QtWidgets import QLabel, QToolTip, QWidget
 from pyvistaqt import QtInteractor
 
 from opensees_studio.core import Project
+from opensees_studio.core.reactions import ReactionRow
+from opensees_studio.core.selection import box_selection
 from opensees_studio.core.view_settings import ViewSettings
 from opensees_studio.views.canvas3d.model_renderer import ModelRenderer
 from opensees_studio.views.canvas3d.selection import SelectionState
@@ -47,6 +49,21 @@ CAMERA_DRAG_ANGLE_DEG = 3.0
 #: A pan does not turn the camera, so it is measured on the focal point: moving
 #: it more than this share of the viewing distance is a deliberate pan.
 CAMERA_DRAG_PAN_FRACTION = 0.05
+
+
+class _RubberBand(QWidget):
+    """The dashed rectangle drawn over the viewport while the user drags."""
+
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+        self.hide()
+
+    def paintEvent(self, _event: Any) -> None:
+        painter = QPainter(self)
+        painter.setPen(QPen(QColor(0, 140, 255), 1.0, Qt.PenStyle.DashLine))
+        painter.drawRect(self.rect().adjusted(0, 0, -1, -1))
 
 
 class ModelCanvas(QtInteractor):
@@ -81,6 +98,8 @@ class ModelCanvas(QtInteractor):
         self.selection = selection or SelectionState(self)
         self._renderer = ModelRenderer(self, self._style, self._settings)
         self._default_selection_enabled = True
+        self._box_origin: QPointF | None = None
+        self._rubber_band: _RubberBand | None = None
         self._snap_preview_enabled = False  # toggled by Draw tools
         #: Optional provider of hover text per element id (set by the main
         #: window); elements it returns None for show no tooltip.
@@ -127,6 +146,24 @@ class ModelCanvas(QtInteractor):
         The base ``super().mousePressEvent`` MUST still be called so VTK
         rotate/pan/zoom keep working.
         """
+        if event.button() == Qt.MouseButton.LeftButton and self._default_selection_enabled:
+            # Left drag draws the selection box, so it must not reach VTK: the
+            # camera turns with the middle button instead (see below).
+            self._box_origin = event.position()
+            self._show_rubber_band(self._box_origin, self._box_origin)
+            return
+        if event.button() == Qt.MouseButton.MiddleButton:
+            # Orbit moved here because the left button now draws the box: the
+            # event is forwarded as a left drag, which is what VTK rotates on.
+            forwarded = QMouseEvent(
+                event.type(),
+                event.position(),
+                Qt.MouseButton.LeftButton,
+                Qt.MouseButton.LeftButton,
+                event.modifiers(),
+            )
+            super().mousePressEvent(forwarded)  # type: ignore[no-untyped-call]
+            return
         if event.button() == Qt.MouseButton.LeftButton:
             # Remember where the press started and what the camera looked like:
             # whether this becomes a click or a drag depends on how far the
@@ -138,13 +175,42 @@ class ModelCanvas(QtInteractor):
         elif event.button() == Qt.MouseButton.RightButton:
             self._right_press_pos = event.position()
             self._right_press_camera = self._camera_state()
-        super().mousePressEvent(event)
+        super().mousePressEvent(event)  # type: ignore[no-untyped-call]
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         # VTK finishes its interaction inside `super()` and may still apply the
         # rotation as the button goes up, so the pick is handled afterwards:
         # anything restored before that would be overwritten.
-        super().mouseReleaseEvent(event)
+        if event.button() == Qt.MouseButton.LeftButton and self._box_origin is not None:
+            origin = self._box_origin
+            self._box_origin = None
+            self._hide_rubber_band()
+            rect = QRectF(origin, event.position()).normalized()
+            drift = (
+                (event.position().x() - origin.x()) ** 2 + (event.position().y() - origin.y()) ** 2
+            ) ** 0.5
+            if drift <= CLICK_MAX_DRIFT_PX:
+                # The same budget the canvas has always used: a small drift is a
+                # click, and only a real drag draws a box.
+                self._handle_click(event.position().x(), event.position().y())
+            else:
+                # Qt's y grows downwards, so a downward drag ends *below* the
+                # press. A normalised rect cannot say this: its top is always
+                # the smaller y.
+                downward = event.position().y() >= origin.y()
+                self._select_in_box(rect, crossing=not downward)
+            return
+        if event.button() == Qt.MouseButton.MiddleButton:
+            forwarded = QMouseEvent(
+                event.type(),
+                event.position(),
+                Qt.MouseButton.LeftButton,
+                Qt.MouseButton.NoButton,
+                event.modifiers(),
+            )
+            super().mouseReleaseEvent(forwarded)  # type: ignore[no-untyped-call]
+            return
+        super().mouseReleaseEvent(event)  # type: ignore[no-untyped-call]
         if event.button() == Qt.MouseButton.RightButton:
             press = getattr(self, "_right_press_pos", None)
             self.__dict__.pop("_right_press_pos", None)
@@ -196,7 +262,10 @@ class ModelCanvas(QtInteractor):
         intersection within pixel tolerance. Skipped entirely when the
         default selection tool is active (no need to hint at snap there).
         """
-        super().mouseMoveEvent(event)
+        if self._box_origin is not None:
+            self._show_rubber_band(self._box_origin, event.position())
+            return
+        super().mouseMoveEvent(event)  # type: ignore[no-untyped-call]
         if self.element_tooltip is not None:
             self._update_element_tooltip(event.position().x(), event.position().y())
         if not self._snap_preview_enabled:
@@ -331,6 +400,87 @@ class ModelCanvas(QtInteractor):
         camera.position = position
         camera.focal_point = focal_point
         camera.up = up
+
+    def _show_rubber_band(self, start: QPointF, current: QPointF) -> None:
+        """Resize and show the dashes while the drag is in progress."""
+        if self._rubber_band is None:
+            self._rubber_band = _RubberBand(self)
+        rect = QRectF(start, current).normalized().toRect()
+        self._rubber_band.setGeometry(rect.adjusted(0, 0, 1, 1))
+        self._rubber_band.show()
+        self._rubber_band.raise_()
+
+    def _hide_rubber_band(self) -> None:
+        if self._rubber_band is not None:
+            self._rubber_band.hide()
+
+    def _project_to_display(self, coords: np.ndarray) -> np.ndarray:
+        """World coordinates to device pixels (origin at the bottom-left).
+
+        ``vtkCoordinate`` does the projection against this viewport's renderer,
+        which is the one API that behaves the same across PyVista versions —
+        ``Renderer`` here has no ``world_to_display``.
+        """
+        from vtkmodules.vtkRenderingCore import vtkCoordinate
+
+        coord = vtkCoordinate()
+        coord.SetCoordinateSystemToWorld()
+        renderer = self.renderer
+        out = np.empty((len(coords), 2), dtype=float)
+        for row, point in enumerate(coords):
+            coord.SetValue(float(point[0]), float(point[1]), float(point[2]))
+            display_value = coord.GetComputedDisplayValue(renderer)
+            out[row] = (float(display_value[0]), float(display_value[1]))
+        return out
+
+    def _select_in_box(self, rect: QRectF, *, crossing: bool) -> None:
+        """Select what the rubber-band rectangle encloses.
+
+        Dragging downwards takes only what is fully inside; dragging upwards
+        also takes what the box merely touches, so a member that crosses it is
+        picked. The rectangle is in Qt logical pixels; the projection is in
+        device pixels with the origin at the bottom-left.
+        """
+        project = self._renderer._source_project
+        if project is None or not project.nodes:
+            return
+        dpr = float(self.devicePixelRatioF()) if hasattr(self, "devicePixelRatioF") else 1.0
+        height = self.height()
+        left = rect.left() * dpr
+        right = rect.right() * dpr
+        top = (height - rect.top()) * dpr
+        bottom = (height - rect.bottom()) * dpr
+
+        coords = np.asarray([node.coords for node in project.nodes], dtype=float)
+        try:
+            display = self._project_to_display(coords)
+        except (AttributeError, TypeError, ValueError) as exc:
+            # Never fail silently again: a broken projection is a bug, and the
+            # console is where the previous one went unnoticed.
+            print(f"[box-select] projection failed: {exc!r}")
+            return
+        screen = {
+            node.id: (float(point[0]), float(point[1]))
+            for node, point in zip(project.nodes, display, strict=True)
+        }
+
+        box_rect = (
+            min(left, right),
+            max(left, right),
+            min(top, bottom),
+            max(top, bottom),
+        )
+        picked_nodes, picked_elements = box_selection(project, screen, box_rect, crossing=crossing)
+        if self._is_additive_modifier():
+            self.selection.set_selection(
+                set(self.selection.nodes) - picked_nodes,
+                set(self.selection.elements) - picked_elements,
+            )
+        else:
+            self.selection.set_selection(
+                set(self.selection.nodes) | picked_nodes,
+                set(self.selection.elements) | picked_elements,
+            )
 
     def _handle_click(self, qt_x: float, qt_y: float) -> None:
         """Run our screen-space picking from Qt-coordinate (top-left origin).
@@ -556,6 +706,11 @@ class ModelCanvas(QtInteractor):
         self.renderer.reset_camera()
         self.render()
 
+    def set_reactions(self, rows: list[ReactionRow], *, show: bool) -> None:
+        """Draw the reactions of the shown case, or stop drawing them."""
+        self._renderer.set_reactions(rows, show=show)
+        self.render()
+
     def refresh(self, project: Project | None) -> None:
         """Re-render ``project`` without moving the camera (model edits)."""
         self._renderer.render(project)
@@ -764,20 +919,25 @@ class ModelCanvas(QtInteractor):
         return (float(point[0]), float(point[1]), float(point[2]))
 
     def _dispatch_pick(self, kind: str, entity_id: int) -> None:
-        additive = self._is_additive_modifier()
+        # A click accumulates: the usual gesture is building a selection, not
+        # restarting it. Ctrl takes one item out, and Ctrl on something that is
+        # not selected does nothing.
+        remove = self._is_additive_modifier()
         if kind == "node":
             if self._default_selection_enabled:
-                if additive:
-                    self.selection.toggle_node(entity_id)
+                if remove:
+                    if entity_id in self.selection.nodes:
+                        self.selection.toggle_node(entity_id)
                 else:
-                    self.selection.select_node(entity_id)
+                    self.selection.select_node(entity_id, additive=True)
             self.nodePicked.emit(entity_id)
         elif kind == "element":
             if self._default_selection_enabled:
-                if additive:
-                    self.selection.toggle_element(entity_id)
+                if remove:
+                    if entity_id in self.selection.elements:
+                        self.selection.toggle_element(entity_id)
                 else:
-                    self.selection.select_element(entity_id)
+                    self.selection.select_element(entity_id, additive=True)
             self.elementPicked.emit(entity_id)
 
     def _is_additive_modifier(self) -> bool:
