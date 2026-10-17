@@ -74,3 +74,32 @@ def test_the_dialog_reports_only_the_ticked_cases(qtbot) -> None:  # type: ignor
     assert dialog.selected_case_ids() == [1, 2]
     dialog._list.item(0).setCheckState(Qt.CheckState.Unchecked)
     assert dialog.selected_case_ids() == [2]
+
+
+@pytest.mark.gui
+def test_a_finished_case_writes_the_results_database(qtbot, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """The window hook: a finished case lands in <project>_results.sqlite."""
+    import numpy as np
+
+    from opensees_studio.services.results import StaticResults
+    from opensees_studio.services.results_db import count_rows, read_runs
+
+    window = _window(qtbot)
+    window._vm.new_project()
+    window._vm._path = tmp_path / "model.osmodel"  # never saved otherwise
+
+    results = StaticResults(
+        case_id=1,
+        case_name="DEAD",
+        n_steps=1,
+        node_disp={1: np.zeros((1, 6)), 2: np.ones((1, 6))},
+        element_forces={9: np.zeros((1, 12))},
+    )
+
+    window._on_case_finished(results)
+
+    db = tmp_path / "model_results.sqlite"
+    assert db.exists()
+    assert [r["case_name"] for r in read_runs(db)] == ["DEAD"]
+    assert count_rows(db, "node_disp") == 2
+    assert count_rows(db, "element_forces") == 1
