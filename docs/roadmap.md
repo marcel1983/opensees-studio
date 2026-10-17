@@ -115,7 +115,9 @@ Status legend: ✅ done · 🟡 partial · ⬜ planned · ✂️ deferred / out-
   far: `_Options.is_default()` compares against a cached field dict instead of
   constructing a throwaway model — 606 → 446 ms on 1.5k nodes / 4.3k frames;
   supports and section extrusions are now one actor per kind instead of one per
-  entity — 202 → 7 actors and 492 → 71 ms on the same model.
+  entity — 202 → 7 actors and 492 → 71 ms on the same model; the joint marker
+  reuses a cached six-by-six sphere — 76 → 59 ms. Net on that model:
+  606 ms and 202 actors → 59 ms and 7 actors.
 
 ## Phase 8 — Earthquake Engineering 🟡
 - ✅ `HystereticMaterial`, `BeamWithHinges`, `FiberSection` → all

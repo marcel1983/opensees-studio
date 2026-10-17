@@ -344,13 +344,26 @@ class ModelRenderer:
         self._node_pd = pd
         self._reglyph_nodes()
 
+    #: Sphere template reused across glyph rebuilds, keyed by its radius. Building
+    #: it on every re-render is pure waste: the source only changes when the model extent
+    #: does, and six-by-six is enough for a joint marker the size of a few pixels.
+    _sphere_cache: tuple[float, pv.PolyData] | None = None
+
+    def _node_sphere(self, radius: float) -> pv.PolyData:
+        """The joint marker template, built once per radius."""
+        cached = self._sphere_cache
+        if cached is not None and cached[0] == radius:
+            return cached[1]
+        sphere = pv.Sphere(radius=radius, theta_resolution=6, phi_resolution=6)
+        type(self)._sphere_cache = (radius, sphere)
+        return sphere
+
     def _reglyph_nodes(self) -> None:
         """Rebuild the glyph polydata after points or state change."""
         if self._node_pd is None or self._node_original_points is None:
             return
         radius = self._scene_node_radius()
-        sphere = pv.Sphere(radius=radius, theta_resolution=8, phi_resolution=8)
-        glyph = self._node_pd.glyph(geom=sphere, scale=False, orient=False)
+        glyph = self._node_pd.glyph(geom=self._node_sphere(radius), scale=False, orient=False)
         if self._node_actor is not None:
             with contextlib.suppress(Exception):
                 self._plotter.remove_actor(self._node_actor, render=False)
