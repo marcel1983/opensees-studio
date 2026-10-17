@@ -42,6 +42,11 @@ from opensees_studio.core.diaphragms import constrained_node_ids
 from opensees_studio.core.frame_members import member_layout
 from opensees_studio.core.geometry.local_axes import frame_local_axes
 from opensees_studio.core.plane import dof_indices as plane_dof_indices
+from opensees_studio.core.reactions import (
+    ReactionRow,
+    largest_force,
+    largest_moment,
+)
 from opensees_studio.core.view_settings import ViewSettings
 from opensees_studio.services.deformation import DeformationSource
 from opensees_studio.views.canvas3d.style import RenderStyle
@@ -127,6 +132,9 @@ class ModelRenderer:
         self._project: Project | None = None
         #: The project as given, before :attr:`_view_filter` (View → Grid Line View).
         self._source_project: Project | None = None
+        #: Reactions of the case on screen, drawn when ``show_reactions`` is on.
+        self._reactions: list[ReactionRow] = []
+        self._show_reactions = False
         self._view_filter: Callable[[Project], Project] | None = None
         self._mode = RendererMode.MODEL
         self._deformation: DeformationSource | None = None
@@ -192,6 +200,7 @@ class ModelRenderer:
             self._build_frame_assignments(project)
         if self._settings.show_loads:
             self._build_loads(project)
+            self._build_reactions(project)
         if self._settings.show_extruded:
             self._build_section_extrusions(project)
         self._apply_mode_to_points()
@@ -941,6 +950,73 @@ class ModelRenderer:
                 lighting=False,
             )
             self._aux_actors.append(actor)
+
+    def set_reactions(self, rows: list[ReactionRow], *, show: bool) -> None:
+        """Set the reactions of the shown case and whether to draw them."""
+        self._reactions = rows
+        self._show_reactions = show
+        if self._source_project is not None:
+            self.render(self._source_project)
+
+    def _build_reactions(self, project: Project) -> None:
+        """Force arrows and moment arcs at the restrained nodes, to scale.
+
+        Both come from the same ``ReactionRow`` list as the table, so a number
+        and the picture cannot disagree. The arrow ends on the joint, as the
+        load arrows do; the arc is a circle perpendicular to the moment vector,
+        read with the right-hand rule.
+        """
+        if not self._show_reactions or not self._reactions:
+            return
+        if self._node_original_points is None:
+            return
+        diagonal = max(self._diag_of_points(self._node_original_points), 1e-9)
+        coords = {node.id: np.asarray(node.coords, dtype=float) for node in project.nodes}
+        max_force = largest_force(self._reactions)
+        max_moment = largest_moment(self._reactions)
+        arrow_max = 0.12 * diagonal
+        arc_max = 0.06 * diagonal
+
+        f_points, f_dirs, f_lengths = [], [], []
+        m_points, m_axes, m_radii = [], [], []
+        for row in self._reactions:
+            point = coords.get(row.node_id)
+            if point is None:
+                continue
+            if max_force > 0.0 and row.magnitude > 0.0:
+                f_points.append(point)
+                f_dirs.append(np.asarray(row.forces, dtype=float) / row.magnitude)
+                f_lengths.append(max(arrow_max * row.magnitude / max_force, 0.01 * diagonal))
+            if max_moment > 0.0 and row.moment_magnitude > 0.0:
+                m_points.append(point)
+                m_axes.append(np.asarray(row.moments, dtype=float) / row.moment_magnitude)
+                m_radii.append(max(arc_max * row.moment_magnitude / max_moment, 0.01 * diagonal))
+
+        self._add_arrow_batch(f_points, f_dirs, f_lengths, (0.85, 0.1, 0.1), "reactions_forces")
+        self._add_arc_batch(m_points, m_axes, m_radii, (0.55, 0.1, 0.75), "reactions_moments")
+
+    def _add_arc_batch(
+        self,
+        points: list[np.ndarray],
+        axes: list[np.ndarray],
+        radii: list[float],
+        color: tuple[float, float, float],
+        name: str,
+    ) -> None:
+        """Draw one circle per moment, in the plane perpendicular to its axis."""
+        if not points:
+            return
+        angles = np.linspace(0.0, 2.0 * np.pi, 33)
+        circle = np.column_stack([np.zeros_like(angles), np.cos(angles), np.sin(angles)])
+        template = pv.MultipleLines(circle)
+        cloud = pv.PolyData(np.asarray(points, dtype=float))
+        cloud["vectors"] = np.asarray(axes, dtype=float)
+        cloud["radius"] = np.asarray(radii, dtype=float)
+        glyphs = cloud.glyph(orient="vectors", scale="radius", geom=template)
+        actor = self._plotter.add_mesh(
+            glyphs, color=color, line_width=2.0, pickable=False, lighting=False, name=name
+        )
+        self._aux_actors.append(actor)
 
     def _build_loads(self, project: Project) -> None:
         """Load arrows, one actor per family instead of one per arrow.

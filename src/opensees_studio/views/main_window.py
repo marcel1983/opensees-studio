@@ -95,6 +95,7 @@ from opensees_studio.core.geometry.ordering import QuadOrderError, order_quad_no
 from opensees_studio.core.groups import Group, colour_for, group_members
 from opensees_studio.core.help import ACTION_TOPICS, TOPIC_PROPERTY
 from opensees_studio.core.materials.library import is_uniaxial
+from opensees_studio.core.reactions import ReactionRow, reaction_rows
 from opensees_studio.core.sections import SHELL_SECTION_CLASSES
 from opensees_studio.core.view_settings import ViewSettings
 from opensees_studio.services import PROJECT_FILE_SUFFIX
@@ -207,6 +208,7 @@ from opensees_studio.views.docks import (
     ModeShapeAnimator,
     PropertyEditorDock,
     PushoverCurveView,
+    ReactionsPanel,
     ResponseSpectrumView,
     ResultsPanel,
     ShellContourView,
@@ -359,7 +361,12 @@ class MainWindow(QMainWindow):
         results_dock = QDockWidget("Results", self)
         results_dock.setWidget(self._results_panel)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, results_dock)
+        self._reactions_panel = ReactionsPanel()
+        self._reactions_dock = QDockWidget("Reactions", self)
+        self._reactions_dock.setWidget(self._reactions_panel)
+        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self._reactions_dock)
         self.tabifyDockWidget(console_dock, results_dock)
+        self.tabifyDockWidget(results_dock, self._reactions_dock)
         console_dock.raise_()
 
     def _build_actions(self) -> None:
@@ -484,6 +491,9 @@ class MainWindow(QMainWindow):
         self._act_show_deformed = QAction("Show &Deformed Shape", self)
         self._act_show_mode_shape = QAction("&Animate Mode Shape", self)
         self._act_show_force_diagram = QAction("Show &Force Diagram…", self)
+        self._act_show_reactions = QAction("Show &Reactions", self)
+        self._act_show_reactions.setCheckable(True)
+        self._act_reactions_table = QAction("Reactions &Table", self)
         self._act_shell_contours = QAction("Show Shell &Contours…", self)
         self._act_show_time_history = QAction("&Time-History Plot…", self)
         self._act_export_th_animation = QAction("Export Time-History &Animation…", self)
@@ -707,6 +717,7 @@ class MainWindow(QMainWindow):
         m_display.addSeparator()
         m_display.addActions([self._act_show_deformed, self._act_show_mode_shape])
         m_display.addAction(self._act_show_force_diagram)
+        m_display.addActions([self._act_show_reactions, self._act_reactions_table])
         m_display.addAction(self._act_shell_contours)
         m_display.addSeparator()
         m_display.addAction(self._act_show_time_history)
@@ -1086,6 +1097,8 @@ class MainWindow(QMainWindow):
         self._act_show_deformed.triggered.connect(self._on_show_deformed)
         self._act_show_mode_shape.triggered.connect(self._on_show_mode_shape)
         self._act_show_force_diagram.triggered.connect(self._on_show_force_diagram)
+        self._act_show_reactions.toggled.connect(self._on_show_reactions)
+        self._act_reactions_table.triggered.connect(self._on_reactions_table)
         self._act_shell_contours.triggered.connect(self._on_show_shell_contours)
         self._act_show_time_history.triggered.connect(self._on_show_time_history)
         self._act_export_th_animation.triggered.connect(self._on_export_th_animation)
@@ -3949,6 +3962,7 @@ class MainWindow(QMainWindow):
     def _on_analysis_finished(self, results) -> None:  # type: ignore[no-untyped-def]
         self._latest_results = results
         self._results_panel.show_results(results, self._vm.project)
+        self._refresh_reactions()
         self._log(f"Analysis complete: {type(results).__name__}.")
         if isinstance(results, TransientResults) and results.early_stop:
             self._log(f"Warning: transient run did not converge ({results.steps_summary()}).")
@@ -4003,6 +4017,7 @@ class MainWindow(QMainWindow):
         self._case_results.clear()
         self._report_extra.clear()
         self._latest_results = None
+        self._refresh_reactions()
         self._on_back_to_model()
         self._results_panel.show_results(None, project)
         removed = delete_all_results(db_path)
@@ -4328,6 +4343,32 @@ class MainWindow(QMainWindow):
                 f"Could not write the animation:\n\n{exc}\n\n"
                 "MP4 export requires FFmpeg via imageio. Try .gif as a fallback.",
             )
+
+    def _reaction_rows(self) -> list[ReactionRow]:
+        """The reactions of the case on screen, or none when there are no results."""
+        project = self._vm.project
+        results = self._latest_results
+        if project is None or results is None:
+            return []
+        return reaction_rows(project, getattr(results, "node_reaction", None))
+
+    def _refresh_reactions(self) -> None:
+        """Keep the table and the overlay on the same case, and enable the actions."""
+        rows = self._reaction_rows()
+        self._reactions_panel.set_rows(rows)
+        self._canvas.set_reactions(rows, show=self._act_show_reactions.isChecked())
+        enabled = bool(rows)
+        self._act_show_reactions.setEnabled(enabled)
+        self._act_reactions_table.setEnabled(enabled)
+        if not enabled and self._act_show_reactions.isChecked():
+            self._act_show_reactions.setChecked(False)
+
+    def _on_show_reactions(self, checked: bool) -> None:
+        self._canvas.set_reactions(self._reaction_rows(), show=checked)
+
+    def _on_reactions_table(self) -> None:
+        self._reactions_dock.show()
+        self._reactions_dock.raise_()
 
     def _on_show_force_diagram(self) -> None:
         if self._static_result() is None or self._vm.project is None:

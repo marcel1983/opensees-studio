@@ -9,6 +9,15 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Added
+
+- **Node reactions, as a table and as a drawing.** The **Reactions** tab, next to
+  Console and Results, lists Fx, Fy, Fz, Mx, My and Mz of every restrained node
+  in the case on screen; *Display → Show Reactions* draws a force arrow and a
+  moment circle at each of them, proportional to the largest value of that case,
+  and *Display → Reactions Table* raises the tab. The table and the drawing
+  share one function, so a number and the picture cannot disagree.
+
 ### Changed
 
 - **Clicking accumulates, Ctrl removes.** A click used to replace the selection
