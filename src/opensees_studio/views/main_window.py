@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QToolBar,
+    QToolButton,
     QTreeWidget,
     QTreeWidgetItem,
     QWidget,
@@ -824,6 +825,32 @@ class MainWindow(QMainWindow):
         )
         self._level_combo.currentIndexChanged.connect(self._on_level_changed)
         tb.addWidget(self._level_combo)
+        tb.addSeparator()
+        # Which results case the viewport represents: the layers (deformed
+        # shape, diagrams, reactions) follow it.
+        tb.addWidget(QLabel("Case: "))
+        self._case_combo = QComboBox()
+        self._case_combo.setMinimumWidth(190)
+        self._case_combo.setToolTip(
+            "Results case shown in the viewport. Deformed shape, force diagram, "
+            "contours and reactions all read this case."
+        )
+        self._case_combo.currentIndexChanged.connect(self._on_case_changed)
+        tb.addWidget(self._case_combo)
+        self._step_back = QToolButton()
+        self._step_back.setText("\u25c0")
+        self._step_back.setToolTip("Previous step of this case")
+        self._step_back.setEnabled(False)
+        self._step_back.clicked.connect(lambda: self._shift_step(-1))
+        tb.addWidget(self._step_back)
+        self._step_forward = QToolButton()
+        self._step_forward.setText("\u25b6")
+        self._step_forward.setToolTip("Next step of this case")
+        self._step_forward.setEnabled(False)
+        self._step_forward.clicked.connect(lambda: self._shift_step(1))
+        tb.addWidget(self._step_forward)
+        self._step_label = QLabel("")
+        tb.addWidget(self._step_label)
         tb.addSeparator()
         tb.addAction(self._act_toggle_parallel)
         tb.addAction(self._act_show_extruded)
@@ -3966,9 +3993,7 @@ class MainWindow(QMainWindow):
         return self
 
     def _on_analysis_finished(self, results) -> None:  # type: ignore[no-untyped-def]
-        self._latest_results = results
-        self._results_panel.show_results(results, self._vm.project)
-        self._refresh_reactions()
+        self._display_results(results)
         self._log(f"Analysis complete: {type(results).__name__}.")
         if isinstance(results, TransientResults) and results.early_stop:
             self._log(f"Warning: transient run did not converge ({results.steps_summary()}).")
@@ -4024,6 +4049,7 @@ class MainWindow(QMainWindow):
         self._report_extra.clear()
         self._latest_results = None
         self._refresh_reactions()
+        self._refresh_case_combo()
         self._on_back_to_model()
         self._results_panel.show_results(None, project)
         removed = delete_all_results(db_path)
@@ -4380,6 +4406,75 @@ class MainWindow(QMainWindow):
     def _on_reactions_table(self) -> None:
         self._reactions_dock.show()
         self._reactions_dock.raise_()
+
+    def _refresh_case_combo(self) -> None:
+        """List the cases that still hold results for this model, newest order."""
+        project = self._vm.project
+        entries = self._case_results.current(project) if project is not None else {}
+        current = getattr(self._latest_results, "case_id", None)
+        self._case_combo.blockSignals(True)
+        self._case_combo.clear()
+        for case_id, results in sorted(entries.items()):
+            kind = type(results).__name__.removesuffix("Results")
+            name = getattr(results, "case_name", None) or f"Case {case_id}"
+            self._case_combo.addItem(f"{name} · {kind}", case_id)
+        if current is not None:
+            index = self._case_combo.findData(current)
+            if index >= 0:
+                self._case_combo.setCurrentIndex(index)
+        self._case_combo.blockSignals(False)
+        self._case_combo.setEnabled(bool(entries))
+        self._refresh_step_buttons()
+
+    def _on_case_changed(self, index: int) -> None:
+        """Show the chosen case; the layers read it from `_latest_results`."""
+        case_id = self._case_combo.itemData(index)
+        project = self._vm.project
+        if case_id is None or project is None:
+            return
+        results = self._case_results.current(project).get(case_id)
+        if results is not None and results is not self._latest_results:
+            self._display_results(results)
+
+    def _display_results(self, results: object) -> None:
+        """Point the whole window at one results case."""
+        self._latest_results = results
+        self._results_panel.show_results(results, self._vm.project)
+        self._refresh_reactions()
+        self._set_result_caption(self._caption_for(results))
+        self._refresh_action_enablement()
+        self._refresh_step_buttons()
+
+    def _refresh_step_buttons(self) -> None:
+        """Enable the step arrows only when the shown case has more than one."""
+        steps = int(getattr(self._latest_results, "n_steps", 1) or 1)
+        # Only a layer that knows how to redraw itself at another step registers
+        # an applier; until one does, the arrows must not pretend to work.
+        steppable = steps > 1 and getattr(self, "_step_apply", None) is not None
+        self._step_index = min(getattr(self, "_step_index", 0), max(steps - 1, 0))
+        self._step_back.setEnabled(steppable)
+        self._step_forward.setEnabled(steppable)
+        if steps > 1:
+            self._step_label.setText(f"Step {self._step_index + 1}/{steps}")
+        else:
+            self._step_label.setText("")
+
+    def _shift_step(self, delta: int) -> None:
+        steps = int(getattr(self._latest_results, "n_steps", 1) or 1)
+        if steps <= 1:
+            return
+        target = min(max(self._step_index + delta, 0), steps - 1)
+        if target == self._step_index:
+            return
+        self._step_index = target
+        self._refresh_step_buttons()
+        self._apply_step()
+
+    def _apply_step(self) -> None:
+        """Re-draw the step-based layer at the current step, if one is showing."""
+        apply = getattr(self, "_step_apply", None)
+        if apply is not None:
+            apply(self._step_index)
 
     def _on_show_force_diagram(self) -> None:
         if self._static_result() is None or self._vm.project is None:
