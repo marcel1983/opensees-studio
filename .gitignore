@@ -57,6 +57,8 @@ scratch/
 # Local AI agent state (Claude Code, Cursor, etc.)
 .claude/
 .cursor/
+.serena/
+.dsh/
 
 # Local example WIP / verification outputs (not for the public repo)
 examples/data/Ex*_tmp/
