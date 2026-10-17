@@ -284,6 +284,7 @@ class MainWindow(QMainWindow):
         self._ground_motions_dlg: GroundMotionsDialog | None = None  # non-modal, reused
 
         self._build_docks()
+        self._log(f"OpenSees Studio {__version__} started.")
         self._build_actions()
         self._build_menu_bar()
         self._build_view_toolbar()

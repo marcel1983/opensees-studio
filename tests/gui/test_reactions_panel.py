@@ -39,3 +39,14 @@ def test_no_reactions_leaves_an_empty_table(qtbot) -> None:  # type: ignore[no-u
     panel.show_results(None, Project(nodes=[Node(id=1, coords=(0.0, 0.0, 0.0))]))
 
     assert panel.rows == 0
+
+
+@pytest.mark.gui
+def test_the_canvas_exposes_the_reaction_overlay(qtbot) -> None:  # type: ignore[no-untyped-def]
+    """The window calls this on the canvas; it living only on the renderer broke the app."""
+    from opensees_studio.views.canvas3d.model_canvas import ModelCanvas
+
+    canvas = ModelCanvas()
+    qtbot.addWidget(canvas)
+
+    canvas.set_reactions([], show=False)
