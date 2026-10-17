@@ -103,3 +103,26 @@ def test_a_finished_case_writes_the_results_database(qtbot, tmp_path) -> None:  
     assert [r["case_name"] for r in read_runs(db)] == ["DEAD"]
     assert count_rows(db, "node_disp") == 2
     assert count_rows(db, "element_forces") == 1
+
+
+@pytest.mark.gui
+def test_the_batch_actions_come_back_when_the_run_ends(qtbot) -> None:  # type: ignore[no-untyped-def]
+    """Regression: they stayed disabled because nothing refreshed after teardown.
+
+    ``finished`` is emitted while the runner still reports running, and the flag
+    only drops in the teardown that follows; the window must listen to
+    ``runningChanged`` for the actions to light up again.
+    """
+    window = _window(qtbot)
+    window._vm.new_project()
+    assert window._vm.project is not None
+    window._vm.project.analyses.extend(_project().analyses)
+    window._refresh_action_enablement()
+    assert window._act_run_all.isEnabled()
+
+    window._runner._set_running(True)
+    assert not window._act_run_all.isEnabled()
+
+    window._runner._set_running(False)
+    assert window._act_run_all.isEnabled()
+    assert window._act_run_selected.isEnabled()
