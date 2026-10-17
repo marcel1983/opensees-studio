@@ -105,6 +105,16 @@ Status legend: ✅ done · 🟡 partial · ⬜ planned · ✂️ deferred / out-
   mass-participation table)
 - ✅ Snapshot / video export (mode shapes + time histories) via
   `imageio[ffmpeg]`
+- ✅ **Selection box and accumulating clicks** — a left drag draws the box
+  (downwards: what is inside; upwards: also what it touches), a click adds and
+  Ctrl+click removes, and the camera orbits with the middle button
+- ✅ **Node reactions** — a Reactions tab and a `Reactions…` dialog with the six
+  components per restrained node, plus force arrows and moment circles in the
+  viewport, all read from one function
+- ✅ **Case selector** — the toolbar lists the cases of the last run and points
+  the whole window at the chosen one; the step arrows await a step-aware layer
+- ✅ **Move / Replicate / Mirror on a frame selection** — a selected member brings
+  its joints
 - 🟡 **Render performance pass** — target: 10k nodes / 20k frames @ 30 fps.
   Measured with `tools/render_bench.py` (geometry build + draw calls) and
   guarded by the ratchet in `tools/render-budget.txt`; at 4.8k nodes / 13.6k
