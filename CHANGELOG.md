@@ -9,6 +9,38 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+The view toolkit: a second viewport on the same model, per-viewport visibility
+switches, hiding and inverting what is drawn, zoom in/out, custom colours, and a
+menu bar that only offers File and Help until a project exists. Projects that
+customise none of it save exactly as before (schema 3 unchanged).
+
+### Added
+
+- **View → New View Window** (`Ctrl+Shift+N`): an independent viewport on the
+  same model, in its own window, with its own camera, colours and visibility
+  switches; the selection is shared, so a joint or element picked in one window
+  is highlighted in every window at once.
+- **View → Visibility**: one switch per category — grids, grid labels, nodes,
+  frames, shells, restraints, constraints, frame assignments, loads, node and
+  element labels, extruded sections. Hiding is per viewport and never removes
+  anything from the model, so the tree, the analysis and the other windows are
+  unaffected.
+- **View → Hide Selected** (`Ctrl+H`) and **View → Invert Visible**, plus
+  **Hide Selected Elements** in the model view's right-click menu.
+- **View → Zoom In** (`Ctrl++`) and **Zoom Out** (`Ctrl+-`), next to Zoom
+  Extents.
+- **View → Colors…**: the background gradient, node, frame, shell and
+  selection-highlight colours, per viewport.
+- The `.osmodel` payload records the primary viewport's display settings under
+  `view`, omitted while they are the defaults, so an untouched project still
+  saves byte-identical. Window geometry and the default viewport persist
+  between sessions.
+
+### Changed
+
+- The menu bar enables only **File** and **Help** until a project is created or
+  opened; the rest light up with the first New or Open.
+
 ## [0.0.14] — 2026-10-16
 
 The grids release: radial (cylindrical) grids, a Grid Wizard, labels at the

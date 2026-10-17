@@ -256,6 +256,32 @@ To regenerate every example after changing the data model:
 for f in examples/*.py; do python "$f"; done
 ```
 
+## Before opening a PR
+
+A PR is not ready until the documentation that the change invalidates is
+fixed **in the same PR**. This applies to every PR, not only to
+user-visible features:
+
+1. **Help pages.** Every menu action and dialog has a page in
+   `core/help.py`. Add the new ones to `TOPICS` **and** to
+   `ACTION_TOPICS`; `tests/gui/test_help_window.py::test_every_menu_action_declares_a_page_that_exists`
+   fails on an action that does not declare one. Write the body for
+   somebody who has the dialog open, and link related pages through
+   `see_also`.
+2. **User-facing docs.** `README.md`, `docs/` and `examples/README.md`
+   wherever the change alters what they describe: menu paths, shortcuts,
+   file format, command line, I/O.
+3. **Format and behaviour changes.** If the `.osmodel` payload gained a
+   field, document it where the format is described and keep the
+   `omit_when_default` rule (a project that does not use the option must
+   still save byte-identical).
+4. **Delete what is no longer true.** A stale paragraph, a screenshot of a
+   removed dialog, a documented flag that no longer exists: remove it in
+   the same PR instead of leaving the contradiction in place.
+5. **CHANGELOG.** Add the entry when the change is user-visible.
+6. **Gates.** `ruff check`, `ruff format --check`, `python tools/typecheck.py`
+   (must stay within the budget) and `lint-imports` before pushing.
+
 ## Branch strategy
 
 - `develop` — active development.
