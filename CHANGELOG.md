@@ -9,7 +9,22 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.19] — 2026-10-17
+
+Selection and results, from the way you pick things to the way you read them: a
+left-drag box, clicks that accumulate, transforming members instead of their
+joints, the node reactions as a table and as a drawing, and a Case selector in
+the toolbar so a run of four cases is four clicks away.
+
 ### Added
+
+- **A Case selector in the toolbar.** Next to Level, it lists the cases that hold
+  results for the model, with name and kind (`DEAD · Static`,
+  `RSX-CQC · ResponseSpectrum`). Choosing one repoints the whole window — caption,
+  panels, reactions and action states — so the deformed shape, the diagram and
+  the overlay cannot disagree about the case.
+  The step arrows (◀ ▶, `Step 12/40`) are in place but disabled until a layer
+  registers how to redraw itself at another step.
 
 - **The version, in the title bar.** The window is `OpenSees Studio v0.0.18`, so
   a screenshot says which build produced it — the same reason the console now
