@@ -405,6 +405,25 @@ class ModelCanvas(QtInteractor):
         if self._rubber_band is not None:
             self._rubber_band.hide()
 
+    def _project_to_display(self, coords: np.ndarray) -> np.ndarray:
+        """World coordinates to device pixels (origin at the bottom-left).
+
+        ``vtkCoordinate`` does the projection against this viewport's renderer,
+        which is the one API that behaves the same across PyVista versions —
+        ``Renderer`` here has no ``world_to_display``.
+        """
+        from vtkmodules.vtkRenderingCore import vtkCoordinate
+
+        coord = vtkCoordinate()
+        coord.SetCoordinateSystemToWorld()
+        renderer = self.renderer
+        out = np.empty((len(coords), 2), dtype=float)
+        for row, point in enumerate(coords):
+            coord.SetValue(float(point[0]), float(point[1]), float(point[2]))
+            display_value = coord.GetComputedDisplayValue(renderer)
+            out[row] = (float(display_value[0]), float(display_value[1]))
+        return out
+
     def _select_in_box(self, rect: QRectF) -> None:
         """Select what the rubber-band rectangle encloses.
 
