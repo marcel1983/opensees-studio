@@ -121,3 +121,14 @@ def test_an_unknown_element_id_adds_nothing() -> None:
     project = _project()
 
     assert q.implied_node_ids(project, node_ids={1}, element_ids={12345}) == {1}
+
+
+def test_a_box_takes_a_member_only_when_both_joints_are_inside() -> None:
+    """The agreed rule for a rubber-band selection."""
+    project = _project()
+    element = next(e for e in project.elements if e.id == 1)
+    first, second = element.nodes
+
+    assert q.elements_with_nodes_inside(project, {first, second}) == {element.id}
+    assert q.elements_with_nodes_inside(project, {first}) == set(), "one end is not enough"
+    assert q.elements_with_nodes_inside(project, set()) == set()

@@ -11,6 +11,10 @@ refused instead of silently downgraded).
 
 ### Changed
 
+- **A left drag draws a selection box.** Dragging with the left button in the
+  Select tool draws a rubber band: every joint inside is selected, and a member
+  joins only when both of its joints are inside. The camera now turns with a
+  middle-button drag, because the left button is the box; the wheel still zooms.
 - **Move, Replicate and Mirror accept a frame selection.** They required
   selected nodes, so the element-first workflow — select the members, transform
   them — found the three commands disabled. A member now brings its joints, and

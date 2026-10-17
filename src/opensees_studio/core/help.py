@@ -1343,10 +1343,13 @@ One undo step takes the whole repair back.
         "tools.select": _t(
             "Tools → Select",
             "Edit and tools",
-            "The default tool: click to select, drag to orbit, wheel to zoom.",
+            "The default tool: click to select, drag a box, middle-drag to orbit, wheel to zoom.",
             """
 Clicking a node or an element selects it; Ctrl+click adds to the selection;
-clicking empty space clears it. A box drag selects everything inside it.
+clicking empty space clears it. Dragging with the left button draws a selection
+box: every joint inside is selected, and a member joins when **both** its joints
+are inside, so one that merely crosses the box is left out. The camera turns
+with a middle-button drag, which the left button no longer does.
 
 With nothing else active this is also what unlocks the model for inspection:
 hovering an element shows its properties, and the property dock follows the

@@ -192,3 +192,17 @@ def implied_node_ids(
         if element.id in wanted:
             nodes.update(element.nodes)
     return nodes
+
+
+def elements_with_nodes_inside(project: Project, node_ids: Iterable[int]) -> set[int]:
+    """Elements whose every joint is in ``node_ids``.
+
+    The rule for a box selection: a member counts only when both of its ends
+    are inside, so a member that merely crosses the rectangle is left out.
+    """
+    inside = set(node_ids)
+    return {
+        element.id
+        for element in project.elements
+        if element.nodes and all(nid in inside for nid in element.nodes)
+    }
