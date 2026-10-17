@@ -188,3 +188,17 @@ def test_a_crossing_box_still_takes_the_members_with_a_joint_inside() -> None:
 
     assert nodes == {3}
     assert elements == {2}
+
+
+def test_the_two_drag_directions_differ_only_in_what_they_touch() -> None:
+    """The same box: downwards takes the whole member, upwards also a crossed one."""
+    project = _line_project()
+    display = {1: (0.0, 0.0), 2: (10.0, 0.0), 3: (50.0, 0.0), 4: (60.0, 0.0)}
+    box = (4.0, 6.0, -5.0, 5.0)
+
+    down_nodes, down_elements = q.box_selection(project, display, box, crossing=False)
+    up_nodes, up_elements = q.box_selection(project, display, box, crossing=True)
+
+    assert down_nodes == up_nodes == set()
+    assert down_elements == set()
+    assert up_elements == {1}

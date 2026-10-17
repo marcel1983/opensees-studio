@@ -189,7 +189,11 @@ class ModelCanvas(QtInteractor):
                 # A click, not a box: keep picking the item under the pointer.
                 self._handle_click(event.position().x(), event.position().y())
             else:
-                self._select_in_box(rect)
+                # Qt's y grows downwards, so a downward drag ends *below* the
+                # press. A normalised rect cannot say this: its top is always
+                # the smaller y.
+                downward = event.position().y() >= origin.y()
+                self._select_in_box(rect, crossing=not downward)
             return
         if event.button() == Qt.MouseButton.MiddleButton:
             forwarded = QMouseEvent(
@@ -424,7 +428,7 @@ class ModelCanvas(QtInteractor):
             out[row] = (float(display_value[0]), float(display_value[1]))
         return out
 
-    def _select_in_box(self, rect: QRectF) -> None:
+    def _select_in_box(self, rect: QRectF, *, crossing: bool) -> None:
         """Select what the rubber-band rectangle encloses.
 
         Dragging downwards takes only what is fully inside; dragging upwards
@@ -455,9 +459,6 @@ class ModelCanvas(QtInteractor):
             for node, point in zip(project.nodes, display, strict=True)
         }
 
-        # Qt's y grows downwards: a downwards drag has release.y > press.y, so
-        # the (already normalised) rect has top < bottom.
-        crossing = rect.top() < rect.bottom()
         box_rect = (
             min(left, right),
             max(left, right),
