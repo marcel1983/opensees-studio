@@ -121,9 +121,10 @@ Status legend: ✅ done · 🟡 partial · ⬜ planned · ✂️ deferred / out-
     one per arrow — a pattern loading every joint and member went from 1.374
     actors and 2.1 s to 8 actors and 54 ms on 108 nodes / 252 frames. The
     geometry is pinned by `tests/tools/test_load_arrows.py`.
-  - ⬜ `update_selection` re-glyphs the whole node cloud on every click; marking
-    the array modified should be enough. Needs a visual check on a real display
-    before it lands.
+  - ✅ Selection recolours the node glyph in place instead of rebuilding it:
+    the state array is written onto the glyph output repeated by its stride —
+    a selection on 4.840 nodes went from 39 ms to 0.2 ms. Ordering is pinned by
+    `tests/tools/test_node_selection.py`.
   - ⬜ Incremental rebuild: an edit still tears down and rebuilds every category,
     not just the one that changed.
   - ⬜ Reaching 10k / 20k at 30 fps needs, after those, GPU-side trimming
