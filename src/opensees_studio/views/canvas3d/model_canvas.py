@@ -23,6 +23,7 @@ from PySide6.QtWidgets import QLabel, QToolTip, QWidget
 from pyvistaqt import QtInteractor
 
 from opensees_studio.core import Project
+from opensees_studio.core.reactions import ReactionRow
 from opensees_studio.core.selection import box_selection
 from opensees_studio.core.view_settings import ViewSettings
 from opensees_studio.views.canvas3d.model_renderer import ModelRenderer
@@ -699,6 +700,11 @@ class ModelCanvas(QtInteractor):
     def reframe(self) -> None:
         """Fit the camera to what is drawn now."""
         self.renderer.reset_camera()
+        self.render()
+
+    def set_reactions(self, rows: list[ReactionRow], *, show: bool) -> None:
+        """Draw the reactions of the shown case, or stop drawing them."""
+        self._renderer.set_reactions(rows, show=show)
         self.render()
 
     def refresh(self, project: Project | None) -> None:
