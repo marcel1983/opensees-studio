@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import contextlib
 import math
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -21,6 +21,7 @@ import shiboken6
 from PySide6.QtCore import QEvent, QPoint, QSettings, Qt
 from PySide6.QtGui import QAction, QActionGroup, QKeySequence
 from PySide6.QtWidgets import (
+    QApplication,
     QComboBox,
     QDialog,
     QDockWidget,
@@ -265,6 +266,8 @@ class MainWindow(QMainWindow):
         #: Top-level menus by role, so the startup gate can disable them all at
         #: once instead of grey-out every action they contain.
         self._menus: dict[str, QMenu] = {}
+        #: Nesting depth of the busy cursor (see _begin_busy / _end_busy).
+        self._busy_depth = 0
         #: Secondary viewports on the same project (View → New View Window).
         self._view_windows: list[ViewWindow] = []
 
@@ -1072,11 +1075,11 @@ class MainWindow(QMainWindow):
         self._stability.log.connect(self._log)
         self._stability.finished.connect(self._on_stability_report)
         self._stability.failed.connect(self._on_stability_failed)
-        self._stability.runningChanged.connect(lambda _running: self._refresh_action_enablement())
+        self._stability.runningChanged.connect(self._on_stability_running_changed)
         # The runner's own flag flips to False only after ``finished`` has been
         # handled (teardown emits it), so the batch actions would stay disabled
         # for the rest of the session without this connection.
-        self._runner.runningChanged.connect(lambda _running: self._refresh_action_enablement())
+        self._runner.runningChanged.connect(self._on_runner_running_changed)
 
         # Display
         self._act_select_results.triggered.connect(self._on_select_results)
@@ -1202,7 +1205,8 @@ class MainWindow(QMainWindow):
         recovered changes).
         """
         try:
-            self._vm.open(path)
+            with self._busy(f"Opening {Path(path).name}…"):
+                self._vm.open(path)
             self._log(f"Opened: {path}")
         except Exception as exc:
             QMessageBox.critical(self, "Open failed", str(exc))
@@ -4553,17 +4557,18 @@ class MainWindow(QMainWindow):
 
         try:
             self._log(f"Exporting time-history animation → {path} …")
-            export_time_history_video(
-                self._canvas,
-                set_step,
-                Path(path),
-                n_steps,
-                fps=30,
-                every=every,
-                progress=lambda i, n: self.statusBar().showMessage(
-                    f"Exporting frame {i}/{n}",
-                ),
-            )
+            with self._busy("Exporting animation…"):
+                export_time_history_video(
+                    self._canvas,
+                    set_step,
+                    Path(path),
+                    n_steps,
+                    fps=30,
+                    every=every,
+                    progress=lambda i, n: self.statusBar().showMessage(
+                        f"Exporting frame {i}/{n}",
+                    ),
+                )
             self.statusBar().clearMessage()
             self._log(f"Export complete: {path}")
         except Exception as exc:
@@ -5060,6 +5065,48 @@ class MainWindow(QMainWindow):
             if menu is not None:
                 menu.setEnabled(has_project)
         self._sync_visibility_actions()
+
+    # ── busy cursor ─────────────────────────────────────────────────
+    def _begin_busy(self, message: str = "") -> None:
+        """Show the wait cursor; nested calls are counted, not stacked."""
+        if self._busy_depth == 0:
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        self._busy_depth += 1
+        if message:
+            self.statusBar().showMessage(message)
+
+    def _end_busy(self) -> None:
+        """Drop one busy level; the cursor returns when the last one goes."""
+        if self._busy_depth == 0:
+            return
+        self._busy_depth -= 1
+        if self._busy_depth == 0:
+            QApplication.restoreOverrideCursor()
+
+    @contextlib.contextmanager
+    def _busy(self, message: str = "") -> Iterator[None]:
+        """Wait cursor for a synchronous operation, restored even on error."""
+        self._begin_busy(message)
+        try:
+            yield
+        finally:
+            self._end_busy()
+
+    def _on_runner_running_changed(self, running: bool) -> None:
+        """Wait cursor while the solver runs; the environment stays responsive."""
+        if running:
+            self._begin_busy("Running analysis…")
+        else:
+            self._end_busy()
+        self._refresh_action_enablement()
+
+    def _on_stability_running_changed(self, running: bool) -> None:
+        """Wait cursor while the stability check runs."""
+        if running:
+            self._begin_busy("Checking model stability…")
+        else:
+            self._end_busy()
+        self._refresh_action_enablement()
 
     def _log(self, message: str) -> None:
         self._console.appendPlainText(message)

@@ -9,6 +9,15 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Added
+
+- **Wait cursor while the application works.** Starting the application, opening
+  a project, running an analysis or the stability check, and exporting an
+  animation now show the wait cursor until the window is ready again. The status
+  bar says what is happening, and the cursor is restored even when the operation
+  fails. Nested waits are counted, so one finishing early cannot clear it while
+  another is still running.
+
 ### Fixed
 
 - **Analyze → Run All Cases and Run Selected Cases came back disabled after a
