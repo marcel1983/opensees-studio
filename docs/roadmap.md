@@ -105,19 +105,27 @@ Status legend: ✅ done · 🟡 partial · ⬜ planned · ✂️ deferred / out-
   mass-participation table)
 - ✅ Snapshot / video export (mode shapes + time histories) via
   `imageio[ffmpeg]`
-- ⬜ **Render performance pass** — collapse per-entity actors into glyphed
-  PolyData (single draw call), in-place colour updates for selection,
-  AA, lower-tessellation spheres. Target: 10k nodes / 20k frames @ 30 fps.
-  *Measured first*: `tools/render_bench.py` (geometry build + actors) and the
-  ratchet in `tools/render-budget.txt`; at 4.8k nodes / 13.6k frames the build
-  takes 269 ms without supports and 1.17 s with them (490 actors), and
-  `_build_frame_assignments` alone accounts for 241 ms of the base cost. Done so
-  far: `_Options.is_default()` compares against a cached field dict instead of
-  constructing a throwaway model — 606 → 446 ms on 1.5k nodes / 4.3k frames;
-  supports and section extrusions are now one actor per kind instead of one per
-  entity — 202 → 7 actors and 492 → 71 ms on the same model; the joint marker
-  reuses a cached six-by-six sphere — 76 → 59 ms. Net on that model:
-  606 ms and 202 actors → 59 ms and 7 actors.
+- 🟡 **Render performance pass** — target: 10k nodes / 20k frames @ 30 fps.
+  Measured with `tools/render_bench.py` (geometry build + draw calls) and
+  guarded by the ratchet in `tools/render-budget.txt`; at 4.8k nodes / 13.6k
+  frames the baseline was 269 ms without supports and 1.17 s with them
+  (490 actors), with `_build_frame_assignments` alone at 241 ms.
+  - ✅ Measured first: benchmark plus budget test, no GPU needed.
+  - ✅ `_Options.is_default()` against a cached field dict — 606 → 446 ms on
+    1.5k nodes / 4.3k frames.
+  - ✅ Supports batched by kind and extrusions merged — 202 → 7 actors,
+    492 → 71 ms on the same model.
+  - ✅ Joint marker cached, 6×6 — 76 → 51 ms. Net: 606 ms / 202 actors →
+    51 ms / 7 actors.
+  - ⬜ Loads still draw one actor per arrow: the last per-entity path.
+  - ⬜ `update_selection` re-glyphs the whole node cloud on every click; marking
+    the array modified should be enough. Needs a visual check on a real display
+    before it lands.
+  - ⬜ Incremental rebuild: an edit still tears down and rebuilds every category,
+    not just the one that changed.
+  - ⬜ Reaching 10k / 20k at 30 fps needs, after those, GPU-side trimming
+    (fewer/lighter primitives) and a real-frame measurement, which the CPU-side
+    benchmark cannot give.
 
 ## Phase 8 — Earthquake Engineering 🟡
 - ✅ `HystereticMaterial`, `BeamWithHinges`, `FiberSection` → all
