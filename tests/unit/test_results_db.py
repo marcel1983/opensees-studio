@@ -65,18 +65,40 @@ def test_a_static_run_lands_in_the_expected_tables(tmp_path: Path) -> None:
         assert ux == pytest.approx(1.0)
 
 
-def test_the_history_is_append_only(tmp_path: Path) -> None:
+def test_re_running_a_case_replaces_its_rows(tmp_path: Path) -> None:
+    """A case keeps one run: running it again overwrites, it does not accumulate."""
     db = tmp_path / "results.sqlite"
 
-    first = record_results(_static(case_id=1), db_path=db)
-    second = record_results(_static(case_id=2), db_path=db)
+    record_results(_static(case_id=1), db_path=db)
+    record_results(_static(case_id=1), db_path=db)
 
-    assert (first, second) == (1, 2)
-    runs = read_runs(db)
-    assert [r["case_id"] for r in runs] == [1, 2]
+    assert len(read_runs(db)) == 1
     with sqlite3.connect(db) as con:
-        # The first run's rows are still there.
+        assert con.execute("SELECT COUNT(*) FROM node_disp").fetchone()[0] == 4
+
+
+def test_different_cases_coexist(tmp_path: Path) -> None:
+    db = tmp_path / "results.sqlite"
+
+    record_results(_static(case_id=1), db_path=db)
+    record_results(_static(case_id=2), db_path=db)
+
+    assert [r["case_id"] for r in read_runs(db)] == [1, 2]
+    with sqlite3.connect(db) as con:
         assert con.execute("SELECT COUNT(*) FROM node_disp").fetchone()[0] == 8
+
+
+def test_deleting_every_result_removes_the_file(tmp_path: Path) -> None:
+    from opensees_studio.services.results_db import delete_all_results
+
+    db = tmp_path / "results.sqlite"
+    assert delete_all_results(db) is False  # nothing there yet
+
+    record_results(_static(), db_path=db)
+    assert db.exists()
+
+    assert delete_all_results(db) is True
+    assert not db.exists()
 
 
 def test_a_modal_run_stores_modes_and_shapes(tmp_path: Path) -> None:

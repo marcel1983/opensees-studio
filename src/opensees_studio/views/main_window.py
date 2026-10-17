@@ -122,7 +122,7 @@ from opensees_studio.services.results import (
     StaticResults,
     TransientResults,
 )
-from opensees_studio.services.results_db import database_path, record_results
+from opensees_studio.services.results_db import database_path, delete_all_results, record_results
 from opensees_studio.services.shell_fields import shell_elements
 from opensees_studio.services.stability import StabilityReport
 from opensees_studio.viewmodels import AnalysisRunner, ProjectViewModel
@@ -496,6 +496,7 @@ class MainWindow(QMainWindow):
         # Batch doors: the whole model in one child process, or a ticked subset.
         self._act_run_all = QAction("Run &All Cases", self, shortcut=QKeySequence("Shift+F5"))
         self._act_run_selected = QAction("Run Se&lected Cases…", self)
+        self._act_clear_results = QAction("Delete &All Results…", self)
         self._act_check_stability = QAction("Check Model &Stability…", self)
 
         # View
@@ -695,6 +696,8 @@ class MainWindow(QMainWindow):
         m_analyze.addSeparator()
         m_analyze.addAction(self._act_run_all)
         m_analyze.addAction(self._act_run_selected)
+        m_analyze.addSeparator()
+        m_analyze.addAction(self._act_clear_results)
 
         m_display = mb.addMenu("&Display")
         m_display.addAction(self._act_select_results)
@@ -1064,6 +1067,7 @@ class MainWindow(QMainWindow):
         self._act_run.triggered.connect(self._on_run_analysis)
         self._act_run_all.triggered.connect(self._on_run_all_cases)
         self._act_run_selected.triggered.connect(self._on_run_selected_cases)
+        self._act_clear_results.triggered.connect(self._on_clear_results)
         self._act_check_stability.triggered.connect(self._on_check_stability)
         self._stability.log.connect(self._log)
         self._stability.finished.connect(self._on_stability_report)
@@ -3925,6 +3929,7 @@ class MainWindow(QMainWindow):
         if isinstance(results, ResponseSpectrumResults | CombinationResults):
             for warning in results.warnings:
                 self._log(f"Warning: {warning}")
+        self._set_result_caption(self._caption_for(results))
         self._refresh_action_enablement()
 
     def _on_case_finished(self, results: object) -> None:
@@ -3935,6 +3940,52 @@ class MainWindow(QMainWindow):
             if case_id is not None:
                 self._report_extra[case_id] = (model_fingerprint(self._vm.project), results)
         self._record_case_results(results)
+
+    # ── what the viewport is showing ────────────────────────────────
+    def _caption_for(self, results: object) -> str:
+        """One line naming the results on screen, for the viewport's top-left."""
+        if isinstance(results, CombinationResults):
+            kind = "envelope" if not results.single_valued else "combination"
+            return f"{results.combination_name}  ·  {kind}"
+        name = getattr(results, "case_name", "") or f"case {getattr(results, 'case_id', '?')}"
+        kind = type(results).__name__.removesuffix("Results")
+        return f"{name}  ·  {kind}"
+
+    def _set_result_caption(self, text: str | None) -> None:
+        """Put ``text`` in every viewport: the main one and each view window."""
+        canvases = [self._main_canvas, *(window.canvas for window in self._view_windows)]
+        for canvas in canvases:
+            canvas.set_result_label(text)
+
+    def _on_clear_results(self) -> None:
+        """Analyze → Delete All Results: forget every stored result."""
+        project = self._vm.project
+        db_path = database_path(self._vm.path)
+        answer = QMessageBox.question(
+            self,
+            "Delete All Results",
+            "Delete every stored result?\n\n"
+            "  • the results of this session\n"
+            f"  • {db_path}\n\n"
+            "The model, its analysis cases and any other project's database are "
+            "not touched.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        self._case_results.clear()
+        self._report_extra.clear()
+        self._latest_results = None
+        self._on_back_to_model()
+        self._results_panel.show_results(None, project)
+        removed = delete_all_results(db_path)
+        self._log(
+            "All results deleted."
+            if removed
+            else "All results deleted (the database was already empty)."
+        )
+        self._refresh_action_enablement()
 
     def _record_case_results(self, results: object) -> None:
         """Append this case's results to the project's queryable database.
@@ -4597,6 +4648,7 @@ class MainWindow(QMainWindow):
         self._register_units_refresh(view)
 
     def _on_back_to_model(self) -> None:
+        self._set_result_caption(None)
         self._tear_down_post_dock()
         if self._diagram_renderer is not None:
             self._diagram_renderer.clear()
@@ -4716,6 +4768,7 @@ class MainWindow(QMainWindow):
         # Results of another project (or of the closed one) never feed a combination.
         self._case_results.clear()
         self._report_extra.clear()
+        self._set_result_caption(None)
         self._main_canvas.show_project(project)
         self._refresh_view_windows(project)
         if project is not None and project.ndm == 2:
@@ -4913,6 +4966,12 @@ class MainWindow(QMainWindow):
         batch_enabled = has_cases and not self._runner.is_running
         self._act_run_all.setEnabled(batch_enabled)
         self._act_run_selected.setEnabled(batch_enabled)
+        project_now = self._vm.project
+        stored = project_now is not None and (
+            bool(self._case_results.current(project_now)) or bool(self._report_extra)
+        )
+        db_there = has_project and database_path(self._vm.path).exists()
+        self._act_clear_results.setEnabled(bool(has_project and (stored or db_there)))
         self._act_check_stability.setEnabled(
             has_project and not self._stability.is_running and not self._runner.is_running
         )

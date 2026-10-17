@@ -18,8 +18,8 @@ from typing import Any
 
 import numpy as np
 from PySide6.QtCore import QPoint, Qt, Signal
-from PySide6.QtGui import QMouseEvent
-from PySide6.QtWidgets import QToolTip, QWidget
+from PySide6.QtGui import QMouseEvent, QResizeEvent
+from PySide6.QtWidgets import QLabel, QToolTip, QWidget
 from pyvistaqt import QtInteractor
 
 from opensees_studio.core import Project
@@ -94,6 +94,21 @@ class ModelCanvas(QtInteractor):
         self.setMouseTracking(True)
 
         self._build_scene_furniture()
+        #: Top-left caption: which results this viewport is showing.
+        self._result_label = QLabel(self)
+        self._result_label.setObjectName("resultCaption")
+        self._result_label.setStyleSheet(
+            "QLabel#resultCaption {"
+            " background: rgba(18, 22, 30, 0.78);"
+            " color: #f4f7fb;"
+            " border-radius: 6px;"
+            " padding: 4px 10px;"
+            " font-weight: 600;"
+            " }"
+        )
+        # It must never swallow a click meant for the canvas.
+        self._result_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self._result_label.hide()
         # No track_click_position — we use Qt's mousePressEvent directly.
 
         # Re-render on selection change so highlighting updates.
@@ -623,6 +638,23 @@ class ModelCanvas(QtInteractor):
         self.set_background(settings.background_bottom, top=settings.background_top)  # type: ignore[arg-type]
         self._renderer.set_settings(settings)
         self.render()
+
+    def set_result_label(self, text: str | None) -> None:
+        """Show ``text`` in the viewport's top-left corner (None clears it)."""
+        caption = (text or "").strip()
+        self._result_label.setText(caption)
+        self._result_label.adjustSize()
+        self._result_label.move(12, 12)
+        self._result_label.setVisible(bool(caption))
+        if caption:
+            self._result_label.raise_()
+
+    def resizeEvent(self, event: QResizeEvent) -> None:
+        """Keep the caption pinned to the top-left corner."""
+        super().resizeEvent(event)
+        label = getattr(self, "_result_label", None)
+        if label is not None:
+            label.move(12, 12)
 
     def set_hidden(self, *, nodes: set[int], elements: set[int]) -> None:
         """Hide these ids in this viewport only (the project is untouched)."""
