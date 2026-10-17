@@ -122,6 +122,7 @@ from opensees_studio.services.results import (
     StaticResults,
     TransientResults,
 )
+from opensees_studio.services.results_db import database_path, record_results
 from opensees_studio.services.shell_fields import shell_elements
 from opensees_studio.services.stability import StabilityReport
 from opensees_studio.viewmodels import AnalysisRunner, ProjectViewModel
@@ -195,6 +196,7 @@ from opensees_studio.views.dialogs.groups import (
 )
 from opensees_studio.views.dialogs.load_combinations import LoadCombinationsDialog
 from opensees_studio.views.dialogs.model_tables import ModelTablesDialog
+from opensees_studio.views.dialogs.run_cases import RunCasesDialog
 from opensees_studio.views.dialogs.seismic_loads import SeismicLoadsDialog
 from opensees_studio.views.dialogs.view_colors import ViewColorsDialog
 from opensees_studio.views.docks import (
@@ -491,6 +493,9 @@ class MainWindow(QMainWindow):
         # Analyze
         self._act_case_manager = QAction("&Cases…", self, shortcut="Ctrl+Shift+A")
         self._act_run = QAction("&Run…", self, shortcut="F5")
+        # Batch doors: the whole model in one child process, or a ticked subset.
+        self._act_run_all = QAction("Run &All Cases", self, shortcut=QKeySequence("Shift+F5"))
+        self._act_run_selected = QAction("Run Se&lected Cases…", self)
         self._act_check_stability = QAction("Check Model &Stability…", self)
 
         # View
@@ -687,6 +692,9 @@ class MainWindow(QMainWindow):
         m_analyze.addSeparator()
         m_analyze.addAction(self._act_check_stability)
         m_analyze.addAction(self._act_run)
+        m_analyze.addSeparator()
+        m_analyze.addAction(self._act_run_all)
+        m_analyze.addAction(self._act_run_selected)
 
         m_display = mb.addMenu("&Display")
         m_display.addAction(self._act_select_results)
@@ -1054,6 +1062,8 @@ class MainWindow(QMainWindow):
         # Analyze
         self._act_case_manager.triggered.connect(self._on_case_manager)
         self._act_run.triggered.connect(self._on_run_analysis)
+        self._act_run_all.triggered.connect(self._on_run_all_cases)
+        self._act_run_selected.triggered.connect(self._on_run_selected_cases)
         self._act_check_stability.triggered.connect(self._on_check_stability)
         self._stability.log.connect(self._log)
         self._stability.finished.connect(self._on_stability_report)
@@ -3811,6 +3821,49 @@ class MainWindow(QMainWindow):
             self._on_new()
         AnalysisCaseManagerDialog(self._vm, self).exec()
 
+    def _on_run_all_cases(self) -> None:
+        """Analyze → Run All Cases: every case, in one child process."""
+        project = self._vm.project
+        if project is None or self._runner.is_running:
+            return
+        if not project.analyses:
+            self._log("No analysis cases. Define one in Analyze → Cases…")
+            return
+        self._log(f"Running all {len(project.analyses)} case(s).")
+        self._start_batch(list(project.analyses))
+
+    def _on_run_selected_cases(self) -> None:
+        """Analyze → Run Selected Cases: tick the cases, then run them together."""
+        project = self._vm.project
+        if project is None or self._runner.is_running:
+            return
+        if not project.analyses:
+            self._log("No analysis cases. Define one in Analyze → Cases…")
+            return
+        dialog = RunCasesDialog(project, self)
+        try:
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return
+            chosen = set(dialog.selected_case_ids())
+        finally:
+            dialog.deleteLater()
+        cases = [case for case in project.analyses if case.id in chosen]
+        if not cases:
+            self._log("No case selected.")
+            return
+        self._log(f"Running {len(cases)} selected case(s).")
+        self._start_batch(cases)
+
+    def _start_batch(self, cases: list[Any]) -> None:
+        """Hand a set of cases to the runner in one child process."""
+        project = self._vm.project
+        if project is None:
+            return
+        try:
+            self._runner.run_cases(project, cases, project_path=self._vm.path)
+        except Exception as exc:
+            self._log(f"Could not start: {exc}")
+
     def _on_run_analysis(self) -> None:
         if self._vm.project is None:
             QMessageBox.information(self, "Run Analysis", "Open or create a project first.")
@@ -3881,6 +3934,21 @@ class MainWindow(QMainWindow):
             case_id = getattr(results, "case_id", None)
             if case_id is not None:
                 self._report_extra[case_id] = (model_fingerprint(self._vm.project), results)
+        self._record_case_results(results)
+
+    def _record_case_results(self, results: object) -> None:
+        """Append this case's results to the project's queryable database.
+
+        A failure here must never fail the analysis: the run already happened,
+        so the database is reported as a warning and the results stay in memory.
+        """
+        try:
+            run_id = record_results(results, project_path=self._vm.path, project=self._vm.project)
+        except Exception as exc:
+            self._log(f"Warning: the results database was not written: {exc}")
+            return
+        if run_id is not None:
+            self._log(f"Results recorded in {database_path(self._vm.path)} (run {run_id}).")
 
     # ── slots: load combinations ────────────────────────────────────
     def _on_load_combinations(self) -> None:
@@ -4841,6 +4909,10 @@ class MainWindow(QMainWindow):
         self._act_truss_wizard.setEnabled(has_project)
         self._act_check_duplicates.setEnabled(has_project)
         self._act_table_editing.setEnabled(has_project)
+        has_cases = has_project and bool(self._vm.project and self._vm.project.analyses)
+        batch_enabled = has_cases and not self._runner.is_running
+        self._act_run_all.setEnabled(batch_enabled)
+        self._act_run_selected.setEnabled(batch_enabled)
         self._act_check_stability.setEnabled(
             has_project and not self._stability.is_running and not self._runner.is_running
         )

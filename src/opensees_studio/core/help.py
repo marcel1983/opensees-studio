@@ -2817,6 +2817,85 @@ the log records the step reached and the results keep what was computed.
 """,
             "analyze.cases",
             "display.deformed",
+            "analyze.results_database",
+        ),
+        "analyze.run_all": _t(
+            "Analyze → Run All Cases",
+            "Analyze",
+            "Run every analysis case of the model, one after another, in one child process.",
+            """
+The batch door: every case defined in Analyze → Cases runs in a single child
+process, in the order they are listed, and each one lands in the results
+database as its own run. Progress and log lines stream back as they do for a
+single run.
+
+Use it before a report, or after changing something that invalidates every case
+(a section, a material, the mass source). To run only some of them, use
+**Run Selected Cases**.
+""",
+            "analyze.run",
+            "analyze.run_selected",
+            "analyze.results_database",
+        ),
+        "analyze.run_selected": _t(
+            "Analyze → Run Selected Cases",
+            "Analyze",
+            "Tick the cases to run and run them together in one child process.",
+            """
+Every case is listed with a checkbox, all ticked by default. Untick what you do
+not need and press OK; the ticked cases run in one child process, in list order,
+and each one is recorded in the results database as its own run.
+
+This is the middle ground between **Run** (one case, with its damping overrides
+and the log in front of you) and **Run All Cases** (everything).
+""",
+            "analyze.run",
+            "analyze.run_all",
+            "analyze.results_database",
+        ),
+        "analyze.results_database": _t(
+            "Analysis results database",
+            "Analyze",
+            "Every run is appended to a SQLite file with all node and element results, for later queries.",
+            """
+Each finished case is written to **`<project>_results.sqlite`**, next to the
+project file (a never-saved project writes to the app data directory as
+`untitled_results.sqlite`). SQLite is used because a static case on a 500-joint
+model writes thousands of rows and a time history writes far more: one file,
+indexed, readable by a notebook, a spreadsheet or the `sqlite3` CLI, and safe to
+interrupt.
+
+The file is **append-only history**: every run adds a row to `runs`, and its
+results carry that `run_id`. Re-running a case keeps the earlier numbers.
+
+| Table | One row per |
+|---|---|
+| `runs` | run: case id and name, kind, timestamp, step count, `dt`, HDF5 path |
+| `node_disp` / `node_reaction` | node × step: `ux, uy, uz, rx, ry, rz` |
+| `element_forces` | element × step: `c1 … c12` (local forces) |
+| `element_stresses` | element × step: shell resultants `n11 … v23` |
+| `storey_shear`, `section_cut_forces` | storey / cut × step |
+| `modal`, `mode_shapes` | mode, and mode × node |
+
+Load combinations are stored as two runs (`combination:max`, `combination:min`);
+a response spectrum is one pseudo-step of peak values; a transient run records
+the HDF5 path and indexes its node displacement history (velocity, acceleration
+and element state stay in the lossless HDF5 file).
+
+Query it without the application:
+
+```sql
+SELECT r.case_name, d.node_id, d.step, d.ux
+FROM node_disp d JOIN runs r USING (run_id)
+WHERE r.run_id = 3 AND d.node_id = 12 ORDER BY d.step;
+```
+
+If the file cannot be written, the run still succeeds and the console says so:
+results are never lost because the database failed.
+""",
+            "analyze.run",
+            "analyze.run_all",
+            "display.select_results",
         ),
         # ──────────────────────────── Display ────────────────────────────
         "display.select_results": _t(
@@ -3722,6 +3801,8 @@ ACTION_TOPICS: dict[str, str] = {
     # ── Analyze ─────────────────────────────────────────────────────
     "_act_case_manager": "analyze.cases",
     "_act_run": "analyze.run",
+    "_act_run_all": "analyze.run_all",
+    "_act_run_selected": "analyze.run_selected",
     "_act_check_stability": "analyze.stability",
     # ── Display ─────────────────────────────────────────────────────
     "_act_select_results": "display.select_results",
