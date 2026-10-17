@@ -54,7 +54,15 @@ def run(argv: list[str]) -> int:
 
     install()
 
-    window = MainWindow()
-    window.show()
+    # A wait cursor while the window builds and draws its first frame: a large
+    # model takes a moment before the interface answers, and the user should see
+    # that something is happening rather than a blank screen.
+    QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+    try:
+        window = MainWindow()
+        window.show()
+        QApplication.processEvents()
+    finally:
+        QApplication.restoreOverrideCursor()
 
     return app.exec()
