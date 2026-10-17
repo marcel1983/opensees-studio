@@ -186,8 +186,12 @@ class ModelCanvas(QtInteractor):
             self._box_origin = None
             self._hide_rubber_band()
             rect = QRectF(origin, event.position()).normalized()
-            if rect.width() < 4.0 and rect.height() < 4.0:
-                # A click, not a box: keep picking the item under the pointer.
+            drift = (
+                (event.position().x() - origin.x()) ** 2 + (event.position().y() - origin.y()) ** 2
+            ) ** 0.5
+            if drift <= CLICK_MAX_DRIFT_PX:
+                # The same budget the canvas has always used: a small drift is a
+                # click, and only a real drag draws a box.
                 self._handle_click(event.position().x(), event.position().y())
             else:
                 # Qt's y grows downwards, so a downward drag ends *below* the
