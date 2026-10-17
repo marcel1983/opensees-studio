@@ -107,7 +107,11 @@ Status legend: ✅ done · 🟡 partial · ⬜ planned · ✂️ deferred / out-
   `imageio[ffmpeg]`
 - ⬜ **Render performance pass** — collapse per-entity actors into glyphed
   PolyData (single draw call), in-place colour updates for selection,
-  AA, lower-tessellation spheres. Target: 10k nodes / 20k frames @ 30 fps
+  AA, lower-tessellation spheres. Target: 10k nodes / 20k frames @ 30 fps.
+  *Measured first*: `tools/render_bench.py` (geometry build + actors) and the
+  ratchet in `tools/render-budget.txt`; at 4.8k nodes / 13.6k frames the build
+  takes 269 ms without supports and 1.17 s with them (490 actors), and
+  `_build_frame_assignments` alone accounts for 241 ms of the base cost.
 
 ## Phase 8 — Earthquake Engineering 🟡
 - ✅ `HystereticMaterial`, `BeamWithHinges`, `FiberSection` → all

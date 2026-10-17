@@ -243,6 +243,15 @@ pytest tests/integration -v    # real openseespy runs (slow)
   analysis CLI as a subprocess (`test_analysis_cli.py`) and the
   direct-versus-CLI result parity (`test_cli_result_parity.py`).
 
+## Render budget
+
+`tools/render_bench.py` builds synthetic models and measures the geometry build
+(CPU) and the number of actors from the renderer, without opening a GPU context
+— `tests/tools/test_render_budget.py` runs it in the normal suite. The ceilings
+live in `tools/render-budget.txt` and are a ratchet: the actor count is exact,
+the time ceiling is wide enough to survive a busy runner. Target from the
+roadmap: 10k nodes and 20k frames at 30 fps, so the numbers only go down.
+
 ## Examples
 
 The `examples/` directory contains both Python scripts and
