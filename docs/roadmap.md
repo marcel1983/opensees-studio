@@ -111,7 +111,9 @@ Status legend: ✅ done · 🟡 partial · ⬜ planned · ✂️ deferred / out-
   *Measured first*: `tools/render_bench.py` (geometry build + actors) and the
   ratchet in `tools/render-budget.txt`; at 4.8k nodes / 13.6k frames the build
   takes 269 ms without supports and 1.17 s with them (490 actors), and
-  `_build_frame_assignments` alone accounts for 241 ms of the base cost.
+  `_build_frame_assignments` alone accounts for 241 ms of the base cost. Done so
+  far: `_Options.is_default()` compares against a cached field dict instead of
+  constructing a throwaway model — 606 → 446 ms on 1.5k nodes / 4.3k frames.
 
 ## Phase 8 — Earthquake Engineering 🟡
 - ✅ `HystereticMaterial`, `BeamWithHinges`, `FiberSection` → all

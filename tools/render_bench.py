@@ -97,9 +97,7 @@ def build_model(nx: int, ny: int, nz: int, *, restrained: bool = False) -> Proje
         for step in ((1, 0, 0), (0, 1, 0), (0, 0, 1)):
             end = index.get((i + step[0], j + step[1], k + step[2]))
             if end is not None:
-                elements.append(
-                    ElasticBeamColumn(id=element_id, nodes=(start, end), section_id=1)
-                )
+                elements.append(ElasticBeamColumn(id=element_id, nodes=(start, end), section_id=1))
                 element_id += 1
 
     return Project(
@@ -142,6 +140,9 @@ MODELS: tuple[tuple[str, int, int, int, bool], ...] = (
     ("grid-6x6x3", 6, 6, 3, False),
     ("grid-6x6x3-supported", 6, 6, 3, True),
     ("grid-10x10x5-supported", 10, 10, 5, True),
+    # Near the roadmap target and big enough to show per-member work: this is the
+    # case where a regression in the per-element paths is visible.
+    ("grid-14x14x8-supported", 14, 14, 8, True),
 )
 
 

@@ -558,3 +558,36 @@ def test_a_shape_hint_stands_upright_in_2d_and_3d() -> None:
     three = section_extents(_project(sections=[section], ndm=3), 1)
     assert (two.y_max - two.y_min, two.z_max - two.z_min) == pytest.approx((0.5, 0.2))
     assert (three.y_max - three.y_min, three.z_max - three.z_min) == pytest.approx((0.2, 0.5))
+
+
+def test_is_default_is_true_only_for_an_untouched_option() -> None:
+    """The renderer skips members whose options are all defaults, so this is load-bearing."""
+    from opensees_studio.core.geometry.frame_options import (
+        FrameEndOffsets,
+        FrameInsertion,
+        FrameReleases,
+    )
+
+    assert FrameReleases().is_default()
+    assert FrameEndOffsets().is_default()
+    assert FrameInsertion().is_default()
+
+    released = FrameReleases(i={"released": ("M3",)})
+    assert not released.is_default()
+
+    # A spring only means something on a released action; the validator refuses
+    # the other way round, so is_default never sees that state.
+    assert FrameReleases(j={"released": ("M3",), "springs": {"M3": 1e9}}).is_default() is False
+
+    assert not FrameEndOffsets(length_i=0.4).is_default()
+    assert not FrameInsertion(offset_2=0.1).is_default()
+
+
+def test_is_default_does_not_share_a_mutable_default_between_classes() -> None:
+    """The per-class cache must not leak one class's defaults into another."""
+    from opensees_studio.core.geometry.frame_options import FrameEndOffsets, FrameReleases
+
+    assert FrameReleases().is_default()
+    assert FrameEndOffsets().is_default()
+    assert not FrameReleases(i={"released": ("T",)}).is_default()
+    assert FrameReleases().is_default(), "the cache must survive a non-default instance"

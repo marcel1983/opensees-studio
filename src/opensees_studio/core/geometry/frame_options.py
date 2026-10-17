@@ -17,7 +17,7 @@ offsets, clear length) is computed in :mod:`opensees_studio.core.frame_members`.
 
 from __future__ import annotations
 
-from typing import Literal, get_args
+from typing import Any, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -30,12 +30,29 @@ RELEASE_DOFS: tuple[str, ...] = get_args(ReleaseDof)
 RELEASE_AXIS: dict[str, int] = {"T": 0, "M2": 1, "M3": 2}
 
 
+#: Per-class field dict of a default instance, built once. pydantic v2 keeps a
+#: model's fields in ``__dict__``, so ``self.__dict__ == defaults`` is a dict
+#: comparison in C: constructing a throwaway model and comparing it with ``==``
+#: ran validation twice per call, and the renderer asks once per member per
+#: category (27k calls on a 13.6k-member model).
+_DEFAULTS: dict[type, dict[str, Any]] = {}
+
+
+def _default_values(cls: type) -> dict[str, Any]:
+    """The field dict of a default ``cls``, computed at most once per class."""
+    cached = _DEFAULTS.get(cls)
+    if cached is None:
+        cached = cls().__dict__
+        _DEFAULTS[cls] = cached
+    return cached
+
+
 class _Options(BaseModel):
     model_config = ConfigDict(extra="forbid", validate_assignment=True, frozen=True)
 
     def is_default(self) -> bool:
         """Every field holds its default: the member behaves as if it was never assigned."""
-        return self == type(self)()
+        return self.__dict__ == _default_values(type(self))
 
 
 class EndRelease(BaseModel):
