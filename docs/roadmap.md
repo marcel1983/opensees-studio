@@ -657,6 +657,9 @@ Status legend: ✅ done · 🟡 partial · ⬜ planned · ✂️ deferred / out-
   finished run appended to a queryable SQLite database (`<project>_results.sqlite`)
   with all node and element results; Analyze → Run All Cases and Run Selected
   Cases. Also fixes MP4 export failing on an odd viewport height.
+- ✅ Results feedback (0.0.16): a caption in each viewport naming the case or
+  combination on screen, Analyze → Delete All Results, and one run per case in
+  the results database (re-running replaces instead of appending).
 
 ## Maintenance / debt
 - ⬜ Canonical float serialization in `.osmodel` (platform last-digit noise
