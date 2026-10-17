@@ -999,7 +999,9 @@ class ModelRenderer:
                     if magnitude < 1e-12 * peak:
                         continue
                     x_at = dload.x_start + t * (dload.x_end - dload.x_start)
-                    element.append((pi + x_at * axis, load_vec / magnitude, full_len * magnitude / peak))
+                    element.append(
+                        (pi + x_at * axis, load_vec / magnitude, full_len * magnitude / peak)
+                    )
 
             for pload in pattern.point_loads:
                 if not isinstance(pload, PointElementLoad):

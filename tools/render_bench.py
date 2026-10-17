@@ -135,8 +135,7 @@ def build_model(
                     for node in nodes
                 ],
                 element_loads=[
-                    UniformElementLoad(element_id=element.id, wy=-1000.0)
-                    for element in elements
+                    UniformElementLoad(element_id=element.id, wy=-1000.0) for element in elements
                 ],
             )
         ]
