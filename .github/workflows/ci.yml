@@ -93,6 +93,10 @@ jobs:
     # The GUI suite runs in one pytest process. For a crash, rerun it one
     # process per file to find the failing file (see CLAUDE.md).
     needs: lint
+    # The suite takes a few minutes everywhere; a hang (macOS has been stopping
+    # around test 145 with no output) must fail in half an hour, not hold a
+    # runner for GitHub's six-hour default.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -120,6 +124,11 @@ jobs:
       - name: Run GUI tests, one process (Linux, headless)
         if: runner.os == 'Linux'
         run: xvfb-run -a pytest tests/gui
-      - name: Run GUI tests, one process (Win/Mac)
-        if: runner.os != 'Linux'
+      - name: Run GUI tests, one process (Windows)
+        if: runner.os == 'Windows'
         run: pytest tests/gui
+      # One line per test (-vv: addopts has -q), and a test running past 5 minutes dumps every thread's
+      # traceback (pytest's faulthandler), so a hang names its test and line.
+      - name: Run GUI tests, one process (macOS, diagnosing a hang)
+        if: runner.os == 'macOS'
+        run: pytest tests/gui -vv -o faulthandler_timeout=300
