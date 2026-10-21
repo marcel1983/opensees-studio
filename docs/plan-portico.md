@@ -1,0 +1,184 @@
+# Plan — importar modelos PORTICO y cerrar las brechas donde nos supera
+
+**Fuente:** [`jpreyes/portico-core`](https://github.com/jpreyes/portico-core)
+(AGPL-3.0-or-later, open-core con CLA y edición Pro comercial), revisado en el
+commit `7468071` (v0.2.0, 2026-07-18).
+**Fecha:** 2026-10-21.
+
+Regla de licencia para todo este plan: las dos bases son AGPL, pero PORTICO
+pide CLA porque vende una edición comercial. **No se copia código**: se
+reimplementa en Python a partir de la documentación y de las referencias
+publicadas (fórmulas de los códigos, soluciones cerradas). Los modelos `.s3d`
+de `examples/` se usan como *entrada de prueba* leída en tiempo de test, no
+se vendorizan sin revisar su licencia caso por caso.
+
+---
+
+## Fase A — Importador `.s3d` (File → Import → PORTICO Model…)
+
+### A.1 Formato observado
+
+Inventario sobre los 23 `.s3d` de `examples/` (`version: "1.0"`):
+
+| Clave | Contenido | Destino en Studio |
+|---|---|---|
+| `units` | `kN-m` (17), `kip-in` (5), `lb-in` (1) | `UnitSystem`; `lb-in` no existe → factor de escala explícito o rechazo con mensaje |
+| `mode` | `3D` / `2D` | `ndm`; un 2D se lleva al plano **X-Z** vía `core.plane` (verificar qué plano usa PORTICO en 2D) |
+| `nodes[]` | `x,y,z`, `restraints{ux..rz}`, `nodeMass{mx..irz}`, `springs{kux..krz}`, `prescDisp` | `Node` + `Restraint6`, masa nodal, `Node.spring`; `prescDisp` → `ImposedDisplacement` |
+| `elements[]` | `n1,n2,matId,secId`, `releases[12]`, `compressionOnly`, `cable` | `ElasticBeamColumn` (Timoshenko si la sección trae `Avy/Avz`) + releases de `frame_options`; `cable`/`compressionOnly` → advertencia (fase posterior) |
+| `materials[]` | `E,G,nu,rho,alpha`, `design` | material elástico; `rho` es **masa** por volumen en PORTICO (comprobar) |
+| `sections[]` | `A,Iz,Iy,J,Avy,Avz,kappay,kappaz`, `mod`, `Zz` | `ElasticSection` con áreas de corte; `mod` → modificadores de `frame_options` |
+| `areas[]` | `QUAD`/`CST`, `behavior` membrane/plate/shell, `thickness`, `planeStrain`, `drilling` | `ShellMITC4Element` / `QuadElement`; `CST` → advertencia o quad degenerado (decidir) |
+| `diaphragms[]` | `z`, `nodes`, `cm`, `mass`, `eccentricity`, `masterId` | `RigidDiaphragm` (+ masa en el nodo maestro) |
+| `links[]` | `master`, `slave`, `rigid`, `dofs` | `RigidLink` / `EqualDOFConstraint` |
+| `loadCases[]` | `type` static/spectrum, `selfWeight`, `specDir`, `loads[]` | `PlainLoadPattern` + `StaticCase`; `spectrum` → `ResponseSpectrumCase` sin espectro (pedirlo) |
+| `loads[]` | `nodal{F}`, `dist{w,dir}` (+ trapezoidal), `temp{dTtop,dTbot}` en áreas | `NodalLoad`, `UniformElementLoad`/`TrapezoidalElementLoad`; `temp` → advertencia (Fase F) |
+| `combinations[]` | `factors` | combinación de carga |
+| `grids` | `x[],y[],z[]` | `GridSystem` Global |
+| `massSource` | fuente de masa | `core.mass_source` |
+
+### A.2 Diseño
+
+- `services/s3d_import.py` (sin Qt), con el mismo contrato que
+  `services/dxf_import.py`: devuelve `S3dImportResult(project, warnings,
+  dropped: Counter)`. **Nunca descarta en silencio**: todo lo no traducido
+  se cuenta y se muestra.
+- Validación defensiva: JSON que no es objeto, colecciones que no son listas,
+  ids duplicados o referencias rotas → `S3dImportError` con mensaje claro.
+- Convenciones a fijar con un test cada una (son la fuente de bugs):
+  1. **Ejes locales**: PORTICO usa `VERT = 0.9994` y `ez = ex × ref`
+     (`ref` = Z global, o X si el miembro es casi vertical). Traducir a
+     `vecxz` explícito por elemento para que coincida.
+  2. **Signo de `dist` con `dir: "gravity"`**: `w > 0` apunta a −Z.
+  3. **Orden de `releases[12]`**: (i: ux..rz, j: ux..rz) — confirmar contra
+     `js/solver/timoshenko.js`.
+  4. **Iz / Iy**: confirmar cuál es fuerte respecto a los ejes locales.
+  5. **Peso propio**: `selfWeight: true` → nuestro peso propio por unidad de
+     peso (ρ·g), no como masa.
+- Viewmodel + diálogo `S3dImportDialog` (resumen: conteos, unidades,
+  advertencias) y un solo paso de undo, como el DXF.
+- Ayuda: página en `core/help.py` (`TOPICS` + `ACTION_TOPICS`), README,
+  CHANGELOG.
+
+### A.3 Pruebas
+
+- `tests/unit/test_s3d_import.py`: un `.s3d` mínimo escrito en el test
+  (portal 2 barras), cada convención de A.2 con su propio caso, archivos
+  corruptos.
+- `tests/integration/test_s3d_parity.py`: importar `verif_1-018_static_portal`,
+  `verif_1-014_modal_cantilever`, `verif_1-021_modal_bathe_wilson` y
+  `verif_1-005a_settlement`, resolver con OpenSees y comparar contra los JSON
+  de `tools/verif/opensees/results/` de PORTICO (su propia corrida
+  OpenSeesPy) y contra la solución analítica. Si el archivo fuente no está
+  disponible, el test se salta con razón explícita (no se vendoriza).
+
+### A.4 Alcance por etapas
+
+| Etapa | Contenido | Tamaño |
+|---|---|---|
+| A1 | nodos, apoyos, resortes, masas, materiales, secciones, barras, releases, cargas nodales/distribuidas, peso propio, casos estáticos, combinaciones, grillas | M |
+| A2 | áreas shell/plate/membrane, diafragmas, links, `prescDisp`, casos de espectro | M |
+| A3 | export `.s3d` (ida y vuelta) — opcional, solo si hay demanda | S |
+
+---
+
+## Fase B — Manual de verificación (prioridad alta)
+
+Es lo que PORTICO tiene y nosotros no: un documento publicable que dice
+"caso X, referencia Y, error Z %".
+
+- `docs/verification/` con un archivo por caso: modelo, referencia
+  (analítica / publicada), tabla de resultados, error relativo, veredicto.
+- Generado, no escrito a mano: `tools/verification_manual.py` corre los casos
+  (reutilizando `tests/integration`), escribe la tabla y falla si un error
+  supera la tolerancia declarada. Un job de CI (o el job de integración
+  existente) lo ejecuta, así el manual nunca queda desactualizado.
+- Catálogo inicial (ya tenemos casi todos como tests de integración):
+  voladizo con carga puntual y UDL, pórtico estático, voladizo modal,
+  Bathe–Wilson (si se puede reproducir con datos publicados), viga con quads,
+  armadura básica, pushover SDOF, P-Δ vs. fórmula de amplificación,
+  asentamiento de apoyo, equilibrio global ΣR = ΣF en todos los modelos de
+  `examples/`.
+- Casos que solo nosotros podemos mostrar: sección de fibras vs. momento-
+  curvatura teórico, Steel02/Concrete02 cíclico vs. curvas de referencia.
+
+Tamaño: M. No depende de la Fase A, pero la Fase A le agrega casos.
+
+---
+
+## Fase C — Verificación de diseño D/C (AISC 360-16 primero)
+
+Ya tenemos la librería AISC v16 (`core/aisc.py`), combinaciones de código
+(`core/code_combinations.py`, ASCE 7) y fuerzas de elemento.
+
+- `core/design/aisc360.py` (puro, sin Qt): tracción (D2), compresión (E3,
+  con pandeo flexural; E4 después), flexión (F2–F3 para W y canales),
+  corte (G2) e interacción H1-1. Cada función devuelve capacidad, demanda,
+  D/C y la ecuación aplicada, para que el reporte la cite.
+- Parámetros por miembro: K, longitud no arriostrada Lb, Cb (por defecto 1.0
+  con advertencia), método LRFD/ASD.
+- `services/design_check.py`: envolvente de combinaciones → D/C por miembro.
+- Vista: colorear miembros por D/C (reusar la escala de `DiagramRenderer`),
+  tabla de resultados y sección en el reporte (`services/report.py`).
+- Pruebas: ejemplos resueltos del *AISC Design Examples* (v16), ecuación por
+  ecuación, más un caso de punta a punta.
+- Después, en este orden: derivas de entrepiso (ya existe
+  `core/storey_results.py`; falta el chequeo contra límite), ACI 318
+  (flexión/corte de vigas, P-M de columnas), NCh433/espectros locales como
+  *preset* opcional.
+
+Tamaño: L (AISC) + M (derivas).
+
+---
+
+## Fase D — Tutoriales y documentación en español
+
+- `docs/tutorials/` con 3 tutoriales paso a paso con capturas:
+  1. Edificio de 3 pisos con diafragma: modal + espectro (`building_3storey_diaphragm`).
+  2. Pushover de un pórtico de acero con fibras hasta el colapso
+     (`portal_pushover.py`) — aquí OpenSees muestra lo que PORTICO no puede.
+  3. Tiempo-historia con registro PEER y escalamiento a espectro objetivo.
+- Capturas generadas por script con la app real (reutilizar `tools/` y el
+  harness GUI), para que se regeneren cuando cambie la UI.
+- Español: traducir README y tutoriales como `*.es.md` (patrón de PORTICO).
+  Internacionalizar la UI queda fuera de este plan (costo alto con Qt).
+
+Tamaño: M.
+
+---
+
+## Fase E — Análisis de práctica profesional
+
+Solo lo que OpenSees permite hacer bien:
+
+| Funcionalidad | Cómo en OpenSees | Tamaño |
+|---|---|---|
+| Etapas constructivas | casos encadenados (`preload_case_ids` ya existe) + activar/desactivar elementos por etapa (`remove element`, o rigidez reducida); empezar por "agregar por etapa" | L |
+| Cargas móviles / líneas de influencia | barrido de carga unitaria en estático lineal, envolvente; sin solver nuevo | M |
+| Gradiente térmico | `eleLoad -beamThermal` en barras; en shells solo si el elemento lo soporta | S–M |
+| Cables / solo compresión | `CorotTruss` + material ENT / tensión-solo (ya hay `CorotTrussElement`) | S |
+| Tendones de pretensado | carga equivalente (fase 1); `Steel` con preesfuerzo inicial (fase 2) | M |
+
+---
+
+## Fase F — Lo que no se copia
+
+- **Solver JS / app web**: nuestro motor es OpenSees por diseño (ADR-0003).
+- **Asistente LLM**: fuera de alcance de este plan; si llega, como servicio
+  opcional que produce un `Project`.
+- **Mallado libre** (Blossom, etc.): solo si los usuarios lo piden; hoy
+  `core/mesh.py` cubre el mallado mapeado.
+
+---
+
+## Orden propuesto
+
+1. **A1** importador básico + tests de paridad (desbloquea casos para B).
+2. **B** manual de verificación generado en CI.
+3. **C** AISC 360 D/C + chequeo de derivas.
+4. **A2** áreas, diafragmas, links.
+5. **D** tutoriales y documentación en español.
+6. **E** análisis de práctica profesional, por demanda.
+
+Cada ítem es un PR propio y cumple el checklist de `CLAUDE.md` (help pages,
+docs, CHANGELOG, gates).
