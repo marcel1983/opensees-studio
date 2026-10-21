@@ -24,14 +24,23 @@ dependencies = [
     "pydantic>=2.5",
     "numpy>=1.26",
     "h5py>=3.10",
-    "openseespy==3.8.0.0",
-    "openseespywin==3.8.0.0 ; sys_platform == 'win32'",
     # Reading a bar layout out of a DXF drawing (File → Import). Pure Python,
     # headless, MIT — it belongs to the base tier like the rest of core/services.
     "ezdxf>=1.3",
 ]
 
 [project.optional-dependencies]
+# ── The solver ─────────────────────────────────────────────────────────────
+# OpenSeesPy is a separate program with its own license (free for research,
+# education and internal use; commercial redistribution needs a license from
+# its authors), so it is not a base dependency: the application models, exports
+# and reports without it, and analyses need it (Options → Solver can also point
+# to another installation). See docs/adr/ADR-0003-solver-engines.md.
+#   pip install -e ".[opensees]"
+opensees = [
+    "openseespy==3.8.0.0",
+    "openseespywin==3.8.0.0 ; sys_platform == 'win32'",
+]
 # ── GUI / visualization stack (desktop app only) ──────────────────────────
 # Install with: pip install -e ".[gui]"   (desktop)
 #               pip install -e ".[gui,dev]"  (desktop + dev tools)
@@ -51,6 +60,8 @@ gui = [
     "pandas>=2.1",
 ]
 dev = [
+    # The test suites solve models: development always has the solver.
+    "opensees-studio[opensees]",
     "pytest>=7.4",
     "pytest-qt>=4.2",
     "pytest-cov>=4.1",

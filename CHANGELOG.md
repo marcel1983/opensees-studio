@@ -9,8 +9,27 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Changed
+
+- **The solver is optional: OpenSeesPy is no longer a base dependency.** It is a
+  separate program with its own license (free for research, education and
+  internal use; commercial redistribution needs a license from its authors), so
+  `pip install opensees-studio` now installs the modeller and
+  `pip install opensees-studio[opensees]` adds the solver (`dev` includes it).
+  Without a solver the application models, exports and reports; Run, the batch
+  runs, Check Model Stability and the Material Tester are disabled and say why,
+  and the log says at start which solver was found. The desktop bundle still
+  carries OpenSeesPy for now.
+
 ### Added
 
+- **Options → Solver.** Shows whether OpenSeesPy is available and which version,
+  and points to it: the application's own environment, another Python 3.12 that
+  has `openseespy` (the application asks that interpreter where it is, without
+  starting OpenSees), or a folder holding the package. The choice is saved in
+  `solver.json` in the application data directory. Other solvers can register as
+  Python packages (`opensees_studio.engines` entry point;
+  `docs/adr/ADR-0003-solver-engines.md`).
 - **Edit → Merge Joints.** Joints closer than a tolerance (a thousandth of the
   model's size to start with) become one: on the selected joints only or on the
   whole model. The lowest id stays; elements, loads, constraints and groups move

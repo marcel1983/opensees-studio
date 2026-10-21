@@ -107,7 +107,7 @@ from opensees_studio.core.reactions import ReactionRow, reaction_rows
 from opensees_studio.core.sections import SHELL_SECTION_CLASSES
 from opensees_studio.core.self_weight import section_weight_per_length
 from opensees_studio.core.view_settings import ViewSettings
-from opensees_studio.services import PROJECT_FILE_SUFFIX
+from opensees_studio.services import PROJECT_FILE_SUFFIX, engines
 from opensees_studio.services.combination import MissingCaseResultsError
 from opensees_studio.services.deformation import (
     linear_static_auto_scale,
@@ -211,6 +211,7 @@ from opensees_studio.views.dialogs.model_tables import ModelTablesDialog
 from opensees_studio.views.dialogs.reactions import ReactionsDialog
 from opensees_studio.views.dialogs.run_cases import RunCasesDialog
 from opensees_studio.views.dialogs.seismic_loads import SeismicLoadsDialog
+from opensees_studio.views.dialogs.solver_settings import SolverSettingsDialog
 from opensees_studio.views.dialogs.view_colors import ViewColorsDialog
 from opensees_studio.views.docks import (
     DeformedShapeView,
@@ -263,6 +264,9 @@ class MainWindow(QMainWindow):
         self.resize(1600, 1000)
 
         self._vm = ProjectViewModel(self)
+        # The solver is a separate program (Options → Solver); it may be absent.
+        engines.activate(engines.load_settings().package_dir)
+        self._solver = engines.current_status()
         self._runner = AnalysisRunner(self)
         self._stability = StabilityChecker(self)
         self._latest_results: object = None  # last analysis output (any kind)
@@ -300,6 +304,7 @@ class MainWindow(QMainWindow):
 
         self._build_docks()
         self._log(f"OpenSees Studio {__version__} started.")
+        self._log_solver_status()
         self._build_actions()
         self._build_menu_bar()
         self._build_view_toolbar()
@@ -590,6 +595,7 @@ class MainWindow(QMainWindow):
         self._act_about = QAction("&About OpenSees Studio…", self)
         self._act_help_contents = QAction("&Help Contents (F1)", self)
         self._act_set_units = QAction("Set Display &Units…", self)
+        self._act_solver_settings = QAction("&Solver…", self)
 
     def _annotate_help_topics(self) -> None:
         """Point every action at its help page (see ``core.help.ACTION_TOPICS``).
@@ -804,6 +810,7 @@ class MainWindow(QMainWindow):
 
         m_options = mb.addMenu("&Options")
         m_options.addAction(self._act_set_units)
+        m_options.addAction(self._act_solver_settings)
 
         m_help = mb.addMenu("&Help")
         m_help.addAction(self._act_help_contents)
@@ -1027,6 +1034,7 @@ class MainWindow(QMainWindow):
         self._act_about.triggered.connect(self._on_about)
         self._act_help_contents.triggered.connect(self._on_help_contents)
         self._act_set_units.triggered.connect(self._on_set_units)
+        self._act_solver_settings.triggered.connect(self._on_solver_settings)
 
         # Edit
         self._act_delete.triggered.connect(self._on_delete)
@@ -5081,6 +5089,31 @@ class MainWindow(QMainWindow):
             "<p>GNU Affero General Public License v3.0 — see LICENSE.</p>",
         )
 
+    def _log_solver_status(self) -> None:
+        if self._solver.available:
+            self._log(f"Solver: {self._solver.summary()}.")
+        else:
+            self._log(
+                f"No solver: {self._solver.message} Modeling, export and reports work; "
+                "running an analysis needs one (Options → Solver)."
+            )
+
+    def _on_solver_settings(self) -> None:
+        """Options → Solver: where OpenSeesPy is installed."""
+        dialog = SolverSettingsDialog(engines.load_settings(), parent=self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        settings = dialog.settings()
+        try:
+            engines.save_settings(settings)
+        except OSError as exc:
+            QMessageBox.critical(self, "Solver", f"Could not save the setting: {exc}")
+            return
+        engines.activate(settings.package_dir)
+        self._solver = engines.current_status(settings)
+        self._log_solver_status()
+        self._refresh_action_enablement()
+
     def _on_set_units(self) -> None:
         """Options → Set Display Units — SAP2000 parity.
 
@@ -5229,7 +5262,13 @@ class MainWindow(QMainWindow):
         self._act_check_duplicates.setEnabled(has_project)
         self._act_table_editing.setEnabled(has_project)
         has_cases = has_project and bool(self._vm.project and self._vm.project.analyses)
-        batch_enabled = has_cases and not self._runner.is_running
+        # Without a solver the model is still built, exported and reported; only
+        # what calls OpenSees waits for one (Options → Solver).
+        solver = self._solver.available
+        for action in (self._act_run, self._act_material_tester):
+            action.setEnabled(solver)
+            action.setStatusTip("" if solver else self._solver.summary())
+        batch_enabled = has_cases and solver and not self._runner.is_running
         self._act_run_all.setEnabled(batch_enabled)
         self._act_run_selected.setEnabled(batch_enabled)
         project_now = self._vm.project
@@ -5239,7 +5278,10 @@ class MainWindow(QMainWindow):
         db_there = has_project and database_path(self._vm.path).exists()
         self._act_clear_results.setEnabled(bool(has_project and (stored or db_there)))
         self._act_check_stability.setEnabled(
-            has_project and not self._stability.is_running and not self._runner.is_running
+            has_project
+            and solver
+            and not self._stability.is_running
+            and not self._runner.is_running
         )
         self._act_mesh.setEnabled(has_project)
         self._act_merge_joints.setEnabled(has_project)
