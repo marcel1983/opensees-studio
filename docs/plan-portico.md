@@ -191,7 +191,15 @@ Tamaño: L (AISC) + M (derivas).
 
 ---
 
-## Fase D — Tutoriales y documentación en español
+## Fase D — Tutoriales y documentación en español — ✅ hecho
+
+**Estado (2026-10-21):** tres tutoriales en inglés y español en
+`docs/tutorials/` (diseño de acero AISC + derivas sobre el nuevo ejemplo
+`steel_frame_design`, edificio con diafragmas + espectro + derivas NCh433,
+importar PORTICO), `README.es.md`, y `tools/tutorial_screenshots.py` que genera
+las capturas de los diálogos sin GPU. El visor 3D necesita OpenGL y no se
+captura en un contenedor; queda el tutorial de pushover con fibras y la
+internacionalización de la interfaz.
 
 - `docs/tutorials/` con 3 tutoriales paso a paso con capturas:
   1. Edificio de 3 pisos con diafragma: modal + espectro (`building_3storey_diaphragm`).
@@ -237,7 +245,7 @@ Solo lo que OpenSees permite hacer bien:
 2. ✅ **B** manual de verificación generado en CI.
 3. ✅ **C** AISC 360 D/C + chequeo de derivas.
 4. ✅ **A2** áreas, diafragmas, links, fuente de masa.
-5. **D** tutoriales y documentación en español.
+5. ✅ **D** tutoriales y documentación en español.
 6. **E** análisis de práctica profesional, por demanda.
 
 Cada ítem es un PR propio y cumple el checklist de `CLAUDE.md` (help pages,

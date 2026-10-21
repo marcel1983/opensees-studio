@@ -13,6 +13,12 @@
   <em>Status: Pre-alpha. Active development. APIs and file formats will change.</em>
 </p>
 
+<p align="center">
+  <strong>English</strong> · <a href="README.es.md">Español</a> ·
+  <a href="docs/tutorials/README.md">Tutorials</a> ·
+  <a href="docs/verification-manual.md">Verification Manual</a>
+</p>
+
 ---
 
 ![OpenSees Studio main window](docs/screenshots/main_window.png)
@@ -372,12 +378,14 @@ of that history:
 Prebuilt desktop bundles are attached to the
 [releases](https://github.com/ogunc/opensees-studio/releases): download the
 archive for your system, unpack it anywhere and run `OpenSeesStudio` (or
-`OpenSeesStudio.exe`). Nothing else has to be installed — the bundle carries
-its own Python, Qt, VTK and OpenSees.
+`OpenSeesStudio.exe`). The bundle carries its own Python, Qt and VTK. The
+OpenSees solver has its own license and is not inside it: install it once from
+Options → Solver, which downloads OpenSeesPy from PyPI after you accept its
+license.
 
 Unpack the whole folder, not the executable on its own: the libraries live
-beside it. A bundle is about 1.3 GB unpacked and roughly 570 MB to download,
-most of it the VTK renderer, the OpenSees solver and the Qt runtime.
+beside it. A bundle is about 1 GB unpacked, most of it the VTK renderer and the
+Qt runtime.
 
 The first launch of a downloaded bundle may be blocked by the operating
 system, since these binaries are not code-signed: on macOS, right-click →

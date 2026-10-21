@@ -11,6 +11,14 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **Tutorials, in English and Spanish** (`docs/tutorials/`): designing a steel
+  moment frame with the AISC check and the drift check, a building with rigid
+  floors (modes, CQC spectrum, NCh433 drift), and importing a PORTICO model. Their
+  dialog screenshots are generated from the current code by
+  `tools/tutorial_screenshots.py`.
+- **`README.es.md`**, a Spanish overview of the README, linked from it.
+- **Example `steel_frame_design`**: a two-bay, two-storey frame of AISC W shapes
+  with three combinations and design settings, for the steel check.
 - **Design → Steel Frame Check (AISC 360-16).** LRFD or ASD ratios of every frame
   member whose section is an AISC W, M, S or HP shape (by its name, or named per
   member): tension yielding (D2), flexural and torsional buckling with the
@@ -32,12 +40,13 @@ refused instead of silently downgraded).
   never opened the Design menu saves byte-identical, and editing the settings
   does not make results stale.
 
-- **Verification Manual** (`docs/verification-manual.md`). Fifteen cases with a
+- **Verification Manual** (`docs/verification-manual.md`). Twenty cases with a
   closed-form or published reference — cantilevers, simply supported and
   fixed-fixed beams, a Timoshenko beam, 3D biaxial bending and torsion, a two-bar
   truss, a support settlement, P-Δ, SDOF and cantilever frequencies, a step load
   in time history, a response spectrum, a simply supported plate and the plastic
-  moment of a fibre section — each with the computed value, the reference, the
+  moment of a fibre section, plus the AISC 360-16 design examples E.1A, F.1, G.1A
+  and H.1A and an end-to-end beam check — each with the computed value, the reference, the
   relative error and its tolerance. It is generated from real runs by
   `tools/verification_manual.py`, and the integration suite fails when a case
   leaves its tolerance or the manual is out of date.
@@ -61,6 +70,11 @@ refused instead of silently downgraded).
   log count them. PORTICO's own verification models (support settlement, link
   offset, static portal, modal cantilever, Bathe–Wilson frame) solve to the same
   numbers as its published OpenSeesPy runs, to 1e-10.
+
+### Fixed
+
+- The README no longer says the desktop bundle includes OpenSees: since 0.0.20 the
+  solver is installed from Options → Solver.
 
 ## [0.0.20] — 2026-10-21
 
