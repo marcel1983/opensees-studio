@@ -205,6 +205,14 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   you pick, and PORTICO's local axes (beam y up) mapped onto OpenSees' (beam z
   up). Areas, diaphragms, links, the mass source, temperature loads and
   spectrum cases are not imported yet; they are counted and reported.
+- **Design** — Design → Steel Frame Check (AISC 360-16, LRFD or ASD): every
+  frame member whose section is a W, M, S or HP shape gets its tension (D2),
+  compression (E3, E4, E7), flexure (F2, F3, F6), shear (G2, G6) and H1
+  interaction ratios over the combinations already run, read at 25 stations
+  along the member, with `Cb` from the moment diagram and per-member K, Lb and
+  Cb overrides; failing members can be selected in the model. Design → Storey
+  Drift Check compares amplified storey drifts with ASCE 7, NCh433 or Eurocode 8
+  limits. The settings are saved with the project.
 - **Export** — the model, with or without one analysis case, as a plain
   OpenSeesPy script generated from the same command sequence the solver
   receives, so it reproduces the application's numbers; or as **IFC4** (File →
@@ -690,7 +698,9 @@ The [Verification Manual](docs/verification-manual.md) compares OpenSees Studio
 with closed-form and published solutions: beams (Euler-Bernoulli and Timoshenko,
 2D and 3D), trusses, support settlement, P-Δ, modal frequencies, a step-load time
 history, a response spectrum, a simply supported plate of shells and the plastic
-moment of a fibre section, each with its relative error and tolerance. The file is
+moment of a fibre section, and the AISC 360-16 design examples E.1A, F.1, G.1A
+and H.1A plus an end-to-end beam check, each with its relative error and
+tolerance. The file is
 generated from real runs by `tools/verification_manual.py` (`--write` regenerates
 it), and CI fails when a case leaves its tolerance or the file is stale.
 

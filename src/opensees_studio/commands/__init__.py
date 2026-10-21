@@ -10,6 +10,7 @@ from opensees_studio.commands.buildings import (
     AddDiaphragmCommand,
     AddRigidLinkCommand,
     RemoveConstraintsCommand,
+    SetDesignSettingsCommand,
     SetMassSourceCommand,
     SetStoreysCommand,
 )
@@ -137,6 +138,7 @@ __all__ = [
     "ReplicateCommand",
     "SetCoordSystemsCommand",
     "SetCustomCommandsCommand",
+    "SetDesignSettingsCommand",
     "SetGridSystemCommand",
     "SetGroupsCommand",
     "SetMassCommand",

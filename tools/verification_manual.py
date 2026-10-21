@@ -636,6 +636,146 @@ def _plastic_moment() -> list[Check]:
     ]
 
 
+# ──────────────────────────── design: AISC 360-16 ────────────────────────────
+_FT = 12.0  # in
+
+
+def _aisc(name: str) -> Any:
+    from opensees_studio.core.units import UnitSystem
+    from opensees_studio.services.steel_design import ishape_in_units
+
+    return ishape_in_units(name, UnitSystem.US_IN_KIP)
+
+
+def _a992() -> Any:
+    from opensees_studio.core.design.aisc360 import Steel
+
+    return Steel(Fy=50.0, E=29000.0, G=11200.0)
+
+
+def _aisc_compression() -> list[Check]:
+    from opensees_studio.core.design.aisc360 import compression
+
+    strength = compression(_aisc("W14X132"), _a992(), "LRFD", length_x=30 * _FT, length_y=30 * _FT)
+    return [Check("φc Pn, W14X132, Lc = 30 ft", "kip", strength.available, 892.0, 2e-3)]
+
+
+def _aisc_flexure() -> list[Check]:
+    from opensees_studio.core.design.aisc360 import flexure_major, lp_lr
+
+    shape = _aisc("W18X50")
+    lp, lr = lp_lr(shape, _a992())
+    braced = flexure_major(shape, _a992(), "LRFD", unbraced=0.0)
+    ltb = flexure_major(shape, _a992(), "LRFD", unbraced=11.67 * _FT, cb=1.01)
+    return [
+        Check("Lp", "ft", lp / _FT, 5.83, 2e-3),
+        Check("Lr", "ft", lr / _FT, 16.9, 5e-3),
+        Check("φb Mn, continuously braced (F.1-1A)", "kip·ft", braced.available / _FT, 379.0, 2e-3),
+        Check(
+            "φb Mn, Lb = 11.67 ft, Cb = 1.01 (F.1-2A)", "kip·ft", ltb.available / _FT, 306.0, 3e-3
+        ),
+    ]
+
+
+def _aisc_shear() -> list[Check]:
+    from opensees_studio.core.design.aisc360 import shear_major
+
+    strength = shear_major(_aisc("W24X62"), _a992(), "LRFD")
+    return [Check("φv Vn, W24X62", "kip", strength.available, 306.0, 2e-3)]
+
+
+def _aisc_interaction() -> list[Check]:
+    from opensees_studio.core.design.aisc360 import (
+        compression,
+        flexure_major,
+        flexure_minor,
+        interaction,
+    )
+
+    shape = _aisc("W14X99")
+    pc = compression(shape, _a992(), "LRFD", length_x=14 * _FT, length_y=14 * _FT).available
+    mcx = flexure_major(shape, _a992(), "LRFD", unbraced=14 * _FT).available
+    mcy = flexure_minor(shape, _a992(), "LRFD").available
+    ratio, _ = interaction(-400.0, pc, 250 * _FT, mcx, 80 * _FT, mcy)
+    return [
+        Check("φc Pn, Lc = 14 ft", "kip", pc, 1130.0, 3e-3),
+        Check("φb Mnx, Lb = 14 ft", "kip·ft", mcx / _FT, 642.0, 2e-3),
+        Check("φb Mny", "kip·ft", mcy / _FT, 311.0, 2e-3),
+        Check("H1-1a ratio, Pr = 400, Mrx = 250, Mry = 80", "-", ratio, 0.928, 3e-3),
+    ]
+
+
+def _aisc_beam_check() -> list[Check]:
+    """The whole chain: OpenSees diagrams → demands → ratio, against wL²/8 by hand."""
+    from opensees_studio.core import (
+        ElasticBeamColumn,
+        LinearTimeSeries,
+        Node,
+        PlainLoadPattern,
+        Project,
+        ProjectMeta,
+        StaticCase,
+        UniformElementLoad,
+        UnitSystem,
+    )
+    from opensees_studio.core.aisc import get_shape, shape_to_elastic_section
+    from opensees_studio.core.design.aisc360 import flexure_major
+    from opensees_studio.core.design.settings import DesignSettings, SteelMemberDesign
+    from opensees_studio.services.steel_design import steel_frame_check
+
+    span, w = 20 * _FT, 0.22  # in, kip/in
+    units = UnitSystem.US_IN_KIP
+    section = shape_to_elastic_section(
+        get_shape("W18X50"), elastic_modulus=29000.0, shear_modulus=11200.0, units=units, ndm=2
+    )
+    project = Project(
+        meta=ProjectMeta(units=units),
+        ndm=2,
+        ndf=3,
+        nodes=[
+            Node(id=1, coords=(0.0, 0.0, 0.0), restraint=(True, False, True, False, False, False)),
+            Node(
+                id=2, coords=(span, 0.0, 0.0), restraint=(False, False, True, False, False, False)
+            ),
+        ],
+        sections=[section],
+        elements=[ElasticBeamColumn(id=1, nodes=(1, 2), section_id=1)],
+        time_series=[LinearTimeSeries(id=1, name="Ramp")],
+        load_patterns=[
+            PlainLoadPattern(
+                id=1,
+                name="w",
+                time_series_id=1,
+                element_loads=[UniformElementLoad(element_id=1, wy=-w)],
+            )
+        ],
+    )
+    case = StaticCase(id=1, name="w", pattern_ids=[1])
+    project.analyses.append(case)
+    results = _run(project, case)
+    report = steel_frame_check(
+        project, {1: results}, DesignSettings(members=[SteelMemberDesign(element_id=1)])
+    )
+    member = report.members[0]
+    capacity = flexure_major(_aisc("W18X50"), _a992(), "LRFD", unbraced=span, cb=1.136).available
+    return [
+        Check(
+            "Major flexure ratio (wL²/8) / φb Mn, Cb from the diagram",
+            "-",
+            member.ratios["Major flexure"],
+            w * span**2 / 8 / capacity,
+            2e-3,
+        ),
+        Check(
+            "Major shear ratio (wL/2) / φv Vn",
+            "-",
+            member.ratios["Major shear"],
+            w * span / 2 / (1.0 * 0.6 * 50.0 * 18.0 * 0.355),
+            1e-6,
+        ),
+    ]
+
+
 # ──────────────────────────── catalogue ────────────────────────────
 CASES: list[Case] = [
     Case(
@@ -766,6 +906,48 @@ CASES: list[Case] = [
         "plastic material a little hardening for large drifts.",
         _plastic_moment,
     ),
+    Case(
+        "D-01",
+        "AISC: column available strength",
+        "Design, AISC 360-16",
+        "AISC *Design Examples* v16.0, Example E.1A; Manual Table 4-1a: 892 kips.",
+        "W14X132, Fy = 50 ksi, Lc = 30 ft about both axes (E3, minor-axis buckling).",
+        _aisc_compression,
+    ),
+    Case(
+        "D-02",
+        "AISC: beam flexural strength and LTB",
+        "Design, AISC 360-16",
+        "AISC *Design Examples* v16.0, Examples F.1-1A and F.1-2A; Manual Table 3-2 "
+        "(Lp = 5.83 ft, Lr = 16.9 ft).",
+        "W18X50, Fy = 50 ksi; continuously braced, and braced at thirds of a 35 ft span.",
+        _aisc_flexure,
+    ),
+    Case(
+        "D-03",
+        "AISC: web shear strength",
+        "Design, AISC 360-16",
+        "AISC *Design Examples* v16.0, Example G.1A: 306 kips (φv = 1.00).",
+        "W24X62, Fy = 50 ksi (G2.1(a)).",
+        _aisc_shear,
+    ),
+    Case(
+        "D-04",
+        "AISC: combined axial force and biaxial flexure",
+        "Design, AISC 360-16",
+        "AISC *Design Examples* v16.0, Example H.1A.",
+        "W14X99, Fy = 50 ksi, Lc = Lb = 14 ft, Pu = 400 kips, Mux = 250 and Muy = 80 kip-ft.",
+        _aisc_interaction,
+    ),
+    Case(
+        "D-05",
+        "Steel frame check of a beam, end to end",
+        "Design, AISC 360-16",
+        "M = wL²/8, V = wL/2, Cb = 1.136 for a uniform load (F1-1).",
+        "Simply supported W18X50, 20 ft, w = 0.22 kip/in, solved by OpenSees and checked by "
+        "Design → Steel Frame Check with Lb = the span.",
+        _aisc_beam_check,
+    ),
 ]
 
 
@@ -803,8 +985,9 @@ def render(outcomes: list[Outcome]) -> str:
         "tolerance is exceeded or the file is out of date",
         "(`tests/integration/test_verification_manual.py`).",
         "",
-        "Units are SI (m, N, kg, s). Errors below 1e-6 are floating-point noise and are",
-        "printed as `< 1e-6`.",
+        "Units are SI (m, N, kg, s) for the V cases and kip-inch for the D (design)",
+        "cases, as in the AISC examples. Errors below 1e-6 are floating-point noise",
+        "and are printed as `< 1e-6`.",
         "",
         f"**{passed} of {len(outcomes)} cases pass.**",
         "",

@@ -150,7 +150,16 @@ Tamaño: M. No depende de la Fase A, pero la Fase A le agrega casos.
 
 ---
 
-## Fase C — Verificación de diseño D/C (AISC 360-16 primero)
+## Fase C — Verificación de diseño D/C (AISC 360-16 primero) — ✅ hecho (AISC + derivas)
+
+**Estado (2026-10-21):** `core/design/aisc360.py` (D2, E3, E4, E7, F2, F3, F6,
+G2.1, G6, H1), `core/design/settings.py` (`Project.design`, omitido si no se
+usa y fuera de la huella de resultados), `services/steel_design.py` (demandas en
+25 estaciones por miembro, expansión de combinaciones, ± espectro, Cb por F1-1)
+y el menú Design con Steel Frame Check y Storey Drift Check. Verificado contra
+los ejemplos AISC E.1A, F.1-1A, F.1-2A, G.1A y H.1A (manual D-01 a D-05).
+Pendiente: HSS/tubos (F7, F8), canales, rotura en tracción (área neta),
+colorear el modelo por D/C, sección en el reporte, ACI 318.
 
 Ya tenemos la librería AISC v16 (`core/aisc.py`), combinaciones de código
 (`core/code_combinations.py`, ASCE 7) y fuerzas de elemento.
@@ -219,7 +228,7 @@ Solo lo que OpenSees permite hacer bien:
 
 1. ✅ **A1** importador básico + tests de paridad (desbloquea casos para B).
 2. ✅ **B** manual de verificación generado en CI.
-3. **C** AISC 360 D/C + chequeo de derivas.
+3. ✅ **C** AISC 360 D/C + chequeo de derivas.
 4. **A2** áreas, diafragmas, links.
 5. **D** tutoriales y documentación en español.
 6. **E** análisis de práctica profesional, por demanda.

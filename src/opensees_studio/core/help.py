@@ -78,6 +78,7 @@ GROUP_ORDER: tuple[str, ...] = (
     "Assign — groups",
     "Analyze",
     "Display",
+    "Design",
     "View",
     "Options",
     "Help",
@@ -990,6 +991,77 @@ takes neither.
 """,
             "file.open",
             "file.import_dxf",
+        ),
+        "design.steel_check": _t(
+            "Design → Steel Frame Check (AISC 360-16)",
+            "Design",
+            "Demand/capacity ratios of steel members over the results of this session.",
+            """
+Checks every frame member whose section is an AISC **W, M, S or HP** shape against
+ANSI/AISC 360-16, by LRFD or ASD. The section's **name** says which shape it is
+(sections from Define → Section Library are named that way); type another shape
+in the overrides to check a member with it.
+
+# What is checked
+- **Tension** D2-1 (yielding of the gross section). Rupture needs the net area
+  and is left to you.
+- **Compression** E3 flexural buckling about both axes, E4 torsional buckling,
+  and the E7 effective area when the flange or the web is slender.
+- **Major-axis flexure** F2 yielding and lateral-torsional buckling (with Lp, Lr
+  and Cb), F3 flange local buckling. A noncompact web is noted, not checked (F4).
+- **Minor-axis flexure** F6, **shear** G2.1 along the web and G6 along the flanges.
+- **Interaction** H1-1a / H1-1b of the axial force and both moments.
+
+The clear web height is taken as `d - 2 tf` (the table has no `k`), which is
+slightly conservative.
+
+# Where the demands come from
+The dialog uses the results of the cases already **run in this session**; it runs
+nothing. Tick the load sets to envelope (by default every combination, or every
+static case when there is none). A combination is expanded into sums of cases:
+Linear Add adds its terms, Envelope keeps each term, and a response spectrum
+case enters as plus and minus its peak. Absolute Add and SRSS combinations have
+no signed demands and are skipped with a note.
+
+Each member is read at 25 stations along its length, span loads included. The
+largest axial force, moments and shears are taken together (conservative for the
+interaction), and Cb comes from the major-axis moment diagram (F1-1) unless you
+set it. **Set Cb = 1.0 for a cantilever**: F1-1 assumes both ends braced.
+
+# The values the dialog asks for
+- **Method** LRFD (φ) or ASD (Ω); **Fy** (50 ksi by default, in the project's
+  stress unit); **ratio limit** above which a member is reported **NG**.
+- **Overrides for the selected members**: the AISC shape, K about each axis, the
+  unbraced length of the compression flange Lb (0 = the member length) and Cb
+  (0 = from the diagram). The buckling lengths are the member length times K.
+
+Results: one row per member with its governing ratio, the check and equation
+that govern and the load set that produced them; **Select failing members**
+closes the dialog with them selected. The settings are saved with the project.
+""",
+            "design.drift_check",
+            "define.load_combinations",
+        ),
+        "design.drift_check": _t(
+            "Design → Storey Drift Check",
+            "Design",
+            "Amplified inter-storey drift ratios against an allowable ratio.",
+            """
+For every static and response spectrum case with a result in this session, the
+drift ratio of each storey (the difference of the floor displacements over the
+storey height, see Define → Storeys) is multiplied by the **amplification** and
+compared with the **allowable drift ratio**. A ratio above 1 is over the limit.
+
+The **Code** list fills in common limits: ASCE 7-22 Table 12.12-1 (0.020, 0.015 or
+0.010 h by risk category; set the amplification to Cd / Ie, since the analysis
+gives elastic drifts), NCh433 (0.002 h at the centre of mass) and Eurocode 8.
+Response spectrum drifts are combined per storey by the case's own rule, never
+taken as the difference of two peak displacements.
+
+The project needs storeys; the limit and the amplification are saved with it.
+""",
+            "design.steel_check",
+            "define.storeys",
         ),
         "file.export_report": _t(
             "File → Export → Report (HTML / PDF)",
@@ -3982,6 +4054,8 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_save_as": "file.save_as",
     "_act_import_dxf": "file.import_dxf",
     "_act_import_s3d": "file.import_s3d",
+    "_act_steel_check": "design.steel_check",
+    "_act_drift_check": "design.drift_check",
     "_act_export_script": "file.export_script",
     "_act_export_ifc": "file.export_ifc",
     "_act_export_report": "file.export_report",

@@ -10,10 +10,11 @@ stay within the tolerance shown. CI regenerates this file and fails when a
 tolerance is exceeded or the file is out of date
 (`tests/integration/test_verification_manual.py`).
 
-Units are SI (m, N, kg, s). Errors below 1e-6 are floating-point noise and are
-printed as `< 1e-6`.
+Units are SI (m, N, kg, s) for the V cases and kip-inch for the D (design)
+cases, as in the AISC examples. Errors below 1e-6 are floating-point noise
+and are printed as `< 1e-6`.
 
-**15 of 15 cases pass.**
+**20 of 20 cases pass.**
 
 | Case | Title | Group | Max. error | Verdict |
 |---|---|---|---|---|
@@ -32,6 +33,11 @@ printed as `< 1e-6`.
 | [V-13](#v-13) | Response spectrum of an SDOF | Dynamics, response spectrum | < 1e-06 | ✅ pass |
 | [V-14](#v-14) | Simply supported square plate, uniform pressure | Shells | 7.3e-04 | ✅ pass |
 | [V-15](#v-15) | Plastic moment of a rectangle | Nonlinear, fibre sections | 2.9e-04 | ✅ pass |
+| [D-01](#d-01) | AISC: column available strength | Design, AISC 360-16 | 1.3e-03 | ✅ pass |
+| [D-02](#d-02) | AISC: beam flexural strength and LTB | Design, AISC 360-16 | 3.4e-03 | ✅ pass |
+| [D-03](#d-03) | AISC: web shear strength | Design, AISC 360-16 | 8.8e-04 | ✅ pass |
+| [D-04](#d-04) | AISC: combined axial force and biaxial flexure | Design, AISC 360-16 | 2.5e-03 | ✅ pass |
+| [D-05](#d-05) | Steel frame check of a beam, end to end | Design, AISC 360-16 | 3.2e-04 | ✅ pass |
 
 <a id="v-01"></a>
 
@@ -232,3 +238,70 @@ printed as `< 1e-6`.
 | Quantity | Unit | OpenSees Studio | Reference | Rel. error | Tolerance | |
 |---|---|---|---|---|---|---|
 | Base moment at 8 yield drifts (fy b h² / 4) | N·m | 4.68613e+06 | 4.6875e+06 | 2.9e-04 | 1e-03 | ✅ |
+
+<a id="d-01"></a>
+
+## D-01 — AISC: column available strength
+
+**Model.** W14X132, Fy = 50 ksi, Lc = 30 ft about both axes (E3, minor-axis buckling).
+
+**Reference.** AISC *Design Examples* v16.0, Example E.1A; Manual Table 4-1a: 892 kips.
+
+| Quantity | Unit | OpenSees Studio | Reference | Rel. error | Tolerance | |
+|---|---|---|---|---|---|---|
+| φc Pn, W14X132, Lc = 30 ft | kip | 893.203 | 892 | 1.3e-03 | 2e-03 | ✅ |
+
+<a id="d-02"></a>
+
+## D-02 — AISC: beam flexural strength and LTB
+
+**Model.** W18X50, Fy = 50 ksi; continuously braced, and braced at thirds of a 35 ft span.
+
+**Reference.** AISC *Design Examples* v16.0, Examples F.1-1A and F.1-2A; Manual Table 3-2 (Lp = 5.83 ft, Lr = 16.9 ft).
+
+| Quantity | Unit | OpenSees Studio | Reference | Rel. error | Tolerance | |
+|---|---|---|---|---|---|---|
+| Lp | ft | 5.82813 | 5.83 | 3.2e-04 | 2e-03 | ✅ |
+| Lr | ft | 16.9571 | 16.9 | 3.4e-03 | 5e-03 | ✅ |
+| φb Mn, continuously braced (F.1-1A) | kip·ft | 378.75 | 379 | 6.6e-04 | 2e-03 | ✅ |
+| φb Mn, Lb = 11.67 ft, Cb = 1.01 (F.1-2A) | kip·ft | 305.457 | 306 | 1.8e-03 | 3e-03 | ✅ |
+
+<a id="d-03"></a>
+
+## D-03 — AISC: web shear strength
+
+**Model.** W24X62, Fy = 50 ksi (G2.1(a)).
+
+**Reference.** AISC *Design Examples* v16.0, Example G.1A: 306 kips (φv = 1.00).
+
+| Quantity | Unit | OpenSees Studio | Reference | Rel. error | Tolerance | |
+|---|---|---|---|---|---|---|
+| φv Vn, W24X62 | kip | 305.73 | 306 | 8.8e-04 | 2e-03 | ✅ |
+
+<a id="d-04"></a>
+
+## D-04 — AISC: combined axial force and biaxial flexure
+
+**Model.** W14X99, Fy = 50 ksi, Lc = Lb = 14 ft, Pu = 400 kips, Mux = 250 and Muy = 80 kip-ft.
+
+**Reference.** AISC *Design Examples* v16.0, Example H.1A.
+
+| Quantity | Unit | OpenSees Studio | Reference | Rel. error | Tolerance | |
+|---|---|---|---|---|---|---|
+| φc Pn, Lc = 14 ft | kip | 1127.18 | 1130 | 2.5e-03 | 3e-03 | ✅ |
+| φb Mnx, Lb = 14 ft | kip·ft | 642.157 | 642 | 2.5e-04 | 2e-03 | ✅ |
+| φb Mny | kip·ft | 311.159 | 311 | 5.1e-04 | 2e-03 | ✅ |
+| H1-1a ratio, Pr = 400, Mrx = 250, Mry = 80 | - | 0.929462 | 0.928 | 1.6e-03 | 3e-03 | ✅ |
+
+<a id="d-05"></a>
+
+## D-05 — Steel frame check of a beam, end to end
+
+**Model.** Simply supported W18X50, 20 ft, w = 0.22 kip/in, solved by OpenSees and checked by Design → Steel Frame Check with Lb = the span.
+
+**Reference.** M = wL²/8, V = wL/2, Cb = 1.136 for a uniform load (F1-1).
+
+| Quantity | Unit | OpenSees Studio | Reference | Rel. error | Tolerance | |
+|---|---|---|---|---|---|---|
+| Major flexure ratio (wL²/8) / φb Mn, Cb from the diagram | - | 0.645025 | 0.645231 | 3.2e-04 | 2e-03 | ✅ |
+| Major shear ratio (wL/2) / φv Vn | - | 0.137715 | 0.137715 | < 1e-06 | 1e-06 | ✅ |

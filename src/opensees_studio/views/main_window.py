@@ -70,6 +70,7 @@ from opensees_studio.commands.buildings import (
     AddDiaphragmCommand,
     AddRigidLinkCommand,
     RemoveConstraintsCommand,
+    SetDesignSettingsCommand,
     SetMassSourceCommand,
     SetStoreysCommand,
 )
@@ -161,6 +162,7 @@ from opensees_studio.views.dialogs import (
     AssignZeroLengthSectionDialog,
     CoordinateGridSystemsDialog,
     DisplayOptionsDialog,
+    DriftCheckDialog,
     DuplicatesDialog,
     DxfImportDialog,
     FrameEndOffsetsDialog,
@@ -182,6 +184,7 @@ from opensees_studio.views.dialogs import (
     RunAnalysisDialog,
     S3dImportDialog,
     SectionLibraryDialog,
+    SteelDesignDialog,
     TrapezoidalLoadDialog,
     UniformExcitationDialog,
     member_sections,
@@ -540,6 +543,8 @@ class MainWindow(QMainWindow):
         self._act_run_all = QAction("Run &All Cases", self, shortcut=QKeySequence("Shift+F5"))
         self._act_run_selected = QAction("Run Se&lected Cases…", self)
         self._act_clear_results = QAction("Delete &All Results…", self)
+        self._act_steel_check = QAction("&Steel Frame Check (AISC 360-16)…", self)
+        self._act_drift_check = QAction("Storey &Drift Check…", self)
         self._act_check_stability = QAction("Check Model &Stability…", self)
 
         # View
@@ -765,6 +770,10 @@ class MainWindow(QMainWindow):
         m_display.addAction(self._act_display_options)
         m_display.addSeparator()
         m_display.addAction(self._act_back_to_model)
+
+        m_design = mb.addMenu("Desi&gn")
+        m_design.addAction(self._act_steel_check)
+        m_design.addAction(self._act_drift_check)
 
         m_view = mb.addMenu("&View")
         m_view.addAction(self._act_zoom_in)
@@ -1158,6 +1167,8 @@ class MainWindow(QMainWindow):
         self._act_run_all.triggered.connect(self._on_run_all_cases)
         self._act_run_selected.triggered.connect(self._on_run_selected_cases)
         self._act_clear_results.triggered.connect(self._on_clear_results)
+        self._act_steel_check.triggered.connect(self._on_steel_check)
+        self._act_drift_check.triggered.connect(self._on_drift_check)
         self._act_check_stability.triggered.connect(self._on_check_stability)
         self._stability.log.connect(self._log)
         self._stability.finished.connect(self._on_stability_report)
@@ -2128,6 +2139,48 @@ class MainWindow(QMainWindow):
         )
         for note in imported.notes:
             self._log(note)
+
+    def _on_steel_check(self) -> None:
+        """Design → Steel Frame Check: AISC 360-16 ratios over this session's results.
+
+        The dialog reads the case results cache and runs nothing itself; its
+        settings are stored on OK with one undoable command.
+        """
+        project = self._vm.project
+        if project is None:
+            return
+        dialog = SteelDesignDialog(
+            project,
+            dict(self._case_results.current(project)),
+            selected_elements=frozenset(self._canvas.selection.elements),
+            parent=self,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        settings = dialog.settings()
+        if settings != project.design:
+            self._vm.apply_command(SetDesignSettingsCommand(self._vm, settings))
+        report = dialog.report()
+        if report is not None:
+            self._log(f"Steel frame check (AISC 360-16, {settings.method}): {report.summary()}")
+            for note in report.notes:
+                self._log(note)
+        if dialog.select_failing_requested:
+            failing = dialog.failing_elements()
+            self._canvas.selection.set_selection(set(), failing)
+            self.statusBar().showMessage(f"Selected {len(failing)} failing member(s).", 4000)
+
+    def _on_drift_check(self) -> None:
+        """Design → Storey Drift Check: amplified drift ratios against the allowable one."""
+        project = self._vm.project
+        if project is None:
+            return
+        dialog = DriftCheckDialog(project, dict(self._case_results.current(project)), parent=self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        settings = dialog.settings()
+        if settings != project.design:
+            self._vm.apply_command(SetDesignSettingsCommand(self._vm, settings))
 
     def _on_mesh(self) -> None:
         """Edit → Mesh: subdivide members and shells, and join the mesh up.
@@ -5306,6 +5359,8 @@ class MainWindow(QMainWindow):
         )
         db_there = has_project and database_path(self._vm.path).exists()
         self._act_clear_results.setEnabled(bool(has_project and (stored or db_there)))
+        self._act_steel_check.setEnabled(has_project)
+        self._act_drift_check.setEnabled(has_project)
         self._act_check_stability.setEnabled(
             has_project
             and solver

@@ -11,6 +11,27 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **Design → Steel Frame Check (AISC 360-16).** LRFD or ASD ratios of every frame
+  member whose section is an AISC W, M, S or HP shape (by its name, or named per
+  member): tension yielding (D2), flexural and torsional buckling with the
+  effective area of slender elements (E3, E4, E7), major-axis flexure with
+  lateral-torsional buckling and flange local buckling (F2, F3), minor-axis
+  flexure (F6), shear (G2.1, G6) and the H1-1 interaction. Demands come from the
+  results already run in the session, at 25 stations per member with span loads;
+  Linear Add and Envelope combinations are expanded into their cases and a
+  response spectrum case enters as ± its peak. Cb comes from the moment diagram
+  (F1-1) unless set; K, the unbraced length and Cb can be overridden per member.
+  The table shows the governing ratio, check, equation and load set, and
+  **Select failing members** selects them. Verified against the AISC Design
+  Examples E.1A, F.1-1A, F.1-2A, G.1A and H.1A (Verification Manual D-01 to D-05).
+- **Design → Storey Drift Check.** Storey drift ratios of the static and response
+  spectrum results, times an amplification (Cd / Ie for ASCE 7), against an
+  allowable ratio, with ASCE 7-22, NCh433 and Eurocode 8 presets.
+- **`.osmodel`: `design`.** The check settings (method, Fy, load sets, member
+  overrides, drift limit) are saved in an optional `design` object. A project that
+  never opened the Design menu saves byte-identical, and editing the settings
+  does not make results stale.
+
 - **Verification Manual** (`docs/verification-manual.md`). Fifteen cases with a
   closed-form or published reference — cantilevers, simply supported and
   fixed-fixed beams, a Timoshenko beam, 3D biaxial bending and torsion, a two-bar

@@ -55,6 +55,7 @@ from opensees_studio.views.dialogs.replicate import ReplicateDialog
 from opensees_studio.views.dialogs.run_analysis import RunAnalysisDialog
 from opensees_studio.views.dialogs.s3d_import import S3dImportDialog
 from opensees_studio.views.dialogs.section_library import SectionLibraryDialog
+from opensees_studio.views.dialogs.steel_design import DriftCheckDialog, SteelDesignDialog
 from opensees_studio.views.dialogs.truss_wizard import TrussWizard
 from opensees_studio.views.dialogs.typical_materials import TypicalMaterialsDialog
 from opensees_studio.views.dialogs.uniform_excitation import UniformExcitationDialog
@@ -81,6 +82,7 @@ __all__ = [
     "CoordinateGridSystemsDialog",
     "DefineGridSystemDataDialog",
     "DisplayOptionsDialog",
+    "DriftCheckDialog",
     "DuplicatesDialog",
     "DxfImportDialog",
     "FrameEndOffsetsDialog",
@@ -105,6 +107,7 @@ __all__ = [
     "RunAnalysisDialog",
     "S3dImportDialog",
     "SectionLibraryDialog",
+    "SteelDesignDialog",
     "TrapezoidalLoadDialog",
     "TrussWizard",
     "TypicalMaterialsDialog",
