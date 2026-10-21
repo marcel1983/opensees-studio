@@ -24,6 +24,7 @@ from opensees_studio.commands import (
     UpdateAnalysisCaseCommand,
 )
 from opensees_studio.core import (
+    InfluenceLineCase,
     ModalCase,
     PushoverCase,
     ResponseSpectrumCase,
@@ -54,6 +55,7 @@ _DEFAULTS = {
         target_disp=0.1,
         step_size=0.001,
     ),
+    "InfluenceLine": lambda cid: InfluenceLineCase(id=cid, name="Influence line", path=[1]),
     "ResponseSpectrum": lambda cid: ResponseSpectrumCase(
         id=cid,
         name="ResponseSpectrum",

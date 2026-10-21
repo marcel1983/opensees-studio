@@ -215,14 +215,21 @@ Tamaño: M.
 
 ---
 
-## Fase E — Análisis de práctica profesional
+## Fase E — Análisis de práctica profesional — 🟡 en curso
+
+**Estado (2026-10-21):** líneas de influencia y cargas móviles hechas: caso
+`InfluenceLineCase` (una resolución lineal por parada, modelo construido una
+sola vez), `InfluenceLineResults` en el almacén y el CLI, Display → Influence
+Line con envolvente de vehículo en ambos sentidos, caso V-16 del manual y el
+ejemplo `bridge_influence_line` (camión HL-93). Quedan: etapas constructivas,
+gradiente térmico, cables/solo compresión, tendones.
 
 Solo lo que OpenSees permite hacer bien:
 
 | Funcionalidad | Cómo en OpenSees | Tamaño |
 |---|---|---|
 | Etapas constructivas | casos encadenados (`preload_case_ids` ya existe) + activar/desactivar elementos por etapa (`remove element`, o rigidez reducida); empezar por "agregar por etapa" | L |
-| Cargas móviles / líneas de influencia | barrido de carga unitaria en estático lineal, envolvente; sin solver nuevo | M |
+| Cargas móviles / líneas de influencia | barrido de carga unitaria en estático lineal, envolvente; sin solver nuevo | M — ✅ hecho |
 | Gradiente térmico | `eleLoad -beamThermal` en barras; en shells solo si el elemento lo soporta | S–M |
 | Cables / solo compresión | `CorotTruss` + material ENT / tensión-solo (ya hay `CorotTrussElement`) | S |
 | Tendones de pretensado | carga equivalente (fase 1); `Steel` con preesfuerzo inicial (fase 2) | M |

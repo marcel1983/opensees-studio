@@ -1007,6 +1007,41 @@ takes neither.
             "file.open",
             "file.import_dxf",
         ),
+        "display.influence_line": _t(
+            "Display → Influence Line",
+            "Display",
+            "Any response of an influence-line case against the load's position, and a vehicle on it.",
+            """
+An **influence-line case** (Analyze → Cases… → Add → *InfluenceLine*) walks a
+load along a chain of frame members — a bridge girder, a crane runway — and
+solves the model once per stop. Each stop's result holds every displacement,
+reaction and member end force with the load there.
+
+# Defining the case
+- **Path**: the member ids in the order the load travels. Consecutive members
+  must share a joint; each is walked from the joint it shares with the previous
+  one, so a path can turn corners.
+- **Stops per member**: equal intervals of every member (a joint shared by two
+  members is one stop). Ten is plenty for straight members.
+- **Load direction** and **value**: -1 along Z, the default, is a unit load
+  downward. The analysis is linear elastic.
+- **Vehicle axles** (optional): `load@offset` pairs, the offset measured behind
+  the front axle, for example `35@0, 145@4.3, 145@8.6`. They prefill the dialog.
+
+# The dialog
+Pick the **response**: a joint displacement or a reaction (by joint and DOF) or a
+member end force (by member, component and end, in the sign of the force
+diagrams). The plot is its value **per unit load** in the sense of the case's
+load, against the distance along the path.
+
+**Envelope** moves the vehicle across the path in **both directions**, axle by
+axle (an axle off the path counts nothing), and reports the largest and the
+smallest effect and where the front axle stood. Axle loads are in the sense of
+the case's load: with the default case a downward axle is positive.
+""",
+            "analyze.cases",
+            "display.force_diagram",
+        ),
         "design.steel_check": _t(
             "Design → Steel Frame Check (AISC 360-16)",
             "Design",
@@ -2940,7 +2975,7 @@ TOPICS.update(
 A case is what to solve. Several cases coexist on one model — a gravity static
 case, a modal case and a pushover, for instance — each with its own settings.
 
-# The five types
+# The six types
 - **Static** — equilibrium under the patterns' loads, in N steps. See
   **Static analysis**.
 - **Modal** — eigenvalues and mode shapes; needs mass. See **Modal analysis**.
@@ -2950,6 +2985,8 @@ case, a modal case and a pushover, for instance — each with its own settings.
   **Transient analysis**.
 - **Response spectrum** — modal maxima combined by SRSS or CQC. See
   **Response spectrum**.
+- **Influence line** — a unit load walked along a chain of members, one linear
+  solve per stop, with an optional vehicle. See **Display → Influence Line**.
 
 # Options that apply to most types
 - **Steps** and, for a transient, **dt**.
@@ -2982,6 +3019,7 @@ gravity state. The case list applies the patterns in the order given.
 """,
             "mechanics.static",
             "analyze.run",
+            "display.influence_line",
         ),
         "analyze.stability": _t(
             "Analyze → Check Model Stability",
@@ -4070,6 +4108,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_import_dxf": "file.import_dxf",
     "_act_import_s3d": "file.import_s3d",
     "_act_steel_check": "design.steel_check",
+    "_act_influence_line": "display.influence_line",
     "_act_drift_check": "design.drift_check",
     "_act_export_script": "file.export_script",
     "_act_export_ifc": "file.export_ifc",

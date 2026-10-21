@@ -147,6 +147,12 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   pushover, transient time-history with Rayleigh damping. Chained workflows:
   gravity preload → `loadConst -time 0.0` → pushover or transient. Numberer
   and system options per case.
+- **Influence lines and moving loads** — an *InfluenceLine* case walks a unit
+  load along a chain of frame members (a girder, a crane runway), one linear
+  solve per stop, keeping every displacement, reaction and member end force.
+  Display → Influence Line plots any of them against the load's position and
+  moves a vehicle (axle loads and spacings, e.g. the HL-93 truck) across it in
+  both directions, reporting the extreme effects and where the front axle stood.
 - **Load combinations and envelopes** (Define → Load Combinations…) — Linear
   Add, Envelope (max/min), Absolute Add and SRSS of static and response spectrum
   cases, or of other combinations, each with a scale factor. Combining is

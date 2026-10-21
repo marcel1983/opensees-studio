@@ -14,7 +14,7 @@ Units are SI (m, N, kg, s) for the V cases and kip-inch for the D (design)
 cases, as in the AISC examples. Errors below 1e-6 are floating-point noise
 and are printed as `< 1e-6`.
 
-**20 of 20 cases pass.**
+**21 of 21 cases pass.**
 
 | Case | Title | Group | Max. error | Verdict |
 |---|---|---|---|---|
@@ -33,6 +33,7 @@ and are printed as `< 1e-6`.
 | [V-13](#v-13) | Response spectrum of an SDOF | Dynamics, response spectrum | < 1e-06 | ✅ pass |
 | [V-14](#v-14) | Simply supported square plate, uniform pressure | Shells | 7.3e-04 | ✅ pass |
 | [V-15](#v-15) | Plastic moment of a rectangle | Nonlinear, fibre sections | 2.9e-04 | ✅ pass |
+| [V-16](#v-16) | Influence lines of a two-span continuous beam | Influence lines, moving loads | < 1e-06 | ✅ pass |
 | [D-01](#d-01) | AISC: column available strength | Design, AISC 360-16 | 1.3e-03 | ✅ pass |
 | [D-02](#d-02) | AISC: beam flexural strength and LTB | Design, AISC 360-16 | 3.4e-03 | ✅ pass |
 | [D-03](#d-03) | AISC: web shear strength | Design, AISC 360-16 | 8.8e-04 | ✅ pass |
@@ -238,6 +239,20 @@ and are printed as `< 1e-6`.
 | Quantity | Unit | OpenSees Studio | Reference | Rel. error | Tolerance | |
 |---|---|---|---|---|---|---|
 | Base moment at 8 yield drifts (fy b h² / 4) | N·m | 4.68613e+06 | 4.6875e+06 | 2.9e-04 | 1e-03 | ✅ |
+
+<a id="v-16"></a>
+
+## V-16 — Influence lines of a two-span continuous beam
+
+**Model.** 2D beam, two spans of 8 m in four members, a unit load walked over 33 stops; a vehicle of two 100 kN axles 2 m apart moved across both ways.
+
+**Reference.** Müller-Breslau: R_B = x (3L² - x²)/(2L³), 11/16 at mid first span; R_A = 1 - x/(2L) - R_B/2 (moments about the far support).
+
+| Quantity | Unit | OpenSees Studio | Reference | Rel. error | Tolerance | |
+|---|---|---|---|---|---|---|
+| Middle reaction, load at mid first span (11/16) | - | 0.6875 | 0.6875 | < 1e-06 | 1e-09 | ✅ |
+| End reaction, load on that support | - | 1 | 1 | < 1e-06 | 1e-09 | ✅ |
+| End reaction under two 100 kN axles 2 m apart | kN | 169.141 | 169.141 | < 1e-06 | 1e-09 | ✅ |
 
 <a id="d-01"></a>
 

@@ -38,6 +38,7 @@ from opensees_studio.views.dialogs.friction_library import FrictionLibraryDialog
 from opensees_studio.views.dialogs.generate_excitation import GenerateExcitationDialog
 from opensees_studio.views.dialogs.grid_system import GridSystemDialog
 from opensees_studio.views.dialogs.ground_motions import GroundMotionsDialog
+from opensees_studio.views.dialogs.influence_line import InfluenceLineDialog
 from opensees_studio.views.dialogs.linear_time_series import LinearTimeSeriesDialog
 from opensees_studio.views.dialogs.locate_origin import (
     CoordSystemLocationOrientationDialog,
@@ -94,6 +95,7 @@ __all__ = [
     "GenerateExcitationDialog",
     "GridSystemDialog",
     "GroundMotionsDialog",
+    "InfluenceLineDialog",
     "LinearTimeSeriesDialog",
     "MaterialLibraryDialog",
     "MaterialTesterDialog",

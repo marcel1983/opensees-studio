@@ -11,6 +11,18 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **Influence lines and moving loads.** A new analysis case type,
+  *InfluenceLine* (Analyze → Cases…), walks a load (a unit load downward by
+  default) along a chain of frame members, stopping at equal intervals of each,
+  and solves the model once per stop: the result keeps every displacement,
+  reaction and member end force at every stop, through the analysis CLI and the
+  result store like any case. **Display → Influence Line** plots any of them per
+  unit load against the distance along the path and moves a vehicle — axle loads
+  and their offsets, stored on the case — across it in both directions, reporting
+  the largest and smallest effect and where the front axle stood. Verified
+  against Müller-Breslau on a two-span continuous beam (Verification Manual
+  V-16). New example `bridge_influence_line` (three-span girder, HL-93 truck).
+
 - **Tutorials, in English and Spanish** (`docs/tutorials/`): designing a steel
   moment frame with the AISC check and the drift check, a building with rigid
   floors (modes, CQC spectrum, NCh433 drift), and importing a PORTICO model. Their
@@ -40,7 +52,7 @@ refused instead of silently downgraded).
   never opened the Design menu saves byte-identical, and editing the settings
   does not make results stale.
 
-- **Verification Manual** (`docs/verification-manual.md`). Twenty cases with a
+- **Verification Manual** (`docs/verification-manual.md`). Twenty-one cases with a
   closed-form or published reference — cantilevers, simply supported and
   fixed-fixed beams, a Timoshenko beam, 3D biaxial bending and torsion, a two-bar
   truss, a support settlement, P-Δ, SDOF and cantilever frequencies, a step load

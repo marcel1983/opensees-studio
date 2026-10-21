@@ -58,12 +58,15 @@ from opensees_studio.core import (
     FiberSection,
     ForceBeamColumn,
     ImposedSupportMotionPattern,
+    InfluenceLineCase,
     LayeredShellSection,
     LinearTimeSeries,
     ModalCase,
+    NodalLoad,
     PathTimeSeries,
     PlainLoadPattern,
     PlateFiberSection,
+    PointElementLoad,
     Project,
     PulseTimeSeries,
     PushoverCase,
@@ -99,7 +102,7 @@ from opensees_studio.core.frame_members import (
     gauss_point_loads,
     split_member_loads,
 )
-from opensees_studio.core.geometry.local_axes import frame_vecxz
+from opensees_studio.core.geometry.local_axes import frame_local_axes, frame_vecxz
 from opensees_studio.core.mass_source import effective_nodal_masses
 from opensees_studio.core.materials.library import materials_in_emission_order
 from opensees_studio.core.modal import (
@@ -125,6 +128,7 @@ from opensees_studio.services.opensees_io import (
     staging_dir,
 )
 from opensees_studio.services.results import (
+    InfluenceLineResults,
     ModalResults,
     PushoverResults,
     ResponseSpectrumResults,
@@ -325,6 +329,8 @@ class OpenSeesRunner:
             return self._run_pushover(case)
         if isinstance(case, ResponseSpectrumCase):
             return self._run_response_spectrum(case)
+        if isinstance(case, InfluenceLineCase):
+            return self._run_influence_line(case)
         if isinstance(case, TransientCase):
             target = results_dir or Path(tempfile.mkdtemp(prefix="osstudio_"))
             return self._run_transient(case, target)
@@ -1601,6 +1607,106 @@ class OpenSeesRunner:
             element_stresses=element_stresses,
             storey_shear=storey_shear,
             section_cut_forces=section_cut_forces,
+        )
+
+    def _run_influence_line(self, case: InfluenceLineCase) -> InfluenceLineResults:
+        """A unit load walked along ``case.path``: one linear static solve per stop.
+
+        Each stop's load is a pattern of its own on a constant time series. For a
+        linear model the solve after removing the previous pattern and adding the
+        next gives exactly the response to the new load alone (the residual of
+        the previous state is the previous load), so the model is built once.
+        """
+        from opensees_studio.core.influence import influence_positions
+
+        ops = self._ops
+        project = self.project
+        if project.ndm == 2 and case.direction == "Y":
+            raise ValueError(
+                "A 2D model lives in the X-Z plane: the moving load cannot act along Y."
+            )
+        stops = influence_positions(project, case.path, case.stations)
+        series_tag = max((ts.id for ts in project.time_series), default=0) + 1
+        ops.timeSeries("Constant", series_tag)
+        first_pattern = max((p.id for p in project.load_patterns), default=0) + 1
+        self._setup_analysis(
+            StaticCase(id=case.id, name=case.name, pattern_ids=[first_pattern], algorithm="Linear")
+        )
+        vector = np.zeros(3)
+        vector["XYZ".index(case.direction)] = case.load
+        elements = {el.id: el for el in project.elements}
+        coords = {n.id: n.coords for n in project.nodes}
+        ndf = len(self._dof_idx)
+        n = len(stops)
+        node_disp = {node.id: np.zeros((n, ndf)) for node in project.nodes}
+        node_reaction = {node.id: np.zeros((n, ndf)) for node in project.nodes}
+        element_forces: dict[int, np.ndarray] = {}
+        for k, stop in enumerate(stops):
+            tag = first_pattern + k
+            if stop.node_id is not None:
+                pattern = PlainLoadPattern(
+                    id=tag,
+                    time_series_id=series_tag,
+                    nodal_loads=[
+                        NodalLoad(
+                            node_id=stop.node_id,
+                            forces=(
+                                float(vector[0]),
+                                float(vector[1]),
+                                float(vector[2]),
+                                0.0,
+                                0.0,
+                                0.0,
+                            ),
+                        )
+                    ],
+                )
+            else:
+                el = elements[stop.element_id]
+                axes = frame_local_axes(project.ndm, coords[el.nodes[0]], coords[el.nodes[1]])
+                assert axes is not None  # a member of the path has a length
+                px, py, pz = (float(np.dot(vector, axis)) for axis in axes)
+                pattern = PlainLoadPattern(
+                    id=tag,
+                    time_series_id=series_tag,
+                    point_loads=[
+                        PointElementLoad(
+                            element_id=stop.element_id, px=px, py=py, pz=pz, x=stop.fraction
+                        )
+                    ],
+                )
+            self._emit_pattern(pattern)
+            status = ops.analyze(1)
+            if status != 0:
+                raise RuntimeError(
+                    f"Influence line: the solve with the load at stop {k + 1}/{n} failed "
+                    f"(ops.analyze returned {status})."
+                )
+            ops.reactions()
+            for node in project.nodes:
+                for j in range(ndf):
+                    node_disp[node.id][k, j] = ops.nodeDisp(node.id, j + 1) * self._dof_sign[j]
+                node_reaction[node.id][k, :] = (
+                    np.asarray(self._node_reactions(node.id, ndf), dtype=float) * self._dof_sign
+                )
+            for el in project.elements:
+                forces = self._element_local_force(el.id)
+                if el.id not in element_forces:
+                    element_forces[el.id] = np.zeros((n, len(forces)))
+                element_forces[el.id][k, :] = forces
+            ops.remove("loadPattern", tag)
+            self._progress(k + 1, n)
+        return InfluenceLineResults(
+            case_id=case.id,
+            case_name=case.name,
+            distances=np.asarray([s.distance for s in stops], dtype=float),
+            element_ids=np.asarray([s.element_id for s in stops], dtype=int),
+            fractions=np.asarray([s.fraction for s in stops], dtype=float),
+            load=case.load,
+            direction=case.direction,
+            node_disp=node_disp,
+            node_reaction=node_reaction,
+            element_forces=element_forces,
         )
 
     def _run_pushover(self, case: PushoverCase) -> PushoverResults:

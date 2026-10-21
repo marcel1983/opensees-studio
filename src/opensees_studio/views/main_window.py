@@ -128,6 +128,7 @@ from opensees_studio.services.element_forces import (
 from opensees_studio.services.opensees_script import case_label, export_script
 from opensees_studio.services.results import (
     CombinationResults,
+    InfluenceLineResults,
     ModalResults,
     PushoverResults,
     ResponseSpectrumResults,
@@ -172,6 +173,7 @@ from opensees_studio.views.dialogs import (
     FrameWizard,
     FrictionLibraryDialog,
     GroundMotionsDialog,
+    InfluenceLineDialog,
     LinearTimeSeriesDialog,
     MaterialLibraryDialog,
     MaterialTesterDialog,
@@ -532,6 +534,7 @@ class MainWindow(QMainWindow):
         self._act_export_th_animation = QAction("Export Time-History &Animation…", self)
         self._act_show_hysteresis = QAction("&Hysteresis Plot…", self)
         self._act_show_pushover = QAction("Show &Pushover Curve…", self)
+        self._act_influence_line = QAction("&Influence Line…", self)
         self._act_show_response_spectrum = QAction("Show &Response Spectrum…", self)
         self._act_display_options = QAction("Display &Options…", self)
         self._act_back_to_model = QAction("Back to &Model View", self, shortcut="Ctrl+Shift+B")
@@ -765,6 +768,7 @@ class MainWindow(QMainWindow):
         m_display.addAction(self._act_export_th_animation)
         m_display.addAction(self._act_show_hysteresis)
         m_display.addAction(self._act_show_pushover)
+        m_display.addAction(self._act_influence_line)
         m_display.addAction(self._act_show_response_spectrum)
         m_display.addSeparator()
         m_display.addAction(self._act_display_options)
@@ -1192,6 +1196,7 @@ class MainWindow(QMainWindow):
         self._act_export_th_animation.triggered.connect(self._on_export_th_animation)
         self._act_show_hysteresis.triggered.connect(self._on_show_hysteresis)
         self._act_show_pushover.triggered.connect(self._on_show_pushover)
+        self._act_influence_line.triggered.connect(self._on_influence_line)
         self._act_show_response_spectrum.triggered.connect(self._on_show_response_spectrum)
         self._act_display_options.triggered.connect(self._on_display_options)
         self._act_back_to_model.triggered.connect(self._on_back_to_model)
@@ -2139,6 +2144,19 @@ class MainWindow(QMainWindow):
         )
         for note in imported.notes:
             self._log(note)
+
+    def _on_influence_line(self) -> None:
+        """Display → Influence Line: one response of the influence-line case on screen."""
+        results = self._latest_results
+        if not isinstance(results, InfluenceLineResults) or self._vm.project is None:
+            QMessageBox.information(
+                self,
+                "Influence Line",
+                "Run an influence-line case first (Analyze → Cases… → Add → InfluenceLine).",
+            )
+            return
+        dialog = InfluenceLineDialog(self._vm.project, results, parent=self)
+        dialog.exec()
 
     def _on_steel_check(self) -> None:
         """Design → Steel Frame Check: AISC 360-16 ratios over this session's results.
@@ -5430,6 +5448,7 @@ class MainWindow(QMainWindow):
         self._act_export_th_animation.setEnabled(has_transient)
         self._act_show_hysteresis.setEnabled(has_transient)
         self._act_show_pushover.setEnabled(has_pushover)
+        self._act_influence_line.setEnabled(isinstance(self._latest_results, InfluenceLineResults))
         self._act_show_response_spectrum.setEnabled(has_rs)
         self._act_display_options.setEnabled(has_project)
         self._act_back_to_model.setEnabled(self._post_dock is not None)

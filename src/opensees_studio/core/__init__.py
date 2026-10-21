@@ -10,6 +10,7 @@ from opensees_studio.core.analysis import (
     SYSTEM_NOTES,
     SYSTEMS,
     AnalysisCase,
+    InfluenceLineCase,
     ModalCase,
     PushoverCase,
     ResponseSpectrumCase,
@@ -695,6 +696,7 @@ __all__ = [  # noqa: RUF022 - grouped by domain under section comments, not alph
     "SYSTEM_NOTES",
     "ModalCase",
     "TransientCase",
+    "InfluenceLineCase",
     "PushoverCase",
     "ResponseSpectrumCase",
     # Load combinations

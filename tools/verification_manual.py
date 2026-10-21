@@ -636,6 +636,49 @@ def _plastic_moment() -> list[Check]:
     ]
 
 
+def _influence_lines() -> list[Check]:
+    from opensees_studio.core import InfluenceLineCase
+    from opensees_studio.core.analysis import Axle
+    from opensees_studio.services.influence import influence_line, vehicle_envelope
+
+    span, A, I = 8.0, 0.01, 1e-4  # noqa: E741
+    project = _frame_2d(
+        [(k * span / 2, 0.0) for k in range(5)],
+        restraints={1: (True, True, False), 3: (False, True, False), 5: (False, True, False)},
+        area=A,
+        inertia=I,
+    )
+    case = InfluenceLineCase(id=1, name="IL", path=[1, 2, 3, 4], stations=8)
+    project.analyses.append(case)
+    results = _run(project, case)
+    middle = influence_line(project, results, "reaction", 3, "Uz")
+    at = {round(float(d), 9): k for k, d in enumerate(results.distances)}
+    quarter = middle[at[span / 2]]
+    first = influence_line(project, results, "reaction", 1, "Uz")
+    # Two 100 kN axles 2 m apart: R_A peaks with one axle on the support and the
+    # other 2 m into the first span.
+    a = 2.0
+    r_a = first[at[0.0]]
+    found = vehicle_envelope(results, first, [Axle(load=100.0), Axle(load=100.0, offset=a)])
+    exact_two = 100.0 * (1.0 + _two_span_end_reaction(a, span))
+    return [
+        Check(
+            "Middle reaction, load at mid first span (11/16)", "-", float(quarter), 11 / 16, 1e-9
+        ),
+        Check("End reaction, load on that support", "-", float(r_a), 1.0, 1e-9),
+        Check(
+            "End reaction under two 100 kN axles 2 m apart", "kN", found.maximum, exact_two, 1e-9
+        ),
+    ]
+
+
+def _two_span_end_reaction(x: float, span: float) -> float:
+    """End reaction of a two-span continuous beam, unit load at x in the first span."""
+    middle = x * (3 * span**2 - x**2) / (2 * span**3)
+    # Moments about the far support C (at 2L): 2L R_A + L R_B = 2L - x.
+    return 1.0 - x / (2 * span) - middle / 2
+
+
 # ──────────────────────────── design: AISC 360-16 ────────────────────────────
 _FT = 12.0  # in
 
@@ -905,6 +948,16 @@ CASES: list[Case] = [
         "force-based element no longer converges its section state: give a perfectly "
         "plastic material a little hardening for large drifts.",
         _plastic_moment,
+    ),
+    Case(
+        "V-16",
+        "Influence lines of a two-span continuous beam",
+        "Influence lines, moving loads",
+        "Müller-Breslau: R_B = x (3L² - x²)/(2L³), 11/16 at mid first span; "
+        "R_A = 1 - x/(2L) - R_B/2 (moments about the far support).",
+        "2D beam, two spans of 8 m in four members, a unit load walked over 33 stops; "
+        "a vehicle of two 100 kN axles 2 m apart moved across both ways.",
+        _influence_lines,
     ),
     Case(
         "D-01",
