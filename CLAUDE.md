@@ -182,13 +182,22 @@ These are non-obvious things that are easy to break if you don't know:
 
 `pyproject.toml` separates dependencies into two tiers:
 
-- **Base** (`pip install -e .`): `pydantic`, `numpy`, `h5py`, `openseespy`.
-  Safe to use headlessly — no Qt, no PyVista, no VTK. Scripts, notebooks,
-  and web backends (e.g. opensees-studio-web) install only this tier.
+- **Base** (`pip install -e .`): `pydantic`, `numpy`, `h5py`, `ezdxf`. No
+  solver: it models, exports and reports. Safe to use headlessly — no Qt, no
+  PyVista, no VTK.
+- **Solver extra** (`pip install -e ".[opensees]"`): `openseespy` (and
+  `openseespywin` on Windows). OpenSeesPy is an optional *engine* with its own
+  license, never a base dependency: `services/engines.py` finds it (this
+  environment, another Python 3.12, or a folder appended to `sys.path`, saved in
+  `solver.json`), the analysis child gets the folder in
+  `OPENSEES_STUDIO_ENGINE_PATH`, and the GUI disables Run, Check Stability and
+  the Material Tester without one. Never import OpenSeesPy at module level, and
+  never detect it by importing it. See `docs/adr/ADR-0003-solver-engines.md`.
+  Scripts and web backends that solve install `.[opensees]`.
 - **GUI extra** (`pip install -e ".[gui]"`): adds PySide6, pyvista, pyvistaqt,
   vtk, pyqtgraph, imageio, ifcopenshell. Required to launch the desktop app.
 
-Desktop dev: `pip install -e ".[gui,dev]"`.
+Desktop dev: `pip install -e ".[gui,dev]"` (`dev` pulls in `opensees`).
 Web / headless: `pip install -e .` (then verify with
 `python -c "import sys, opensees_studio.core; assert 'PySide6' not in sys.modules"`).
 
@@ -197,7 +206,7 @@ See `docs/adr/ADR-0002-headless-gui-dep-split.md` for the rationale.
 ### Frozen builds
 
 `packaging/` freezes the app into a folder an end user runs without Python
-(`pip install -e ".[gui,packaging]"`, then `python packaging/build.py`). The
+(`pip install -e ".[gui,packaging,opensees]"`, then `python packaging/build.py`). The
 GUI never solves in its own process, so the bundle re-enters itself as the
 analysis CLI — see the child-spawn gotcha above. Build with **Python 3.12**:
 the interpreter inside the bundle has to be the one the Windows

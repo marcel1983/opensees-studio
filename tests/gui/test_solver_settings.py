@@ -1,0 +1,95 @@
+"""Options → Solver, and what the window does without a solver."""
+
+from __future__ import annotations
+
+import importlib.util
+from pathlib import Path
+
+import pytest
+
+pytest.importorskip("PySide6")
+pytest.importorskip("pyvistaqt")
+
+from PySide6.QtWidgets import QDialog
+
+from opensees_studio.services import engines
+from opensees_studio.views.dialogs.solver_settings import SolverSettingsDialog
+
+MISSING = engines.EngineStatus(
+    engine=engines.OPENSEES_PY,
+    name="OpenSeesPy",
+    available=False,
+    message="OpenSeesPy is not installed. Point to an installation in Options → Solver.",
+)
+
+
+@pytest.fixture(autouse=True)
+def _data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENSEES_STUDIO_DATA_DIR", str(tmp_path / "data"))
+
+
+def _window(qtbot):  # type: ignore[no-untyped-def]
+    from opensees_studio.views.main_window import MainWindow
+
+    mw = MainWindow()
+    qtbot.addWidget(mw)
+    mw._vm.new_project(ndm=3, ndf=6, dead_case=True)
+    mw._refresh_action_enablement()
+    return mw
+
+
+@pytest.mark.gui
+def test_with_a_solver_everything_runs(qtbot) -> None:  # type: ignore[no-untyped-def]
+    mw = _window(qtbot)
+    assert mw._solver.available
+    for action in (mw._act_run, mw._act_run_all, mw._act_check_stability, mw._act_material_tester):
+        assert action.isEnabled()
+
+
+@pytest.mark.gui
+def test_without_a_solver_the_analysis_tools_wait_and_modelling_does_not(
+    qtbot, monkeypatch
+) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setattr(engines, "current_status", lambda settings=None: MISSING)
+    mw = _window(qtbot)
+
+    for action in (mw._act_run, mw._act_run_all, mw._act_check_stability, mw._act_material_tester):
+        assert not action.isEnabled()
+    assert "Options → Solver" in mw._act_run.statusTip()
+    assert mw._act_export_script.isEnabled()
+    assert mw._act_frame_wizard.isEnabled()
+
+
+@pytest.mark.gui
+def test_choosing_a_folder_is_saved_and_applied(qtbot, monkeypatch, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    mw = _window(qtbot)
+    folder = Path(importlib.util.find_spec("openseespy").origin).parents[1]  # type: ignore[arg-type]
+
+    def _fake_exec(self: SolverSettingsDialog) -> int:
+        self._folder_radio.setChecked(True)
+        self._folder_edit.setText(str(folder))
+        self._refresh()
+        return int(QDialog.DialogCode.Accepted)
+
+    monkeypatch.setattr(SolverSettingsDialog, "exec", _fake_exec)
+    mw._act_solver_settings.trigger()
+
+    assert engines.load_settings().package_dir == str(folder)
+    assert mw._solver.available
+
+
+@pytest.mark.gui
+def test_the_dialog_refuses_what_it_cannot_use(qtbot, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    dialog = SolverSettingsDialog(engines.SolverSettings())
+    qtbot.addWidget(dialog)
+    assert dialog._ok.isEnabled()
+    assert "Ready" in dialog._status.text()
+
+    dialog._folder_radio.setChecked(True)  # no folder chosen yet
+    assert not dialog._ok.isEnabled()
+
+    dialog._python_radio.setChecked(True)
+    dialog._python_edit.setText(str(tmp_path / "no-python"))
+    dialog._refresh()
+    assert not dialog._ok.isEnabled()
+    assert "Could not run" in dialog._status.text()

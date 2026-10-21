@@ -5,7 +5,7 @@ run without installing Python: a self-contained folder with an
 `OpenSeesStudio` executable inside.
 
 ```bash
-pip install -e ".[gui,packaging]"
+pip install -e ".[gui,packaging,opensees]"
 python packaging/build.py --gui-smoke --zip
 ```
 

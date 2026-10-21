@@ -30,7 +30,8 @@ of the original stdout, so native output can never corrupt a line.
 Exit codes:
 
 - 0: every case ran (an early stop is a result, not an error);
-- 2: a Python-side analysis error, reported in an ``error`` line;
+- 2: a Python-side analysis error, reported in an ``error`` line (also when
+  OpenSeesPy is not installed: the line says where to point to one);
 - 3: the project is invalid or a reference does not resolve;
 - anything else: the process died (a hard exit inside OpenSees, a signal).
 
@@ -278,9 +279,33 @@ def _run_in_fresh_process(
     return entry, EXIT_OK
 
 
+def _solver_missing(protocol: _Protocol) -> bool:
+    """Report a missing OpenSeesPy as an ``error`` line instead of an ImportError.
+
+    The parent passes the folder it found OpenSees in (Options → Solver) through
+    ``OPENSEES_STUDIO_ENGINE_PATH``; it is appended to ``sys.path`` here.
+    """
+    import importlib.util
+
+    from opensees_studio.services.engines import (
+        SolverSettings,
+        activate_from_environment,
+        current_status,
+    )
+
+    activate_from_environment()
+    if importlib.util.find_spec("openseespy") is not None:
+        return False
+    status = current_status(SolverSettings())
+    protocol.emit(type="error", message=status.message, traceback="")
+    return True
+
+
 def main(argv: list[str] | None = None) -> int:
     protocol = _Protocol(_claim_stdout())
     args = _parse_args(argv)
+    if _solver_missing(protocol):
+        return EXIT_ANALYSIS_ERROR
     if args.check_stability:
         return _check_stability(protocol, str(args.project))
 
