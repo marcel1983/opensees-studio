@@ -9,6 +9,14 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.20] — 2026-10-21
+
+The solver becomes a separate download, and the model gets connected and
+weighed: OpenSeesPy is no longer shipped inside OpenSees Studio (it has its own
+license) and is installed from Options → Solver; every member with a unit
+weight carries its self weight; and Merge Joints and Divide Frames at Joints
+repair a model that only looks connected.
+
 ### Changed
 
 - **The solver is optional: OpenSeesPy is no longer a base dependency.** It is a
