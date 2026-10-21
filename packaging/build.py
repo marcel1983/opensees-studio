@@ -15,7 +15,7 @@ load — is invisible until an actual run.
 
 The bundle does not carry OpenSeesPy (ADR-0003), so the smoke test proves both
 halves: the frozen CLI **without** a solver refuses with the message that sends
-the user to Options → Solver, and the same CLI solves a bundled example once
+the user to Options > Solver, and the same CLI solves a bundled example once
 OpenSeesPy is installed by the application's own installer
 (``services.engine_install``, the code behind the in-app download) into a
 temporary folder. ``--engine-dir`` reuses a folder already holding it, for a
@@ -136,9 +136,9 @@ def smoke_test(engine_dir: Path | None = None) -> None:
         if refused.returncode != 2 or "Options" not in (refused.stdout or ""):
             raise SystemExit(
                 "[smoke] without a solver the frozen CLI should exit 2 and point to "
-                f"Options → Solver; it exited {refused.returncode}\n{_tail(refused)}"
+                f"Options > Solver; it exited {refused.returncode}\n{_tail(refused)}"
             )
-        print("[smoke] ok: without a solver the CLI refuses and points to Options → Solver")
+        print("[smoke] ok: without a solver the CLI refuses and points to Options > Solver")
 
         out_dir = tmp / "out"
         proc = _run_cli(out_dir, _engine_folder(tmp, engine_dir))
