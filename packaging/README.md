@@ -151,3 +151,9 @@ unsigned build. Treat the first signed release as the test.
 tags, and on pull requests that touch this folder; tag builds attach the
 archives to the GitHub release. A Windows bundle must be built on Windows
 and a macOS one on macOS: PyInstaller cannot cross-compile.
+
+The `publish` job needs the Linux and Windows archives and publishes without
+the macOS one when its job failed or found no hosted runner (it says so in the
+release notes). "Re-run failed jobs" on that run later builds macOS and re-runs
+`publish`, which adds the archive to the same release and rewrites
+`SHA256SUMS.txt`.
