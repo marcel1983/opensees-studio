@@ -103,11 +103,9 @@ class SolverEngine(Protocol):
 
     def status(self, settings: SolverSettings) -> EngineStatus:
         """Whether the engine can run here, without loading it."""
-        ...
 
     def child_environment(self, settings: SolverSettings) -> dict[str, str]:
         """Variables the analysis child needs to find the engine."""
-        ...
 
 
 # ──────────────────────────── settings ────────────────────────────
