@@ -41,11 +41,6 @@ from pydantic import BaseModel, ConfigDict, Field, PositiveInt
 from opensees_studio.core.diaphragms import IN_PLANE_SLOTS, centre_of_mass, constrained_node_ids
 from opensees_studio.core.geometry.local_axes import frame_local_axes
 from opensees_studio.core.loads import PlainLoadPattern
-from opensees_studio.core.self_weight import (
-    gravity_direction,
-    nodal_self_weight_loads,
-    weight_per_length,
-)
 from opensees_studio.core.units import gravity
 
 if TYPE_CHECKING:
@@ -100,6 +95,14 @@ def _frame_end_shares(
 
 def self_weight_per_node(project: Project, multiplier: float = 1.0) -> dict[int, float]:
     """Node id -> downward weight of the weighted frames (half per end), trusses and shells."""
+    # Imported here: core.self_weight -> core.geometry -> core (package) -> project
+    # -> mass_source would otherwise be a cycle.
+    from opensees_studio.core.self_weight import (
+        gravity_direction,
+        nodal_self_weight_loads,
+        weight_per_length,
+    )
+
     if multiplier == 0.0:
         return {}
     coords = {n.id: np.asarray(n.coords, dtype=float) for n in project.nodes}
@@ -120,6 +123,8 @@ def self_weight_per_node(project: Project, multiplier: float = 1.0) -> dict[int,
 
 def pattern_weight_per_node(project: Project, pattern: PlainLoadPattern) -> dict[int, float]:
     """Node id -> downward weight the pattern applies, lumped on nodes (signed)."""
+    from opensees_studio.core.self_weight import gravity_direction
+
     coords = {n.id: np.asarray(n.coords, dtype=float) for n in project.nodes}
     elements = {e.id: e for e in project.elements}
     down = gravity_direction(project.ndm)
