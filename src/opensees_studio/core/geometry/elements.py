@@ -53,6 +53,16 @@ class TrussElement(Entity):
     area: PositiveFloat
     material_id: PositiveInt
     rho: float = Field(default=0.0, ge=0.0, description="Mass per unit length.")
+    unit_weight: float = Field(
+        default=0.0,
+        ge=0.0,
+        description=(
+            "Weight per unit volume (force / length³). Only the self weight of a "
+            "load pattern reads it (gamma * area per length, half to each node)."
+        ),
+    )
+
+    serialize_without_defaults = omit_when_default("unit_weight")
 
 
 class CorotTrussElement(Entity):
@@ -63,6 +73,16 @@ class CorotTrussElement(Entity):
     area: PositiveFloat
     material_id: PositiveInt
     rho: float = Field(default=0.0, ge=0.0)
+    unit_weight: float = Field(
+        default=0.0,
+        ge=0.0,
+        description=(
+            "Weight per unit volume (force / length³). Only the self weight of a "
+            "load pattern reads it (gamma * area per length, half to each node)."
+        ),
+    )
+
+    serialize_without_defaults = omit_when_default("unit_weight")
 
 
 class FrameMember(Entity):
@@ -207,6 +227,16 @@ class BeamWithHingesElement(FrameMember):
     G: float | None = None
     J: float | None = None
     geom_transf: GeomTransfType = "Linear"
+    unit_weight: float = Field(
+        default=0.0,
+        ge=0.0,
+        description=(
+            "Weight per unit volume (force / length³) of the member, with the "
+            "elastic area A. Only the self weight of a load pattern reads it."
+        ),
+    )
+
+    serialize_without_defaults = omit_when_default("unit_weight", *FRAME_OPTION_FIELDS)
 
 
 class QuadElement(Entity):

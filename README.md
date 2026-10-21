@@ -215,6 +215,16 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   on a supported shell edge inherits the DOFs both of that edge's corners have
   restrained, so meshing a slab does not quietly unsupport it. One undo step, and
   the dialog shows what it will add before you accept it.
+- **Connecting a model** — Edit → Merge Joints makes joints closer than a
+  tolerance one (on the selection or the whole model; elements, loads,
+  constraints, masses and restraints follow the joint that stays), and Edit →
+  Divide Frames at Joints splits every frame and truss at the joints lying
+  inside it, and where members cross. Select → Loose Joints, Joints Inside
+  Members and Joints on Shell Edges find what still looks connected and is not.
+- **Self weight** — a pattern's self-weight multiplier loads every member with
+  a unit weight: frames (elastic, fibre and aggregated sections, BeamWithHinges)
+  as a uniform load, trusses half to each joint, and shells as consistent nodal
+  forces. Every new model starts with a DEAD case that does exactly that.
 - **Stability check** — Analyze → Check Model Stability looks for mechanisms
   before anything is solved: the singular values of the assembled stiffness
   matrix, each zero reported with the joints and DOFs that move (and selected in

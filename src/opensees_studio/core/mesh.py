@@ -34,7 +34,12 @@ from typing import Any
 
 import numpy as np
 
-from opensees_studio.core.geometry.elements import FrameMember
+from opensees_studio.core.geometry.elements import (
+    FRAME_ELEMENT_CLASSES,
+    CorotTrussElement,
+    FrameMember,
+    TrussElement,
+)
 from opensees_studio.core.geometry.frame_options import EndRelease
 from opensees_studio.core.geometry.node import Node, Restraint6
 from opensees_studio.core.project import Project
@@ -255,7 +260,8 @@ def _closest_between_segments(
 
 
 def _bar_like(element: Any) -> bool:
-    return len(element.nodes) == 2
+    """A frame or a truss: zero-length elements, bearings and links are never split."""
+    return isinstance(element, (*FRAME_ELEMENT_CLASSES, TrussElement, CorotTrussElement))
 
 
 def _face_like(element: Any) -> bool:

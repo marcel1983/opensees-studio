@@ -23,6 +23,7 @@ from opensees_studio.commands.constraints import (
 )
 from opensees_studio.commands.duplicates import (
     FixDuplicatesCommand,
+    MergeJointsCommand,
     RepairReport,
 )
 from opensees_studio.commands.elements import (
@@ -123,6 +124,7 @@ __all__ = [
     "DeleteSectionsCommand",
     "EditGroupMembersCommand",
     "FixDuplicatesCommand",
+    "MergeJointsCommand",
     "MeshCommand",
     "MirrorCommand",
     "MoveNodesCommand",

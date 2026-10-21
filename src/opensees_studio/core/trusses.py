@@ -85,6 +85,7 @@ class TrussSpec:
     plane: Plane = "XZ"
     origin: tuple[float, float, float] = (0.0, 0.0, 0.0)
     restrain_out_of_plane: bool = True
+    unit_weight: float = 0.0  # weight per volume of every bar (self weight)
 
     def __post_init__(self) -> None:
         if self.span <= 0.0:
@@ -97,6 +98,8 @@ class TrussSpec:
             raise TrussError("The depth at the supports must be between 0 and the mid-span depth.")
         if self.chord_area <= 0.0 or self.web_area <= 0.0:
             raise TrussError("Both member areas must be positive.")
+        if self.unit_weight < 0.0:
+            raise TrussError("The unit weight cannot be negative.")
         if self.material_id < 1:
             raise TrussError("The members need a material.")
         if self.plane not in ("XZ", "YZ"):  # an elevation: Z is up
@@ -266,7 +269,13 @@ def build_truss(
                 continue  # no length (a closed end), or the same bar as a chord
             seen.add(key)
             elements.append(
-                TrussElement(id=next_element, nodes=(i, j), area=area, material_id=spec.material_id)
+                TrussElement(
+                    id=next_element,
+                    nodes=(i, j),
+                    area=area,
+                    material_id=spec.material_id,
+                    unit_weight=spec.unit_weight,
+                )
             )
             ids.append(next_element)
             next_element += 1

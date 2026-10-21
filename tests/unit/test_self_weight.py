@@ -141,10 +141,10 @@ def _slab(points, gamma: float = 25.0, h: float = 0.2) -> Project:  # type: igno
 
 
 def test_a_rectangle_gives_a_quarter_of_its_weight_to_each_corner() -> None:
-    from opensees_studio.core.self_weight import shell_self_weight_nodal_loads
+    from opensees_studio.core.self_weight import nodal_self_weight_loads
 
     project = _slab([(0, 0, 0), (4, 0, 0), (4, 3, 0), (0, 3, 0)])
-    loads = shell_self_weight_nodal_loads(project)
+    loads = nodal_self_weight_loads(project)
     weight = 25.0 * 0.2 * 12.0
     assert sorted(loads) == [1, 2, 3, 4]
     for force in loads.values():
@@ -163,15 +163,10 @@ def test_a_trapezoid_shares_by_consistent_integration() -> None:
 
 
 def test_a_weightless_plate_and_a_zero_multiplier_carry_nothing() -> None:
-    from opensees_studio.core.self_weight import shell_self_weight_nodal_loads
+    from opensees_studio.core.self_weight import nodal_self_weight_loads
 
     assert (
-        shell_self_weight_nodal_loads(
-            _slab([(0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0)], gamma=0.0)
-        )
+        nodal_self_weight_loads(_slab([(0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0)], gamma=0.0))
         == {}
     )
-    assert (
-        shell_self_weight_nodal_loads(_slab([(0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0)]), 0.0)
-        == {}
-    )
+    assert nodal_self_weight_loads(_slab([(0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0)]), 0.0) == {}
