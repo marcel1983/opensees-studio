@@ -93,3 +93,55 @@ def test_the_dialog_refuses_what_it_cannot_use(qtbot, tmp_path) -> None:  # type
     dialog._refresh()
     assert not dialog._ok.isEnabled()
     assert "Could not run" in dialog._status.text()
+
+
+# ──────────────────────────── the download ────────────────────────────
+@pytest.mark.gui
+def test_the_download_needs_the_license_and_then_points_at_the_folder(
+    qtbot, monkeypatch, tmp_path
+) -> None:  # type: ignore[no-untyped-def]
+    from opensees_studio.viewmodels import engine_installer
+
+    calls: list[Path] = []
+
+    def fake_install(root, *, progress, cancelled):  # type: ignore[no-untyped-def]
+        folder = tmp_path / "engines" / "openseespy-3.8.0.0"
+        calls.append(folder)
+        progress(50, 100)
+        progress(100, 100)
+        return engines.SolverSettings(package_dir=str(folder))
+
+    monkeypatch.setattr(engine_installer, "install_opensees", fake_install)
+    dialog = SolverSettingsDialog(engines.SolverSettings())
+    qtbot.addWidget(dialog)
+
+    monkeypatch.setattr(SolverSettingsDialog, "accept_license", lambda self: False)
+    dialog._download.click()
+    assert calls == []  # no acceptance, no download
+
+    monkeypatch.setattr(SolverSettingsDialog, "accept_license", lambda self: True)
+    dialog._download.click()
+    with qtbot.waitSignal(dialog._installer.installed, timeout=10_000, raising=False):
+        pass
+    qtbot.waitUntil(lambda: dialog._folder_edit.text() != "", timeout=10_000)
+
+    assert calls and dialog._folder_radio.isChecked()
+    assert dialog._folder_edit.text() == str(calls[0])
+    assert dialog._download.isEnabled()
+
+
+@pytest.mark.gui
+def test_a_failed_download_is_reported(qtbot, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from opensees_studio.services.engine_install import InstallError
+    from opensees_studio.viewmodels import engine_installer
+
+    def failing(root, *, progress, cancelled):  # type: ignore[no-untyped-def]
+        raise InstallError("Could not download openseespy: offline")
+
+    monkeypatch.setattr(engine_installer, "install_opensees", failing)
+    monkeypatch.setattr(SolverSettingsDialog, "accept_license", lambda self: True)
+    dialog = SolverSettingsDialog(engines.SolverSettings())
+    qtbot.addWidget(dialog)
+    dialog._download.click()
+    qtbot.waitUntil(lambda: "offline" in dialog._status.text(), timeout=10_000)
+    assert dialog._download.isEnabled()

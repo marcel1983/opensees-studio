@@ -3,22 +3,28 @@
 OpenSeesPy is a separate program with its own license; the application may be
 installed without it. This dialog shows whether an engine is available and
 lets the user point to one: the application's own environment, another Python
-of the same version that has ``openseespy``, or a folder holding the package.
-The logic is in :mod:`opensees_studio.services.engines`.
+of the same version that has ``openseespy``, or a folder holding the package —
+or download it from PyPI into such a folder, after accepting its license. The
+logic is in :mod:`opensees_studio.services.engines` and
+:mod:`opensees_studio.services.engine_install`.
 """
 
 from __future__ import annotations
 
 import sys
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QButtonGroup,
+    QCheckBox,
     QDialogButtonBox,
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
+    QProgressDialog,
     QPushButton,
     QRadioButton,
     QVBoxLayout,
@@ -26,6 +32,13 @@ from PySide6.QtWidgets import (
 )
 
 from opensees_studio.core.help import TOPIC_PROPERTY
+from opensees_studio.services.engine_install import (
+    LICENSE_SUMMARY,
+    LICENSE_URL,
+    OPENSEESPY_VERSION,
+    InstallError,
+    wheels_for,
+)
 from opensees_studio.services.engines import (
     OPENSEES_PY,
     EngineError,
@@ -33,6 +46,7 @@ from opensees_studio.services.engines import (
     current_status,
     inspect_python,
 )
+from opensees_studio.viewmodels.engine_installer import EngineInstaller
 from opensees_studio.views.screen_fit import FittedDialog, MessageArea
 
 LICENSE_NOTE = (
@@ -101,6 +115,24 @@ class SolverSettingsDialog(FittedDialog):
         form.addRow("Folder:", folder_row)
         layout.addLayout(form)
 
+        self._download = QPushButton()
+        try:
+            megabytes = sum(w.size for w in wheels_for()) / 1e6
+            self._download.setText(
+                f"Download OpenSeesPy {OPENSEESPY_VERSION} from PyPI ({megabytes:.0f} MB)…"
+            )
+        except InstallError as exc:
+            self._download.setText(f"Download OpenSeesPy {OPENSEESPY_VERSION}…")
+            self._download.setEnabled(False)
+            self._download.setToolTip(str(exc))
+        self._download.clicked.connect(self._on_download)
+        layout.addWidget(self._download)
+        self._installer = EngineInstaller(self)
+        self._installer.installed.connect(self._on_installed)
+        self._installer.failed.connect(self._on_install_failed)
+        self._installer.cancelled.connect(self._on_install_cancelled)
+        self._progress: QProgressDialog | None = None
+
         self._status = MessageArea()
         layout.addWidget(self._status)
         note = QLabel(LICENSE_NOTE)
@@ -138,6 +170,79 @@ class SolverSettingsDialog(FittedDialog):
             self._folder_edit.setText(path)
             self._folder_radio.setChecked(True)
             self._refresh()
+
+    # ── download ────────────────────────────────────────────────────
+    def accept_license(self) -> bool:
+        """Show OpenSeesPy's terms; True only when the user ticks that they accept them."""
+        box = QMessageBox(self)
+        box.setWindowTitle("OpenSeesPy license")
+        box.setIcon(QMessageBox.Icon.Information)
+        box.setTextFormat(Qt.TextFormat.RichText)
+        box.setText(
+            f'{LICENSE_SUMMARY}<br><br>Full terms: <a href="{LICENSE_URL}">{LICENSE_URL}</a>'
+        )
+        tick = QCheckBox("I have read the OpenSeesPy license and my use fits its terms")
+        box.setCheckBox(tick)
+        box.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
+        if box.exec() != QMessageBox.StandardButton.Ok:
+            return False
+        if not tick.isChecked():
+            QMessageBox.information(
+                self, "OpenSeesPy license", "Tick the box to accept the license and download."
+            )
+            return False
+        return True
+
+    def _on_download(self) -> None:
+        if not self.accept_license():
+            return
+        self._progress = QProgressDialog("Downloading OpenSeesPy …", "Cancel", 0, 100, self)
+        self._progress.setWindowModality(Qt.WindowModality.WindowModal)
+        self._progress.setMinimumDuration(0)
+        self._progress.setAutoClose(False)
+        self._progress.setAutoReset(False)
+        self._progress.canceled.connect(self._installer.cancel)
+        self._installer.progressed.connect(self._on_progress)
+        self._download.setEnabled(False)
+        self._installer.start()
+
+    def _on_progress(self, done: int, total: int) -> None:
+        progress = self._progress
+        if progress is None or not total:
+            return
+        progress.setLabelText(f"Downloading OpenSeesPy … {done / 1e6:.1f} of {total / 1e6:.1f} MB")
+        # setValue processes events on a modal dialog: the "installed" slot may run
+        # inside it and close the dialog, so it comes last.
+        progress.setValue(int(100 * done / total))
+
+    def _close_progress(self) -> None:
+        progress, self._progress = self._progress, None
+        if progress is not None:
+            progress.canceled.disconnect()
+            progress.hide()
+            progress.deleteLater()
+        self._download.setEnabled(True)
+
+    def _on_installed(self, settings: SolverSettings) -> None:
+        self._close_progress()
+        self._folder_radio.setChecked(True)
+        self._folder_edit.setText(settings.package_dir or "")
+        self._refresh()
+
+    def _on_install_failed(self, message: str) -> None:
+        self._close_progress()
+        self._status.show_message(message, level="error")
+
+    def _on_install_cancelled(self) -> None:
+        self._close_progress()
+        self._status.show_message("The download was cancelled; nothing was installed.", "warning")
+
+    def done(self, result: int) -> None:
+        # Closing the dialog stops a download in progress instead of orphaning it.
+        if self._installer.is_running:
+            self._installer.cancel()
+            self._installer.wait()
+        super().done(result)
 
     # ── state ───────────────────────────────────────────────────────
     def mode(self) -> str:

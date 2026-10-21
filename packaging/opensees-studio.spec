@@ -11,10 +11,11 @@ who has no Python: ``OpenSeesStudio`` (the GUI) is the file they run.
 Three things here are not obvious and are the reason this file exists at all
 instead of a one-line ``pyinstaller`` call:
 
-* **OpenSeesPy has no PyInstaller hook.** ``openseespylinux`` / ``openseespywin``
-  ship one large extension module (about 250 MB) with BLAS/LAPACK next to it,
-  loaded by name from the package ``__init__``. Nothing in the import graph
-  points at the shared libraries, so they are collected explicitly.
+* **OpenSeesPy is not in the bundle.** It is a separate program with its own
+  license (ADR-0003): the user installs it from Options → Solver, which
+  downloads it from PyPI into a folder the analysis child appends to
+  ``sys.path``. It is listed in ``excludes`` because PyInstaller also follows
+  the lazy imports inside the runner, and a developer's environment has it.
 * **The bundle re-runs itself for analyses.** ``opensees_studio.child_cli``
   makes the frozen executable double as the analysis CLI (a bundle has no
   ``python -m``), and ``__main__`` dispatches it. Nothing extra is needed in
@@ -41,14 +42,13 @@ SRC = ROOT / "src"
 
 APP_NAME = "OpenSeesStudio"
 
-# ── OpenSees: collected by hand, there is no hook for it ────────────────
 datas = []
 binaries = []
 hiddenimports = []
 
 # ifcopenshell (File → Export → IFC) is imported lazily and ships a native
-# library plus its schema files, so it is collected whole as well.
-for package in ("openseespylinux", "openseespy", "ifcopenshell"):
+# library plus its schema files, so it is collected whole.
+for package in ("ifcopenshell",):
     try:
         pkg_datas, pkg_binaries, pkg_hidden = collect_all(package)
     except Exception as exc:  # platform-specific wheel of the other OS
@@ -101,6 +101,11 @@ hiddenimports += collect_submodules("vtkmodules")
 
 # ── Nothing here imports these ─────────────────────────────────────────
 excludes = [
+    # The solver: installed by the user (Options → Solver), never shipped.
+    "openseespy",
+    "openseespylinux",
+    "openseespywin",
+    "openseespymac",
     "scipy",
     "pandas",
     "matplotlib.tests",

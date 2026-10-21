@@ -206,9 +206,12 @@ See `docs/adr/ADR-0002-headless-gui-dep-split.md` for the rationale.
 ### Frozen builds
 
 `packaging/` freezes the app into a folder an end user runs without Python
-(`pip install -e ".[gui,packaging,opensees]"`, then `python packaging/build.py`). The
-GUI never solves in its own process, so the bundle re-enters itself as the
-analysis CLI — see the child-spawn gotcha above. Build with **Python 3.12**:
+(`pip install -e ".[gui,packaging]"`, then `python packaging/build.py`). The
+bundle **excludes OpenSeesPy** (ADR-0003): the user installs it from Options →
+Solver (`services/engine_install.py`, pinned PyPI wheels with SHA256), and the
+smoke test proves both that the frozen CLI refuses without it and that it
+solves once installed. The GUI never solves in its own process, so the bundle
+re-enters itself as the analysis CLI — see the child-spawn gotcha above. Build with **Python 3.12**:
 the interpreter inside the bundle has to be the one the Windows
 `opensees.pyd` links against. `packaging/README.md` documents the traps
 (the `vtk` shim, PyVista's mypyc module, why VTK is not trimmed); the smoke

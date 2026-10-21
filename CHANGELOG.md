@@ -18,8 +18,9 @@ refused instead of silently downgraded).
   `pip install opensees-studio[opensees]` adds the solver (`dev` includes it).
   Without a solver the application models, exports and reports; Run, the batch
   runs, Check Model Stability and the Material Tester are disabled and say why,
-  and the log says at start which solver was found. The desktop bundle still
-  carries OpenSeesPy for now.
+  and the log says at start which solver was found.
+- **The desktop bundle no longer includes OpenSeesPy** (about 250 MB lighter
+  unpacked on Linux). Install it once from Options → Solver.
 
 ### Added
 
@@ -27,7 +28,11 @@ refused instead of silently downgraded).
   and points to it: the application's own environment, another Python 3.12 that
   has `openseespy` (the application asks that interpreter where it is, without
   starting OpenSees), or a folder holding the package. The choice is saved in
-  `solver.json` in the application data directory. Other solvers can register as
+  `solver.json` in the application data directory. **Download OpenSeesPy from
+  PyPI**: shows its license and downloads only after you accept it; fetches the
+  two files published for the platform (Linux x86-64, Windows, macOS arm64),
+  checks each against its pinned SHA256, unpacks into the application data
+  folder and selects it, with progress and Cancel. Other solvers can register as
   Python packages (`opensees_studio.engines` entry point;
   `docs/adr/ADR-0003-solver-engines.md`).
 
