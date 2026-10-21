@@ -3502,6 +3502,12 @@ wait for one. The log says at start whether a solver was found.
   starting OpenSees.
 - **A folder** that contains the `openseespy` package (a `site-packages`
   folder).
+- **Download OpenSeesPy from PyPI** — the button shows the OpenSeesPy license
+  first and downloads only once you tick that you accept it. It fetches the two
+  files OpenSeesPy publishes for this platform (Linux x86-64, Windows, macOS on
+  Apple silicon), checks each against its published SHA256 digest, unpacks them
+  into the application data folder and selects that folder. Cancel stops it
+  and leaves nothing behind.
 The status line says whether that choice is usable and which version it finds.
 When the application's own environment has OpenSeesPy, it is used and another
 folder is not.
@@ -3509,8 +3515,9 @@ folder is not.
 # License
 OpenSeesPy is free for research, education and internal use; commercial
 redistribution needs a license from its authors. OpenSees Studio is free
-software and does not distribute OpenSeesPy in its own install: each user
-installs it and should check that their use fits its terms.
+software and does not distribute OpenSeesPy, not even in its downloadable
+bundle: each user installs it, from the place its authors publish it, and should
+check that their use fits its terms.
 
 # Other engines
 More engines can plug in as Python packages (the `opensees_studio.engines`

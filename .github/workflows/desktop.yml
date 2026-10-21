@@ -63,7 +63,7 @@ jobs:
         uses: ./.github/actions/windows-opengl
 
       - name: Install the GUI and packaging stack
-        run: pip install --retries 5 -e ".[gui,packaging,opensees]"
+        run: pip install --retries 5 -e ".[gui,packaging]"
 
       # The smoke test inside build.py solves a bundled example through the
       # frozen CLI. On Linux the GUI start test runs under xvfb; on Windows

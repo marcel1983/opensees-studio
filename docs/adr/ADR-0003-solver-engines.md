@@ -70,7 +70,12 @@ step of the PR that adds the second engine.
 - `pip install opensees-studio` is a modeller without a solver; scripts and web
   backends that solve add `[opensees]`.
 - Desktop developers keep `pip install -e ".[gui,dev]"`.
-- The frozen bundle still carries OpenSeesPy (`desktop.yml` installs
-  `[gui,packaging,opensees]`) until the next step: a bundle without it and an
-  in-app download that shows the license before installing into a folder that
-  the `package_dir` setting then points at.
+- The frozen bundle does not carry OpenSeesPy (`excludes` in the spec). Options →
+  Solver downloads it after the user accepts its license
+  (`services/engine_install.py`): exactly the two wheels of the platform, at
+  URLs, sizes and SHA256 digests pinned in the code, unpacked through a
+  `.partial` folder into `<app data>/engines/openseespy-3.8.0.0`, which the
+  `package_dir` setting then points at. Linux x86-64, Windows amd64 and macOS
+  arm64 are the platforms OpenSeesPy 3.8.0.0 publishes; elsewhere the user
+  points to an installation of their own. Moving to another OpenSeesPy
+  version means updating `WHEELS` (and the `opensees` extra) together.

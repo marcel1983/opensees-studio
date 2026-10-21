@@ -403,8 +403,9 @@ correct install for web backends, scripts, and Jupyter notebooks that reuse
 research, education and internal use; commercial redistribution needs a
 license from its authors), so it is an optional extra rather than part of
 OpenSees Studio. In the desktop app, Options → Solver shows whether it is
-available and can point to another Python 3.12 that has `openseespy`, or to a
-folder holding the package. Without it, Run, Check Model Stability and the
+available, downloads it from PyPI after you accept its license (the downloadable
+bundle does not include it), or points to another Python 3.12 that has
+`openseespy`, or to a folder holding the package. Without it, Run, Check Model Stability and the
 Material Tester are disabled. See `docs/adr/ADR-0003-solver-engines.md`.
 
 Python 3.12 is required: the `openseespywin` and `openseespylinux` 3.8.0.0
