@@ -221,8 +221,9 @@ Tamaño: M.
 `InfluenceLineCase` (una resolución lineal por parada, modelo construido una
 sola vez), `InfluenceLineResults` en el almacén y el CLI, Display → Influence
 Line con envolvente de vehículo en ambos sentidos, caso V-16 del manual y el
-ejemplo `bridge_influence_line` (camión HL-93). Quedan: etapas constructivas,
-gradiente térmico, tendones. Cables/solo compresión: hechos en el importador
+ejemplo `bridge_influence_line` (camión HL-93). Temperatura en marcos hecha
+(cargas nodales equivalentes y corrección de esfuerzos, V-17). Quedan: etapas
+constructivas, temperatura en cáscaras, tendones. Cables/solo compresión: hechos en el importador
 (barras con material elástico de un solo lado, casos con Newton).
 
 Solo lo que OpenSees permite hacer bien:
@@ -231,7 +232,7 @@ Solo lo que OpenSees permite hacer bien:
 |---|---|---|
 | Etapas constructivas | casos encadenados (`preload_case_ids` ya existe) + activar/desactivar elementos por etapa (`remove element`, o rigidez reducida); empezar por "agregar por etapa" | L |
 | Cargas móviles / líneas de influencia | barrido de carga unitaria en estático lineal, envolvente; sin solver nuevo | M — ✅ hecho |
-| Gradiente térmico | `eleLoad -beamThermal` en barras; en shells solo si el elemento lo soporta | S–M |
+| Gradiente térmico | `eleLoad -beamThermal` en barras; en shells solo si el elemento lo soporta | S–M — ✅ hecho en marcos (cargas equivalentes + corrección; `-beamThermal` no existe para el elemento elástico) |
 | Cables / solo compresión | `CorotTruss` + material ENT / tensión-solo (ya hay `CorotTrussElement`) | S — ✅ hecho (importador: truss + `Elastic` con `Eneg`, Newton; SAP 1-012 A/B/C) |
 | Tendones de pretensado | carga equivalente (fase 1); `Steel` con preesfuerzo inicial (fase 2) | M |
 

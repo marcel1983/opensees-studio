@@ -158,7 +158,13 @@ def _patterns(project: Project) -> str:
         if isinstance(p, PlainLoadPattern):
             counts = (
                 ("joint", len(p.nodal_loads)),
-                ("member", len(p.element_loads) + len(p.distributed_loads) + len(p.point_loads)),
+                (
+                    "member",
+                    len(p.element_loads)
+                    + len(p.distributed_loads)
+                    + len(p.point_loads)
+                    + len(p.temperature_loads),
+                ),
                 ("area", len(p.surface_loads) + len(p.floor_loads)),
                 ("imposed", len(p.imposed_displacements)),
             )

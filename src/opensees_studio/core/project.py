@@ -471,6 +471,12 @@ class Project(BaseModel):
                     problems.append(
                         f"Pattern {pat.id} has a point load on missing element {pl.element_id}."
                     )
+            for tl in getattr(pat, "temperature_loads", []):
+                if tl.element_id not in element_ids:
+                    problems.append(
+                        f"Pattern {pat.id} has a temperature load on missing element "
+                        f"{tl.element_id}."
+                    )
             for dl in getattr(pat, "distributed_loads", []):
                 if dl.element_id not in element_ids:
                     problems.append(

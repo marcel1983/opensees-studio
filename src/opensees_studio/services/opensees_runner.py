@@ -118,6 +118,7 @@ from opensees_studio.core.plane import dof_signs, to_solver_coords, to_solver_ve
 from opensees_studio.core.section_cuts import cut_resultant, section_cuts
 from opensees_studio.core.self_weight import nodal_self_weight_loads, self_weight_loads
 from opensees_studio.core.storey_results import cut_force, storey_cuts
+from opensees_studio.core.thermal import equivalent_nodal_loads, fixed_end_forces
 from opensees_studio.services.catalog_emitters import emit_catalog_material
 from opensees_studio.services.frame_members import FramePlan, plan_frame_members
 from opensees_studio.services.material_emitters import emit_material
@@ -319,6 +320,7 @@ class OpenSeesRunner:
             depending on case type.
         """
         self._check_ground_motion_records(case)
+        self._check_temperature_loads(case)
         self.build()
         self._check_dof_coverage()
         if isinstance(case, StaticCase):
@@ -335,6 +337,25 @@ class OpenSeesRunner:
             target = results_dir or Path(tempfile.mkdtemp(prefix="osstudio_"))
             return self._run_transient(case, target)
         raise TypeError(f"Unsupported analysis case type: {type(case).__name__}")
+
+    def _check_temperature_loads(self, case: Any) -> None:
+        """Temperature loads run in static cases only (their end-force correction)."""
+        if isinstance(case, StaticCase):
+            return
+        ids = set(getattr(case, "pattern_ids", []) or [])
+        for preload_id in getattr(case, "preload_case_ids", []) or []:
+            preload = next((c for c in self.project.analyses if c.id == preload_id), None)
+            ids.update(getattr(preload, "pattern_ids", []) or [])
+        heated = [
+            p.name or str(p.id)
+            for p in self.project.load_patterns
+            if p.id in ids and getattr(p, "temperature_loads", None)
+        ]
+        if heated:
+            raise ValueError(
+                f"Pattern(s) {', '.join(heated)} carry temperature loads, which run in static "
+                "cases only."
+            )
 
     def _check_ground_motion_records(self, case: Any) -> None:
         """Fail fast when the case uses a flagged ground-motion record.
@@ -944,6 +965,12 @@ class OpenSeesRunner:
                 ops.pattern("Plain", pat.id, pat.time_series_id)
                 for nl in pat.nodal_loads:
                     ops.load(nl.node_id, *self._solver_dofs(nl.forces))
+                # Temperature: minus the fixed-end forces at the member's joints;
+                # the static run adds them back to the member's end forces.
+                for thermal in pat.temperature_loads:
+                    node_i, load_i, node_j, load_j = equivalent_nodal_loads(self.project, thermal)
+                    ops.load(node_i, *self._solver_dofs(load_i))
+                    ops.load(node_j, *self._solver_dofs(load_j))
                 # Shells and trusses: their self weight as nodal forces (translations only).
                 for node_id, force in nodal_self_weight_loads(
                     self.project, pat.self_weight
@@ -1551,6 +1578,7 @@ class OpenSeesRunner:
         node_coords = {n.id: n.coords for n in self.project.nodes}
 
         correct = self._needs_correction_solve(case, case.pattern_ids)
+        thermal = self._thermal_end_forces(case)
         for step in range(case.n_steps):
             status = self._analyze_static_step(case, correct)
             if status != 0:
@@ -1570,6 +1598,8 @@ class OpenSeesRunner:
                 if el.id not in element_forces:
                     element_forces[el.id] = np.zeros((case.n_steps, len(forces)))
                 element_forces[el.id][step, :] = forces
+                for factor_of, fixed_end in thermal.get(el.id, ()):
+                    element_forces[el.id][step, :] += factor_of(step) * fixed_end
                 stresses = self._element_stress_resultants(el.id)
                 if stresses is not None:
                     if el.id not in element_stresses:
@@ -1708,6 +1738,48 @@ class OpenSeesRunner:
             node_reaction=node_reaction,
             element_forces=element_forces,
         )
+
+    def _thermal_end_forces(
+        self, case: StaticCase
+    ) -> dict[int, list[tuple[Callable[[int], float], np.ndarray]]]:
+        """Each heated member's fixed-end forces and the pattern factor at a step.
+
+        The member's real end forces are what OpenSees reports plus these (see
+        :mod:`core.thermal`). The factor is the pattern's time series at the
+        step's load factor, so a ramp in N steps adds them in N parts.
+        """
+        out: dict[int, list[tuple[Callable[[int], float], np.ndarray]]] = {}
+        patterns = {p.id: p for p in self.project.load_patterns}
+        series = {ts.id: ts for ts in self.project.time_series}
+        for pid in case.pattern_ids:
+            pattern = patterns.get(pid)
+            if not isinstance(pattern, PlainLoadPattern) or not pattern.temperature_loads:
+                continue
+            ts = series.get(pattern.time_series_id)
+            if case.integrator != "LoadControl" or not isinstance(
+                ts, LinearTimeSeries | ConstantTimeSeries
+            ):
+                raise ValueError(
+                    f"Pattern {pattern.name or pid} carries temperature loads: they run under "
+                    "LoadControl with a Linear or Constant time series only."
+                )
+            if isinstance(ts, ConstantTimeSeries):
+                factor = float(ts.factor)
+
+                def factor_of(step: int, value: float = factor) -> float:
+                    return value
+
+            else:
+                scale = float(ts.factor) * case.load_factor_increment
+
+                def factor_of(step: int, value: float = scale) -> float:
+                    return (step + 1) * value
+
+            for thermal in pattern.temperature_loads:
+                out.setdefault(thermal.element_id, []).append(
+                    (factor_of, fixed_end_forces(self.project, thermal))
+                )
+        return out
 
     def _run_pushover(self, case: PushoverCase) -> PushoverResults:
         """Monotonic displacement-controlled pushover.

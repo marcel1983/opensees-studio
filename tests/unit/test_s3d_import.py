@@ -339,7 +339,7 @@ def test_unsupported_objects_are_counted(tmp_path: Path) -> None:
     data["nodes"][1]["springUni"] = {"uz": "c"}
     result = import_s3d(_write(tmp_path, data))
     assert result.dropped["triangular or degenerate area (no 3-node shell)"] == 1
-    assert result.dropped["temperature load"] == 1
+    assert result.dropped["temperature load on an area"] == 1
     assert result.dropped["node springUni"] == 1
     assert "Not imported" in result.summary()
 
@@ -497,6 +497,17 @@ def test_cables_and_struts_become_one_way_trusses(tmp_path: Path) -> None:
     strut = import_s3d(_write(tmp_path, data, "strut.s3d")).project.materials[0]
     assert strut.Eneg == pytest.approx(2.8e10)
     assert pytest.approx(2.8e10 * 1e-9) == strut.E
+
+
+def test_member_temperature_loads_come_with_the_material_alpha(tmp_path: Path) -> None:
+    data = _model(loads=[{"type": "temp", "elemId": 1, "dT": 25.0}])
+    data["materials"][0]["alpha"] = 1.0e-5
+    pattern = import_s3d(_write(tmp_path, data)).project.load_patterns[0]
+    thermal = pattern.temperature_loads[0]
+    assert (thermal.element_id, thermal.alpha, thermal.uniform) == (1, 1.0e-5, 25.0)
+    data["materials"][0]["alpha"] = 0.0
+    result = import_s3d(_write(tmp_path, data, "noalpha.s3d"))
+    assert result.dropped["temperature load on a material without alpha"] == 1
 
 
 def test_prescribed_displacements_alone_get_their_own_case(tmp_path: Path) -> None:

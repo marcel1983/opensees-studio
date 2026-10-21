@@ -16,6 +16,7 @@ from opensees_studio.core import (
     NodalLoad,
     PlainLoadPattern,
     PointElementLoad,
+    TemperatureLoad,
     TimeSeries,
     TrapezoidalElementLoad,
     UniformElementLoad,
@@ -317,3 +318,34 @@ class AddPatternLoadsCommand(_ElementLoadCommand):
 
     def _make_loads(self) -> list[Any]:
         return list(self._loads)
+
+
+class AddTemperatureLoadsCommand(_ElementLoadCommand):
+    """Apply a temperature change (uniform and gradients) to a set of frame elements."""
+
+    _list_name = "temperature_loads"
+
+    def __init__(
+        self,
+        vm: ProjectViewModel,
+        element_ids: set[int],
+        *,
+        alpha: float,
+        uniform: float = 0.0,
+        gradient_y: float = 0.0,
+        gradient_z: float = 0.0,
+        pattern_id: int | None = None,
+    ) -> None:
+        super().__init__(vm, f"Apply temperature load to {len(element_ids)} element(s)", pattern_id)
+        self._element_ids = set(element_ids)
+        self._values = {
+            "alpha": alpha,
+            "uniform": uniform,
+            "gradient_y": gradient_y,
+            "gradient_z": gradient_z,
+        }
+
+    def _make_loads(self) -> list[Any]:
+        return [
+            TemperatureLoad(element_id=eid, **self._values) for eid in sorted(self._element_ids)
+        ]

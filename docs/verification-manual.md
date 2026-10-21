@@ -14,7 +14,7 @@ Units are SI (m, N, kg, s) for the V cases and kip-inch for the D (design)
 cases, as in the AISC examples. Errors below 1e-6 are floating-point noise
 and are printed as `< 1e-6`.
 
-**21 of 21 cases pass.**
+**22 of 22 cases pass.**
 
 | Case | Title | Group | Max. error | Verdict |
 |---|---|---|---|---|
@@ -34,6 +34,7 @@ and are printed as `< 1e-6`.
 | [V-14](#v-14) | Simply supported square plate, uniform pressure | Shells | 7.3e-04 | ✅ pass |
 | [V-15](#v-15) | Plastic moment of a rectangle | Nonlinear, fibre sections | 2.9e-04 | ✅ pass |
 | [V-16](#v-16) | Influence lines of a two-span continuous beam | Influence lines, moving loads | < 1e-06 | ✅ pass |
+| [V-17](#v-17) | Temperature: uniform change and gradient | Static, temperature loads | < 1e-06 | ✅ pass |
 | [D-01](#d-01) | AISC: column available strength | Design, AISC 360-16 | 1.3e-03 | ✅ pass |
 | [D-02](#d-02) | AISC: beam flexural strength and LTB | Design, AISC 360-16 | 3.4e-03 | ✅ pass |
 | [D-03](#d-03) | AISC: web shear strength | Design, AISC 360-16 | 8.8e-04 | ✅ pass |
@@ -253,6 +254,21 @@ and are printed as `< 1e-6`.
 | Middle reaction, load at mid first span (11/16) | - | 0.6875 | 0.6875 | < 1e-06 | 1e-09 | ✅ |
 | End reaction, load on that support | - | 1 | 1 | < 1e-06 | 1e-09 | ✅ |
 | End reaction under two 100 kN axles 2 m apart | kN | 169.141 | 169.141 | < 1e-06 | 1e-09 | ✅ |
+
+<a id="v-17"></a>
+
+## V-17 — Temperature: uniform change and gradient
+
+**Model.** 2D member, L = 4 m in two members, ΔT = 30 °C and a gradient of 100 °C/m across local y, α = 1.2e-5; once as a cantilever, once fixed at both ends.
+
+**Reference.** Free member: δ = α ΔT L, w = α g L²/2. Member held at both ends: N = EA α ΔT, M = EI α g.
+
+| Quantity | Unit | OpenSees Studio | Reference | Rel. error | Tolerance | |
+|---|---|---|---|---|---|---|
+| Free end: elongation α ΔT L | m | 0.00144 | 0.00144 | < 1e-06 | 1e-09 | ✅ |
+| Free end: deflection α g L²/2 | m | 0.0096 | 0.0096 | < 1e-06 | 1e-09 | ✅ |
+| Held: axial compression EA α ΔT | N | 720000 | 720000 | < 1e-06 | 1e-09 | ✅ |
+| Held: moment EI α g | N·m | 24000 | 24000 | < 1e-06 | 1e-09 | ✅ |
 
 <a id="d-01"></a>
 

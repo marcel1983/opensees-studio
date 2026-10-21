@@ -65,6 +65,7 @@ from opensees_studio.core.loads import (
     LinearTimeSeries,
     NodalLoad,
     PlainLoadPattern,
+    TemperatureLoad,
     TrapezoidalElementLoad,
     UniformElementLoad,
 )
@@ -706,6 +707,27 @@ class _Translator:
             wz_end=wz * w_j,
         )
 
+    def _temperature_load(
+        self, load: dict[str, Any], by_id: dict[int, ElasticBeamColumn | TrussElement]
+    ) -> TemperatureLoad | None:
+        """A uniform temperature change of a member, with its material's α."""
+        if load.get("areaId") is not None:
+            self.dropped["temperature load on an area"] += 1
+            return None
+        element = by_id.get(int(load.get("elemId", 0)))
+        if not isinstance(element, ElasticBeamColumn) or element.releases.any:
+            self.dropped["temperature load on a bar or a member with releases"] += 1
+            return None
+        raw = next(
+            (e for e in self.s3d.items("elements") if _entity_id(e, "element") == element.id), {}
+        )
+        alpha = _number(self.materials.get(int(raw.get("matId", 0)), {}), "alpha")
+        if alpha <= 0.0:
+            self.dropped["temperature load on a material without alpha"] += 1
+            return None
+        # α is per degree and ΔT in degrees: neither scales with the units.
+        return TemperatureLoad(element_id=element.id, alpha=alpha, uniform=_number(load, "dT"))
+
     def _nodal_load(self, load: dict[str, Any]) -> NodalLoad | None:
         node_id = int(load.get("nodeId", 0))
         if node_id not in self.nodes:
@@ -760,7 +782,9 @@ class _Translator:
                     elif built is not None:
                         pattern.distributed_loads.append(built)
                 elif kind == "temp":
-                    self.dropped["temperature load"] += 1
+                    thermal = self._temperature_load(load, by_id)
+                    if thermal is not None:
+                        pattern.temperature_loads.append(thermal)
                 else:
                     self.dropped[f"{kind} load"] += 1
             patterns.append(pattern)

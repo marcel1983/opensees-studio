@@ -11,6 +11,17 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **Temperature loads on frames** (Assign → Frame → Temperature Load). A uniform
+  temperature change and a gradient across local y and z, with the coefficient of
+  expansion α, on elastic members without releases or end offsets, in static
+  cases. The members' fixed-end forces are applied to the joints with the
+  opposite sign and added back to their end forces, so a free member grows α ΔT L
+  or bends to α g with no force, and a held one carries EA α ΔT and EI α g
+  (Verification Manual V-17). Mesh, Replicate and Merge Joints carry the loads;
+  other case types refuse a pattern that has them. PORTICO member temperature
+  loads are imported with their material's α. `.osmodel`: an optional
+  `temperature_loads` list on plain patterns, absent when empty.
+
 - **Influence lines and moving loads.** A new analysis case type,
   *InfluenceLine* (Analyze → Cases…), walks a load (a unit load downward by
   default) along a chain of frame members, stopping at equal intervals of each,
@@ -52,7 +63,7 @@ refused instead of silently downgraded).
   never opened the Design menu saves byte-identical, and editing the settings
   does not make results stale.
 
-- **Verification Manual** (`docs/verification-manual.md`). Twenty-one cases with a
+- **Verification Manual** (`docs/verification-manual.md`). Twenty-two cases with a
   closed-form or published reference — cantilevers, simply supported and
   fixed-fixed beams, a Timoshenko beam, 3D biaxial bending and torsion, a two-bar
   truss, a support settlement, P-Δ, SDOF and cantilever frequencies, a step load

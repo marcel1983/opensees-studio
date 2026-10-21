@@ -147,6 +147,12 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   pushover, transient time-history with Rayleigh damping. Chained workflows:
   gravity preload → `loadConst -time 0.0` → pushover or transient. Numberer
   and system options per case.
+- **Temperature loads** — Assign → Frame → Temperature Load: a uniform change
+  and a gradient across each local axis of elastic members (α ΔT, α g), in static
+  cases. OpenSees' elastic elements take no thermal load, so the fixed-end forces
+  are applied as equivalent joint loads and added back to the member forces:
+  diagrams, combinations and the steel check see `N = EA (ε - α ΔT)` and
+  `M = EI (κ - α g)`.
 - **Influence lines and moving loads** — an *InfluenceLine* case walks a unit
   load along a chain of frame members (a girder, a crane runway), one linear
   solve per stop, keeping every displacement, reaction and member end force.

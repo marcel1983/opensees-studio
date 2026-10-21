@@ -60,7 +60,8 @@ script o un notebook de Jupyter: la interfaz es una forma de usarlo, no la únic
   de superficie y de losa a vigas; peso propio; fuente de masa; casos estáticos,
   modales (deterministas), pushover, espectro de respuesta (CQC/SRSS) y
   tiempo-historia con registros PEER y escalamiento a espectro objetivo;
-  combinaciones de carga; líneas de influencia y cargas móviles (un caso
+  combinaciones de carga; cargas de temperatura en marcos (ΔT uniforme y
+  gradientes, Assign → Frame → Temperature Load); líneas de influencia y cargas móviles (un caso
   *InfluenceLine* recorre una carga unitaria por una cadena de miembros, y
   Display → Influence Line pasa un vehículo, p. ej. el camión HL-93, en ambos
   sentidos).

@@ -57,6 +57,7 @@ from opensees_studio.views.dialogs.run_analysis import RunAnalysisDialog
 from opensees_studio.views.dialogs.s3d_import import S3dImportDialog
 from opensees_studio.views.dialogs.section_library import SectionLibraryDialog
 from opensees_studio.views.dialogs.steel_design import DriftCheckDialog, SteelDesignDialog
+from opensees_studio.views.dialogs.temperature_load import AssignTemperatureLoadDialog
 from opensees_studio.views.dialogs.truss_wizard import TrussWizard
 from opensees_studio.views.dialogs.typical_materials import TypicalMaterialsDialog
 from opensees_studio.views.dialogs.uniform_excitation import UniformExcitationDialog
@@ -77,6 +78,7 @@ __all__ = [
     "AssignPointElementLoadDialog",
     "AssignSectionDialog",
     "AssignSupportDialog",
+    "AssignTemperatureLoadDialog",
     "AssignZeroLengthSectionDialog",
     "CoordSystemDataDialog",
     "CoordSystemLocationOrientationDialog",

@@ -679,6 +679,48 @@ def _two_span_end_reaction(x: float, span: float) -> float:
     return 1.0 - x / (2 * span) - middle / 2
 
 
+def _thermal() -> list[Check]:
+    from opensees_studio.core import LinearTimeSeries, PlainLoadPattern, TemperatureLoad
+    from opensees_studio.services.element_forces import ForceComponent, extract_diagram_data
+
+    L, A, I, alpha, dt, g = 4.0, 0.01, 1e-4, 1.2e-5, 30.0, 100.0  # noqa: E741
+
+    def solve(restraints: dict[int, tuple[bool, bool, bool]], **load: float) -> tuple[Any, Any]:
+        project = _frame_2d(
+            [(0.0, 0.0), (L / 2, 0.0), (L, 0.0)], restraints=restraints, area=A, inertia=I
+        )
+        project.time_series.append(LinearTimeSeries(id=1, name="Ramp"))
+        pattern = PlainLoadPattern(
+            id=1,
+            name="Heat",
+            time_series_id=1,
+            temperature_loads=[TemperatureLoad(element_id=k, alpha=alpha, **load) for k in (1, 2)],
+        )
+        project.load_patterns.append(pattern)
+        from opensees_studio.core import StaticCase
+
+        case = StaticCase(id=1, name="Heat", pattern_ids=[1])
+        project.analyses.append(case)
+        return project, _run(project, case)
+
+    _, free_r = solve({1: (True, True, True)}, uniform=dt, gradient_y=g)
+    held, held_r = solve({1: (True, True, True), 3: (True, True, True)}, uniform=dt, gradient_y=g)
+    axial = extract_diagram_data(held, held_r, ForceComponent.N).values_i[0]
+    moment = extract_diagram_data(held, held_r, ForceComponent.M3).values_i[0]
+    return [
+        Check("Free end: elongation α ΔT L", "m", free_r.node_disp[3][-1][0], alpha * dt * L, 1e-9),
+        Check(
+            "Free end: deflection α g L²/2",
+            "m",
+            -free_r.node_disp[3][-1][1],
+            alpha * g * L**2 / 2,
+            1e-9,
+        ),
+        Check("Held: axial compression EA α ΔT", "N", float(axial), E * A * alpha * dt, 1e-9),
+        Check("Held: moment EI α g", "N·m", abs(float(moment)), E * I * alpha * g, 1e-9),
+    ]
+
+
 # ──────────────────────────── design: AISC 360-16 ────────────────────────────
 _FT = 12.0  # in
 
@@ -958,6 +1000,15 @@ CASES: list[Case] = [
         "2D beam, two spans of 8 m in four members, a unit load walked over 33 stops; "
         "a vehicle of two 100 kN axles 2 m apart moved across both ways.",
         _influence_lines,
+    ),
+    Case(
+        "V-17",
+        "Temperature: uniform change and gradient",
+        "Static, temperature loads",
+        "Free member: δ = α ΔT L, w = α g L²/2. Member held at both ends: N = EA α ΔT, M = EI α g.",
+        "2D member, L = 4 m in two members, ΔT = 30 °C and a gradient of 100 °C/m "
+        "across local y, α = 1.2e-5; once as a cantilever, once fixed at both ends.",
+        _thermal,
     ),
     Case(
         "D-01",

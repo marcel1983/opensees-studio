@@ -49,6 +49,7 @@ from opensees_studio.commands import (
     AddNodesCommand,
     AddPointElementLoadsCommand,
     AddSectionsCommand,
+    AddTemperatureLoadsCommand,
     AddTrapezoidalElementLoadsCommand,
     AssignMaterialCommand,
     AssignSectionCommand,
@@ -160,6 +161,7 @@ from opensees_studio.views.dialogs import (
     AssignPointElementLoadDialog,
     AssignSectionDialog,
     AssignSupportDialog,
+    AssignTemperatureLoadDialog,
     AssignZeroLengthSectionDialog,
     CoordinateGridSystemsDialog,
     DisplayOptionsDialog,
@@ -519,6 +521,7 @@ class MainWindow(QMainWindow):
         self._act_assign_insertion = QAction("I&nsertion Point…", self)
         self._act_assign_modifiers = QAction("Property M&odifiers…", self)
         self._act_assign_trapezoidal_load = QAction("&Trapezoidal Load…", self)
+        self._act_assign_temperature_load = QAction("Te&mperature Load…", self)
 
         # Display (post-processing)
         self._act_select_results = QAction("Show Results &Of…", self)
@@ -729,6 +732,7 @@ class MainWindow(QMainWindow):
             self._act_assign_distributed_load,
             self._act_assign_trapezoidal_load,
             self._act_assign_frame_point_load,
+            self._act_assign_temperature_load,
             self._act_assign_hinge,
         ]
         self._area_actions: list[QAction | None] = [
@@ -1164,6 +1168,7 @@ class MainWindow(QMainWindow):
         self._act_assign_insertion.triggered.connect(self._on_assign_insertion)
         self._act_assign_modifiers.triggered.connect(self._on_assign_modifiers)
         self._act_assign_trapezoidal_load.triggered.connect(self._on_assign_trapezoidal_load)
+        self._act_assign_temperature_load.triggered.connect(self._on_assign_temperature_load)
 
         # Analyze
         self._act_case_manager.triggered.connect(self._on_case_manager)
@@ -3609,6 +3614,49 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, "Assign Distributed Load failed", str(exc))
 
+    def _on_assign_temperature_load(self) -> None:
+        """Assign → Frame → Temperature Load: uniform ΔT and gradients on the selected members.
+
+        Every selected member is checked before anything changes: the method needs
+        elastic members without releases or end offsets (see ``core.thermal``).
+        """
+        from opensees_studio.core import TemperatureLoad
+        from opensees_studio.core.thermal import ThermalLoadError, fixed_end_forces
+
+        project = self._vm.project
+        selected = set(self._canvas.selection.elements)
+        if project is None or not selected:
+            QMessageBox.information(
+                self, "Assign Temperature Load", "Select one or more frame members first."
+            )
+            return
+        refused = []
+        for element_id in sorted(selected):
+            try:
+                fixed_end_forces(project, TemperatureLoad(element_id=element_id, alpha=1.0))
+            except ThermalLoadError as exc:
+                refused.append(str(exc))
+        if refused:
+            QMessageBox.warning(self, "Assign Temperature Load", "\n".join(refused[:8]))
+            return
+        dialog = AssignTemperatureLoadDialog(len(selected), ndm=project.ndm, parent=self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        try:
+            values = dialog.values()
+            self._vm.apply_command(
+                AddTemperatureLoadsCommand(
+                    self._vm,
+                    selected,
+                    alpha=values["alpha"],
+                    uniform=values["uniform"],
+                    gradient_y=values["gradient_y"],
+                    gradient_z=values["gradient_z"],
+                )
+            )
+        except Exception as exc:
+            QMessageBox.critical(self, "Assign Temperature Load failed", str(exc))
+
     def _on_assign_frame_point_load(self) -> None:
         """Assign → Frame → Point Load: a concentrated load inside each selected frame."""
         from opensees_studio.core import FRAME_ELEMENT_CLASSES
@@ -5427,6 +5475,7 @@ class MainWindow(QMainWindow):
             self._act_assign_insertion,
             self._act_assign_modifiers,
             self._act_assign_trapezoidal_load,
+            self._act_assign_temperature_load,
         ):
             action.setEnabled(has_project and has_selected_elements)
         self._act_delete.setEnabled(has_project and has_selection)

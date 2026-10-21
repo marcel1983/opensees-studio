@@ -58,6 +58,7 @@ from opensees_studio.commands.loads import (
     AddNodalLoadsCommand,
     AddPatternLoadsCommand,
     AddPointElementLoadsCommand,
+    AddTemperatureLoadsCommand,
     AddTrapezoidalElementLoadsCommand,
 )
 from opensees_studio.commands.materials import (
@@ -109,6 +110,7 @@ __all__ = [
     "AddRigidLinkCommand",
     "AddSectionsCommand",
     "AddSpectrumCommand",
+    "AddTemperatureLoadsCommand",
     "AddTimeSeriesCommand",
     "AddTrapezoidalElementLoadsCommand",
     "ApplyModelTablesCommand",
