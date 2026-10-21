@@ -16,6 +16,7 @@ exactly so the runner can emit them without further translation.
 
 from __future__ import annotations
 
+import math
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt
@@ -218,6 +219,35 @@ class FiberSection(Entity):
     patches: list[Patch] = Field(default_factory=list)
     layers: list[Layer] = Field(default_factory=list)
     fibres: list[Fibre] = Field(default_factory=list)
+    unit_weight: float = Field(
+        default=0.0,
+        ge=0.0,
+        description=(
+            "Weight per unit volume (force / length³), applied to the gross area "
+            "(:attr:`gross_area`). Only the self weight of a load pattern reads it."
+        ),
+    )
+
+    serialize_without_defaults = omit_when_default("unit_weight")
+
+    @property
+    def gross_area(self) -> float:
+        """Area of the patches, the bars of the layers and the loose fibres.
+
+        Bars inside a concrete patch are counted on top of it, so an RC section
+        comes out larger by its steel ratio (1-3 %): the weight of one unit
+        weight over that area is within the same margin of the true one.
+        """
+        area = 0.0
+        for patch in self.patches:
+            if isinstance(patch, RectangularPatch):
+                area += abs(patch.y_j - patch.y_i) * abs(patch.z_j - patch.z_i)
+            else:
+                sweep = min(abs(patch.end_angle - patch.start_angle), 360.0) / 360.0
+                area += math.pi * (patch.r_outer**2 - patch.r_inner**2) * sweep
+        area += sum(layer.n_bars * layer.bar_area for layer in self.layers)
+        area += sum(fibre.area for fibre in self.fibres)
+        return area
 
 
 def w_shape_patches(

@@ -261,33 +261,42 @@ class PropertyEditorDock(QScrollArea):
         elif hasattr(el, "material_id"):
             form.addRow("Material id:", QLabel(str(el.material_id)))
 
-        # ── Inline-editable Area (truss-style elements). ──
-        if hasattr(el, "area") and self.on_change_element_fields is not None:
-            area_spin = FloatField()
-            area_spin.setRange(1e-12, 1e6)
-            area_spin.setValue(float(el.area))
-            area_spin.setSingleStep(float(el.area) * 0.1 if el.area else 0.001)
+        # ── Inline-editable Area (truss-style elements) and unit weight. ──
+        for field, label, minimum in (
+            ("area", "Area:", 1e-12),
+            ("unit_weight", "Unit weight γ:", 0.0),
+        ):
+            if not hasattr(el, field):
+                continue
+            value = float(getattr(el, field))
+            if self.on_change_element_fields is None:
+                form.addRow(label, QLabel(f"{value:g}"))
+                continue
+            spin = FloatField()
+            spin.setRange(minimum, 1e12)
+            spin.setValue(value)
+            spin.setSingleStep(value * 0.1 if value else 0.001)
 
             # Commit on editingFinished so we don't dispatch a command on
             # every keystroke (which would spam the undo stack).
-            def _on_area_edited(_eid: int = el.id) -> None:
-                new_val = area_spin.value()
+            def _on_edited(
+                _eid: int = el.id, _field: str = field, _spin: FloatField = spin
+            ) -> None:
+                new_val = _spin.value()
                 # Skip no-op edits: the property dock is re-rendered after
                 # any model mutation, so editingFinished fires on focus-out
                 # too — we don't want a stack of identical commands.
                 try:
-                    current = float(self._project.element(_eid).area)  # type: ignore[union-attr]
+                    current = float(getattr(self._project.element(_eid), _field))  # type: ignore[union-attr]
                 except (KeyError, AttributeError):
                     current = None
                 if current == new_val:
                     return
                 if self.on_change_element_fields is not None:
-                    self.on_change_element_fields(_eid, {"area": new_val})
+                    self.on_change_element_fields(_eid, {_field: new_val})
 
-            area_spin.editingFinished.connect(_on_area_edited)
-            form.addRow("Area:", area_spin)
-        elif hasattr(el, "area"):
-            form.addRow("Area:", QLabel(f"{el.area:g}"))
+            spin.editingFinished.connect(_on_edited)
+            form.addRow(label, spin)
 
         if hasattr(el, "geom_transf") and self.on_change_element_fields is not None:
             transf_cb = QComboBox()
@@ -605,6 +614,12 @@ class PropertyEditorDock(QScrollArea):
         if with_area:
             controls["area"] = _multi_float([float(e.area) for e in with_area], 1e-12, 1e6)
             form.addRow(f"Area ({len(with_area)}):", controls["area"])
+        with_weight = [e for e in elements if hasattr(e, "unit_weight")]
+        if with_weight:
+            controls["unit_weight"] = _multi_float(
+                [float(e.unit_weight) for e in with_weight], 0.0, 1e12
+            )
+            form.addRow(f"Unit weight γ ({len(with_weight)}):", controls["unit_weight"])
         with_transf = [e for e in elements if hasattr(e, "geom_transf")]
         if with_transf:
             controls["geom_transf"] = _multi_combo(
@@ -657,6 +672,11 @@ class PropertyEditorDock(QScrollArea):
                     fields[key] = value
             if "area" in controls and (area := _read_multi(controls["area"])) is not None:
                 fields["area"] = area
+            if (
+                "unit_weight" in controls
+                and (weight := _read_multi(controls["unit_weight"])) is not None
+            ):
+                fields["unit_weight"] = weight
             edit.fields = fields
             if members:
                 offsets = {

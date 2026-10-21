@@ -18,6 +18,7 @@ from opensees_studio.commands import (
 )
 from opensees_studio.core import (
     DEFAULT_TRUSS_AREA,
+    DEFAULT_UNIT_WEIGHT,
     Node,
     TrussElement,
     find_default_truss_material,
@@ -131,6 +132,7 @@ class DrawTrussTool(CanvasTool):
                 nodes=(n1, n2),
                 area=DEFAULT_TRUSS_AREA,
                 material_id=mat_id,
+                unit_weight=DEFAULT_UNIT_WEIGHT,  # the default material is steel
             )
             self._vm.apply_command(AddElementsCommand(self._vm, [elem]))
         finally:

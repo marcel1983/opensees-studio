@@ -1181,13 +1181,83 @@ Selection (Esc) to pick one set alone.
 - **By Load Pattern** — the joints and elements a pattern loads. A pattern with
   a self weight loads every frame whose section has a unit weight.
 - **By Group** — the joints and elements of a group (Define → Groups).
-- **Supported Joints**, **Joints with Mass**, **Elements with Self Weight** (frames and shells).
+- **Supported Joints**, **Joints with Mass**, **Elements with Self Weight**
+  (frames, trusses and shells).
+- **Loose Joints** — joints no element, constraint, rigid link or diaphragm uses.
+  **Joints Inside Members** — joints lying inside a frame or truss without being
+  one of its ends, with those members (fix them with Edit → Divide Frames at
+  Joints). **Joints on Shell Edges** — joints inside a shell edge, not at a
+  corner, with those shells (subdivide the shells with Edit → Mesh). The three
+  use the duplicates check's tolerance, a millionth of the model's size.
 - **Joints of Selected Elements** — the end joints of what is selected;
   **Elements between Selected Joints** — the elements whose every joint is
   selected.
 """,
             "edit.select_all",
             "edit.clear_selection",
+            "edit.divide_frames",
+        ),
+        "edit.merge_joints": _t(
+            "Edit → Merge Joints",
+            "Edit and tools",
+            "Joints closer than a tolerance become one.",
+            """
+For a drawing whose joints are a few millimetres apart where they should be one
+(an imported DXF, two frames drawn separately): they look connected and are
+not, and the model solves as two pieces.
+
+# Values
+- **Tolerance** — joints closer than this merge. It starts at a thousandth of
+  the model's size; Check Model for Duplicates uses a millionth, for joints that
+  are meant to be exactly coincident.
+- **Apply to** — the selected joints only (only they merge, among themselves),
+  or the entire model.
+- The summary says how many groups merge and how many joints go before you
+  accept, and which groups are left alone.
+
+# What happens
+- The lowest id of a group stays, at its own position. Elements, loads,
+  constraints and groups that used the others move to it; a DOF restrained on
+  any of them stays restrained, and different masses are added.
+- Members that become repeated (two beams on the same two joints) are removed,
+  and their loads move to the one that stays.
+- A group joined by a zero-length element, an equalDOF, a rigid link or the
+  retained joint of a diaphragm is meant to be coincident and is left alone.
+- One undo step.
+""",
+            "edit.check_duplicates",
+            "edit.divide_frames",
+        ),
+        "edit.divide_frames": _t(
+            "Edit → Divide Frames at Joints",
+            "Edit and tools",
+            "Split frames and trusses at the joints that lie inside them.",
+            """
+A column whose top lands in the middle of a beam, or a brace that ends on a
+girder, looks connected on screen; unless the beam has a joint there, the
+column passes by and the beam does not carry it. This splits every member at
+the joints lying on it, so they are connected.
+
+# Values
+- **Tolerance** — how close a joint has to be to a member to count as lying on
+  it (a thousandth of the model's size to start with).
+- **Apply to** — the selected members, or the entire model.
+- **Also split members where they cross each other** — two members crossing
+  with no joint get one there, shared by both.
+
+# What happens
+- Each member becomes pieces between its joints; the pieces keep the section,
+  material and assignments, distributed loads and self weight follow them and a
+  point load goes to the piece it falls on. One undo step; the new pieces are
+  left selected.
+- The summary also reports **loose joints** (on no element) and **joints on a
+  shell edge** that is not at a corner. Those are not split here: select them
+  from the Select menu, delete the loose ones, and subdivide those shells with
+  Edit → Mesh so a corner lands on the joint.
+""",
+            "edit.merge_joints",
+            "edit.mesh",
+            "select.menu",
         ),
         "edit.move": _t(
             "Edit → Move",
@@ -1641,8 +1711,9 @@ as one undoable step, and leaves it selected.
 The left end is pinned and the right end on a roller, so the truss is
 statically determinate externally. A truss bar has no bending stiffness, so in
 a frame model (ndf 3 or 6) the rotations of every truss node are restrained;
-connect it to frames afterwards only through nodes you free again. Truss bars
-carry no self weight in the DEAD case yet.
+connect it to frames afterwards only through nodes you free again. The bars
+take the **unit weight** on the Members page (steel by default), so the DEAD
+case carries them: half of each bar's weight goes to each of its joints.
 """,
             "define.portal_frame",
             "mechanics.static",
@@ -1951,8 +2022,15 @@ reference patterns by id, so the same loads can be used by several cases.
   default section is steel (gamma = 77 kN/m³), so a frame drawn on a fresh
   model already has a gravity result. A **plate section** (shell) has a unit
   weight too: each ShellMITC4 takes gamma times h per unit area as consistent
-  nodal forces over its real shape. Fiber and aggregated sections,
-  BeamWithHinges members and trusses carry no self weight yet.
+  nodal forces over its real shape.
+- A **fiber section** has a unit weight too, applied to its gross area (patches
+  plus bars plus loose fibres: an RC section comes out heavier by its steel
+  ratio, 1-3 %). An **aggregator** weighs what the section it wraps weighs.
+- **Trusses** and **BeamWithHinges** members carry their own unit weight (in the
+  Properties panel): a truss bar sends half its weight to each joint, a
+  BeamWithHinges member takes gamma times its elastic area A per length.
+  Assign → Frame → Hinge keeps the member's weight per length. 2D quads,
+  zero-length elements, bearings and links carry no self weight.
 """,
             "assign.load",
             "assign.distributed_load",
@@ -3830,6 +3908,11 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_replicate": "edit.replicate",
     "_act_check_duplicates": "edit.check_duplicates",
     "_act_mesh": "edit.mesh",
+    "_act_merge_joints": "edit.merge_joints",
+    "_act_divide_frames": "edit.divide_frames",
+    "_act_select_loose_joints": "select.menu",
+    "_act_select_joints_in_bars": "select.menu",
+    "_act_select_shell_edge_joints": "select.menu",
     "_act_mirror": "edit.mirror",
     "_act_tool_select": "tools.select",
     "_act_tool_draw_node": "tools.draw_node",

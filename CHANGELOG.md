@@ -9,6 +9,36 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Added
+
+- **Edit → Merge Joints.** Joints closer than a tolerance (a thousandth of the
+  model's size to start with) become one: on the selected joints only or on the
+  whole model. The lowest id stays; elements, loads, constraints and groups move
+  to it, restraints are combined and different masses added, members that end up
+  repeated are removed, and joints joined on purpose (zero-length element,
+  equalDOF, rigid link, diaphragm) are left alone. The dialog says what will
+  merge before you accept; one undo step.
+- **Edit → Divide Frames at Joints.** Splits every frame and truss (or the
+  selected ones) at the joints lying inside it, and optionally where members
+  cross, so a column standing on a beam mid-span is connected to it. Loads follow
+  the pieces. The dialog also reports loose joints and joints on a shell edge.
+- **Select → Loose Joints, Joints Inside Members, Joints on Shell Edges.**
+- **Self weight of every member with a unit weight.** Fiber sections have a unit
+  weight applied to their gross area (patches, bars and loose fibres); an
+  aggregator weighs what the section it wraps weighs; trusses and BeamWithHinges
+  members carry their own unit weight (editable in the Properties panel, on one
+  member or many). A truss bar sends half its weight to each joint. The truss
+  wizard and Draw Truss give new bars steel's unit weight, and Assign → Frame →
+  Hinge keeps the member's weight per length. Members without a unit weight save
+  byte-identical.
+
+### Fixed
+
+- **Edit → Mesh could split a zero-length element, a bearing or a link** at a
+  joint lying between its two nodes. Only frames and trusses are split now.
+- **The fiber section editor dropped a section's loose fibres** when it was
+  edited; they are kept.
+
 ## [0.0.19] — 2026-10-17
 
 Selection and results, from the way you pick things to the way you read them: a

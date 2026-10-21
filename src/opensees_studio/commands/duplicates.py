@@ -81,9 +81,17 @@ class RepairReport:
 class FixDuplicatesCommand(ProjectCommand):
     """Merge coincident nodes and remove the elements that repeat a member."""
 
-    def __init__(self, vm: ProjectViewModel, *, tolerance: float | None = None) -> None:
-        super().__init__(vm, "Fix duplicate nodes and elements")
+    def __init__(
+        self,
+        vm: ProjectViewModel,
+        *,
+        tolerance: float | None = None,
+        node_ids: set[int] | None = None,
+        text: str = "Fix duplicate nodes and elements",
+    ) -> None:
+        super().__init__(vm, text)
         self._tolerance = tolerance
+        self._node_ids = None if node_ids is None else set(node_ids)
         self._before: dict[str, Any] | None = None
         self.report = RepairReport()
 
@@ -93,7 +101,7 @@ class FixDuplicatesCommand(ProjectCommand):
         self._before = snapshot_project(project)
         self.report = RepairReport()
 
-        found = check_duplicates(project, tolerance=self._tolerance)
+        found = check_duplicates(project, tolerance=self._tolerance, node_ids=self._node_ids)
         mapping = self._merge_nodes(project, found.node_clusters)
         if mapping:
             self._follow_the_keeper(project, mapping)
@@ -360,3 +368,18 @@ class FixDuplicatesCommand(ProjectCommand):
             ]
             self.report.dropped_copy_loads += len(pattern.distributed_loads) - len(kept_distributed)
             pattern.distributed_loads[:] = kept_distributed
+
+
+class MergeJointsCommand(FixDuplicatesCommand):
+    """Edit → Merge Joints: merge the joints within ``tolerance`` of each other.
+
+    The same repair as :class:`FixDuplicatesCommand` — the lowest id stays, and
+    elements, loads, constraints, masses and restraints follow it; members that
+    become repeated are removed — with the user's tolerance, and limited to
+    ``node_ids`` when a selection is given.
+    """
+
+    def __init__(
+        self, vm: ProjectViewModel, *, tolerance: float, node_ids: set[int] | None = None
+    ) -> None:
+        super().__init__(vm, tolerance=tolerance, node_ids=node_ids, text="Merge joints")

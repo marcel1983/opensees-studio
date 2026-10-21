@@ -113,7 +113,7 @@ from opensees_studio.core.modal import (
 from opensees_studio.core.modal_combination import DEFAULT_MODAL_DAMPING, closely_spaced_pairs
 from opensees_studio.core.plane import dof_signs, to_solver_coords, to_solver_vector3
 from opensees_studio.core.section_cuts import cut_resultant, section_cuts
-from opensees_studio.core.self_weight import self_weight_loads, shell_self_weight_nodal_loads
+from opensees_studio.core.self_weight import nodal_self_weight_loads, self_weight_loads
 from opensees_studio.core.storey_results import cut_force, storey_cuts
 from opensees_studio.services.catalog_emitters import emit_catalog_material
 from opensees_studio.services.frame_members import FramePlan, plan_frame_members
@@ -938,8 +938,8 @@ class OpenSeesRunner:
                 ops.pattern("Plain", pat.id, pat.time_series_id)
                 for nl in pat.nodal_loads:
                     ops.load(nl.node_id, *self._solver_dofs(nl.forces))
-                # The shells' self weight: consistent nodal forces (translations only).
-                for node_id, force in shell_self_weight_nodal_loads(
+                # Shells and trusses: their self weight as nodal forces (translations only).
+                for node_id, force in nodal_self_weight_loads(
                     self.project, pat.self_weight
                 ).items():
                     full = (*(float(f) for f in force), 0.0, 0.0, 0.0)

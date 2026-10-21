@@ -43,7 +43,7 @@ from opensees_studio.core.geometry.local_axes import frame_local_axes
 from opensees_studio.core.loads import PlainLoadPattern
 from opensees_studio.core.self_weight import (
     gravity_direction,
-    shell_self_weight_nodal_loads,
+    nodal_self_weight_loads,
     weight_per_length,
 )
 from opensees_studio.core.units import gravity
@@ -99,7 +99,7 @@ def _frame_end_shares(
 
 
 def self_weight_per_node(project: Project, multiplier: float = 1.0) -> dict[int, float]:
-    """Node id -> downward weight of the weighted frames (half per end) and shells."""
+    """Node id -> downward weight of the weighted frames (half per end), trusses and shells."""
     if multiplier == 0.0:
         return {}
     coords = {n.id: np.asarray(n.coords, dtype=float) for n in project.nodes}
@@ -113,7 +113,7 @@ def self_weight_per_node(project: Project, multiplier: float = 1.0) -> dict[int,
         half = 0.5 * w * multiplier * float(np.linalg.norm(coords[j] - coords[i]))
         out[i] = out.get(i, 0.0) + half
         out[j] = out.get(j, 0.0) + half
-    for nid, force in shell_self_weight_nodal_loads(project, multiplier).items():
+    for nid, force in nodal_self_weight_loads(project, multiplier).items():
         out[nid] = out.get(nid, 0.0) + float(force @ down)
     return out
 

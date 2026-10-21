@@ -55,6 +55,7 @@ from opensees_studio.commands import (
     DeleteElementsCommand,
     DeleteNodesCommand,
     FixDuplicatesCommand,
+    MergeJointsCommand,
     MeshCommand,
     MirrorCommand,
     MoveNodesCommand,
@@ -92,12 +93,19 @@ from opensees_studio.core import (
 )
 from opensees_studio.core import selection as selection_queries
 from opensees_studio.core.combinations import model_fingerprint
+from opensees_studio.core.connectivity import (
+    joints_on_bars,
+    joints_on_shell_edges,
+    loose_joints,
+)
+from opensees_studio.core.duplicates import default_tolerance
 from opensees_studio.core.geometry.ordering import QuadOrderError, order_quad_nodes
 from opensees_studio.core.groups import Group, colour_for, group_members
 from opensees_studio.core.help import ACTION_TOPICS, TOPIC_PROPERTY
 from opensees_studio.core.materials.library import is_uniaxial
 from opensees_studio.core.reactions import ReactionRow, reaction_rows
 from opensees_studio.core.sections import SHELL_SECTION_CLASSES
+from opensees_studio.core.self_weight import section_weight_per_length
 from opensees_studio.core.view_settings import ViewSettings
 from opensees_studio.services import PROJECT_FILE_SUFFIX
 from opensees_studio.services.combination import MissingCaseResultsError
@@ -189,6 +197,7 @@ from opensees_studio.views.dialogs.buildings import (
     MassSourceDialog,
     StoreysDialog,
 )
+from opensees_studio.views.dialogs.connect_joints import DivideFramesDialog, MergeJointsDialog
 from opensees_studio.views.dialogs.grid_line_view import GridLineViewDialog
 from opensees_studio.views.dialogs.grid_wizard import GridWizardDialog
 from opensees_studio.views.dialogs.groups import (
@@ -238,6 +247,11 @@ def _add_actions(menu: QMenu, actions: Sequence[QAction | None]) -> None:
             menu.addSeparator()
         else:
             menu.addAction(action)
+
+
+def _pairs_selection(pairs: list[tuple[int, int]]) -> tuple[set[int], set[int]]:
+    """``(element, node)`` fault pairs as a selection: the joints and the members."""
+    return {node for _, node in pairs}, {element for element, _ in pairs}
 
 
 class MainWindow(QMainWindow):
@@ -409,12 +423,17 @@ class MainWindow(QMainWindow):
         self._act_select_joints_of_elements = QAction("Joints of Selected Elements", self)
         self._act_select_elements_within_joints = QAction("Elements between Selected Joints", self)
         self._act_select_weighted = QAction("Elements with Self &Weight", self)
+        self._act_select_loose_joints = QAction("&Loose Joints", self)
+        self._act_select_joints_in_bars = QAction("Joints &Inside Members", self)
+        self._act_select_shell_edge_joints = QAction("Joints on S&hell Edges", self)
 
         # Edit → transforms
         self._act_move = QAction("&Move…", self, shortcut="Ctrl+M")
         self._act_replicate = QAction("&Replicate…", self, shortcut="Ctrl+Shift+R")
         self._act_check_duplicates = QAction("Check Model for &Duplicates…", self)
         self._act_mesh = QAction("&Mesh…", self)
+        self._act_merge_joints = QAction("Merge &Joints…", self)
+        self._act_divide_frames = QAction("Divide Frames at &Joints…", self)
         self._act_mirror = QAction("Mirr&or…", self)
 
         # Tools (exclusive)
@@ -621,6 +640,8 @@ class MainWindow(QMainWindow):
         m_edit.addSeparator()
         m_edit.addAction(self._act_table_editing)
         m_edit.addAction(self._act_check_duplicates)
+        m_edit.addAction(self._act_merge_joints)
+        m_edit.addAction(self._act_divide_frames)
         m_edit.addAction(self._act_mesh)
 
         m_select = mb.addMenu("&Select")
@@ -1029,12 +1050,23 @@ class MainWindow(QMainWindow):
                 self._act_select_elements_within_joints,
                 lambda p, sel: (set(), q.elements_within_nodes(p, sel.nodes)),
             ),
+            (self._act_select_loose_joints, lambda p, sel: (set(loose_joints(p)), set())),
+            (
+                self._act_select_joints_in_bars,
+                lambda p, sel: _pairs_selection(joints_on_bars(p, default_tolerance(p))),
+            ),
+            (
+                self._act_select_shell_edge_joints,
+                lambda p, sel: _pairs_selection(joints_on_shell_edges(p, default_tolerance(p))),
+            ),
         ):
             action.triggered.connect(lambda _=False, query=query: self._select_from(query))
         self._act_move.triggered.connect(self._on_move)
         self._act_replicate.triggered.connect(self._on_replicate)
         self._act_check_duplicates.triggered.connect(self._on_check_duplicates)
         self._act_mesh.triggered.connect(self._on_mesh)
+        self._act_merge_joints.triggered.connect(self._on_merge_joints)
+        self._act_divide_frames.triggered.connect(self._on_divide_frames)
         self._act_mirror.triggered.connect(self._on_mirror)
 
         # Tools
@@ -1594,6 +1626,14 @@ class MainWindow(QMainWindow):
         )
         menu.addSeparator()
         menu.addActions(
+            [
+                self._act_select_loose_joints,
+                self._act_select_joints_in_bars,
+                self._act_select_shell_edge_joints,
+            ]
+        )
+        menu.addSeparator()
+        menu.addActions(
             [self._act_select_joints_of_elements, self._act_select_elements_within_joints]
         )
         for submenu, fill in (
@@ -2084,6 +2124,52 @@ class MainWindow(QMainWindow):
             self._canvas.selection.select_node(node.id, additive=True)
         self._canvas.render()
         self._log(f"Mesh: {plan.summary()}")
+
+    def _on_merge_joints(self) -> None:
+        """Edit → Merge Joints: joints closer than a tolerance become one, one undo step."""
+        project = self._vm.project
+        if project is None:
+            return
+        dialog = MergeJointsDialog(
+            project, selected_nodes=set(self._canvas.selection.nodes), parent=self
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        command = MergeJointsCommand(
+            self._vm, tolerance=dialog.tolerance(), node_ids=dialog.scope_ids()
+        )
+        try:
+            self._vm.apply_command(command)
+        except Exception as exc:
+            QMessageBox.critical(self, "Could not merge the joints", str(exc))
+            return
+        self._canvas.selection.clear()
+        report = command.report
+        self._log(
+            f"Merge Joints: {report.merged_node_groups} group(s), {report.removed_nodes} "
+            f"joint(s) removed, {report.removed_elements} repeated member(s) removed."
+        )
+
+    def _on_divide_frames(self) -> None:
+        """Edit → Divide Frames at Joints: split members at the joints inside them."""
+        project = self._vm.project
+        if project is None:
+            return
+        dialog = DivideFramesDialog(
+            project, selected_elements=set(self._canvas.selection.elements), parent=self
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        plan = dialog.plan()
+        if plan.is_empty:
+            return
+        try:
+            self._vm.apply_command(MeshCommand(self._vm, plan))
+        except Exception as exc:
+            QMessageBox.critical(self, "Could not divide the frames", str(exc))
+            return
+        self._canvas.selection.set_selection(set(), {e.id for e in plan.new_elements})
+        self._log(f"Divide Frames at Joints: {plan.summary()}")
 
     def _on_frame_wizard(self) -> None:
         """Define → Create Portal Frame: a parametric 2D frame, one undo step.
@@ -3521,6 +3607,11 @@ class MainWindow(QMainWindow):
                         G=vals["G"],
                         J=vals["J"],
                         geom_transf=getattr(el, "geom_transf", "Linear"),
+                        # Keep the member's weight per length: gamma on the new A.
+                        unit_weight=section_weight_per_length(
+                            self._vm.project, getattr(el, "section_id", 0)
+                        )
+                        / vals["A"],
                     )
                 )
         self._vm.apply_command(ReplaceElementsCommand(self._vm, replacements))
@@ -5151,6 +5242,8 @@ class MainWindow(QMainWindow):
             has_project and not self._stability.is_running and not self._runner.is_running
         )
         self._act_mesh.setEnabled(has_project)
+        self._act_merge_joints.setEnabled(has_project)
+        self._act_divide_frames.setEnabled(has_project)
         self._act_assign_support.setEnabled(has_project and has_selected_nodes)
         self._act_add_multi_support.setEnabled(has_project and has_selected_nodes)
         self._act_assign_masses.setEnabled(has_project and has_selected_nodes)
