@@ -684,6 +684,16 @@ pytest tests/integration   # real OpenSeesPy runs on bundled examples
 CI runs lint + the non-`slow` subset on Linux / macOS / Windows
 × Python 3.12.
 
+## Verification
+
+The [Verification Manual](docs/verification-manual.md) compares OpenSees Studio
+with closed-form and published solutions: beams (Euler-Bernoulli and Timoshenko,
+2D and 3D), trusses, support settlement, P-Δ, modal frequencies, a step-load time
+history, a response spectrum, a simply supported plate of shells and the plastic
+moment of a fibre section, each with its relative error and tolerance. The file is
+generated from real runs by `tools/verification_manual.py` (`--write` regenerates
+it), and CI fails when a case leaves its tolerance or the file is stale.
+
 ## Roadmap
 
 See [`docs/roadmap.md`](docs/roadmap.md) for the phase-by-phase plan.

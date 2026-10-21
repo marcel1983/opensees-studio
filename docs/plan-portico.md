@@ -117,7 +117,16 @@ Inventario sobre los 23 `.s3d` de `examples/` (`version: "1.0"`):
 
 ---
 
-## Fase B — Manual de verificación (prioridad alta)
+## Fase B — Manual de verificación (prioridad alta) — ✅ hecho
+
+**Estado (2026-10-21):** `tools/verification_manual.py` genera
+`docs/verification-manual.md` con 15 casos (V-01 a V-15) y
+`tests/integration/test_verification_manual.py` falla si un caso sale de su
+tolerancia o el archivo no está al día. Hallazgo: con un material
+elastoplástico perfecto, pasado ~10 desplazamientos de fluencia el elemento
+`forceBeamColumn` deja de converger su estado seccional y el momento sube por
+encima de Mp (V-15 se limita a 8 y lo documenta). Bathe–Wilson y el equilibrio
+global de todos los ejemplos quedan para una ampliación.
 
 Es lo que PORTICO tiene y nosotros no: un documento publicable que dice
 "caso X, referencia Y, error Z %".
@@ -209,7 +218,7 @@ Solo lo que OpenSees permite hacer bien:
 ## Orden propuesto
 
 1. ✅ **A1** importador básico + tests de paridad (desbloquea casos para B).
-2. **B** manual de verificación generado en CI.
+2. ✅ **B** manual de verificación generado en CI.
 3. **C** AISC 360 D/C + chequeo de derivas.
 4. **A2** áreas, diafragmas, links.
 5. **D** tutoriales y documentación en español.

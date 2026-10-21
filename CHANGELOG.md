@@ -11,6 +11,16 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **Verification Manual** (`docs/verification-manual.md`). Fifteen cases with a
+  closed-form or published reference — cantilevers, simply supported and
+  fixed-fixed beams, a Timoshenko beam, 3D biaxial bending and torsion, a two-bar
+  truss, a support settlement, P-Δ, SDOF and cantilever frequencies, a step load
+  in time history, a response spectrum, a simply supported plate and the plastic
+  moment of a fibre section — each with the computed value, the reference, the
+  relative error and its tolerance. It is generated from real runs by
+  `tools/verification_manual.py`, and the integration suite fails when a case
+  leaves its tolerance or the manual is out of date.
+
 - **File → Import → PORTICO Model (.s3d).** Opens a model saved by PORTICO
   (`jpreyes/portico-core`) as a new, unsaved project. Nodes, supports, support
   springs, nodal masses, frame members, sections (with PORTICO's section
