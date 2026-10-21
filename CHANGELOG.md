@@ -9,6 +9,25 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Added
+
+- **File → Import → PORTICO Model (.s3d).** Opens a model saved by PORTICO
+  (`jpreyes/portico-core`) as a new, unsaved project. Nodes, supports, support
+  springs, nodal masses, frame members, sections (with PORTICO's section
+  modifiers applied), end releases and end springs, static load cases (nodal,
+  uniform and trapezoidal loads, self weight), prescribed support
+  displacements, combinations and grid lines come across. The dialog reads the
+  file's unit system from its `units` label and scales **every** value to the
+  project units you pick, by dimension: a `kN-m` file opened in SI metres has
+  its forces in newtons and its densities in kg/m³. PORTICO gives a beam its
+  local y up and OpenSees its local z, so each member's `Iz`/`Iy`, shear areas
+  and bending releases are swapped where needed and distributed loads are
+  re-projected onto the OpenSees axes. Areas, diaphragms, links, the mass
+  source, temperature loads and response spectrum cases are not imported yet;
+  the dialog and the log count them. PORTICO's own verification models
+  (support settlement, static portal, modal cantilever, Bathe–Wilson frame)
+  solve to the same numbers as its published OpenSeesPy runs, to 1e-10.
+
 ## [0.0.20] — 2026-10-21
 
 The solver becomes a separate download, and the model gets connected and

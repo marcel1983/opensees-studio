@@ -16,6 +16,41 @@ se vendorizan sin revisar su licencia caso por caso.
 
 ## Fase A — Importador `.s3d` (File → Import → PORTICO Model…)
 
+### Estado (2026-10-21): A1 hecho
+
+`services/s3d_import.py`, `views/dialogs/s3d_import.py`, ayuda
+`file.import_s3d`. Lo aprendido al implementarlo, que corrige lo supuesto abajo:
+
+- **Unidades.** La app PORTICO calcula siempre en kN-m-t (el selector de
+  unidades está bloqueado); la etiqueta `units` del archivo sólo dice en qué
+  sistema están los números (los benchmarks de SAP vienen en `kip-in` y
+  `lb-in`). El importador escala **todo** por dimensión al sistema que elige el
+  usuario (por defecto el más cercano: `kN-m` → SI m-N, `kip-in`/`lb-in` →
+  US in-kip). Masa coherente = fuerza·s²/longitud (t en kN-m). El peso propio
+  de PORTICO usa siempre g = 9.80665, que sólo es correcto en kN-m: para otro
+  sistema el importador usa g en las unidades del proyecto y lo advierte.
+- **Ejes locales.** PORTICO: `z = x × ref`, `y = z × x` (viga con y arriba).
+  OpenSees (nuestro `vecxz`): viga con z arriba. En 3D casi todo miembro sale
+  "intercambiado": `Iz`↔`Iy`, `Avy`↔`Avz`, `ry`↔`rz` en releases (la sección se
+  nombra "(axes 2-3)"). En 2D los triedros coinciden. Las cargas distribuidas
+  se proyectan como vectores, exacto para cualquier giro.
+- **Timoshenko.** PORTICO es Timoshenko siempre que haya áreas de corte; en
+  OpenSees 3.8 `ElasticTimoshenkoBeam` no admite releases ni cargas
+  trapezoidales, así que esos miembros pierden la deformación por corte (se
+  cuenta y se informa).
+- **`prescDisp`** ya entra en A1: PORTICO lo impone en todos los casos
+  estáticos, así que va en un patrón que corren todos.
+- **Cargas sobre nodos o elementos inexistentes**: PORTICO las ignora en
+  silencio (pasa en su `portico_simple.s3d`); aquí se cuentan.
+- **Paridad**: 1-005, 1-014, 1-018 y 1-021 dan los mismos números que las
+  corridas OpenSeesPy publicadas por PORTICO (error ≤ 1e-10).
+  `tests/integration/test_s3d_import_run.py` las corre con
+  `PORTICO_CORE_DIR` apuntando a un checkout; sin él se saltan, y quedan los
+  voladizos con solución cerrada.
+- Pendiente para A2: áreas, diafragmas, links (1-010 los necesita), fuente de
+  masa, casos de espectro, resortes unilaterales/acoplados/de suelo y el
+  comportamiento cable/solo-compresión.
+
 ### A.1 Formato observado
 
 Inventario sobre los 23 `.s3d` de `examples/` (`version: "1.0"`):
@@ -40,7 +75,7 @@ Inventario sobre los 23 `.s3d` de `examples/` (`version: "1.0"`):
 ### A.2 Diseño
 
 - `services/s3d_import.py` (sin Qt), con el mismo contrato que
-  `services/dxf_import.py`: devuelve `S3dImportResult(project, warnings,
+  `services/dxf_import.py`: devuelve `S3dImport(project, notes,
   dropped: Counter)`. **Nunca descarta en silencio**: todo lo no traducido
   se cuenta y se muestra.
 - Validación defensiva: JSON que no es objeto, colecciones que no son listas,
@@ -76,7 +111,7 @@ Inventario sobre los 23 `.s3d` de `examples/` (`version: "1.0"`):
 
 | Etapa | Contenido | Tamaño |
 |---|---|---|
-| A1 | nodos, apoyos, resortes, masas, materiales, secciones, barras, releases, cargas nodales/distribuidas, peso propio, casos estáticos, combinaciones, grillas | M |
+| A1 | nodos, apoyos, resortes, masas, materiales, secciones, barras, releases, cargas nodales/distribuidas, peso propio, casos estáticos, combinaciones, grillas | M — ✅ hecho |
 | A2 | áreas shell/plate/membrane, diafragmas, links, `prescDisp`, casos de espectro | M |
 | A3 | export `.s3d` (ida y vuelta) — opcional, solo si hay demanda | S |
 
@@ -173,7 +208,7 @@ Solo lo que OpenSees permite hacer bien:
 
 ## Orden propuesto
 
-1. **A1** importador básico + tests de paridad (desbloquea casos para B).
+1. ✅ **A1** importador básico + tests de paridad (desbloquea casos para B).
 2. **B** manual de verificación generado en CI.
 3. **C** AISC 360 D/C + chequeo de derivas.
 4. **A2** áreas, diafragmas, links.

@@ -938,6 +938,59 @@ you drew two hundred has to say so.
             "define.portal_frame",
             "edit.check_duplicates",
         ),
+        "file.import_s3d": _t(
+            "File → Import → PORTICO Model (.s3d)",
+            "File",
+            "A model saved by PORTICO, as a new project scaled to the units you choose.",
+            """
+Reads a `.s3d` file from PORTICO (the browser-based structural analysis program,
+`jpreyes/portico-core`) and makes it the **current project**. It replaces what is
+open, so unsaved changes are asked about first, and the new project has no file
+until you save it.
+
+# Units
+PORTICO never converts: the file's `units` label says which system its numbers
+are in. **File units** is filled in from that label (`kN-m`, `kip-in`, `lb-in`,
+…); change it if the label is wrong. **Project units** is the system the project
+gets, and every value is **scaled** to it by its dimension: lengths, forces,
+moments, stresses, masses, densities, spring stiffnesses and loads. A `kN-m`
+file opened in `SI (m, N, kg, s, Pa)` has its forces multiplied by 1000 and its
+densities in kg/m³. The **Scale** line shows the length and force factors.
+
+Self weight is the material density times g in the project's units. PORTICO
+always multiplies by 9.80665, which is only right for its own `kN-m`.
+
+# What comes across
+- Nodes, supports, support springs and nodal masses.
+- Frame elements as elastic beam-columns. A section with shear areas makes a
+  Timoshenko member, as in PORTICO, and the consistent mass matrix is used.
+- Sections and materials: one elastic section per section, material and
+  orientation used, with PORTICO's section modifiers applied to the values.
+- End releases (torsion and bending) and end springs on released actions.
+- Static load cases with their nodal, uniform and trapezoidal loads and self
+  weight, each as a load pattern plus a linear static case of the same name.
+- Prescribed support displacements, as one pattern every static case runs (as
+  PORTICO imposes them in every static case).
+- Load combinations and grid lines.
+
+# Local axes
+PORTICO gives a beam its local **y** up; OpenSees gives it local **z** up. Per
+member the importer works out how the two triads relate and swaps `Iz`/`Iy`,
+`Avy`/`Avz` and the bending releases where needed (the section name then ends in
+"(axes 2-3)"). Distributed loads are re-projected onto the OpenSees axes, so they
+keep their global direction.
+
+# What it does not do (yet)
+Counted in the summary and the log, never dropped silently: area elements,
+diaphragms, links, the mass source, temperature loads, response spectrum cases,
+translational end releases, and the cable / compression-only behaviour (such a
+member arrives as an ordinary elastic member). A member with releases or a
+trapezoidal load loses its shear deformation, because OpenSees' Timoshenko beam
+takes neither.
+""",
+            "file.open",
+            "file.import_dxf",
+        ),
         "file.export_report": _t(
             "File → Export → Report (HTML / PDF)",
             "File",
@@ -3928,6 +3981,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_save": "file.save",
     "_act_save_as": "file.save_as",
     "_act_import_dxf": "file.import_dxf",
+    "_act_import_s3d": "file.import_s3d",
     "_act_export_script": "file.export_script",
     "_act_export_ifc": "file.export_ifc",
     "_act_export_report": "file.export_report",

@@ -197,7 +197,14 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   (plan, elevation or 3D) chosen before anything is inserted. Endpoints that
   land on the same point become one node, and what is not a straight bar —
   circles, text, hatches — is counted and reported rather than guessed at. The
-  whole import is one undo step.
+  whole import is one undo step. File → Import → PORTICO Model (.s3d) opens a
+  model saved by [PORTICO](https://github.com/jpreyes/portico-core) as a new
+  project: nodes, supports, springs, masses, frame members (Timoshenko when the
+  section has shear areas), releases, static load cases and combinations, every
+  value scaled from the file's unit system (`kN-m`, `kip-in`, …) to the one
+  you pick, and PORTICO's local axes (beam y up) mapped onto OpenSees' (beam z
+  up). Areas, diaphragms, links, the mass source, temperature loads and
+  spectrum cases are not imported yet; they are counted and reported.
 - **Export** — the model, with or without one analysis case, as a plain
   OpenSeesPy script generated from the same command sequence the solver
   receives, so it reproduces the application's numbers; or as **IFC4** (File →

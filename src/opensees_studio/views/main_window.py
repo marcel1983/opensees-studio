@@ -180,6 +180,7 @@ from opensees_studio.views.dialogs import (
     PlainPatternDialog,
     ReplicateDialog,
     RunAnalysisDialog,
+    S3dImportDialog,
     SectionLibraryDialog,
     TrapezoidalLoadDialog,
     UniformExcitationDialog,
@@ -400,6 +401,7 @@ class MainWindow(QMainWindow):
         self._act_save = QAction("&Save", self, shortcut=QKeySequence.StandardKey.Save)
         self._act_save_as = QAction("Save &As…", self, shortcut=QKeySequence.StandardKey.SaveAs)
         self._act_import_dxf = QAction("&DXF Drawing…", self)
+        self._act_import_s3d = QAction("&PORTICO Model (.s3d)…", self)
         self._act_export_script = QAction("OpenSees &script (.py)…", self)
         self._act_export_ifc = QAction("&IFC (.ifc)…", self)
         self._act_export_report = QAction("&Report (HTML / PDF)…", self)
@@ -630,6 +632,7 @@ class MainWindow(QMainWindow):
         m_file.addSeparator()
         m_import = m_file.addMenu("&Import")
         m_import.addAction(self._act_import_dxf)
+        m_import.addAction(self._act_import_s3d)
         m_export = m_file.addMenu("&Export")
         m_export.addAction(self._act_export_script)
         m_export.addAction(self._act_export_ifc)
@@ -1027,6 +1030,7 @@ class MainWindow(QMainWindow):
         self._act_save.triggered.connect(self._on_save)
         self._act_save_as.triggered.connect(self._on_save_as)
         self._act_import_dxf.triggered.connect(self._on_import_dxf)
+        self._act_import_s3d.triggered.connect(self._on_import_s3d)
         self._act_export_script.triggered.connect(self._on_export_script)
         self._act_export_ifc.triggered.connect(self._on_export_ifc)
         self._act_export_report.triggered.connect(self._on_export_report)
@@ -2099,6 +2103,31 @@ class MainWindow(QMainWindow):
         drawing = dialog.drawing()
         if drawing is not None and drawing.skipped_summary():
             self._log(drawing.skipped_summary())
+
+    def _on_import_s3d(self) -> None:
+        """File → Import → PORTICO Model: a ``.s3d`` file as a new, unsaved project.
+
+        The whole model is replaced, so this asks about unsaved changes like Open
+        does. What the file has and the import cannot carry is written to the log.
+        """
+        if not self._confirm_discard_changes("Importing a PORTICO model"):
+            return
+        dialog = S3dImportDialog(parent=self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        imported = dialog.imported()
+        if imported is None:
+            return
+        self._vm.adopt(imported.project)
+        self._apply_project_view_settings()
+        source = dialog.source()
+        self._log(
+            f"Imported {source.name if source else 'the PORTICO model'} "
+            f"({imported.source_units} → {imported.project.meta.units.value}): "
+            f"{imported.summary()}"
+        )
+        for note in imported.notes:
+            self._log(note)
 
     def _on_mesh(self) -> None:
         """Edit → Mesh: subdivide members and shells, and join the mesh up.

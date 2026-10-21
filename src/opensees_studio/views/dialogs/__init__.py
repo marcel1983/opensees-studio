@@ -53,6 +53,7 @@ from opensees_studio.views.dialogs.point_element_load import AssignPointElementL
 from opensees_studio.views.dialogs.quick_grid_lines import QuickGridLinesDialog
 from opensees_studio.views.dialogs.replicate import ReplicateDialog
 from opensees_studio.views.dialogs.run_analysis import RunAnalysisDialog
+from opensees_studio.views.dialogs.s3d_import import S3dImportDialog
 from opensees_studio.views.dialogs.section_library import SectionLibraryDialog
 from opensees_studio.views.dialogs.truss_wizard import TrussWizard
 from opensees_studio.views.dialogs.typical_materials import TypicalMaterialsDialog
@@ -102,6 +103,7 @@ __all__ = [
     "QuickGridLinesDialog",
     "ReplicateDialog",
     "RunAnalysisDialog",
+    "S3dImportDialog",
     "SectionLibraryDialog",
     "TrapezoidalLoadDialog",
     "TrussWizard",

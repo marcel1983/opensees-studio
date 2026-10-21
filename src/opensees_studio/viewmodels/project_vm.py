@@ -96,6 +96,18 @@ class ProjectViewModel(QObject):
         self._set_dirty(False)
         self.projectChanged.emit(self._project)
 
+    def adopt(self, project: Project) -> None:
+        """Make ``project`` (built by an importer) the current, never-saved project.
+
+        It has no file yet, so it starts dirty: closing it asks before the
+        import is thrown away.
+        """
+        self._project = project
+        self._path = None
+        self._undo_stack.clear()
+        self._set_dirty(True)
+        self.projectChanged.emit(self._project)
+
     def save(self, path: str | Path | None = None) -> Path:
         if self._project is None:
             raise RuntimeError("No project to save.")
