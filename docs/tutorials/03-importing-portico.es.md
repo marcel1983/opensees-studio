@@ -81,7 +81,9 @@ modal (1-014), pórtico estático (1-018) y el marco de Bathe–Wilson (1-021).
 
 Cargas térmicas, casos de espectro de respuesta (el espectro no está en el
 archivo), áreas triangulares, resortes unilaterales, acoplados y de suelo, la
-masa rotacional y la excentricidad accidental de un diafragma, y el
-comportamiento de cable / sólo compresión. Cada uno se cuenta en el resumen y en
+masa rotacional y la excentricidad accidental de un diafragma, y las cargas
+distribuidas sobre cables y puntales. (Los cables y los puntales de sólo compresión
+sí pasan, como barras que se aflojan del otro lado; sus casos estáticos corren con
+Newton.) Cada uno se cuenta en el resumen y en
 el log; nunca se descarta en silencio. La lista completa está en la página de
 ayuda (F1 en el diálogo).

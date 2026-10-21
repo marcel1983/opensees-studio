@@ -475,6 +475,30 @@ def test_the_mass_source_follows_portico(tmp_path: Path) -> None:
     assert import_s3d(_write(tmp_path, _model(), "plain.s3d")).project.mass_source is None
 
 
+def test_cables_and_struts_become_one_way_trusses(tmp_path: Path) -> None:
+    from opensees_studio.core.geometry.elements import TrussElement
+    from opensees_studio.core.materials import ElasticUniaxial
+
+    data = _model(loads=[{"type": "dist", "elemId": 1, "w": 1.0, "dir": "gravity"}])
+    data["elements"][0]["cable"] = True
+    result = import_s3d(_write(tmp_path, data))
+    truss = result.project.elements[0]
+    assert isinstance(truss, TrussElement)
+    assert truss.area == pytest.approx(0.15)
+    material = result.project.materials[0]
+    assert isinstance(material, ElasticUniaxial)
+    assert (material.E, material.Eneg) == (pytest.approx(2.8e10), 0.0)
+    assert result.project.analyses[0].algorithm == "Newton"
+    assert result.dropped["distributed load on a tension- or compression-only bar"] == 1
+    assert any("go slack" in note for note in result.notes)
+
+    data["elements"][0]["cable"] = False
+    data["elements"][0]["compressionOnly"] = True
+    strut = import_s3d(_write(tmp_path, data, "strut.s3d")).project.materials[0]
+    assert strut.Eneg == pytest.approx(2.8e10)
+    assert pytest.approx(2.8e10 * 1e-9) == strut.E
+
+
 def test_prescribed_displacements_alone_get_their_own_case(tmp_path: Path) -> None:
     data = _model(mode="2D")
     data["loadCases"] = []

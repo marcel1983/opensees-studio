@@ -986,6 +986,10 @@ always multiplies by 9.80665, which is only right for its own `kN-m`.
   and the mass on all three translations, as PORTICO does.
 - A model loaded only by prescribed displacements (a patch test) gets a static
   case of its own.
+- **Cable** and **compression-only** members as trusses whose elastic material
+  goes slack on the other side (`Eneg = 0` for a cable, a stiffness of 1e-9 E in
+  tension for a strut). The static cases then run with Newton, and their
+  combinations are no longer an exact superposition.
 
 # Local axes
 PORTICO gives a beam its local **y** up; OpenSees gives it local **z** up. Per
@@ -999,8 +1003,8 @@ Counted in the summary and the log, never dropped silently: triangular areas
 (there is no 3-node shell), areas of a 2D model, temperature loads, response
 spectrum cases (the spectrum is not in the file), translational end releases,
 unilateral, coupled and soil springs, a diaphragm's rotational mass and
-accidental eccentricity, and the cable / compression-only behaviour (such a
-member arrives as an ordinary elastic member). A member with releases or a
+accidental eccentricity, and distributed loads on a cable or a strut (a truss
+takes none). A member with releases or a
 trapezoidal load loses its shear deformation, because OpenSees' Timoshenko beam
 takes neither.
 """,

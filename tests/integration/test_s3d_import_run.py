@@ -119,6 +119,64 @@ def test_imported_shells_carry_their_self_weight(tmp_path: Path) -> None:
     assert total == pytest.approx(weight, rel=1e-9)
 
 
+def _braced_frame(member_flags: dict[int, str]) -> dict[str, Any]:
+    """SAP2000 Example 1-012: a 120 x 120 in frame, an X-brace, 100 kip at the top."""
+    free = {"ux": 0, "uy": 0, "uz": 0, "rx": 0, "ry": 0, "rz": 0}
+    pin = {"ux": 1, "uy": 1, "uz": 1, "rx": 1, "ry": 0, "rz": 1}
+    hold = {**free, "uy": 1, "rx": 1, "rz": 1}
+    members = [(1, 2), (3, 4), (2, 4), (1, 4), (2, 3)]
+    return {
+        "units": "kip-in",
+        "nodes": [
+            {"id": 1, "x": 0, "y": 0, "z": 0, "restraints": pin},
+            {"id": 2, "x": 0, "y": 0, "z": 120, "restraints": hold},
+            {"id": 3, "x": 120, "y": 0, "z": 0, "restraints": pin},
+            {"id": 4, "x": 120, "y": 0, "z": 120, "restraints": hold},
+        ],
+        "elements": [
+            {
+                "id": k,
+                "n1": a,
+                "n2": b,
+                "matId": 1,
+                "secId": 1,
+                # Axial members, as in the example: a negligible bending inertia.
+                **({member_flags[k]: True} if k in member_flags else {}),
+            }
+            for k, (a, b) in enumerate(members, start=1)
+        ],
+        "materials": [{"id": 1, "name": "Steel", "E": 30000, "G": 11500, "nu": 0.3, "rho": 0}],
+        "sections": [{"id": 1, "name": "Bar", "A": 8, "Iz": 1e-3, "Iy": 1e-3, "J": 1e-3}],
+        "loadCases": [
+            {
+                "id": 1,
+                "name": "H",
+                "type": "static",
+                "loads": [{"type": "nodal", "nodeId": 2, "F": [100, 0, 0, 0, 0, 0]}],
+            }
+        ],
+    }
+
+
+@pytest.mark.parametrize(
+    ("flags", "ux"),
+    [({}, 0.1068), ({5: "cable"}, 0.2414), ({4: "compressionOnly"}, 0.1914)],
+    ids=["linear", "cable", "strut"],
+)
+def test_tension_and_compression_only_members(
+    tmp_path: Path, flags: dict[int, str], ux: float
+) -> None:
+    """The three models of SAP2000 Example 1-012 (independent and SAP2000: same values)."""
+    path = tmp_path / "brace.s3d"
+    path.write_text(json.dumps(_braced_frame(flags)), encoding="utf-8")
+    project = import_s3d(path).project
+    results = OpenSeesRunner(project).run(project.analyses[0])
+    assert results.node_disp[2][-1][0] == pytest.approx(ux, rel=2e-3)
+    # The base takes the whole horizontal load, split by which diagonal works.
+    total = results.node_reaction[1][-1][0] + results.node_reaction[3][-1][0]
+    assert total == pytest.approx(-100.0, rel=1e-6)
+
+
 # ──────────────────── parity with PORTICO's own OpenSees runs ────────────────────
 PORTICO = os.environ.get("PORTICO_CORE_DIR")
 

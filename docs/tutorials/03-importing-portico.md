@@ -77,6 +77,8 @@ repeats that comparison whenever `PORTICO_CORE_DIR` points to a copy of PORTICO.
 
 Temperature loads, response spectrum cases (the spectrum is not in the file),
 triangular areas, unilateral, coupled and soil springs, a diaphragm's rotational
-mass and accidental eccentricity, and the cable / compression-only behaviour.
+mass and accidental eccentricity, and distributed loads on cables and struts.
+(Cables and compression-only struts themselves do come across, as trusses that go
+slack on the other side; their static cases run with Newton.)
 Each is counted in the summary and the log, never dropped silently. The full list
 is in the help page (F1 in the dialog).

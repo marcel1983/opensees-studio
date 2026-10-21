@@ -46,7 +46,11 @@ from pydantic import ValidationError
 from opensees_studio.core.analysis import StaticCase
 from opensees_studio.core.combinations import CombinationTerm, LoadCombination
 from opensees_studio.core.constraints import EqualDOFConstraint, RigidDiaphragm, RigidLink
-from opensees_studio.core.geometry.elements import ElasticBeamColumn, ShellMITC4Element
+from opensees_studio.core.geometry.elements import (
+    ElasticBeamColumn,
+    ShellMITC4Element,
+    TrussElement,
+)
 from opensees_studio.core.geometry.frame_options import EndRelease, FrameReleases
 from opensees_studio.core.geometry.grid import (
     CoordinateGridSystem,
@@ -65,6 +69,7 @@ from opensees_studio.core.loads import (
     UniformElementLoad,
 )
 from opensees_studio.core.mass_source import MassSource, MassSourcePattern
+from opensees_studio.core.materials import ElasticUniaxial
 from opensees_studio.core.project import Project, ProjectMeta
 from opensees_studio.core.sections import ElasticMembranePlateSection, ElasticSection
 from opensees_studio.core.units import UnitSystem, gravity, metres_per_unit, newtons_per_unit
@@ -410,7 +415,10 @@ class _Translator:
         for item in s3d.items("elements"):
             sec_id, mat_id = int(item.get("secId", 0)), int(item.get("matId", 0))
             self._materials_of.setdefault(sec_id, set()).add(mat_id)
-        self.elements: list[ElasticBeamColumn] = []
+        self.elements: list[ElasticBeamColumn | TrussElement] = []
+        self.truss_materials: list[ElasticUniaxial] = []
+        self._one_way_materials: dict[tuple[int, bool], int] = {}
+        self.one_way = 0
         self.area_sections: list[ElasticMembranePlateSection] = []
         self.area_elements: list[ShellMITC4Element] = []
         self.oblique = 0
@@ -595,12 +603,15 @@ class _Translator:
             shear = has_shear and not releases.any and element_id not in trapezoidal
             if has_shear and not shear:
                 self.dropped["shear deformation (member with releases or a trapezoidal load)"] += 1
-            if item.get("cable") or item.get("compressionOnly"):
-                self.dropped["cable / compression-only behaviour (imported as elastic)"] += 1
             mat = self.materials[mat_id]
             mod = sec.get("mod") or {}
             area = _number(sec, "A") * _number(mod, "A", 1.0) * self.scale.area
             rho = _number(mat, "rho") * self.scale.density * area
+            if item.get("cable") or item.get("compressionOnly"):
+                self.elements.append(
+                    self._one_way_bar(element_id, (ni, nj), mat_id, area, bool(item.get("cable")))
+                )
+                continue
             self.elements.append(
                 ElasticBeamColumn(
                     id=element_id,
@@ -613,6 +624,39 @@ class _Translator:
                 )
             )
 
+    def _one_way_bar(
+        self, element_id: int, nodes: tuple[int, int], mat_id: int, area: float, cable: bool
+    ) -> TrussElement:
+        """A tension-only (cable) or compression-only (strut) member, as a truss.
+
+        PORTICO's cable and compression-only members are axial bars that go slack
+        on the wrong side. Here: an elastic material with ``E`` on the working
+        side and (next to) nothing on the other — ``Eneg = 0`` for a cable, and
+        ``E * 1e-9`` in tension for a strut, since ``E`` must be positive.
+        """
+        mat = self.materials[mat_id]
+        e = _number(mat, "E") * self.scale.stress
+        key = (mat_id, cable)
+        if key not in self._one_way_materials:
+            material_id = len(self.truss_materials) + 1
+            self._one_way_materials[key] = material_id
+            name = f"{mat.get('name') or f'Material {mat_id}'} ({'tension' if cable else 'compression'} only)"
+            self.truss_materials.append(
+                ElasticUniaxial(id=material_id, name=name, E=e, Eneg=0.0)
+                if cable
+                else ElasticUniaxial(id=material_id, name=name, E=e * 1e-9, Eneg=e)
+            )
+        density = _number(mat, "rho") * self.scale.density
+        self.one_way += 1
+        return TrussElement(
+            id=element_id,
+            nodes=nodes,
+            area=area,
+            material_id=self._one_way_materials[key],
+            rho=density * area,
+            unit_weight=density * gravity(self.target),
+        )
+
     # ── loads ──
     def trapezoidal_elements(self) -> set[int]:
         found: set[int] = set()
@@ -624,13 +668,16 @@ class _Translator:
         return found
 
     def _element_load(
-        self, load: dict[str, Any], by_id: dict[int, ElasticBeamColumn]
+        self, load: dict[str, Any], by_id: dict[int, ElasticBeamColumn | TrussElement]
     ) -> UniformElementLoad | TrapezoidalElementLoad | None:
         element_id = int(load.get("elemId", 0))
         element = by_id.get(element_id)
         if element is None:
             # PORTICO skips such a load without a word; here it is at least counted.
             self.dropped["load on a missing element"] += 1
+            return None
+        if isinstance(element, TrussElement):
+            self.dropped["distributed load on a tension- or compression-only bar"] += 1
             return None
         p_i, p_j = self.points[element.nodes[0]], self.points[element.nodes[1]]
         axes = frame_local_axes(self.ndm, p_i.tolist(), p_j.tolist())
@@ -718,7 +765,7 @@ class _Translator:
                     self.dropped[f"{kind} load"] += 1
             patterns.append(pattern)
             ids = [case_id] if imposed_id is None else [case_id, imposed_id]
-            cases.append(StaticCase(id=case_id, name=name, pattern_ids=ids))
+            cases.append(self._static_case(case_id, name, ids))
         if imposed_id is not None:
             # PORTICO imposes a node's prescribed displacement in every static case.
             patterns.append(
@@ -733,11 +780,22 @@ class _Translator:
                 # A model loaded only by its prescribed displacements (a patch test)
                 # still gets the static case PORTICO would solve.
                 cases.append(
-                    StaticCase(
-                        id=imposed_id, name="Prescribed displacements", pattern_ids=[imposed_id]
-                    )
+                    self._static_case(imposed_id, "Prescribed displacements", [imposed_id])
                 )
         return series, patterns, cases
+
+    def _static_case(self, case_id: int, name: str, pattern_ids: list[int]) -> StaticCase:
+        """A linear static case, or a Newton one when a bar goes slack on one side."""
+        if not self.one_way:
+            return StaticCase(id=case_id, name=name, pattern_ids=pattern_ids)
+        return StaticCase(
+            id=case_id,
+            name=name,
+            pattern_ids=pattern_ids,
+            algorithm="Newton",
+            tolerance=1e-10,
+            max_iter=50,
+        )
 
     def build_combinations(self, case_ids: set[int]) -> list[LoadCombination]:
         combinations: list[LoadCombination] = []
@@ -992,6 +1050,12 @@ def s3d_to_project(
     case_ids = {case.id for case in cases}
     combinations = translator.build_combinations(case_ids)
     mass_source = translator.mass_source(case_ids)
+    if translator.one_way:
+        translator.notes.append(
+            f"{translator.one_way} cable or compression-only member(s) became trusses that go "
+            "slack on the other side; the static cases run with Newton, and their "
+            "combinations are no longer an exact superposition."
+        )
     if translator.oblique:
         translator.notes.append(
             f"{translator.oblique} member(s) with a non-symmetric section have local axes "
@@ -1018,6 +1082,7 @@ def s3d_to_project(
             ndf=3 if translator.ndm == 2 else 6,
             coord_systems=[grid if grid is not None else default_global_system()],
             nodes=list(translator.nodes.values()),
+            materials=[*translator.truss_materials],
             sections=[*translator.sections, *translator.area_sections],
             elements=[*translator.elements, *translator.area_elements],
             diaphragms=diaphragms,

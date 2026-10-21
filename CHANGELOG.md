@@ -77,7 +77,9 @@ refused instead of silently downgraded).
   re-projected onto the OpenSees axes. Quadrilateral areas become `ShellMITC4`,
   diaphragms become rigid diaphragms on PORTICO's master node (the floor mass
   spread over its nodes), rigid links become `rigidLink`s and the other links
-  equalDOFs, and the mass source comes along. Triangular areas, temperature
+  equalDOFs, the mass source comes along, and cable and compression-only
+  members become trusses that go slack on the other side (their static cases
+  run with Newton; SAP2000 Example 1-012 reproduced). Triangular areas, temperature
   loads and response spectrum cases are not imported yet; the dialog and the
   log count them. PORTICO's own verification models (support settlement, link
   offset, static portal, modal cantilever, Bathe–Wilson frame) solve to the same
