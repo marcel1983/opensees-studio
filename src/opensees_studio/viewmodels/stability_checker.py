@@ -20,7 +20,7 @@ from PySide6.QtCore import QObject, QProcess, QProcessEnvironment, Signal
 
 from opensees_studio.child_cli import analysis_cli_command, is_frozen
 from opensees_studio.core import Project
-from opensees_studio.services import write_run_snapshot
+from opensees_studio.services import engines, write_run_snapshot
 from opensees_studio.services.stability import StabilityReport, check_stability
 from opensees_studio.viewmodels.analysis_runner import (
     STDERR_TAIL_LINES,
@@ -72,6 +72,9 @@ class StabilityChecker(QObject):
         process.setProgram(command[0])
         env = QProcessEnvironment.systemEnvironment()
         env.insert("PYTHONUNBUFFERED", "1")
+        # Where the solver is, when it is not in this environment (Options → Solver).
+        for key, value in engines.child_environment().items():
+            env.insert(key, value)
         process.setProcessEnvironment(env)
         process.setArguments([*command[1:], "--project", str(snapshot), "--check-stability"])
         if is_frozen() and os.name == "nt":

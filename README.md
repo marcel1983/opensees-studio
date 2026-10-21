@@ -383,15 +383,25 @@ pip install -e ".[gui,dev]"
 pip install -e .
 ```
 
-This installs only the headless base set (pydantic, numpy, h5py, openseespy).
-It is the correct install for web backends, scripts, and Jupyter notebooks that
-reuse `opensees_studio.core` or `opensees_studio.services` without the GUI.
+This installs only the headless base set (pydantic, numpy, h5py, ezdxf), with
+**no solver**: it models, exports and reports. Add the solver with
+`pip install -e ".[opensees]"` (the `dev` extra already includes it). It is the
+correct install for web backends, scripts, and Jupyter notebooks that reuse
+`opensees_studio.core` or `opensees_studio.services` without the GUI.
+
+**The solver is a separate program.** OpenSeesPy has its own license (free for
+research, education and internal use; commercial redistribution needs a
+license from its authors), so it is an optional extra rather than part of
+OpenSees Studio. In the desktop app, Options → Solver shows whether it is
+available and can point to another Python 3.12 that has `openseespy`, or to a
+folder holding the package. Without it, Run, Check Model Stability and the
+Material Tester are disabled. See `docs/adr/ADR-0003-solver-engines.md`.
 
 Python 3.12 is required: the `openseespywin` and `openseespylinux` 3.8.0.0
 wheels declare `Requires-Python >=3.12`, and the Windows `opensees.pyd` links
 against `python312.dll` (so use 3.12 exactly on Windows). Pin both
 `openseespy==3.8.0.0` and `openseespywin==3.8.0.0` (already pinned
-in `pyproject.toml`).
+in the `opensees` extra of `pyproject.toml`).
 
 ## Quick start — the 60-second tour
 

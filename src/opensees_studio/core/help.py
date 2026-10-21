@@ -3403,6 +3403,43 @@ closed, and closing the main window closes every secondary one with it.
             "view.new_window",
         ),
         # ──────────────────────────── Options and Help ────────────────────────────
+        "options.solver": _t(
+            "Options → Solver",
+            "Options",
+            "Which engine solves the model, and where OpenSeesPy is installed.",
+            """
+OpenSees Studio models; an **engine** solves. The engine is **OpenSeesPy 3.8**,
+a separate program with its own license, and the application can be installed
+without it. Without a solver you can still model, export the OpenSeesPy script
+or IFC, and write a report; Run, Check Model Stability and the Material Tester
+wait for one. The log says at start whether a solver was found.
+
+# Where OpenSeesPy comes from
+- **Installed with OpenSees Studio** — in the application's own Python
+  environment (`pip install opensees-studio[opensees]`, or a bundle that
+  carries it).
+- **Another Python** of the same version as the application (3.12) that has
+  `openseespy` installed (`python -m pip install openseespy==3.8.0.0`). Choose
+  its interpreter; the application asks it where its `openseespy` is, without
+  starting OpenSees.
+- **A folder** that contains the `openseespy` package (a `site-packages`
+  folder).
+The status line says whether that choice is usable and which version it finds.
+When the application's own environment has OpenSeesPy, it is used and another
+folder is not.
+
+# License
+OpenSeesPy is free for research, education and internal use; commercial
+redistribution needs a license from its authors. OpenSees Studio is free
+software and does not distribute OpenSeesPy in its own install: each user
+installs it and should check that their use fits its terms.
+
+# Other engines
+More engines can plug in as Python packages (the `opensees_studio.engines`
+entry point); this dialog chooses OpenSeesPy, the one shipped today.
+""",
+            "analyze.run",
+        ),
         "options.units": _t(
             "Options → Set Display Units",
             "Options",
@@ -3945,6 +3982,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_vis_extruded": "view.show_extruded",
     # ── Options and Help ────────────────────────────────────────────
     "_act_set_units": "options.units",
+    "_act_solver_settings": "options.solver",
     "_act_help_contents": "help.contents",
     "_act_about": "help.about",
 }

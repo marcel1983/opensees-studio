@@ -28,7 +28,7 @@ from PySide6.QtCore import QObject, QProcess, QProcessEnvironment, QThread, QTim
 
 from opensees_studio.child_cli import analysis_cli_command, is_frozen
 from opensees_studio.core import Project
-from opensees_studio.services import write_run_snapshot
+from opensees_studio.services import engines, write_run_snapshot
 from opensees_studio.services.qt_workers import AnalysisWorker
 from opensees_studio.services.result_store import load_results
 
@@ -217,6 +217,9 @@ class AnalysisRunner(QObject):
         # Unbuffered child: whatever it wrote before a hard exit reaches the pipe.
         env = QProcessEnvironment.systemEnvironment()
         env.insert("PYTHONUNBUFFERED", "1")
+        # Where the solver is, when it is not in this environment (Options → Solver).
+        for key, value in engines.child_environment().items():
+            env.insert(key, value)
         process.setProcessEnvironment(env)
         process.setArguments(
             [
