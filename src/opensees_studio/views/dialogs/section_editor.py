@@ -78,6 +78,16 @@ class FiberSectionEditor(FittedDialog):
         self._section_id: int = existing.id if existing else 1
         self._section_name: str = existing.name if existing else ""
         self._gj: float | None = existing.GJ if existing else None
+        # Loose fibres are not editable here; they are kept as they were.
+        self._fibres = list(existing.fibres) if existing else []
+        self._unit_weight = FloatField()
+        self._unit_weight.setRange(0.0, 1e12)
+        self._unit_weight.setSingleStep(1e3)
+        self._unit_weight.setValue(existing.unit_weight if existing else 0.0)
+        self._unit_weight.setToolTip(
+            "Weight per unit volume (force / length³). A load pattern with a self "
+            "weight applies gamma times the gross area (patches + bars) per length."
+        )
         self._build_ui()
         if existing is not None:
             self._load_existing(existing)
@@ -91,6 +101,8 @@ class FiberSectionEditor(FittedDialog):
             GJ=self._gj,
             patches=list(self._patches),
             layers=list(self._layers),
+            fibres=list(self._fibres),
+            unit_weight=self._unit_weight.value(),
         )
 
     # ── UI ──────────────────────────────────────────────────────────
@@ -107,6 +119,9 @@ class FiberSectionEditor(FittedDialog):
         controls_layout = QVBoxLayout(controls)
         controls_layout.setContentsMargins(0, 0, 0, 0)
 
+        weight_row = QFormLayout()
+        weight_row.addRow("Unit weight γ:", self._unit_weight)
+        controls_layout.addLayout(weight_row)
         controls_layout.addWidget(self._build_template_group())
         controls_layout.addWidget(self._build_rc_group())
 

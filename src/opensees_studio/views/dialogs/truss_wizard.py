@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
     QWizardPage,
 )
 
-from opensees_studio.core import TRUSS_TYPE_LABELS, TrussError, TrussSpec
+from opensees_studio.core import DEFAULT_UNIT_WEIGHT, TRUSS_TYPE_LABELS, TrussError, TrussSpec
 from opensees_studio.core.help import TOPIC_PROPERTY
 from opensees_studio.views.float_field import FloatField
 from opensees_studio.views.screen_fit import fit_to_available_screen
@@ -170,6 +170,12 @@ class TrussWizard(QWizard):
         form.addRow("Material:", self._material)
         form.addRow("Chord area:", self._chord_area)
         form.addRow("Web area:", self._web_area)
+        self._unit_weight = _field(DEFAULT_UNIT_WEIGHT, minimum=0.0, maximum=1e12, step=1e3)
+        self._unit_weight.setToolTip(
+            "Weight per unit volume of the bars (force / length³), for the self "
+            "weight of the DEAD case. Steel by default; 0 = weightless."
+        )
+        form.addRow("Unit weight γ:", self._unit_weight)
         if not self._materials:
             form.addRow(
                 QLabel(
@@ -264,6 +270,7 @@ class TrussWizard(QWizard):
             material_id=material_id,
             chord_area=self._chord_area.value(),
             web_area=self._web_area.value(),
+            unit_weight=self._unit_weight.value(),
             truss_type=TRUSS_TYPE_LABELS[self._type.currentIndex()][1],
             end_depth=end_depth,
             plane=self._plane.currentData() or "XZ",

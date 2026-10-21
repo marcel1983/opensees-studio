@@ -164,6 +164,8 @@ class ConvertElementTypeCommand(ProjectCommand):
                 kwargs["section_id"] = el.section_id
             if hasattr(el, "area") and "area" not in kwargs:
                 kwargs["area"] = el.area
+            if hasattr(el, "unit_weight") and "unit_weight" not in kwargs:
+                kwargs["unit_weight"] = el.unit_weight
             # Drop kwargs the target class doesn't accept.
             accepted = cls.model_fields.keys()
             kwargs = {k: v for k, v in kwargs.items() if k in accepted}
