@@ -47,9 +47,16 @@ se vendorizan sin revisar su licencia caso por caso.
   `tests/integration/test_s3d_import_run.py` las corre con
   `PORTICO_CORE_DIR` apuntando a un checkout; sin él se saltan, y quedan los
   voladizos con solución cerrada.
-- Pendiente para A2: áreas, diafragmas, links (1-010 los necesita), fuente de
-  masa, casos de espectro, resortes unilaterales/acoplados/de suelo y el
-  comportamiento cable/solo-compresión.
+- **A2 (hecho):** áreas QUAD → `ShellMITC4` (membrana y placa pasan a cáscara
+  completa, se advierte), diafragmas → `rigidDiaphragm` con el `masterId` de
+  PORTICO (la masa del piso se reparte por igual entre sus nodos; PORTICO usa
+  el tributario de vigas), links rígidos → `rigidLink` beam/bar y no rígidos →
+  equalDOF, fuente de masa → `MassSource` (masa en UX, UY, UZ como PORTICO), y un
+  modelo sólo con `prescDisp` recibe su propio caso estático. 1-010 coincide con
+  PORTICO. Queda: triángulos (no hay cáscara de 3 nodos), casos de espectro (el
+  espectro no está en el archivo), cargas térmicas, resortes
+  unilaterales/acoplados/de suelo, Icm y excentricidad accidental de diafragmas,
+  y cable/solo-compresión.
 
 ### A.1 Formato observado
 
@@ -112,7 +119,7 @@ Inventario sobre los 23 `.s3d` de `examples/` (`version: "1.0"`):
 | Etapa | Contenido | Tamaño |
 |---|---|---|
 | A1 | nodos, apoyos, resortes, masas, materiales, secciones, barras, releases, cargas nodales/distribuidas, peso propio, casos estáticos, combinaciones, grillas | M — ✅ hecho |
-| A2 | áreas shell/plate/membrane, diafragmas, links, `prescDisp`, casos de espectro | M |
+| A2 | áreas shell/plate/membrane, diafragmas, links, `prescDisp`, casos de espectro | M — ✅ hecho (salvo espectros y triángulos) |
 | A3 | export `.s3d` (ida y vuelta) — opcional, solo si hay demanda | S |
 
 ---
@@ -229,7 +236,7 @@ Solo lo que OpenSees permite hacer bien:
 1. ✅ **A1** importador básico + tests de paridad (desbloquea casos para B).
 2. ✅ **B** manual de verificación generado en CI.
 3. ✅ **C** AISC 360 D/C + chequeo de derivas.
-4. **A2** áreas, diafragmas, links.
+4. ✅ **A2** áreas, diafragmas, links, fuente de masa.
 5. **D** tutoriales y documentación en español.
 6. **E** análisis de práctica profesional, por demanda.
 

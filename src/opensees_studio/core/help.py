@@ -973,6 +973,19 @@ always multiplies by 9.80665, which is only right for its own `kN-m`.
 - Prescribed support displacements, as one pattern every static case runs (as
   PORTICO imposes them in every static case).
 - Load combinations and grid lines.
+- **Areas** (quadrilaterals) as `ShellMITC4` with an elastic plate section per
+  material and thickness; their element ids follow the members'. PORTICO's
+  membrane and plate areas become full shells (a membrane gains bending, a plate
+  gains membrane stiffness), which the log notes.
+- **Diaphragms** as rigid diaphragms on PORTICO's master node (`masterId`, else
+  the first node). The floor mass is spread equally over the floor's nodes on UX
+  and UY (PORTICO uses the tributary of the beams).
+- **Links**: a rigid link with all six DOFs is a rigid `beam` link, with the three
+  translations a `bar`; a non-rigid link is an equalDOF of its DOFs.
+- The **mass source**: its load cases and factors, the self weight when ticked,
+  and the mass on all three translations, as PORTICO does.
+- A model loaded only by prescribed displacements (a patch test) gets a static
+  case of its own.
 
 # Local axes
 PORTICO gives a beam its local **y** up; OpenSees gives it local **z** up. Per
@@ -982,9 +995,11 @@ member the importer works out how the two triads relate and swaps `Iz`/`Iy`,
 keep their global direction.
 
 # What it does not do (yet)
-Counted in the summary and the log, never dropped silently: area elements,
-diaphragms, links, the mass source, temperature loads, response spectrum cases,
-translational end releases, and the cable / compression-only behaviour (such a
+Counted in the summary and the log, never dropped silently: triangular areas
+(there is no 3-node shell), areas of a 2D model, temperature loads, response
+spectrum cases (the spectrum is not in the file), translational end releases,
+unilateral, coupled and soil springs, a diaphragm's rotational mass and
+accidental eccentricity, and the cable / compression-only behaviour (such a
 member arrives as an ordinary elastic member). A member with releases or a
 trapezoidal load loses its shear deformation, because OpenSees' Timoshenko beam
 takes neither.

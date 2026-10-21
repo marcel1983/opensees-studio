@@ -334,18 +334,153 @@ def test_combinations_keep_only_imported_cases(tmp_path: Path) -> None:
 
 
 def test_unsupported_objects_are_counted(tmp_path: Path) -> None:
-    data = _model(
-        areas=[{"id": 1, "nodes": [1, 2, 2, 1], "matId": 1, "thickness": 0.2}],
-        links=[{"id": 1, "master": 1, "slave": 2}],
-        massSource={"enabled": True, "entries": []},
-    )
+    data = _model(areas=[{"id": 1, "nodes": [1, 2, 2, 1], "matId": 1, "thickness": 0.2}])
     data["loadCases"][0]["loads"] = [{"type": "temp", "areaId": 1, "dTtop": 10, "dTbot": 0}]
+    data["nodes"][1]["springUni"] = {"uz": "c"}
     result = import_s3d(_write(tmp_path, data))
-    assert result.dropped["area element"] == 1
-    assert result.dropped["link"] == 1
-    assert result.dropped["mass source"] == 1
+    assert result.dropped["triangular or degenerate area (no 3-node shell)"] == 1
     assert result.dropped["temperature load"] == 1
+    assert result.dropped["node springUni"] == 1
     assert "Not imported" in result.summary()
+
+
+def _plate_model(**extra: Any) -> dict[str, Any]:
+    """A 2 x 1 strip of shells on four corner supports, plus the cantilever member."""
+    data = _model(**extra)
+    data["nodes"] = [
+        _node(1, 0.0, 0.0, 0.0, restraints=FIXED),
+        _node(2, 6.0, 0.0, 0.0),
+        _node(3, 0.0, 1.0, 0.0, restraints=FIXED),
+        _node(4, 6.0, 1.0, 0.0),
+        _node(5, 3.0, 0.0, 0.0),
+        _node(6, 3.0, 1.0, 0.0),
+    ]
+    data["areas"] = [
+        {
+            "id": 1,
+            "nodes": [1, 5, 6, 3],
+            "matId": 1,
+            "thickness": 0.2,
+            "behavior": "shell",
+            "kind": "QUAD",
+        },
+        {
+            "id": 2,
+            "nodes": [5, 2, 4, 6],
+            "matId": 1,
+            "thickness": 0.2,
+            "behavior": "plate",
+            "kind": "QUAD",
+        },
+    ]
+    return data
+
+
+def test_quad_areas_become_shells_after_the_members(tmp_path: Path) -> None:
+    from opensees_studio.core.geometry.elements import ShellMITC4Element
+    from opensees_studio.core.sections import ElasticMembranePlateSection
+
+    result = import_s3d(_write(tmp_path, _plate_model()), units=UnitSystem.SI_MM_N)
+    shells = [e for e in result.project.elements if isinstance(e, ShellMITC4Element)]
+    assert [e.id for e in shells] == [2, 3]  # after the one frame member
+    assert shells[0].nodes == (1, 5, 6, 3)
+    plates = [s for s in result.project.sections if isinstance(s, ElasticMembranePlateSection)]
+    assert len(plates) == 1  # one material, one thickness
+    assert plates[0].h == pytest.approx(200.0)
+    assert pytest.approx(2.8e4) == plates[0].E
+    assert plates[0].unit_weight == pytest.approx(2.5e-9 * 9806.65)  # t/mm³ times g in mm/s²
+    assert any("plate area(s) became full shells" in note for note in result.notes)
+    assert "2 shell(s)" in result.summary()
+
+
+def test_areas_of_a_2d_model_are_reported(tmp_path: Path) -> None:
+    data = _model(mode="2D", areas=[{"id": 1, "nodes": [1, 2, 2, 1], "matId": 1, "thickness": 0.2}])
+    result = import_s3d(_write(tmp_path, data))
+    assert result.dropped["area element (a 2D frame model has no plane elements)"] == 1
+
+
+def test_a_diaphragm_keeps_its_master_and_spreads_its_mass(tmp_path: Path) -> None:
+    data = _plate_model(
+        diaphragms=[
+            {
+                "id": 1,
+                "name": "Floor",
+                "z": 0.0,
+                "nodes": [2, 4, 5, 6],
+                "masterId": 5,
+                "mass": {"m": 8.0, "Icm": 0},
+                "eccentricity": {"ex": 0.1, "ey": 0},
+            }
+        ]
+    )
+    result = import_s3d(_write(tmp_path, data))
+    diaphragm = result.project.diaphragms[0]
+    assert diaphragm.retained_node == 5
+    assert diaphragm.constrained_nodes == (2, 4, 6)
+    assert diaphragm.perp_dirn == 3
+    masses = {n.id: n.mass for n in result.project.nodes}
+    # 8 t over four nodes, 2000 kg each, on UX and UY.
+    assert masses[4][:3] == pytest.approx((2000.0, 2000.0, 0.0))
+    assert result.dropped["diaphragm accidental eccentricity"] == 1
+    assert any("spread equally" in note for note in result.notes)
+
+
+def test_links_become_rigid_links_or_equal_dofs(tmp_path: Path) -> None:
+    data = _plate_model(
+        links=[
+            {"id": 1, "master": 2, "slave": 4, "rigid": True},
+            {
+                "id": 2,
+                "master": 5,
+                "slave": 6,
+                "rigid": True,
+                "dofs": {"ux": 1, "uy": 1, "uz": 1, "rx": 0, "ry": 0, "rz": 0},
+            },
+            {
+                "id": 3,
+                "master": 1,
+                "slave": 7,
+                "rigid": False,
+                "dofs": {"ux": 0, "uy": 0, "uz": 1, "rx": 0, "ry": 0, "rz": 0},
+            },
+        ]
+    )
+    data["nodes"].append(_node(7, 3.0, 0.5, 1.0))
+    project = import_s3d(_write(tmp_path, data)).project
+    assert [
+        (link.kind, link.retained_node, link.constrained_node) for link in project.rigid_links
+    ] == [
+        ("beam", 2, 4),
+        ("bar", 5, 6),
+    ]
+    equal = project.mp_constraints[0]
+    assert (equal.retained_node, equal.constrained_node, equal.dofs) == (1, 7, (3,))
+
+
+def test_the_mass_source_follows_portico(tmp_path: Path) -> None:
+    data = _model(
+        massSource={
+            "enabled": True,
+            "selfWeight": True,
+            "entries": [{"lcId": 1, "factor": 1.0}, {"lcId": 7, "factor": 0.25}],
+        }
+    )
+    result = import_s3d(_write(tmp_path, data))
+    source = result.project.mass_source
+    assert source is not None
+    assert source.element_self_mass
+    assert [(p.pattern_id, p.factor) for p in source.patterns] == [(1, 1.0)]
+    assert source.include_vertical and not source.lump_at_diaphragms
+    assert result.dropped["mass source entry on a case not imported"] == 1
+    assert import_s3d(_write(tmp_path, _model(), "plain.s3d")).project.mass_source is None
+
+
+def test_prescribed_displacements_alone_get_their_own_case(tmp_path: Path) -> None:
+    data = _model(mode="2D")
+    data["loadCases"] = []
+    data["nodes"][1]["prescDisp"] = {"uz": 0.01}
+    project = import_s3d(_write(tmp_path, data)).project
+    assert [case.name for case in project.analyses] == ["Prescribed displacements"]
 
 
 def test_grid_lines_are_scaled(tmp_path: Path) -> None:

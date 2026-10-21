@@ -45,7 +45,8 @@ from pydantic import ValidationError
 
 from opensees_studio.core.analysis import StaticCase
 from opensees_studio.core.combinations import CombinationTerm, LoadCombination
-from opensees_studio.core.geometry.elements import ElasticBeamColumn
+from opensees_studio.core.constraints import EqualDOFConstraint, RigidDiaphragm, RigidLink
+from opensees_studio.core.geometry.elements import ElasticBeamColumn, ShellMITC4Element
 from opensees_studio.core.geometry.frame_options import EndRelease, FrameReleases
 from opensees_studio.core.geometry.grid import (
     CoordinateGridSystem,
@@ -63,8 +64,9 @@ from opensees_studio.core.loads import (
     TrapezoidalElementLoad,
     UniformElementLoad,
 )
+from opensees_studio.core.mass_source import MassSource, MassSourcePattern
 from opensees_studio.core.project import Project, ProjectMeta
-from opensees_studio.core.sections import ElasticSection
+from opensees_studio.core.sections import ElasticMembranePlateSection, ElasticSection
 from opensees_studio.core.units import UnitSystem, gravity, metres_per_unit, newtons_per_unit
 
 _KIP_N = 4448.2216152605
@@ -240,7 +242,7 @@ class S3dFile:
         ]
         text = f"{self.mode} model in {self.units}: " + ", ".join(parts)
         if others:
-            text += "; also " + ", ".join(others) + " (not imported)"
+            text += "; " + ", ".join(others)
         return text + "."
 
 
@@ -282,11 +284,24 @@ class S3dImport:
 
     def summary(self) -> str:
         project = self.project
+        shells = sum(isinstance(e, ShellMITC4Element) for e in project.elements)
         text = (
-            f"{len(project.nodes)} node(s), {len(project.elements)} member(s), "
-            f"{len(project.sections)} section(s), {len(project.analyses)} static case(s), "
-            f"{len(project.combinations)} combination(s)."
+            f"{len(project.nodes)} node(s), {len(project.elements) - shells} member(s), "
+            f"{shells} shell(s), {len(project.sections)} section(s), "
+            f"{len(project.analyses)} static case(s), {len(project.combinations)} combination(s)"
         )
+        extras = [
+            f"{len(items)} {label}"
+            for items, label in (
+                (project.diaphragms, "diaphragm(s)"),
+                (project.rigid_links, "rigid link(s)"),
+                (project.mp_constraints, "equalDOF constraint(s)"),
+            )
+            if items
+        ]
+        if project.mass_source is not None:
+            extras.append("a mass source")
+        text += (", " + ", ".join(extras) if extras else "") + "."
         if self.dropped:
             items = ", ".join(f"{count} {what}" for what, count in sorted(self.dropped.items()))
             text += f" Not imported: {items}."
@@ -396,6 +411,8 @@ class _Translator:
             sec_id, mat_id = int(item.get("secId", 0)), int(item.get("matId", 0))
             self._materials_of.setdefault(sec_id, set()).add(mat_id)
         self.elements: list[ElasticBeamColumn] = []
+        self.area_sections: list[ElasticMembranePlateSection] = []
+        self.area_elements: list[ShellMITC4Element] = []
         self.oblique = 0
 
     # ── nodes ──
@@ -713,7 +730,13 @@ class _Translator:
                 )
             )
             if not static:
-                self.dropped["prescribed displacement (no static case)"] += len(imposed)
+                # A model loaded only by its prescribed displacements (a patch test)
+                # still gets the static case PORTICO would solve.
+                cases.append(
+                    StaticCase(
+                        id=imposed_id, name="Prescribed displacements", pattern_ids=[imposed_id]
+                    )
+                )
         return series, patterns, cases
 
     def build_combinations(self, case_ids: set[int]) -> list[LoadCombination]:
@@ -754,17 +777,178 @@ class _Translator:
             ),
         )
 
-    def unsupported(self) -> None:
-        for key, label in (
-            ("areas", "area element"),
-            ("diaphragms", "diaphragm"),
-            ("links", "link"),
+    # ── areas, diaphragms, links, mass ──
+    def build_areas(self) -> None:
+        """QUAD areas as ``ShellMITC4`` with an elastic plate section per material and thickness.
+
+        Area ids follow the frame elements' (one id space in OpenSees).
+        """
+        areas = self.s3d.items("areas")
+        if not areas:
+            return
+        if self.ndm == 2:
+            self.dropped["area element (a 2D frame model has no plane elements)"] += len(areas)
+            return
+        offset = max((el.id for el in self.elements), default=0)
+        keys: dict[tuple[int, float], int] = {}
+        kinds: Counter[str] = Counter()
+        s = self.scale
+        for item in areas:
+            area_id = _entity_id(item, "area")
+            nodes = [int(n) for n in item.get("nodes") or []]
+            kind = str(item.get("kind") or ("CST" if len(nodes) == 3 else "QUAD"))
+            if kind != "QUAD" or len(nodes) != 4 or len(set(nodes)) != 4:
+                self.dropped["triangular or degenerate area (no 3-node shell)"] += 1
+                continue
+            missing = [n for n in nodes if n not in self.nodes]
+            if missing:
+                raise S3dImportError(f"Area {area_id} uses missing node {missing[0]}.")
+            mat_id = int(item.get("matId", 0))
+            if mat_id not in self.materials:
+                raise S3dImportError(f"Area {area_id} uses missing material {mat_id}.")
+            thickness = _number(item, "thickness") * s.length
+            key = (mat_id, round(thickness, 12))
+            if key not in keys:
+                mat = self.materials[mat_id]
+                rho = _number(mat, "rho") * s.density
+                section_id = len(self.sections) + len(keys) + 1
+                keys[key] = section_id
+                try:
+                    self.area_sections.append(
+                        ElasticMembranePlateSection(
+                            id=section_id,
+                            name=f"{mat.get('name') or f'Material {mat_id}'} h = {thickness:g}",
+                            E=_number(mat, "E") * s.stress,
+                            nu=_number(mat, "nu", 0.2),
+                            h=thickness,
+                            rho=rho,
+                            unit_weight=rho * gravity(self.target),
+                        )
+                    )
+                except ValidationError as exc:
+                    raise S3dImportError(f"Area {area_id}: {_first_error(exc)}") from exc
+            behaviour = str(item.get("behavior") or "membrane")
+            kinds[behaviour] += 1
+            if item.get("planeStrain"):
+                self.dropped["plane-strain flag of an area (a shell is plane stress)"] += 1
+            self.area_elements.append(
+                ShellMITC4Element(
+                    id=offset + area_id,
+                    nodes=(nodes[0], nodes[1], nodes[2], nodes[3]),
+                    section_id=keys[key],
+                )
+            )
+        if self.area_elements:
+            self.notes.append(
+                f"{len(self.area_elements)} area(s) imported as ShellMITC4, element id = "
+                f"{offset} + the area id."
+            )
+        for behaviour, label in (
+            ("membrane", "membrane areas gain bending stiffness"),
+            ("plate", "plate areas gain membrane stiffness"),
         ):
-            if self.s3d.items(key):
-                self.dropped[label] += len(self.s3d.items(key))
-        mass_source = self.s3d.data.get("massSource")
-        if isinstance(mass_source, dict) and mass_source.get("enabled"):
-            self.dropped["mass source"] += 1
+            if kinds[behaviour]:
+                self.notes.append(
+                    f"{kinds[behaviour]} {behaviour} area(s) became full shells: {label}, which "
+                    "PORTICO's element does not have."
+                )
+
+    def build_diaphragms(self) -> list[RigidDiaphragm]:
+        """Rigid floors: the master is ``masterId`` (else the first node), as in PORTICO."""
+        out: list[RigidDiaphragm] = []
+        items = self.s3d.items("diaphragms")
+        if items and self.ndm == 2:
+            self.dropped["diaphragm (2D model)"] += len(items)
+            return out
+        for item in items:
+            diaphragm_id = _entity_id(item, "diaphragm")
+            nodes = [int(n) for n in item.get("nodes") or [] if int(n) in self.nodes]
+            master = int(item.get("masterId") or (nodes[0] if nodes else 0))
+            constrained = tuple(n for n in nodes if n != master)
+            if master not in self.nodes or not constrained:
+                self.dropped["diaphragm with fewer than two nodes"] += 1
+                continue
+            out.append(
+                RigidDiaphragm(
+                    id=diaphragm_id,
+                    name=str(item.get("name") or f"D{diaphragm_id}"),
+                    perp_dirn=3,
+                    retained_node=master,
+                    constrained_nodes=constrained,
+                )
+            )
+            mass = item.get("mass") or {}
+            m = _number(mass, "m") * self.scale.mass
+            if m > 0:
+                # PORTICO spreads the floor mass by beam tributary; here equally, on UX and UY.
+                share = m / len(nodes)
+                for node_id in nodes:
+                    node = self.nodes[node_id]
+                    mx, my, *rest = node.mass
+                    node.mass = (mx + share, my + share, *rest)  # type: ignore[assignment]
+                self.notes.append(
+                    f"Diaphragm {item.get('name') or diaphragm_id}: its mass was spread equally "
+                    "over its nodes (PORTICO uses the tributary of the beams)."
+                )
+            if _number(mass, "Icm") > 0:
+                self.dropped["diaphragm rotational mass Icm"] += 1
+            ecc = item.get("eccentricity") or {}
+            if _number(ecc, "ex") or _number(ecc, "ey"):
+                self.dropped["diaphragm accidental eccentricity"] += 1
+        return out
+
+    def build_links(self) -> tuple[list[RigidLink], list[EqualDOFConstraint]]:
+        """``rigid`` links as rigid links (with the lever arm), the others as equalDOF."""
+        rigid: list[RigidLink] = []
+        equal: list[EqualDOFConstraint] = []
+        for item in self.s3d.items("links"):
+            master, slave = int(item.get("master", 0)), int(item.get("slave", 0))
+            if master not in self.nodes or slave not in self.nodes or master == slave:
+                raise S3dImportError(f"Link {item.get('id')} needs two existing, different nodes.")
+            flags = item.get("dofs") or dict.fromkeys(_DOF_NAMES, 1)
+            tied = [k for k, name in enumerate(_DOF_NAMES) if flags.get(name)]
+            if item.get("rigid", True):
+                if tied == [0, 1, 2, 3, 4, 5]:
+                    rigid.append(
+                        RigidLink(kind="beam", retained_node=master, constrained_node=slave)
+                    )
+                    continue
+                if tied == [0, 1, 2]:
+                    rigid.append(
+                        RigidLink(kind="bar", retained_node=master, constrained_node=slave)
+                    )
+                    continue
+                self.dropped["rigid link on a subset of DOFs (imported as a full rigid link)"] += 1
+                rigid.append(RigidLink(kind="beam", retained_node=master, constrained_node=slave))
+                continue
+            if self.ndm == 2:
+                dofs = tuple(_DOF_2D[k] for k in tied if k in _DOF_2D)
+            else:
+                dofs = tuple(k + 1 for k in tied)
+            if dofs:
+                equal.append(
+                    EqualDOFConstraint(retained_node=master, constrained_node=slave, dofs=dofs)
+                )
+        return rigid, equal
+
+    def mass_source(self, case_ids: set[int]) -> MassSource | None:
+        source = self.s3d.data.get("massSource")
+        if not isinstance(source, dict) or not source.get("enabled"):
+            return None
+        patterns = []
+        for entry in source.get("entries") or []:
+            ref = int(entry.get("lcId", 0))
+            if ref not in case_ids:
+                self.dropped["mass source entry on a case not imported"] += 1
+                continue
+            patterns.append(MassSourcePattern(pattern_id=ref, factor=_number(entry, "factor", 1.0)))
+        # PORTICO puts the weight's mass on UX, UY and UZ of every node it lands on.
+        return MassSource(
+            element_self_mass=bool(source.get("selfWeight")),
+            patterns=patterns,
+            include_vertical=True,
+            lump_at_diaphragms=False,
+        )
 
 
 def _symmetric(section: dict[str, Any]) -> bool:
@@ -801,9 +985,13 @@ def s3d_to_project(
     translator = _Translator(s3d, target, source)
     translator.build_nodes()
     translator.build_elements(translator.trapezoidal_elements())
+    translator.build_areas()
+    diaphragms = translator.build_diaphragms()
+    rigid_links, equal_dofs = translator.build_links()
     series, patterns, cases = translator.build_cases()
-    combinations = translator.build_combinations({case.id for case in cases})
-    translator.unsupported()
+    case_ids = {case.id for case in cases}
+    combinations = translator.build_combinations(case_ids)
+    mass_source = translator.mass_source(case_ids)
     if translator.oblique:
         translator.notes.append(
             f"{translator.oblique} member(s) with a non-symmetric section have local axes "
@@ -830,8 +1018,12 @@ def s3d_to_project(
             ndf=3 if translator.ndm == 2 else 6,
             coord_systems=[grid if grid is not None else default_global_system()],
             nodes=list(translator.nodes.values()),
-            sections=[*translator.sections],
-            elements=[*translator.elements],
+            sections=[*translator.sections, *translator.area_sections],
+            elements=[*translator.elements, *translator.area_elements],
+            diaphragms=diaphragms,
+            rigid_links=rigid_links,
+            mp_constraints=equal_dofs,
+            mass_source=mass_source,
             time_series=series,
             load_patterns=[*patterns],
             analyses=[*cases],

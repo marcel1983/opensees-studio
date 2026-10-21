@@ -23,7 +23,7 @@ from opensees_studio.views.dialogs import S3dImportDialog
 
 
 def _portico(tmp_path: Path, *, units: str = "kN-m", name: str = "frame.s3d") -> Path:
-    """A cantilever with one tip load, plus an area the importer does not take."""
+    """A cantilever with one tip load, plus a degenerate area the importer cannot take."""
     free = {"ux": 0, "uy": 0, "uz": 0, "rx": 0, "ry": 0, "rz": 0}
     data = {
         "units": units,
@@ -64,7 +64,7 @@ def test_the_dialog_preselects_units_and_shows_the_factors(qtbot, tmp_path) -> N
     assert "1 force unit = 1000 N" in dialog._factors.text()
     summary = dialog._summary.text()
     assert "2 node(s), 1 member(s)" in summary
-    assert "1 area element" in summary  # what does not come across is said
+    assert "triangular or degenerate area" in summary  # what does not come across is said
     assert dialog._ok.isEnabled()
 
 
@@ -132,4 +132,4 @@ def test_the_menu_makes_the_import_the_unsaved_project(qtbot, tmp_path, monkeypa
     assert mw._vm.path is None and mw._vm.is_dirty
     log = mw._console.toPlainText()
     assert "Imported frame.s3d (kN-m → SI (m, N, kg, s, Pa))" in log
-    assert "1 area element" in log
+    assert "triangular or degenerate area" in log

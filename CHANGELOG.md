@@ -53,11 +53,14 @@ refused instead of silently downgraded).
   its forces in newtons and its densities in kg/m³. PORTICO gives a beam its
   local y up and OpenSees its local z, so each member's `Iz`/`Iy`, shear areas
   and bending releases are swapped where needed and distributed loads are
-  re-projected onto the OpenSees axes. Areas, diaphragms, links, the mass
-  source, temperature loads and response spectrum cases are not imported yet;
-  the dialog and the log count them. PORTICO's own verification models
-  (support settlement, static portal, modal cantilever, Bathe–Wilson frame)
-  solve to the same numbers as its published OpenSeesPy runs, to 1e-10.
+  re-projected onto the OpenSees axes. Quadrilateral areas become `ShellMITC4`,
+  diaphragms become rigid diaphragms on PORTICO's master node (the floor mass
+  spread over its nodes), rigid links become `rigidLink`s and the other links
+  equalDOFs, and the mass source comes along. Triangular areas, temperature
+  loads and response spectrum cases are not imported yet; the dialog and the
+  log count them. PORTICO's own verification models (support settlement, link
+  offset, static portal, modal cantilever, Bathe–Wilson frame) solve to the same
+  numbers as its published OpenSeesPy runs, to 1e-10.
 
 ## [0.0.20] — 2026-10-21
 

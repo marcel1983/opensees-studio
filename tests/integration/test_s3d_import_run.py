@@ -90,11 +90,41 @@ def test_a_2d_cantilever_in_millimetres(tmp_path: Path) -> None:
     assert -disp[1] / scale.length == pytest.approx(_timoshenko(IZ, AVY), rel=1e-9)
 
 
+def test_imported_shells_carry_their_self_weight(tmp_path: Path) -> None:
+    """A slab of shells on four columns: the reactions add up to the weight."""
+    free = {"ux": 0, "uy": 0, "uz": 0, "rx": 0, "ry": 0, "rz": 0}
+    a, h, rho, col = 4.0, 0.2, 2.5, 3.0  # m, m, t/m³, m
+    nodes = []
+    for k, (x, y) in enumerate([(0, 0), (a, 0), (a, a), (0, a)], start=1):
+        nodes.append({"id": k, "x": x, "y": y, "z": col, "restraints": free})
+        nodes.append({"id": k + 4, "x": x, "y": y, "z": 0.0, "restraints": dict.fromkeys(free, 1)})
+    data = {
+        "units": "kN-m",
+        "nodes": nodes,
+        "elements": [{"id": k, "n1": k + 4, "n2": k, "matId": 1, "secId": 1} for k in range(1, 5)],
+        "areas": [
+            {"id": 1, "nodes": [1, 2, 3, 4], "matId": 1, "thickness": h, "behavior": "shell"}
+        ],
+        "materials": [{"id": 1, "name": "C", "E": 2.8e7, "G": 1.2e7, "nu": 0.2, "rho": rho}],
+        "sections": [{"id": 1, "name": "C40", "A": 0.16, "Iz": 2e-3, "Iy": 2e-3, "J": 3e-3}],
+        "loadCases": [{"id": 1, "name": "PP", "type": "static", "selfWeight": True, "loads": []}],
+    }
+    path = tmp_path / "slab.s3d"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    project = import_s3d(path).project
+    results = OpenSeesRunner(project).run(project.analyses[0])
+    total = sum(results.node_reaction[k][-1][2] for k in range(5, 9))
+    g = 9.80665
+    weight = rho * 1000 * g * (a * a * h + 4 * 0.16 * col)  # N
+    assert total == pytest.approx(weight, rel=1e-9)
+
+
 # ──────────────────── parity with PORTICO's own OpenSees runs ────────────────────
 PORTICO = os.environ.get("PORTICO_CORE_DIR")
 
 PARITY_CASES = {
     "1-005": "verif_1-005a_settlement",
+    "1-010": "verif_1-010_link_offset",
     "1-014": "verif_1-014_modal_cantilever",
     "1-018": "verif_1-018_static_portal",
     "1-021": "verif_1-021_modal_bathe_wilson",

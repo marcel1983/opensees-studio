@@ -59,9 +59,10 @@ class S3dImportDialog(FittedDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(
             QLabel(
-                "Nodes, supports, frame members, sections, static load cases and "
-                "combinations become a <b>new project</b>, scaled to the units chosen "
-                "below. <i>Whatever cannot come across is counted and reported.</i>"
+                "Nodes, supports, frame members, shells, diaphragms, links, static load "
+                "cases, combinations and the mass source become a <b>new project</b>, "
+                "scaled to the units chosen below. <i>Whatever cannot come across is "
+                "counted and reported.</i>"
             )
         )
 

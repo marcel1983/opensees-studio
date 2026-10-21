@@ -203,8 +203,10 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   section has shear areas), releases, static load cases and combinations, every
   value scaled from the file's unit system (`kN-m`, `kip-in`, …) to the one
   you pick, and PORTICO's local axes (beam y up) mapped onto OpenSees' (beam z
-  up). Areas, diaphragms, links, the mass source, temperature loads and
-  spectrum cases are not imported yet; they are counted and reported.
+  up). Quadrilateral areas become `ShellMITC4`, diaphragms rigid diaphragms on
+  PORTICO's master node, links rigid links or equalDOFs, and the mass source
+  comes along; triangular areas, temperature loads and spectrum cases are not
+  imported yet and are counted and reported.
 - **Design** — Design → Steel Frame Check (AISC 360-16, LRFD or ASD): every
   frame member whose section is a W, M, S or HP shape gets its tension (D2),
   compression (E3, E4, E7), flexure (F2, F3, F6), shear (G2, G6) and H1
