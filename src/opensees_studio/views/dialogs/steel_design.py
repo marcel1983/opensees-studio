@@ -155,6 +155,11 @@ class SteelDesignDialog(FittedDialog):
         self._select_failing.setEnabled(False)
         self._select_failing.clicked.connect(self.accept_and_select)
         run_row.addWidget(self._select_failing)
+        self._show_ratios = QPushButton("Show ratios on the model")
+        self._show_ratios.setToolTip("Close with OK and paint every member by its governing ratio.")
+        self._show_ratios.setEnabled(False)
+        self._show_ratios.clicked.connect(self.accept_and_show)
+        run_row.addWidget(self._show_ratios)
         run_row.addStretch(1)
         layout.addLayout(run_row)
 
@@ -174,6 +179,7 @@ class SteelDesignDialog(FittedDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
         self.select_failing_requested = False
+        self.show_ratios_requested = False
 
     def _load_settings(self, settings: DesignSettings) -> None:
         self._method.setCurrentText(settings.method)
@@ -260,6 +266,10 @@ class SteelDesignDialog(FittedDialog):
         self.select_failing_requested = True
         self.accept()
 
+    def accept_and_show(self) -> None:
+        self.show_ratios_requested = True
+        self.accept()
+
     # ── running ─────────────────────────────────────────────────────
     def run_check(self) -> DesignReport:
         report = steel_frame_check(self._project, self._results, self.settings())
@@ -291,6 +301,7 @@ class SteelDesignDialog(FittedDialog):
             text, level="warning" if report.failing or report.notes else "info"
         )
         self._select_failing.setEnabled(bool(report.failing))
+        self._show_ratios.setEnabled(bool(report.members))
         return report
 
 

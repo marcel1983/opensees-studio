@@ -11,6 +11,14 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **Design → Display Steel Ratios on Model.** Paints every frame member by its
+  governing AISC 360-16 ratio (blue, teal, green, orange up to the limit, red
+  above it, grey when not designed) with the ratio at mid-length, and a panel
+  with the legend, the summary and Select failing members. The Steel Frame Check
+  dialog gains **Show ratios on the model**. The calculation report (File →
+  Export → Report) prints the steel check and the storey drifts when the project
+  has design settings.
+
 - **Temperature loads on frames** (Assign → Frame → Temperature Load). A uniform
   temperature change and a gradient across local y and z, with the coefficient of
   expansion α, on elastic members without releases or end offsets, in static

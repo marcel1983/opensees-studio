@@ -100,6 +100,7 @@ from opensees_studio.core.connectivity import (
     joints_on_shell_edges,
     loose_joints,
 )
+from opensees_studio.core.design.settings import DesignSettings
 from opensees_studio.core.duplicates import default_tolerance
 from opensees_studio.core.geometry.ordering import QuadOrderError, order_quad_nodes
 from opensees_studio.core.groups import Group, colour_for, group_members
@@ -139,10 +140,12 @@ from opensees_studio.services.results import (
 from opensees_studio.services.results_db import database_path, delete_all_results, record_results
 from opensees_studio.services.shell_fields import shell_elements
 from opensees_studio.services.stability import StabilityReport
+from opensees_studio.services.steel_design import steel_frame_check
 from opensees_studio.viewmodels import AnalysisRunner, ProjectViewModel
 from opensees_studio.viewmodels.case_results import CaseResultsCache
 from opensees_studio.viewmodels.stability_checker import StabilityChecker
 from opensees_studio.views.canvas3d import ModelCanvas
+from opensees_studio.views.canvas3d.design_ratio_renderer import DesignRatioRenderer
 from opensees_studio.views.canvas3d.diagram_renderer import DiagramRenderer
 from opensees_studio.views.canvas3d.model_renderer import RendererMode
 from opensees_studio.views.canvas3d.shell_contour_renderer import ShellContourRenderer
@@ -223,6 +226,7 @@ from opensees_studio.views.dialogs.solver_settings import SolverSettingsDialog
 from opensees_studio.views.dialogs.view_colors import ViewColorsDialog
 from opensees_studio.views.docks import (
     DeformedShapeView,
+    DesignRatioView,
     ForceDiagramView,
     HysteresisView,
     ModeShapeAnimator,
@@ -332,6 +336,7 @@ class MainWindow(QMainWindow):
         # Diagram overlay paints onto the same plotter as the model.
         self._diagram_renderer = DiagramRenderer(self._main_canvas)
         self._contour_renderer = ShellContourRenderer(self._main_canvas)
+        self._ratio_renderer = DesignRatioRenderer(self._main_canvas)
 
     @property
     def _canvas(self) -> ModelCanvas:
@@ -551,6 +556,7 @@ class MainWindow(QMainWindow):
         self._act_clear_results = QAction("Delete &All Results…", self)
         self._act_steel_check = QAction("&Steel Frame Check (AISC 360-16)…", self)
         self._act_drift_check = QAction("Storey &Drift Check…", self)
+        self._act_steel_ratios = QAction("Display Steel &Ratios on Model", self)
         self._act_check_stability = QAction("Check Model &Stability…", self)
 
         # View
@@ -781,6 +787,7 @@ class MainWindow(QMainWindow):
 
         m_design = mb.addMenu("Desi&gn")
         m_design.addAction(self._act_steel_check)
+        m_design.addAction(self._act_steel_ratios)
         m_design.addAction(self._act_drift_check)
 
         m_view = mb.addMenu("&View")
@@ -1178,6 +1185,7 @@ class MainWindow(QMainWindow):
         self._act_clear_results.triggered.connect(self._on_clear_results)
         self._act_steel_check.triggered.connect(self._on_steel_check)
         self._act_drift_check.triggered.connect(self._on_drift_check)
+        self._act_steel_ratios.triggered.connect(self._on_steel_ratios)
         self._act_check_stability.triggered.connect(self._on_check_stability)
         self._stability.log.connect(self._log)
         self._stability.finished.connect(self._on_stability_report)
@@ -2192,6 +2200,50 @@ class MainWindow(QMainWindow):
             failing = dialog.failing_elements()
             self._canvas.selection.set_selection(set(), failing)
             self.statusBar().showMessage(f"Selected {len(failing)} failing member(s).", 4000)
+        if dialog.show_ratios_requested and report is not None:
+            self._show_design_ratios(report, settings)
+
+    def _on_steel_ratios(self) -> None:
+        """Design → Display Steel Ratios: paint the members by the stored check's ratios.
+
+        Runs the AISC 360-16 check with the project's design settings (the
+        defaults when none were stored) over this session's results, as the
+        Steel Frame Check dialog would, and shows the overlay with its legend.
+        """
+        project = self._vm.project
+        if project is None:
+            return
+        settings = project.design or DesignSettings()
+        report = steel_frame_check(project, dict(self._case_results.current(project)), settings)
+        if not any(m.status != "not designed" for m in report.members):
+            reason = " ".join(report.notes) or (
+                "No frame member has an AISC W, M, S, HP, HSS, pipe or channel section."
+            )
+            QMessageBox.information(self, "Display Steel Ratios", reason)
+            return
+        self._log(f"Steel frame check (AISC 360-16, {settings.method}): {report.summary()}")
+        self._show_design_ratios(report, settings)
+
+    def _show_design_ratios(self, report: Any, settings: DesignSettings) -> None:
+        """The ratio overlay and its legend dock; Back to model clears both."""
+        self._on_back_to_model()
+        self._ratio_renderer.render(self._vm.project, report.members, limit=settings.ratio_limit)
+        view = DesignRatioView()
+        view.set_report(report, method=settings.method, limit=settings.ratio_limit)
+        dock = QDockWidget("Steel Ratios", self)
+        dock.setWidget(view)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
+        self._post_dock = dock
+        failing = {m.element_id for m in report.failing}
+
+        def _select_failing() -> None:
+            self._canvas.selection.set_selection(set(), failing)
+            self.statusBar().showMessage(f"Selected {len(failing)} failing member(s).", 4000)
+
+        view.selectFailing.connect(_select_failing)
+        view.closed.connect(self._on_back_to_model)
+        self._set_result_caption(f"Steel ratios · AISC 360-16 {settings.method}")
+        self._canvas.render()
 
     def _on_drift_check(self) -> None:
         """Design → Storey Drift Check: amplified drift ratios against the allowable one."""
@@ -5075,6 +5127,7 @@ class MainWindow(QMainWindow):
         if self._diagram_renderer is not None:
             self._diagram_renderer.clear()
         self._contour_renderer.clear()
+        self._ratio_renderer.clear()
         self._canvas._renderer.set_mode(RendererMode.MODEL)
         self._canvas.render()
 
@@ -5427,6 +5480,7 @@ class MainWindow(QMainWindow):
         self._act_clear_results.setEnabled(bool(has_project and (stored or db_there)))
         self._act_steel_check.setEnabled(has_project)
         self._act_drift_check.setEnabled(has_project)
+        self._act_steel_ratios.setEnabled(has_project)
         self._act_check_stability.setEnabled(
             has_project
             and solver

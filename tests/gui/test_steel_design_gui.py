@@ -115,3 +115,64 @@ def test_the_menu_stores_the_settings_in_one_undo_step(qtbot, monkeypatch) -> No
     assert "Steel frame check (AISC 360-16, ASD)" in mw._console.toPlainText()
     mw._vm.undo_stack.undo()
     assert project.design is None
+
+
+@pytest.mark.gui
+def test_display_steel_ratios_paints_the_members(qtbot) -> None:  # type: ignore[no-untyped-def]
+    from opensees_studio.views.main_window import MainWindow
+
+    mw = MainWindow()
+    qtbot.addWidget(mw)
+    project = _beam_project()
+    mw._vm.adopt(project)
+    for results in _results(project).values():
+        mw._case_results.put(project, results)
+    assert mw._act_steel_ratios.isEnabled()
+    mw._act_steel_ratios.trigger()
+    assert mw._ratio_renderer.is_drawn
+    assert mw._ratio_renderer.members == 4
+    view = mw._post_dock.widget()
+    assert "4 member(s) checked" in view.summary_text()
+    view.closed.emit()
+    assert not mw._ratio_renderer.is_drawn
+    assert mw._post_dock is None
+
+
+@pytest.mark.gui
+def test_display_steel_ratios_without_results_explains(qtbot, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from PySide6.QtWidgets import QMessageBox
+
+    from opensees_studio.views.main_window import MainWindow
+
+    mw = MainWindow()
+    qtbot.addWidget(mw)
+    mw._vm.adopt(_beam_project())
+    shown: list[str] = []
+    monkeypatch.setattr(
+        QMessageBox, "information", lambda _parent, _title, text: shown.append(text)
+    )
+    mw._act_steel_ratios.trigger()
+    assert not mw._ratio_renderer.is_drawn
+    assert shown and "run Case" in shown[0]
+
+
+@pytest.mark.gui
+def test_the_dialog_button_shows_the_ratios(qtbot, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from opensees_studio.views.main_window import MainWindow
+
+    mw = MainWindow()
+    qtbot.addWidget(mw)
+    project = _beam_project()
+    mw._vm.adopt(project)
+    for results in _results(project).values():
+        mw._case_results.put(project, results)
+
+    def _show(self) -> int:  # type: ignore[no-untyped-def]
+        self.run_check()
+        assert self._show_ratios.isEnabled()
+        self.accept_and_show()
+        return int(QDialog.DialogCode.Accepted)
+
+    monkeypatch.setattr(SteelDesignDialog, "exec", _show)
+    mw._act_steel_check.trigger()
+    assert mw._ratio_renderer.is_drawn

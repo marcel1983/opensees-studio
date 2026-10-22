@@ -85,6 +85,12 @@ selected, ready for Assign → Frame → Section… to give them a deeper shape.
 The other overrides: the AISC **shape** to check with, **K** about each axis (the
 buckling lengths are the member length times K), and **Cb**.
 
+**Show ratios on the model** closes the dialog and paints every member by its
+ratio: blue below 0.5, then teal, green and orange up to the limit, red above
+it, grey when not designed. Design → Display Steel Ratios on Model does the same
+from the menu with the saved settings, and Display → Back to Model removes the
+colours. File → Export → Report prints the same table.
+
 ## 5. Check the storey drifts
 
 **Design → Storey Drift Check…**

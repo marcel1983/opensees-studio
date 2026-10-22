@@ -1091,10 +1091,40 @@ set it. **Set Cb = 1.0 for a cantilever**: F1-1 assumes both ends braced.
 
 Results: one row per member with its governing ratio, the check and equation
 that govern and the load set that produced them; **Select failing members**
-closes the dialog with them selected. The settings are saved with the project.
+closes the dialog with them selected, and **Show ratios on the model** closes it
+and paints every member by its ratio (Design → Display Steel Ratios on Model).
+The settings are saved with the project, and File → Export → Report prints the
+check when they are.
 """,
+            "design.steel_ratios",
             "design.drift_check",
             "define.load_combinations",
+        ),
+        "design.steel_ratios": _t(
+            "Design → Display Steel Ratios on Model",
+            "Design",
+            "Paint every frame member by its governing AISC 360-16 ratio.",
+            """
+Runs the steel frame check with the settings saved in the project (or the
+defaults: LRFD, 50 ksi, every combination) over the results of this session, and
+draws each member in the colour of its governing demand/capacity ratio, with the
+ratio written at mid-length:
+
+- blue up to 0.5, teal up to 0.7, green up to 0.9 and orange up to the ratio limit
+  (the steps are those fractions of the limit, so a limit of 0.95 keeps the reading);
+- **red above the limit**;
+- grey for a member the check does not cover (no AISC shape, or a section name
+  that is not one).
+
+The panel on the right shows the legend, the summary and the notes (load sets
+skipped because a case has no result yet). **Select failing members** selects
+the red ones; **Back to model** (or Display → Back to Model) removes the colours.
+
+Nothing is stored: change the settings in Design → Steel Frame Check, then display
+the ratios again.
+""",
+            "design.steel_check",
+            "file.export_report",
         ),
         "design.drift_check": _t(
             "Design → Storey Drift Check",
@@ -1138,6 +1168,10 @@ browser and pastes into Word).
   now*: peak displacements (and where), support reactions with their sum, the
   pushover curve, the periods, the storey table and the section cuts. Values
   are in the display units, with the Results panel's signs.
+- **Steel frame check** — when the project has design settings (saved by
+  Design → Steel Frame Check): the method, Fy, ratio limit and load sets, every
+  checked member with its governing ratio, check, equation and load set, and the
+  amplified storey drifts against the limit. Its values are in the project's units.
 
 # Notes
 - Results computed before the last model change are left out; run the cases again
@@ -4154,6 +4188,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_steel_check": "design.steel_check",
     "_act_influence_line": "display.influence_line",
     "_act_drift_check": "design.drift_check",
+    "_act_steel_ratios": "design.steel_ratios",
     "_act_export_script": "file.export_script",
     "_act_export_ifc": "file.export_ifc",
     "_act_export_report": "file.export_report",

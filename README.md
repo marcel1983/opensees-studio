@@ -97,7 +97,8 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   joints, elements and joint loads as spreadsheets, with Excel copy and paste,
   added and deleted rows, and one validated undo step.
 - **Calculation report** — File → Export → Report: model, loads, cases and the
-  current results as a PDF or an HTML page.
+  current results as a PDF or an HTML page, plus the steel frame check and the
+  storey drifts when the project has design settings.
 - **Section cuts** — Define → Section Cuts: the force and moment through a group
   (storey or pier shear, overturning moment), in the Results panel of static
   cases.
@@ -223,14 +224,16 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   you pick, and PORTICO's local axes (beam y up) mapped onto OpenSees' (beam z
   up). Quadrilateral areas become `ShellMITC4`, diaphragms rigid diaphragms on
   PORTICO's master node, links rigid links or equalDOFs, and the mass source
-  comes along; triangular areas, temperature loads and spectrum cases are not
-  imported yet and are counted and reported.
+  comes along; triangular areas and spectrum cases are not imported yet and are
+  counted and reported.
 - **Design** — Design → Steel Frame Check (AISC 360-16, LRFD or ASD): every
   frame member whose section is a W, M, S or HP shape gets its tension (D2),
   compression (E3, E4, E7), flexure (F2, F3, F6), shear (G2, G6) and H1
   interaction ratios over the combinations already run, read at 25 stations
   along the member, with `Cb` from the moment diagram and per-member K, Lb and
-  Cb overrides; failing members can be selected in the model. Design → Storey
+  Cb overrides; failing members can be selected in the model, and Design →
+  Display Steel Ratios on Model paints every member by its ratio (blue to red,
+  grey when not designed). The report prints the check. Design → Storey
   Drift Check compares amplified storey drifts with ASCE 7, NCh433 or Eurocode 8
   limits. The settings are saved with the project.
 - **Export** — the model, with or without one analysis case, as a plain

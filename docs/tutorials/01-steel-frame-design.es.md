@@ -86,6 +86,12 @@ olvidarlos.
 Los otros ajustes por miembro: el **perfil** AISC con que verificar, **K** en cada
 eje (las longitudes de pandeo son el largo del miembro por K) y **Cb**.
 
+**Show ratios on the model** cierra el diálogo y pinta cada miembro según su
+razón: azul bajo 0.5, luego turquesa, verde y naranjo hasta el límite, rojo sobre
+él y gris si no se diseñó. Design → Display Steel Ratios on Model hace lo mismo
+desde el menú con los ajustes guardados, y Display → Back to Model quita los
+colores. File → Export → Report imprime la misma tabla.
+
 ## 5. Verificar las derivas de piso
 
 **Design → Storey Drift Check…**

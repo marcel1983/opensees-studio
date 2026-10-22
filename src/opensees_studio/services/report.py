@@ -2,7 +2,9 @@
 
 The page reads top to bottom like a calculation report: the project, the model
 in numbers, materials and sections, load patterns, analysis cases and
-combinations, then the results the session has for the model as it is now.
+combinations, then the results the session has for the model as it is now, and
+— when the project carries design settings (Design → Steel Frame Check) — the
+AISC 360-16 member check and the storey drift check over those results.
 Results reuse the Results panel's tables (:mod:`services.result_tables`), so the
 units and signs are the ones the panel shows; long tables are summarised (peak
 displacement per DOF, reactions of the supports only) rather than printed node
@@ -38,6 +40,13 @@ from opensees_studio.services.results import (
     ResponseSpectrumResults,
     StaticResults,
     TransientResults,
+)
+from opensees_studio.services.steel_design import (
+    default_fy,
+    default_load_sets,
+    load_set_label,
+    steel_frame_check,
+    storey_drift_check,
 )
 
 DIGITS = 5
@@ -206,6 +215,65 @@ def _combinations(project: Project) -> str:
     return _table(["ID", "Name", "Type", "Terms"], rows) if rows else "<p>None.</p>"
 
 
+# ─────────────────────────── design ───────────────────────────
+def _design_section(project: Project, results: Mapping[int, Any]) -> str:
+    """The steel member check and the drift check, with the stored design settings."""
+    settings = project.design
+    if settings is None:
+        return ""
+    fy = settings.fy if settings.fy is not None else default_fy(project.meta.units)
+    load_sets = settings.load_sets or default_load_sets(project)
+    out = [
+        "<h2>Steel frame check — AISC 360-16</h2>",
+        _table(
+            ["Setting", "Value"],
+            [
+                ["Method", settings.method],
+                ["Fy", fy],
+                ["Ratio limit", settings.ratio_limit],
+                ["Load sets", ", ".join(load_set_label(project, ls) for ls in load_sets) or "—"],
+            ],
+        ),
+    ]
+    report = steel_frame_check(project, results, settings)
+    out.append(f"<p>{_e(report.summary())}</p>")
+    out += [f"<p class='note'>{_e(note)}</p>" for note in report.notes]
+    designed = sorted(
+        (m for m in report.members if m.status != "not designed"), key=lambda m: -m.ratio
+    )
+    if designed:
+        rows = [
+            [m.element_id, m.shape, m.ratio, m.status, m.check, m.equation, m.load_set]
+            for m in designed
+        ]
+        out.append(
+            _table(
+                ["Element", "Shape", "Ratio", "Status", "Governs", "Equation", "Load set"],
+                rows,
+            )
+        )
+    skipped = len(report.members) - len(designed)
+    if skipped:
+        out.append(f"<p class='note'>{skipped} frame member(s) not designed.</p>")
+
+    drift_rows: list[list[Any]] = []
+    for result in sorted(results.values(), key=lambda r: getattr(r, "case_id", 0)):
+        drift = storey_drift_check(project, result, settings)
+        if drift is None:
+            continue
+        drift_rows += [
+            [drift.load_set, row.storey, max(row.drift, default=0.0), row.ratio]
+            for row in drift.rows
+        ]
+    if drift_rows:
+        out.append(
+            f"<h3>Storey drift — limit {settings.drift_limit:g}, "
+            f"amplification {settings.drift_amplification:g}</h3>"
+        )
+        out.append(_table(["Load set", "Storey", "Drift ratio", "Ratio to limit"], drift_rows))
+    return "".join(out)
+
+
 # ─────────────────────────── results ───────────────────────────
 def _results_section(results: Any, project: Project) -> str:
     name = getattr(results, "case_name", "") or f"case {getattr(results, 'case_id', '?')}"
@@ -282,5 +350,8 @@ def build_report(
             "before exporting the report.</p>"
         )
     parts += [_results_section(r, project) for r in items]
+    parts.append(
+        _design_section(project, {getattr(r, "case_id", k): r for k, r in enumerate(items)})
+    )
     parts.append("</body></html>")
     return "".join(parts)

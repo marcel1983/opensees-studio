@@ -68,7 +68,9 @@ script o un notebook de Jupyter: la interfaz es una forma de usarlo, no la únic
 - **Diseño**: Design → Steel Frame Check verifica según **AISC 360-16** (LRFD o
   ASD) los miembros de perfiles W, M, S y HP: tracción, compresión (E3, E4, E7),
   flexión con pandeo lateral-torsional (F2, F3, F6), corte (G2, G6) e interacción
-  H1, sobre las combinaciones ya corridas. Design → Storey Drift Check compara las
+  H1, sobre las combinaciones ya corridas; Design → Display Steel Ratios on Model
+  pinta cada miembro según su razón D/C, y el reporte de cálculo imprime la
+  verificación. Design → Storey Drift Check compara las
   derivas de piso con ASCE 7, NCh433 o Eurocódigo 8.
 - **Importar y exportar**: dibujos DXF, modelos de
   [PORTICO](https://github.com/jpreyes/portico-core) (`.s3d`, escalados a las

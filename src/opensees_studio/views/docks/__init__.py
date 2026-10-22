@@ -1,6 +1,7 @@
 """Reusable dock widget contents."""
 
 from opensees_studio.views.docks.deformed_shape import DeformedShapeView
+from opensees_studio.views.docks.design_ratios import DesignRatioView
 from opensees_studio.views.docks.force_diagram import ForceDiagramView
 from opensees_studio.views.docks.hysteresis import HysteresisView
 from opensees_studio.views.docks.mode_shape_animator import ModeShapeAnimator
@@ -14,6 +15,7 @@ from opensees_studio.views.docks.time_history import TimeHistoryView
 
 __all__ = [
     "DeformedShapeView",
+    "DesignRatioView",
     "ForceDiagramView",
     "HysteresisView",
     "ModeShapeAnimator",
