@@ -1051,8 +1051,10 @@ the case's load: with the default case a downward axle is positive.
             "Design",
             "Demand/capacity ratios of steel members over the results of this session.",
             """
-Checks every frame member whose section is an AISC **W, M, S or HP** shape against
-ANSI/AISC 360-16, by LRFD or ASD. The section's **name** says which shape it is
+Checks every frame member whose section is an AISC shape of a covered family
+against ANSI/AISC 360-16, by LRFD or ASD: **W, M, S, HP** (I-shapes), **C, MC**
+(channels), **WT, MT, ST** (tees), **L with equal legs**, **rectangular and
+square HSS**, **round HSS** and **pipes**. The section's **name** says which shape it is
 (sections from Define → Section Library are named that way); type another shape
 in the overrides to check a member with it.
 
@@ -1065,6 +1067,26 @@ in the overrides to check a member with it.
   and Cb), F3 flange local buckling. A noncompact web is noted, not checked (F4).
 - **Minor-axis flexure** F6, **shear** G2.1 along the web and G6 along the flanges.
 - **Interaction** H1-1a / H1-1b of the axial force and both moments.
+
+The other families use their own sections of the Specification:
+- **Channels**: E4 flexural-torsional buckling about the axis of symmetry, F2
+  with c from F2-8b, F6, G2.1(b) and G6 with the full flange width.
+- **Tees**: E4 flexural-torsional buckling, the stem as an unstiffened element
+  (E7), F9 yielding, lateral-torsional buckling, flange and stem local buckling.
+  The sign of the moment is not tracked, so the strength is the smaller of the
+  stem in tension and the stem in compression.
+- **Equal-leg angles**: E3 about the minor principal axis z, E4, F10 about the
+  geometric axes without lateral-torsional restraint (0.8 My, toe in
+  compression), G3. Unequal-leg angles are not designed (their flexure is about
+  the principal axes).
+- **Rectangular HSS**: E7 walls, F7 flange and web local buckling (the effective
+  section modulus of F7-3 for a slender flange) and lateral-torsional buckling
+  of a deep tube, G4. **Round HSS and pipes**: E7-6, F8, G5 with Lv half the
+  member length.
+
+HSS walls use the design thickness 0.93 tnom. The default Fy is 50 ksi: set it
+for the material (A500 Grade C round HSS 46 ksi, A53 pipe 35 ksi). Torsion is
+not checked.
 
 The clear web height is taken as `d - 2 tf` (the table has no `k`), which is
 slightly conservative.

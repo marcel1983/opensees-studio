@@ -41,9 +41,9 @@ SPAN = 20 * 12.0  # in
 W_DEAD, W_LIVE = 0.05, 0.10  # kip/in
 
 
-def _beam(ndm: int = 2, section_name: str = "W18X50") -> Project:
+def _beam(ndm: int = 2, section_name: str = "W18X50", shape: str = "W18X50") -> Project:
     section = shape_to_elastic_section(
-        get_shape("W18X50"), elastic_modulus=E, shear_modulus=G, units=KIP_IN, ndm=ndm
+        get_shape(shape), elastic_modulus=E, shear_modulus=G, units=KIP_IN, ndm=ndm
     ).model_copy(update={"name": section_name})
     pin = (
         (True, True, True, False, False, False)
@@ -224,3 +224,48 @@ def test_drift_check_of_the_diaphragm_building() -> None:
     # Storey 1: drift ratio = u(3.5 m) / 3.5, amplified twice, over 0.002.
     assert first.ratio == pytest.approx(max(first.drift) / 0.002)
     assert first.drift[0] > 0
+
+
+@pytest.mark.parametrize("ndm", [2, 3])
+@pytest.mark.parametrize(
+    ("shape", "zx"),
+    [("HSS12X6X1_2", 57.4), ("Pipe10STD", 36.9), ("C12X20_7", None), ("WT9X17_5", None)],
+)
+def test_other_families_are_checked_end_to_end(ndm: int, shape: str, zx: float | None) -> None:
+    """A beam of an HSS, a pipe, a channel or a tee: the ratio uses its own family's strength."""
+    project = _beam(ndm, section_name=shape, shape=shape)
+    report = steel_frame_check(project, _results(project), DesignSettings())
+    middle = next(m for m in report.members if m.element_id == 2)
+    assert middle.status in ("OK", "NG")
+    assert middle.shape == shape
+    moment = (1.2 * W_DEAD + 1.6 * W_LIVE) * SPAN**2 / 8
+    if zx is not None:  # compact and unbraced length below Lp: φMn = 0.9 Fy Zx
+        assert middle.ratios["Major flexure"] == pytest.approx(moment / (0.9 * 50 * zx), rel=1e-3)
+    else:
+        from opensees_studio.services.steel_design import shape_in_units
+
+        strength = shape_in_units(shape, KIP_IN).flexure_major(
+            Steel(50.0, E, G), "LRFD", unbraced=SPAN / 4, cb=middle_cb(project)
+        )
+        assert middle.ratios["Major flexure"] == pytest.approx(
+            moment / strength.available, rel=2e-2
+        )
+
+
+def middle_cb(project: Project) -> float:
+    """Cb of member 2 (L/4 to L/2 of a uniformly loaded span), from F1-1."""
+    from opensees_studio.core.design.aisc360 import cb_from_moments
+
+    def m(x: float) -> float:
+        return x * (SPAN - x) / 2
+
+    q = SPAN / 4
+    return cb_from_moments(m(2 * q), m(q + q / 4), m(q + q / 2), m(q + 3 * q / 4))
+
+
+def test_unequal_angle_is_reported_not_designed() -> None:
+    project = _beam(2, section_name="L4X3X1_2", shape="L4X3X1_2")
+    report = steel_frame_check(project, _results(project), DesignSettings())
+    member = report.members[0]
+    assert member.status == "not designed"
+    assert "unequal legs" in member.notes[0]

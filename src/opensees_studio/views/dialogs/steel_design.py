@@ -95,7 +95,8 @@ class SteelDesignDialog(FittedDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(
             QLabel(
-                "Frame members whose section is an AISC <b>W, M, S or HP</b> shape (by name, "
+                "Frame members whose section is an AISC <b>W, M, S, HP, channel, tee, "
+                "equal-leg angle, HSS or pipe</b> shape (by name, "
                 "or named below) are checked for tension, compression, flexure, shear and "
                 "the H1 interaction, over the results of the load sets ticked here."
             )

@@ -1,7 +1,11 @@
-"""AISC 360-16 available strengths of doubly symmetric I-shaped members.
+"""AISC 360-16 available strengths of steel members.
 
 The equations of *Specification for Structural Steel Buildings* (ANSI/AISC
-360-16) a frame check needs, for the W, M, S and HP families:
+360-16) a frame check needs. This module holds the doubly symmetric I-shapes
+(W, M, S and HP families), the common pieces (factors, buckling stress,
+effective width, interaction) and :func:`check_member`, which works on any
+shape following :class:`SteelShape`; channels, tees, angles and HSS are in
+:mod:`core.design.aisc360_shapes`. For the I-shapes:
 
 * **D2** tension, yielding of the gross section (rupture needs the net area,
   which a model does not know, and is left to the engineer);
@@ -28,7 +32,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Literal, Protocol
 
 Method = Literal["LRFD", "ASD"]
 
@@ -88,6 +92,45 @@ class IShape:
     @property
     def web_ratio(self) -> float:
         return self.h / self.tw
+
+    @property
+    def c(self) -> float:
+        """The ``c`` of F2-8a: 1 for a doubly symmetric I-shape."""
+        return 1.0
+
+    # The SteelShape protocol: the limit states of this family.
+    def tension(self, steel: Steel, method: Method) -> Strength:
+        return tension(self, steel, method)
+
+    def compression(
+        self,
+        steel: Steel,
+        method: Method,
+        *,
+        length_x: float,
+        length_y: float,
+        k_x: float = 1.0,
+        k_y: float = 1.0,
+    ) -> Strength:
+        return compression(
+            self, steel, method, length_x=length_x, length_y=length_y, k_x=k_x, k_y=k_y
+        )
+
+    def flexure_major(
+        self, steel: Steel, method: Method, *, unbraced: float, cb: float = 1.0
+    ) -> Strength:
+        return flexure_major(self, steel, method, unbraced=unbraced, cb=cb)
+
+    def flexure_minor(
+        self, steel: Steel, method: Method, *, unbraced: float, cb: float = 1.0
+    ) -> Strength:
+        return flexure_minor(self, steel, method)
+
+    def shear_major(self, steel: Steel, method: Method, *, length: float) -> Strength:
+        return shear_major(self, steel, method)
+
+    def shear_minor(self, steel: Steel, method: Method, *, length: float) -> Strength:
+        return shear_minor(self, steel, method)
 
 
 @dataclass(frozen=True)
@@ -258,7 +301,7 @@ def lp_lr(shape: IShape, steel: Steel) -> tuple[float, float]:
     """F2-5 and F2-6: the limiting unbraced lengths of lateral-torsional buckling."""
     e, fy = steel.E, steel.Fy
     lp = 1.76 * shape.ry * math.sqrt(e / fy)
-    jc = shape.J / (shape.Sx * shape.ho)  # c = 1 for a doubly symmetric I-shape
+    jc = shape.J * shape.c / (shape.Sx * shape.ho)
     lr = (
         1.95
         * shape.rts
@@ -288,7 +331,7 @@ def flexure_major(
             mn = cb * (mp - (mp - 0.7 * fy * shape.Sx) * (unbraced - lp) / (lr - lp))
             candidates.append((min(mn, mp), "F2-2 inelastic LTB"))
         else:
-            jc = shape.J / (shape.Sx * shape.ho)
+            jc = shape.J * shape.c / (shape.Sx * shape.ho)
             ratio = unbraced / shape.rts
             fcr = cb * math.pi**2 * e / ratio**2 * math.sqrt(1.0 + 0.078 * jc * ratio**2)
             candidates.append((min(fcr * shape.Sx, mp), "F2-3 elastic LTB"))
@@ -379,6 +422,52 @@ def cb_from_moments(m_max: float, m_a: float, m_b: float, m_c: float) -> float:
 
 
 # ──────────────────────────── a member check ────────────────────────────
+class SteelShape(Protocol):
+    """A shape the check covers: its properties and the limit states of its family.
+
+    ``flexure_major`` is bending about the axis of the larger moment of inertia
+    (``Ix``), ``shear_major`` the shear that goes with it; the ``minor`` pair is
+    the other axis. Lengths are the member's unbraced lengths.
+    """
+
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def A(self) -> float: ...
+
+    @property
+    def Ix(self) -> float: ...
+
+    @property
+    def Iy(self) -> float: ...
+
+    def tension(self, steel: Steel, method: Method) -> Strength: ...
+
+    def compression(
+        self,
+        steel: Steel,
+        method: Method,
+        *,
+        length_x: float,
+        length_y: float,
+        k_x: float = 1.0,
+        k_y: float = 1.0,
+    ) -> Strength: ...
+
+    def flexure_major(
+        self, steel: Steel, method: Method, *, unbraced: float, cb: float = 1.0
+    ) -> Strength: ...
+
+    def flexure_minor(
+        self, steel: Steel, method: Method, *, unbraced: float, cb: float = 1.0
+    ) -> Strength: ...
+
+    def shear_major(self, steel: Steel, method: Method, *, length: float) -> Strength: ...
+
+    def shear_minor(self, steel: Steel, method: Method, *, length: float) -> Strength: ...
+
+
 @dataclass(frozen=True)
 class Demand:
     """Required strengths of one load set: axial (tension +), moments and shears."""
@@ -408,7 +497,7 @@ class MemberCheck:
 
 
 def check_member(
-    shape: IShape,
+    shape: SteelShape,
     steel: Steel,
     method: Method,
     demand: Demand,
@@ -422,17 +511,18 @@ def check_member(
     """Ratios of axial, flexure, shear and H1 interaction for one demand."""
     check = MemberCheck()
     if demand.axial >= 0.0:
-        axial = tension(shape, steel, method)
+        axial = shape.tension(steel, method)
         label = "Tension"
     else:
-        axial = compression(
-            shape, steel, method, length_x=length_x, length_y=length_y, k_x=k_x, k_y=k_y
+        axial = shape.compression(
+            steel, method, length_x=length_x, length_y=length_y, k_x=k_x, k_y=k_y
         )
         label = "Compression"
-    major = flexure_major(shape, steel, method, unbraced=length_ltb, cb=demand.cb)
-    minor = flexure_minor(shape, steel, method)
-    v_major = shear_major(shape, steel, method)
-    v_minor = shear_minor(shape, steel, method)
+    major = shape.flexure_major(steel, method, unbraced=length_ltb, cb=demand.cb)
+    minor = shape.flexure_minor(steel, method, unbraced=length_ltb, cb=demand.cb)
+    length = max(length_x, length_y)
+    v_major = shape.shear_major(steel, method, length=length)
+    v_minor = shape.shear_minor(steel, method, length=length)
     check.ratios[label] = abs(demand.axial) / axial.available
     check.equations[label] = axial.equation
     check.ratios["Major flexure"] = abs(demand.moment_major) / major.available
@@ -453,6 +543,6 @@ def check_member(
     )
     check.ratios["P-M interaction"] = ratio
     check.equations["P-M interaction"] = equation
-    for strength in (axial, major, minor):
+    for strength in (axial, major, minor, v_major, v_minor):
         check.notes.extend(strength.notes)
     return check

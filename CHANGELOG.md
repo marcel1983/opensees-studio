@@ -11,6 +11,15 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **Steel frame check: channels, tees, angles, HSS and pipes.** Design → Steel
+  Frame Check now covers C and MC channels (E4 flexural-torsional buckling, F2,
+  F6, G2, G6), WT, MT and ST tees (F9, stem as an unstiffened element), equal-leg
+  angles (E3 about z, E4, F10, G3), rectangular HSS (E7 walls, F7 with the
+  effective section modulus and lateral-torsional buckling, G4) and round HSS and
+  pipes (E7-6, F8, G5). Section names are matched whatever their case and
+  whether they write `.` and `/` or the table's `_`. Unequal-leg angles stay not
+  designed.
+
 - **Design → Display Steel Ratios on Model.** Paints every frame member by its
   governing AISC 360-16 ratio (blue, teal, green, orange up to the limit, red
   above it, grey when not designed) with the ratio at mid-length, and a panel

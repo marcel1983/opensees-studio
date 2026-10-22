@@ -112,11 +112,14 @@ storeys has nothing to check, and the dialog says so.
 overrides and the drift limit — are saved in the project. They do not change
 any analysis result, so editing them never asks you to run again.
 
-## What the check does not do
+## What the check covers, and what it does not
 
 AISC 360-16 for **W, M, S and HP** shapes: tension yielding (rupture needs the
 net area), compression (E3, E4, E7), flexure (F2, F3, F6), shear (G2.1, G6) and
-H1. HSS, pipes, channels and angles are listed as not designed, and so is a
-member whose section has no AISC name and no override. The numbers are checked
+H1. Channels (F2, E4), tees (F9), equal-leg angles (F10), rectangular HSS (F7,
+G4) and round HSS and pipes (F8, G5) are checked by the same dialog. Unequal-leg
+angles and double angles are listed as not designed, and so is a member whose
+section has no AISC name and no override. Set **Fy** for the material: A500
+Grade C HSS is 50 ksi (46 ksi round), A53 pipe 35 ksi. The numbers are checked
 against the AISC Design Examples in the
 [Verification Manual](../verification-manual.md) (cases D-01 to D-05).

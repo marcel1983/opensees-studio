@@ -18,7 +18,8 @@ The governing ratio over all load sets is reported with the equation that
 produced it.
 
 The shape. A member is checked when its section's name is an AISC v16 shape
-of the W, M, S or HP family, or when the user names one for it. The shape's
+of a family the check covers (W, M, S, HP, C, MC, WT, MT, ST, equal-leg L,
+rectangular and round HSS, pipe), or when the user names one for it. The shape's
 tabulated properties (scaled to the project's units) give the capacity; the
 analysis keeps using the section's own values, and a difference in area of
 more than 2 % is reported.
@@ -32,11 +33,12 @@ import itertools
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import Any
 
 import numpy as np
 
-from opensees_studio.core.aisc import SOURCE_UNITS, get_shape
+from opensees_studio.core.aisc import SOURCE_UNITS, get_shape, load_shapes
 from opensees_studio.core.analysis import ResponseSpectrumCase, StaticCase
 from opensees_studio.core.design.aisc360 import (
     I_SHAPE_FAMILIES,
@@ -44,8 +46,22 @@ from opensees_studio.core.design.aisc360 import (
     IShape,
     MemberCheck,
     Steel,
+    SteelShape,
     cb_from_moments,
     check_member,
+)
+from opensees_studio.core.design.aisc360_shapes import (
+    ANGLE_FAMILIES,
+    CHANNEL_FAMILIES,
+    HSS_DESIGN_THICKNESS,
+    RECT_HSS_FAMILIES,
+    ROUND_HSS_FAMILIES,
+    TEE_FAMILIES,
+    Channel,
+    EqualLegAngle,
+    RectHSS,
+    RoundHSS,
+    Tee,
 )
 from opensees_studio.core.design.settings import DesignLoadSet, DesignSettings
 from opensees_studio.core.geometry.elements import FRAME_ELEMENT_CLASSES
@@ -180,8 +196,19 @@ def spectrum_field(project: Any, results: ResponseSpectrumResults) -> Field:
 
 # ──────────────────────────── shapes ────────────────────────────
 def shape_name(name: str) -> str:
-    """``W14x90`` / ``w 14 x 90`` → ``W14X90``."""
-    return "".join(name.split()).upper()
+    """The table's name of ``name``: ``w 14 x 90`` → ``W14X90``, ``C12x20.7`` → ``C12X20_7``.
+
+    Case, spaces and the table's ``_`` for ``.`` and ``/`` do not matter
+    (``HSS8x8x1/2``, ``pipe10std``). An unknown name comes back upper-cased.
+    """
+    compact = "".join(name.split())
+    key = compact.upper().replace(".", "_").replace("/", "_")
+    return _names_by_key().get(key, compact.upper())
+
+
+@lru_cache(maxsize=1)
+def _names_by_key() -> dict[str, str]:
+    return {n.upper(): n for n in load_shapes()}
 
 
 def ishape_in_units(name: str, units: Any) -> IShape:
@@ -215,6 +242,114 @@ def ishape_in_units(name: str, units: Any) -> IShape:
         raise ValueError(f"{shape.name} lacks {', '.join(missing)} in the table")
     v: dict[str, float] = {k: float(x) for k, x in values.items() if x is not None}
     return IShape(
+        name=shape.name,
+        A=shape.area * f**2,
+        d=v["d"] * f,
+        bf=v["bf"] * f,
+        tw=v["tw"] * f,
+        tf=v["tf"] * f,
+        Ix=shape.ix * f**4,
+        Iy=v["iy"] * f**4,
+        Zx=v["zx"] * f**3,
+        Zy=v["zy"] * f**3,
+        Sx=v["sx"] * f**3,
+        Sy=v["sy"] * f**3,
+        rx=v["rx"] * f,
+        ry=v["ry"] * f,
+        J=v["j"] * f**4,
+        Cw=v["cw"] * f**6,
+    )
+
+
+#: Every family the check covers.
+CHECKED_FAMILIES = (
+    I_SHAPE_FAMILIES
+    | CHANNEL_FAMILIES
+    | TEE_FAMILIES
+    | ANGLE_FAMILIES
+    | RECT_HSS_FAMILIES
+    | ROUND_HSS_FAMILIES
+)
+
+
+def shape_in_units(name: str, units: Any) -> SteelShape:
+    """The AISC shape ``name`` as the class of its family, in the project's ``units``.
+
+    Raises:
+        KeyError: not an AISC v16 shape.
+        ValueError: a shape these provisions do not cover, or a table row
+            missing a property the family needs.
+    """
+    shape = get_shape(shape_name(name))
+    family = shape.family
+    if family in I_SHAPE_FAMILIES:
+        return ishape_in_units(name, units)
+    if family not in CHECKED_FAMILIES:
+        raise ValueError(f"{shape.name} is a {family} shape, which the check does not cover")
+    f = length_scale(SOURCE_UNITS, units)
+
+    def need(*keys: str) -> dict[str, float]:
+        values = {k: getattr(shape, k) for k in keys}
+        missing = [k for k, v in values.items() if v is None]
+        if missing:
+            raise ValueError(f"{shape.name} lacks {', '.join(missing)} in the table")
+        return {k: float(v) for k, v in values.items()}
+
+    if family in ROUND_HSS_FAMILIES:
+        v = need("od", "tnom", "zx", "sx", "rx", "j")
+        return RoundHSS(
+            name=shape.name,
+            A=shape.area * f**2,
+            D=v["od"] * f,
+            t=HSS_DESIGN_THICKNESS * v["tnom"] * f,
+            Ix=shape.ix * f**4,
+            Z=v["zx"] * f**3,
+            S=v["sx"] * f**3,
+            r=v["rx"] * f,
+            J=v["j"] * f**4,
+        )
+    if family in RECT_HSS_FAMILIES:
+        v = need("d", "bf", "tnom", "zx", "zy", "sx", "sy", "rx", "ry", "iy", "j")
+        return RectHSS(
+            name=shape.name,
+            A=shape.area * f**2,
+            H=v["d"] * f,
+            B=v["bf"] * f,
+            t=HSS_DESIGN_THICKNESS * v["tnom"] * f,
+            Ix=shape.ix * f**4,
+            Iy=v["iy"] * f**4,
+            Zx=v["zx"] * f**3,
+            Zy=v["zy"] * f**3,
+            Sx=v["sx"] * f**3,
+            Sy=v["sy"] * f**3,
+            rx=v["rx"] * f,
+            ry=v["ry"] * f,
+            J=v["j"] * f**4,
+        )
+    if family in ANGLE_FAMILIES:
+        v = need("d", "bf", "tw", "sx", "sy", "rx", "ry", "iy", "j", "cw")
+        if abs(v["d"] - v["bf"]) > 1e-9:
+            raise ValueError(
+                f"{shape.name} has unequal legs: its flexure about the principal axes "
+                "(F10) is not covered"
+            )
+        return EqualLegAngle(
+            name=shape.name,
+            A=shape.area * f**2,
+            b=v["d"] * f,
+            t=v["tw"] * f,
+            Ix=shape.ix * f**4,
+            Iy=v["iy"] * f**4,
+            Sx=v["sx"] * f**3,
+            Sy=v["sy"] * f**3,
+            rx=v["rx"] * f,
+            ry=v["ry"] * f,
+            J=v["j"] * f**4,
+            Cw=v["cw"] * f**6,
+        )
+    v = need("d", "bf", "tw", "tf", "zx", "zy", "sx", "sy", "rx", "ry", "iy", "j", "cw")
+    kind = Channel if family in CHANNEL_FAMILIES else Tee
+    return kind(
         name=shape.name,
         A=shape.area * f**2,
         d=v["d"] * f,
@@ -278,7 +413,7 @@ class DesignReport:
         return text + "."
 
 
-def _axes(project: Any, section: Any, shape: IShape) -> tuple[str, str, str, str, bool]:
+def _axes(project: Any, section: Any, shape: SteelShape) -> tuple[str, str, str, str, bool]:
     """(major moment, major shear, minor moment, minor shear, bent about the major axis)."""
     if project.ndm == 2:
         iz = float(getattr(section, "Iz", shape.Ix) or shape.Ix)
@@ -350,10 +485,10 @@ def steel_frame_check(
         section = sections.get(getattr(element, "section_id", -1))
         name = overrides.shape or (getattr(section, "name", "") or "")
         try:
-            shape = ishape_in_units(name, units)
+            shape = shape_in_units(name, units)
         except (KeyError, ValueError) as exc:
             reason = exc.args[0] if exc.args else str(exc)
-            result.notes.append(f"No AISC I-shape to check with: {reason}")
+            result.notes.append(f"No AISC shape to check with: {reason}")
             continue
         result.shape = shape.name
         if isinstance(section, ElasticSection) and abs(section.A - shape.A) > 0.02 * shape.A:

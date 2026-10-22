@@ -113,11 +113,15 @@ pisos no tiene nada que verificar, y el diálogo lo dice.
 por miembro y límite de deriva— se guardan en el proyecto. No cambian ningún
 resultado de análisis, así que editarlos nunca te pide volver a correr.
 
-## Lo que la verificación no hace
+## Lo que la verificación cubre, y lo que no
 
 AISC 360-16 para perfiles **W, M, S y HP**: fluencia en tracción (la rotura
 necesita el área neta), compresión (E3, E4, E7), flexión (F2, F3, F6), corte
-(G2.1, G6) y H1. Los HSS, tubos, canales y ángulos aparecen como no diseñados, al
-igual que un miembro cuya sección no tiene nombre AISC ni ajuste. Los números
+(G2.1, G6) y H1. Canales (F2, E4), tees (F9), ángulos de alas iguales (F10), HSS
+rectangulares (F7, G4) y HSS circulares y tubos (F8, G5) se verifican en el mismo
+diálogo. Los ángulos de alas desiguales y los ángulos dobles aparecen como no
+diseñados, al igual que un miembro cuya sección no tiene nombre AISC ni ajuste.
+Ajusta **Fy** al material: los HSS A500 grado C son de 50 ksi (46 ksi los
+circulares) y los tubos A53 de 35 ksi. Los números
 están verificados contra los Design Examples de AISC en el
 [Manual de Verificación](../verification-manual.md) (casos D-01 a D-05).

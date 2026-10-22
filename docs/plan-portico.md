@@ -165,8 +165,12 @@ usa y fuera de la huella de resultados), `services/steel_design.py` (demandas en
 25 estaciones por miembro, expansión de combinaciones, ± espectro, Cb por F1-1)
 y el menú Design con Steel Frame Check y Storey Drift Check. Verificado contra
 los ejemplos AISC E.1A, F.1-1A, F.1-2A, G.1A y H.1A (manual D-01 a D-05).
-Pendiente: HSS/tubos (F7, F8), canales, rotura en tracción (área neta),
-colorear el modelo por D/C, sección en el reporte, ACI 318.
+**2026-10-22:** canales (E4, F2, F6, G6), tees (F9), ángulos de alas iguales
+(E3 en z, E4, F10, G3), HSS rectangulares (E7, F7, G4) y circulares/tubos (E7-6,
+F8, G5) en `core/design/aisc360_shapes.py`; Design → Display Steel Ratios on
+Model colorea por D/C y el reporte de cálculo imprime la verificación.
+Pendiente: ángulos de alas desiguales y dobles (flexión en ejes principales),
+rotura en tracción (área neta), torsión, ACI 318.
 
 Ya tenemos la librería AISC v16 (`core/aisc.py`), combinaciones de código
 (`core/code_combinations.py`, ASCE 7) y fuerzas de elemento.

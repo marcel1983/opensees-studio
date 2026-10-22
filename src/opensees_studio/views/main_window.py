@@ -2217,7 +2217,7 @@ class MainWindow(QMainWindow):
         report = steel_frame_check(project, dict(self._case_results.current(project)), settings)
         if not any(m.status != "not designed" for m in report.members):
             reason = " ".join(report.notes) or (
-                "No frame member has an AISC W, M, S, HP, HSS, pipe or channel section."
+                "No frame member has an AISC section the check covers."
             )
             QMessageBox.information(self, "Display Steel Ratios", reason)
             return

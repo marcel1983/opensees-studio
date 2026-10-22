@@ -229,7 +229,8 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
 - **Design** — Design → Steel Frame Check (AISC 360-16, LRFD or ASD): every
   frame member whose section is a W, M, S or HP shape gets its tension (D2),
   compression (E3, E4, E7), flexure (F2, F3, F6), shear (G2, G6) and H1
-  interaction ratios over the combinations already run, read at 25 stations
+  interaction ratios — channels (E4, F2), tees (F9), equal-leg angles (F10),
+  rectangular HSS (F7, G4) and round HSS and pipes (F8, G5) too — over the combinations already run, read at 25 stations
   along the member, with `Cb` from the moment diagram and per-member K, Lb and
   Cb overrides; failing members can be selected in the model, and Design →
   Display Steel Ratios on Model paints every member by its ratio (blue to red,
