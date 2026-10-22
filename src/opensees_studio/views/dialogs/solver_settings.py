@@ -17,6 +17,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
+    QComboBox,
     QDialogButtonBox,
     QFileDialog,
     QFormLayout,
@@ -44,7 +45,9 @@ from opensees_studio.services.engines import (
     EngineError,
     SolverSettings,
     current_status,
+    engines,
     inspect_python,
+    opensees_status,
 )
 from opensees_studio.viewmodels.engine_installer import EngineInstaller
 from opensees_studio.views.screen_fit import FittedDialog, MessageArea
@@ -68,6 +71,8 @@ class SolverSettingsDialog(FittedDialog):
         self.setProperty(TOPIC_PROPERTY, "options.solver")
         self._settings = settings
         self._build_ui()
+        index = self._engine.findData(settings.engine)
+        self._engine.setCurrentIndex(max(index, 0))
         if settings.python:
             self._python_radio.setChecked(True)
             self._python_edit.setText(settings.python)
@@ -83,12 +88,21 @@ class SolverSettingsDialog(FittedDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(
             QLabel(
-                "OpenSees Studio models; an <b>engine</b> solves. The engine today is "
-                "<b>OpenSeesPy 3.8</b>. Without it you can still model, export and "
-                "report, but not run an analysis."
+                "OpenSees Studio models; an <b>engine</b> solves. Without one you can "
+                "still model, export and report, but not run an analysis. The stability "
+                "check and the Material Tester always use <b>OpenSeesPy</b>, whatever "
+                "engine runs the cases."
             )
         )
         form = QFormLayout()
+        self._engine = QComboBox()
+        for key, engine in engines().items():
+            self._engine.addItem(
+                f"{engine.name} — runs {', '.join(sorted(engine.case_types))}", userData=key
+            )
+        self._engine.currentIndexChanged.connect(self._refresh)
+        form.addRow("Engine:", self._engine)
+        form.addRow(QLabel("<b>Where OpenSeesPy is</b>"))
         self._own_radio = QRadioButton("OpenSeesPy installed with OpenSees Studio")
         self._python_radio = QRadioButton(
             f"OpenSeesPy of another Python {sys.version_info[0]}.{sys.version_info[1]}"
@@ -259,13 +273,19 @@ class SolverSettingsDialog(FittedDialog):
             executable = self._python_edit.text().strip()
             if not executable:
                 raise EngineError("Choose a Python interpreter.")
-            return inspect_python(executable)
+            found = inspect_python(executable)
+            return SolverSettings(
+                engine=self.engine_key(), package_dir=found.package_dir, python=found.python
+            )
         if mode == FOLDER:
             folder = self._folder_edit.text().strip()
             if not folder:
                 raise EngineError("Choose a folder.")
-            return SolverSettings(engine=OPENSEES_PY, package_dir=folder)
-        return SolverSettings(engine=OPENSEES_PY)
+            return SolverSettings(engine=self.engine_key(), package_dir=folder)
+        return SolverSettings(engine=self.engine_key())
+
+    def engine_key(self) -> str:
+        return str(self._engine.currentData() or OPENSEES_PY)
 
     def _refresh(self, *_: object) -> None:
         self._python_edit.setEnabled(self._python_radio.isChecked())
@@ -278,12 +298,17 @@ class SolverSettingsDialog(FittedDialog):
             return
         self._ok.setEnabled(True)
         status = current_status(self._settings)
-        if status.available:
-            self._status.show_message(
-                "\n".join(filter(None, [f"Ready: {status.summary()}.", status.message]))
+        lines = [f"Ready: {status.summary()}." if status.available else status.message]
+        if status.available and status.message:
+            lines.append(status.message)
+        if self.engine_key() != OPENSEES_PY:
+            opensees = opensees_status(self._settings)
+            lines.append(
+                f"Stability check and Material Tester: {opensees.summary()}."
+                if opensees.available
+                else "Stability check and Material Tester need OpenSeesPy: " + opensees.message
             )
-        else:
-            self._status.show_message(status.message, level="warning")
+        self._status.show_message("\n".join(lines), level="info" if status.available else "warning")
 
     def settings(self) -> SolverSettings:
         """What to save on OK (the last settings the form could describe)."""

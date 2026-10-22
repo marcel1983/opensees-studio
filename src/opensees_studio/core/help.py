@@ -3905,9 +3905,13 @@ software and does not distribute OpenSeesPy, not even in its downloadable
 bundle: each user installs it, from the place its authors publish it, and should
 check that their use fits its terms.
 
-# Other engines
-More engines can plug in as Python packages (the `opensees_studio.engines`
-entry point); this dialog chooses OpenSeesPy, the one shipped today.
+# Engine
+The **Engine** list shows every engine installed, with the analysis types it
+runs. More engines plug in as Python packages (the `opensees_studio.engines`
+entry point). A case of a type the chosen engine does not run is refused when
+you run it, with a message naming the engine and what it does run. The
+stability check and the Material Tester always use OpenSeesPy, so they stay
+available (or not) whatever engine you choose.
 """,
             "analyze.run",
         ),

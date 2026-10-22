@@ -278,7 +278,8 @@ class MainWindow(QMainWindow):
         self._vm = ProjectViewModel(self)
         # The solver is a separate program (Options → Solver); it may be absent.
         engines.activate(engines.load_settings().package_dir)
-        self._solver = engines.current_status()
+        self._solver = engines.current_status()  # the engine that runs the cases
+        self._opensees = engines.opensees_status()  # stability check, Material Tester
         self._runner = AnalysisRunner(self)
         self._stability = StabilityChecker(self)
         self._latest_results: object = None  # last analysis output (any kind)
@@ -5370,6 +5371,7 @@ class MainWindow(QMainWindow):
             return
         engines.activate(settings.package_dir)
         self._solver = engines.current_status(settings)
+        self._opensees = engines.opensees_status(settings)
         self._log_solver_status()
         self._refresh_action_enablement()
 
@@ -5524,9 +5526,13 @@ class MainWindow(QMainWindow):
         # Without a solver the model is still built, exported and reported; only
         # what calls OpenSees waits for one (Options → Solver).
         solver = self._solver.available
-        for action in (self._act_run, self._act_material_tester):
-            action.setEnabled(solver)
-            action.setStatusTip("" if solver else self._solver.summary())
+        opensees = self._opensees.available
+        self._act_run.setEnabled(solver)
+        self._act_run.setStatusTip("" if solver else self._solver.summary())
+        # The Material Tester and the stability check call OpenSees itself,
+        # whatever engine runs the cases.
+        self._act_material_tester.setEnabled(opensees)
+        self._act_material_tester.setStatusTip("" if opensees else self._opensees.summary())
         batch_enabled = has_cases and solver and not self._runner.is_running
         self._act_run_all.setEnabled(batch_enabled)
         self._act_run_selected.setEnabled(batch_enabled)
@@ -5541,7 +5547,7 @@ class MainWindow(QMainWindow):
         self._act_steel_ratios.setEnabled(has_project)
         self._act_check_stability.setEnabled(
             has_project
-            and solver
+            and opensees
             and not self._stability.is_running
             and not self._runner.is_running
         )

@@ -82,7 +82,10 @@ def test_a_folder_with_the_package(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     settings = engines.SolverSettings(package_dir=str(folder))
     status = engines.current_status(settings)
     assert (status.available, status.version, status.location) == (True, "3.8.0.0", str(folder))
-    assert engines.child_environment(settings) == {engines.ENGINE_PATH_ENV: str(folder)}
+    assert engines.child_environment(settings) == {
+        engines.ENGINE_KEY_ENV: engines.OPENSEES_PY,
+        engines.ENGINE_PATH_ENV: str(folder),
+    }
 
 
 def test_a_folder_without_the_package(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -173,23 +176,55 @@ def test_plug_in_engines_register_and_broken_ones_are_skipped(
     assert set(found) == {engines.OPENSEES_PY, "toy"}
     toy = engines.SolverSettings(engine="toy")
     assert engines.current_status(toy).name == "Toy solver"
-    assert engines.child_environment(toy) == {"TOY": "1"}
+    assert engines.child_environment(toy) == {engines.ENGINE_KEY_ENV: "toy", "TOY": "1"}
     # An engine that is not installed falls back to the built-in one.
     assert engines.engine_for(engines.SolverSettings(engine="gone")).key == engines.OPENSEES_PY
 
 
-def test_the_cli_reports_a_missing_solver(monkeypatch: pytest.MonkeyPatch) -> None:
+class _Lines:
+    def __init__(self) -> None:
+        self.lines: list[dict] = []
+
+    def emit(self, **payload) -> None:  # type: ignore[no-untyped-def]
+        self.lines.append(payload)
+
+
+def test_the_cli_picks_the_engine_or_says_why_not(monkeypatch: pytest.MonkeyPatch) -> None:
     from opensees_studio import run
 
-    class _Protocol:
-        lines: list[dict] = []  # noqa: RUF012
+    protocol = _Lines()
+    monkeypatch.delenv(engines.ENGINE_KEY_ENV, raising=False)
+    assert run._engine(protocol, need_opensees=False).key == engines.OPENSEES_PY  # type: ignore[arg-type]
 
-        def emit(self, **payload) -> None:  # type: ignore[no-untyped-def]
-            self.lines.append(payload)
+    monkeypatch.setenv(engines.ENGINE_KEY_ENV, "gone")
+    assert run._engine(protocol, need_opensees=False) is None  # type: ignore[arg-type]
+    assert "'gone' is not installed" in protocol.lines[-1]["message"]
+    # The stability check runs on OpenSees whatever engine solves.
+    assert run._engine(protocol, need_opensees=True).key == engines.OPENSEES_PY  # type: ignore[arg-type]
 
-    protocol = _Protocol()
-    assert run._solver_missing(protocol) is False  # type: ignore[arg-type]
     _without_own_opensees(monkeypatch)
-    assert run._solver_missing(protocol) is True  # type: ignore[arg-type]
-    (line,) = protocol.lines
-    assert line["type"] == "error" and "Options → Solver" in line["message"]
+    monkeypatch.delenv(engines.ENGINE_KEY_ENV)
+    assert run._engine(protocol, need_opensees=False) is None  # type: ignore[arg-type]
+    assert "Options → Solver" in protocol.lines[-1]["message"]
+
+
+def test_the_child_learns_the_engine_and_where_opensees_is(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(importlib.metadata, "entry_points", lambda group: [_Entry(_Engine)])
+    env = engines.child_environment(engines.SolverSettings(engine="toy", package_dir="/os"))
+    assert env == {engines.ENGINE_KEY_ENV: "toy", engines.ENGINE_PATH_ENV: "/os", "TOY": "1"}
+    monkeypatch.setenv(engines.ENGINE_KEY_ENV, "toy")
+    assert engines.engine_in_child().key == "toy"  # type: ignore[union-attr]
+
+
+def test_unsupported_cases_and_the_opensees_runner() -> None:
+    from opensees_studio.core import ModalCase, Project, StaticCase
+    from opensees_studio.services.opensees_runner import OpenSeesRunner
+
+    static = StaticCase(id=1, name="s", pattern_ids=[1])
+    modal = ModalCase(id=2, name="m")
+    assert engines.unsupported_cases(_Engine(), [static, modal]) == [modal]
+    assert engines.unsupported_cases(engines.OpenSeesPyEngine(), [static, modal]) == []
+    runner = engines.OpenSeesPyEngine().create_runner(Project(ndm=3, ndf=6))
+    assert isinstance(runner, OpenSeesRunner)

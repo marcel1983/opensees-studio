@@ -57,13 +57,20 @@ An engine is an object with:
 | `case_types: frozenset[str]` | `AnalysisCase.type` values it runs. |
 | `status(settings) -> EngineStatus` | Available or not, version, location, message. Must not load the engine. |
 | `child_environment(settings) -> dict[str, str]` | Variables the analysis child needs. |
+| `create_runner(project, on_progress) -> runner` | In the analysis child: an object whose `run(case, results_dir=...)` returns the results classes of `services.results`. |
 
 Third-party engines register under the `opensees_studio.engines` entry-point
 group; one that fails to load is skipped. The analysis child protocol (JSON
 lines on stdout, results through `services.result_store`, the exit codes in
-`run.py`) is the boundary a second engine must honour; today the child always
-runs `OpenSeesRunner`, and dispatching the child on the engine key is the first
-step of the PR that adds the second engine.
+`run.py`) is the boundary a second engine must honour.
+
+The parent passes the chosen engine's key in `OPENSEES_STUDIO_ENGINE` (and the
+OpenSeesPy folder in `OPENSEES_STUDIO_ENGINE_PATH`, whatever engine solves).
+The child builds that engine's runner, refuses up front any case whose type is
+not in its `case_types` (one `error` line, exit 2, nothing written), and keeps
+the ARPACK re-execution (`core.modal`) for OpenSeesPy only. The stability check
+and the Material Tester call OpenSees itself, so they follow OpenSeesPy's own
+status rather than the chosen engine's.
 
 ## 4. Consequences
 

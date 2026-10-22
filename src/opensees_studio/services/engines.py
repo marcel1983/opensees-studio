@@ -39,12 +39,15 @@ import subprocess
 import sys
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 from opensees_studio.services.persistence import app_data_dir
 
 #: Environment variable that hands the engine's package folder to the analysis child.
 ENGINE_PATH_ENV = "OPENSEES_STUDIO_ENGINE_PATH"
+
+#: Environment variable that tells the analysis child which engine solves.
+ENGINE_KEY_ENV = "OPENSEES_STUDIO_ENGINE"
 
 #: File in the application data directory that holds :class:`SolverSettings`.
 SETTINGS_FILE = "solver.json"
@@ -53,7 +56,9 @@ SETTINGS_FILE = "solver.json"
 OPENSEES_PY = "openseespy"
 
 #: Case types the OpenSeesPy engine runs (``AnalysisCase.type``).
-OPENSEES_CASE_TYPES = frozenset({"Static", "Modal", "Transient", "Pushover", "ResponseSpectrum"})
+OPENSEES_CASE_TYPES = frozenset(
+    {"Static", "Modal", "Transient", "Pushover", "ResponseSpectrum", "InfluenceLine"}
+)
 
 #: How long :func:`inspect_python` waits for another interpreter to answer.
 INSPECT_TIMEOUT_S = 30.0
@@ -106,6 +111,10 @@ class SolverEngine(Protocol):
 
     def child_environment(self, settings: SolverSettings) -> dict[str, str]:
         """Variables the analysis child needs to find the engine."""
+
+    def create_runner(self, project: Any, on_progress: Any = None) -> Any:
+        """In the analysis child: an object whose ``run(case, results_dir=...)``
+        returns the same results classes ``OpenSeesRunner`` does."""
 
 
 # ──────────────────────────── settings ────────────────────────────
@@ -203,6 +212,11 @@ class OpenSeesPyEngine:
     def child_environment(self, settings: SolverSettings) -> dict[str, str]:
         return {ENGINE_PATH_ENV: settings.package_dir} if settings.package_dir else {}
 
+    def create_runner(self, project: Any, on_progress: Any = None) -> Any:
+        from opensees_studio.services.opensees_runner import OpenSeesRunner
+
+        return OpenSeesRunner(project, on_progress=on_progress)
+
 
 # ──────────────────────────── registry ────────────────────────────
 def engines() -> dict[str, SolverEngine]:
@@ -235,8 +249,35 @@ def current_status(settings: SolverSettings | None = None) -> EngineStatus:
 
 
 def child_environment(settings: SolverSettings | None = None) -> dict[str, str]:
+    """What the analysis child needs: the chosen engine, and where OpenSeesPy is.
+
+    The OpenSeesPy folder goes along whatever engine solves: the stability
+    check and the Material Tester always run on OpenSees.
+    """
     settings = load_settings() if settings is None else settings
-    return engine_for(settings).child_environment(settings)
+    engine = engine_for(settings)
+    env = {ENGINE_KEY_ENV: engine.key, **OpenSeesPyEngine().child_environment(settings)}
+    env.update(engine.child_environment(settings))
+    return env
+
+
+def opensees_status(settings: SolverSettings | None = None) -> EngineStatus:
+    """Whether OpenSeesPy itself is usable (the stability check and the Material Tester)."""
+    settings = load_settings() if settings is None else settings
+    return OpenSeesPyEngine().status(settings)
+
+
+def engine_in_child() -> SolverEngine | None:
+    """In the analysis child: the engine the parent chose, None when it is not installed here."""
+    import os
+
+    key = os.environ.get(ENGINE_KEY_ENV) or OPENSEES_PY
+    return engines().get(key)
+
+
+def unsupported_cases(engine: SolverEngine, cases: list[Any]) -> list[Any]:
+    """The cases ``engine`` cannot run (by ``case.type``)."""
+    return [case for case in cases if getattr(case, "type", None) not in engine.case_types]
 
 
 def activate(package_dir: str | None) -> None:

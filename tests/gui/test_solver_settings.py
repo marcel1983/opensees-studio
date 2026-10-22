@@ -51,6 +51,7 @@ def test_without_a_solver_the_analysis_tools_wait_and_modelling_does_not(
     qtbot, monkeypatch
 ) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.setattr(engines, "current_status", lambda settings=None: MISSING)
+    monkeypatch.setattr(engines, "opensees_status", lambda settings=None: MISSING)
     mw = _window(qtbot)
 
     for action in (mw._act_run, mw._act_run_all, mw._act_check_stability, mw._act_material_tester):
@@ -145,3 +146,50 @@ def test_a_failed_download_is_reported(qtbot, monkeypatch) -> None:  # type: ign
     dialog._download.click()
     qtbot.waitUntil(lambda: "offline" in dialog._status.text(), timeout=10_000)
     assert dialog._download.isEnabled()
+
+
+# ──────────────────────────── choosing the engine ────────────────────────────
+class _ToyEngine:
+    key = "toy"
+    name = "Toy solver"
+    case_types = frozenset({"Static"})
+
+    def status(self, settings):  # type: ignore[no-untyped-def]
+        return engines.EngineStatus(engine=self.key, name=self.name, available=True)
+
+    def child_environment(self, settings):  # type: ignore[no-untyped-def]
+        return {}
+
+    def create_runner(self, project, on_progress=None):  # type: ignore[no-untyped-def]
+        raise NotImplementedError
+
+
+class _Entry:
+    def load(self):  # type: ignore[no-untyped-def]
+        return _ToyEngine
+
+
+@pytest.mark.gui
+def test_the_dialog_chooses_the_engine(qtbot, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    import importlib.metadata
+
+    monkeypatch.setattr(importlib.metadata, "entry_points", lambda group: [_Entry()])
+    dialog = SolverSettingsDialog(engines.SolverSettings())
+    qtbot.addWidget(dialog)
+    assert dialog.engine_key() == engines.OPENSEES_PY
+
+    dialog._engine.setCurrentIndex(dialog._engine.findData("toy"))
+    assert dialog.settings().engine == "toy"
+    assert "Stability check and Material Tester" in dialog._status.text()
+
+
+@pytest.mark.gui
+def test_another_engine_runs_while_the_opensees_tools_wait(qtbot, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    ready = engines.EngineStatus(engine="toy", name="Toy solver", available=True)
+    monkeypatch.setattr(engines, "current_status", lambda settings=None: ready)
+    monkeypatch.setattr(engines, "opensees_status", lambda settings=None: MISSING)
+    mw = _window(qtbot)
+
+    assert mw._act_run.isEnabled() and mw._act_run_all.isEnabled()
+    assert not mw._act_check_stability.isEnabled()
+    assert not mw._act_material_tester.isEnabled()

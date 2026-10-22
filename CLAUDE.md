@@ -197,8 +197,11 @@ These are non-obvious things that are easy to break if you don't know:
   license, never a base dependency: `services/engines.py` finds it (this
   environment, another Python 3.12, or a folder appended to `sys.path`, saved in
   `solver.json`), the analysis child gets the folder in
-  `OPENSEES_STUDIO_ENGINE_PATH`, and the GUI disables Run, Check Stability and
-  the Material Tester without one. Never import OpenSeesPy at module level, and
+  `OPENSEES_STUDIO_ENGINE_PATH` and the chosen engine in
+  `OPENSEES_STUDIO_ENGINE` (it builds that engine's runner with
+  `create_runner` and refuses case types the engine does not declare), and the
+  GUI disables Run without an engine, and Check Stability and the Material
+  Tester without OpenSeesPy (they always call OpenSees). Never import OpenSeesPy at module level, and
   never detect it by importing it. See `docs/adr/ADR-0003-solver-engines.md`.
   Scripts and web backends that solve install `.[opensees]`.
 - **GUI extra** (`pip install -e ".[gui]"`): adds PySide6, pyvista, pyvistaqt,
