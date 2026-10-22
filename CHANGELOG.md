@@ -9,6 +9,16 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Added
+
+- **View → Color By: paint frames and shells by section, by material or by
+  group.** Each category gets its own colour (groups keep the colour they were
+  given in Define → Groups) and a legend in the viewport's corner names them.
+  Material follows the section's fibres, so a reinforced-concrete member reads
+  "concrete + steel"; members with no section, material or group keep the
+  ordinary colour. The selection still shows on top. Saved with the project's
+  view settings; a project that keeps a single colour saves byte-identical.
+
 ## [0.0.22] — 2026-10-22
 
 A second engine ships with the application: PyNite (MIT) runs linear static
