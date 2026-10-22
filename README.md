@@ -134,6 +134,13 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   `BeamWithHinges`, and `ElasticMembranePlateSection` (E, ν, h, ρ) for shells;
   geometric transformations and beam integration rules are assignable per
   element.
+- **Concrete Section Wizard** — Define → Concrete Section Wizard: a rectangular,
+  circular, T or L reinforced concrete section from its dimensions, clear cover,
+  bar sizes (metric φ or US #) and counts, ties and strengths. It adds the cover
+  and core concrete (`Concrete02`, the core confined after Mander when asked) and
+  the bars (`Steel02`), a fiber section, and optionally an elastic section with
+  the ACI 318-19 cracked inertia (0.70 Ig columns, 0.35 Ig beams), in one undo
+  step.
 - **AISC v16 shape library** — pick a shape by name in Define → Section
   Library → "Add from AISC…" (1,660 shapes across 13 families). The data is
   US customary and is shown both as published and converted to the project's

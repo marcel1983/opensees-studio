@@ -488,6 +488,7 @@ class MainWindow(QMainWindow):
         self._act_material_tester = QAction("Material &Tester…", self, shortcut="Ctrl+Shift+T")
         self._act_ground_motions = QAction("&Ground Motions…", self, shortcut="Ctrl+Shift+G")
         self._act_section_library = QAction("&Section Library…", self, shortcut="Ctrl+Shift+S")
+        self._act_concrete_section = QAction("&Concrete Section Wizard…", self)
         self._act_add_linear_ts = QAction("Add &Linear TimeSeries…", self)
         self._act_add_path_ts = QAction("Add &Path TimeSeries…", self)
         self._act_add_function_ts = QAction(
@@ -693,6 +694,7 @@ class MainWindow(QMainWindow):
                 self._act_material_tester,
                 self._act_ground_motions,
                 self._act_section_library,
+                self._act_concrete_section,
             ]
         )
         m_define.addSeparator()
@@ -1129,6 +1131,7 @@ class MainWindow(QMainWindow):
         self._act_material_tester.triggered.connect(self._on_material_tester)
         self._act_ground_motions.triggered.connect(self._on_ground_motions)
         self._act_section_library.triggered.connect(self._on_section_library)
+        self._act_concrete_section.triggered.connect(self._on_concrete_section)
         self._act_add_linear_ts.triggered.connect(self._on_add_linear_ts)
         self._act_add_path_ts.triggered.connect(self._on_add_path_ts)
         self._act_add_function_ts.triggered.connect(self._on_add_function_ts)
@@ -3861,6 +3864,42 @@ class MainWindow(QMainWindow):
         if self._vm.project is None:
             self._on_new()
         SectionLibraryDialog(self._vm, self).exec()
+
+    def _on_concrete_section(self) -> None:
+        """Define → Concrete Section Wizard: materials and sections in one undo step."""
+        from opensees_studio.views.dialogs.concrete_section import ConcreteSectionDialog
+
+        if self._vm.project is None:
+            self._on_new()
+        project = self._vm.project
+        if project is None:
+            return
+        dialog = ConcreteSectionDialog(project, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        result = dialog.built_section()
+        if result is None:
+            return
+        sections = [s for s in (result.fiber, result.elastic) if s is not None]
+        self._add_materials_and_sections("Concrete section", result.materials, sections)
+
+    def _add_materials_and_sections(
+        self, text: str, materials: list[Any], sections: list[Any]
+    ) -> None:
+        """Add ``materials`` then ``sections`` as one undo step, and say what was added."""
+        from opensees_studio.commands import AddMaterialsCommand
+
+        stack = self._vm.undo_stack
+        stack.beginMacro(text)
+        try:
+            if materials:
+                self._vm.apply_command(AddMaterialsCommand(self._vm, materials))
+            if sections:
+                self._vm.apply_command(AddSectionsCommand(self._vm, sections))
+        finally:
+            stack.endMacro()
+        names = ", ".join(f"#{s.id} {s.name}" for s in sections)
+        self._log(f"{text}: added {len(materials)} material(s) and section(s) {names}.")
 
     # ── slots: assign property ──────────────────────────────────────
     def _on_assign_section(self) -> None:

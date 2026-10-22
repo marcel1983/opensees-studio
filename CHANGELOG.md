@@ -11,6 +11,14 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **Define → Concrete Section Wizard.** A rectangular, circular, T or L
+  reinforced concrete section from its dimensions, clear cover, metric or US bar
+  sizes and counts, ties and strengths, drawn as you type. It adds the cover and
+  core concrete (`Concrete02`; the core confined after Mander, Priestley and Park
+  when asked), the bars (`Steel02`), a fiber section and, optionally, an elastic
+  section with the ACI 318-19 cracked inertia (0.70 Ig for columns, 0.35 Ig for
+  beams), all in one undo step.
+
 - **Steel frame check: channels, tees, angles, HSS and pipes.** Design → Steel
   Frame Check now covers C and MC channels (E4 flexural-torsional buckling, F2,
   F6, G2, G6), WT, MT and ST tees (F9, stem as an unstiffened element), equal-leg

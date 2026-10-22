@@ -2074,6 +2074,55 @@ about a record is computed once, here.
             "mechanics.ground_motions",
             "define.linear_ts",
         ),
+        "define.concrete_section": _t(
+            "Define → Concrete Section Wizard",
+            "Define",
+            "A reinforced concrete section, its concrete and steel materials, from a few inputs.",
+            """
+Builds a reinforced concrete frame section the way it is drawn on a plan, and
+adds the materials it needs, in one undo step. The drawing on the right shows the
+concrete, the core inside the bar centrelines (dashed) and the bars at their true
+size, with the centroid.
+
+# Shape
+- **Rectangle** (column or beam), **Circle** (column), **T-beam** (flange on
+  top, centred on the web) and **L-beam** (edge beam, flange to +z).
+- Depth h runs along local **y**, width b along local **z**: assign the section
+  so local y is the direction the member bends in (Assign → Frame → Local Axes).
+
+# Reinforcement
+- Bar sizes **metric** (φ6 to φ40 mm) or **US** (#3 to #18).
+- Top and bottom bars (at least two each) and intermediate bars on each side
+  face; a circle takes its bars evenly around.
+- **Clear cover** is to the outside of the ties: the bars sit at cover + tie +
+  half a bar from the face.
+- Tie size and spacing give the transverse ratio ρs (two legs each way for
+  hoops, 4 Asp / (ds s) for a spiral), used for the confinement.
+
+# Materials it adds
+- **Cover concrete**: `Concrete02`, f'c at a strain 2 f'c / Ec (so its initial
+  slope is Ec = 4700 sqrt(f'c) MPa, ACI 318-19), spalling to zero at 0.005,
+  tension 0.33 sqrt(f'c) MPa.
+- **Core concrete**: with **Confined core (Mander)** ticked, f'cc, εcc and εcu of
+  Mander, Priestley and Park (1988) with ke = 0.75 for hoops and 0.95 for a
+  spiral, εcu = 0.004 + 1.4 ρs fyh εsu / f'cc; otherwise the cover concrete.
+- **Bars**: `Steel02` with fy, Es and 1 % hardening.
+
+# Sections it adds
+- **Fiber section** (default): core, cover strips, flange overhangs and bars as
+  layers, for force- or displacement-based members. Its GJ is the gross elastic
+  one (G = Ec / 2.4).
+- **Elastic section with cracked inertia**: the gross area, Ec and I times the
+  factor of ACI 318-19 Table 6.6.3.1.1 — **0.70 for a column, 0.35 for a beam** —
+  for a linear model; change the factor if your code asks for another.
+
+A column's longitudinal ratio outside ACI's 1 % to 8 % is noted. Edit the
+materials afterwards in Define → Material Library, and the fibre layout in
+Define → Section Library (double-click the section).
+""",
+            "define.section_library",
+            "define.material_library",
+        ),
         "define.section_library": _t(
             "Define → Section Library",
             "Define",
@@ -4267,6 +4316,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_material_tester": "define.material_tester",
     "_act_ground_motions": "define.ground_motions",
     "_act_section_library": "define.section_library",
+    "_act_concrete_section": "define.concrete_section",
     "_act_add_linear_ts": "define.linear_ts",
     "_act_add_path_ts": "define.path_ts",
     "_act_add_function_ts": "define.function_ts",

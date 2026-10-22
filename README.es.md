@@ -54,8 +54,11 @@ script o un notebook de Jupyter: la interfaz es una forma de usarlo, no la únic
   modificadores y puntos de inserción al estilo SAP2000.
 - **Materiales y secciones**: Steel01/02, Concrete01/02/04, Hysteretic y la
   biblioteca de materiales de OpenSees; secciones de fibras con editor; la
-  biblioteca de perfiles AISC v16; el Material Tester para ver la respuesta
-  cíclica de un material.
+  biblioteca de perfiles AISC v16; el **asistente de secciones de hormigón
+  armado** (Define → Concrete Section Wizard: rectangular, circular, T o L, barras
+  φ o #, núcleo confinado según Mander, sección de fibras y sección elástica con
+  inercia fisurada ACI); el Material Tester para ver la respuesta cíclica de un
+  material.
 - **Cargas y análisis**: patrones nodales, distribuidos, trapezoidales, puntuales,
   de superficie y de losa a vigas; peso propio; fuente de masa; casos estáticos,
   modales (deterministas), pushover, espectro de respuesta (CQC/SRSS) y
