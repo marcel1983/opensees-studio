@@ -9,6 +9,16 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.21] — 2026-10-22
+
+Models come in from PORTICO and go out designed: File → Import → PORTICO Model
+reads `.s3d` files scaled to the project's units; the new Design menu checks
+steel members against AISC 360-16 (I-shapes, channels, tees, angles, HSS and
+pipes), paints them by their ratio and checks storey drifts; influence lines,
+moving loads and temperature loads join the analyses; the Concrete Section
+Wizard and the Section Designer build any section; and a generated Verification
+Manual compares every result family with closed-form and published solutions.
+
 ### Added
 
 - **Define → Section Designer.** Draw any cross-section with a command line —
