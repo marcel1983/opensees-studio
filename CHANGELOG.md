@@ -9,6 +9,16 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Added
+
+- **Choose the engine that runs the analyses** (Options → Solver → Engine). The
+  analysis process now runs the cases with the engine chosen there instead of
+  always with OpenSeesPy, so an engine installed as a Python package (the
+  `opensees_studio.engines` entry point) solves without changes to OpenSees
+  Studio. A case of a type the engine does not run is refused before anything is
+  solved, with a message naming what it does run. The stability check and the
+  Material Tester keep using OpenSeesPy whatever the engine.
+
 ## [0.0.21] — 2026-10-22
 
 Models come in from PORTICO and go out designed: File → Import → PORTICO Model
