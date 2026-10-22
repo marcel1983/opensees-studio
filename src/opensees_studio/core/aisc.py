@@ -23,12 +23,16 @@ from pydantic import BaseModel, ConfigDict
 
 from opensees_studio.core.sections import (
     AngleShape,
+    ChannelShape,
     ElasticSection,
     FiberSection,
     Patch,
     PipeShape,
     RectangularPatch,
-    RectShape,
+    SectionShape,
+    TeeShape,
+    TubeShape,
+    WideFlangeShape,
     w_shape_patches,
 )
 from opensees_studio.core.units import UnitSystem, length_scale
@@ -165,21 +169,32 @@ def shapes_of(family: str) -> list[AISCShape]:
     return [s for s in load_shapes().values() if s.family == family]
 
 
-def shape_hint(shape: AISCShape) -> PipeShape | RectShape | AngleShape | None:
-    """The truthful drawing hint for ``shape``, when the viewer has a kind for it.
+def shape_hint(shape: AISCShape, scale: float = 1.0) -> SectionShape | None:
+    """The truthful drawing hint for ``shape``, its lengths times ``scale``.
 
-    Only the kinds that exist today (pipe, rectangle, angle) are returned. A
-    wide flange drawn as a solid rectangle would misrepresent it, so an
-    I-shaped section gets no hint and the viewer falls back to its equivalent
-    rectangle, which is documented as an approximation; the fibre route
-    (:func:`shape_to_fiber_section`) draws the real profile in the meantime.
+    ``scale`` takes the table's inches to the project's length unit (the hint is
+    read in project units by the viewer, the member extents and the IFC export).
+    Every family the table carries has a kind: I-shapes, channels, tees, angles,
+    round and rectangular tubes.
     """
-    if shape.family in {"PIPE", "HSS_R"} and shape.od and shape.tnom:
-        return PipeShape(od=shape.od, t=shape.tnom)
-    if shape.family == "HSS" and shape.d and shape.bf and shape.tnom:
-        return RectShape(d=shape.d, b=shape.bf)
-    if shape.family == "L" and shape.d and shape.bf and shape.tf:
-        return AngleShape(d=shape.d, b=shape.bf, t=shape.tf)
+    d, bf, tw, tf, od, t = (
+        None if v is None else v * scale
+        for v in (shape.d, shape.bf, shape.tw, shape.tf, shape.od, shape.tnom)
+    )
+    family = shape.family
+    if family in {"PIPE", "HSS_R"} and od and t:
+        return PipeShape(od=od, t=t)
+    if family == "HSS" and d and bf and t:
+        return TubeShape(d=d, b=bf, t=t)
+    if family == "L" and d and bf and tf:
+        return AngleShape(d=d, b=bf, t=tf)
+    if d and bf and tw and tf:
+        if family in {"W", "HP", "M", "S"}:
+            return WideFlangeShape(d=d, bf=bf, tw=tw, tf=tf)
+        if family in {"C", "MC"}:
+            return ChannelShape(d=d, bf=bf, tw=tw, tf=tf)
+        if family in {"WT", "MT", "ST"}:
+            return TeeShape(d=d, bf=bf, tw=tw, tf=tf)
     return None
 
 
@@ -221,7 +236,7 @@ def shape_to_elastic_section(
         Iz=iz,
         Iy=iy,
         J=(shape.j * factor**4) if shape.j is not None else None,
-        shape=shape_hint(shape) if with_hint else None,
+        shape=shape_hint(shape, factor) if with_hint else None,
     )
 
 

@@ -61,8 +61,55 @@ class RectShape(BaseModel):
     b: PositiveFloat = Field(..., description="Width along local y.")
 
 
+class WideFlangeShape(BaseModel):
+    """I-shape (W, HP, M, S): depth ``d``, flange width ``bf``, web ``tw``, flanges ``tf``.
+
+    Like the other hints, the depth stands along local z (a 3D beam); a 2D frame
+    has it along local y.
+    """
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+    kind: Literal["ishape"] = "ishape"
+    d: PositiveFloat = Field(..., description="Overall depth.")
+    bf: PositiveFloat = Field(..., description="Flange width.")
+    tw: PositiveFloat = Field(..., description="Web thickness.")
+    tf: PositiveFloat = Field(..., description="Flange thickness.")
+
+
+class ChannelShape(BaseModel):
+    """Channel (C, MC): web along the depth, both flanges on the +width side."""
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+    kind: Literal["channel"] = "channel"
+    d: PositiveFloat = Field(..., description="Overall depth.")
+    bf: PositiveFloat = Field(..., description="Flange width.")
+    tw: PositiveFloat = Field(..., description="Web thickness.")
+    tf: PositiveFloat = Field(..., description="Flange thickness.")
+
+
+class TeeShape(BaseModel):
+    """Tee (WT, MT, ST): the flange at the top of the depth, the stem below it."""
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+    kind: Literal["tee"] = "tee"
+    d: PositiveFloat = Field(..., description="Overall depth (flange + stem).")
+    bf: PositiveFloat = Field(..., description="Flange width.")
+    tw: PositiveFloat = Field(..., description="Stem thickness.")
+    tf: PositiveFloat = Field(..., description="Flange thickness.")
+
+
+class TubeShape(BaseModel):
+    """Rectangular hollow section (HSS): depth ``d``, width ``b``, wall ``t``."""
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+    kind: Literal["tube"] = "tube"
+    d: PositiveFloat = Field(..., description="Outer depth.")
+    b: PositiveFloat = Field(..., description="Outer width.")
+    t: PositiveFloat = Field(..., description="Wall thickness.")
+
+
 SectionShape = Annotated[
-    PipeShape | AngleShape | RectShape,
+    PipeShape | AngleShape | RectShape | WideFlangeShape | ChannelShape | TeeShape | TubeShape,
     Field(discriminator="kind"),
 ]
 
@@ -96,7 +143,8 @@ class ElasticSection(Entity):
     shape: SectionShape | None = Field(
         default=None,
         description=(
-            "Optional true cross-section geometry (pipe/angle/rect), used ONLY as a "
+            "Optional true cross-section geometry (pipe, angle, rectangle, I, channel, "
+            "tee, rectangular tube), used ONLY as a "
             "drawing hint for an extruded view. Never emitted to OpenSees and never "
             "read by the analysis (which uses A/Iz/Iy/J only), so it cannot change a "
             "result; absent ⇒ a viewer back-solves an equivalent rectangle from A/Iz."

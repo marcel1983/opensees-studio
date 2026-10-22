@@ -317,3 +317,31 @@ def test_support_springs_are_stiffness_values(tmp_path: Path) -> None:
     assert condition.RotationalStiffnessY.is_a("IfcRotationalStiffnessMeasure")
     assert condition.RotationalStiffnessY.wrappedValue == pytest.approx(2e3)
     assert condition.TranslationalStiffnessX.wrappedValue is True
+
+
+@pytest.mark.parametrize(
+    ("name", "profile"),
+    [
+        ("C10X30", "IfcUShapeProfileDef"),
+        ("WT7X45", "IfcTShapeProfileDef"),
+        ("HSS10X10X1_2", "IfcRectangleHollowProfileDef"),
+    ],
+)
+def test_every_aisc_profile_kind_has_its_ifc_profile(
+    name: str, profile: str, tmp_path: Path
+) -> None:
+    section = shape_to_elastic_section(
+        get_shape(name), elastic_modulus=29000.0, units=UnitSystem.US_IN_KIP, ndm=3
+    )
+    project = Project(
+        ndm=3,
+        ndf=6,
+        nodes=[Node(id=1, coords=(0.0, 0.0, 144.0)), Node(id=2, coords=(240.0, 0.0, 144.0))],
+        sections=[section.model_copy(update={"name": "custom"})],
+        elements=[ElasticBeamColumn(id=1, nodes=(1, 2), section_id=section.id)],
+    )
+    project.meta.units = UnitSystem.US_IN_KIP
+    report = export_ifc(project, tmp_path / "p.ifc")
+    assert _validate(report.path) == []
+    (beam,) = ifcopenshell.open(str(report.path)).by_type("IfcBeam")
+    assert beam.Representation.Representations[0].Items[0].SweptArea.is_a(profile)

@@ -39,6 +39,7 @@ from opensees_studio.core.sections import (
     RectShape,
     SectionAggregator,
     StraightLayer,
+    TubeShape,
 )
 
 if TYPE_CHECKING:
@@ -88,7 +89,7 @@ def section_extents(project: Project, section_id: int) -> SectionExtents | None:
     """Bounding box of section ``section_id`` about its reference axis, None if unknown.
 
     An :class:`ElasticSection` uses its shape hint when it has one (a pipe, the
-    legs of an angle, a rectangle) and otherwise the rectangle with the same
+    legs of an angle, the depth and width of the other profiles) and otherwise the rectangle with the same
     ``A``, ``Iz`` and ``Iy``; a fibre section the extent of its patches, layers
     and fibres; an aggregator the extent of the section it wraps.
     """
@@ -101,12 +102,11 @@ def section_extents(project: Project, section_id: int) -> SectionExtents | None:
         shape = section.shape
         if isinstance(shape, PipeShape):
             return _symmetric(shape.od, shape.od)
-        if isinstance(shape, (RectShape, AngleShape)):
+        if shape is not None:
             # The hint stands with its depth along local z (a 3D beam); a 2D frame bends in
             # the x-y plane, so there the depth lies along local y.
-            return (
-                _symmetric(shape.d, shape.b) if project.ndm == 2 else _symmetric(shape.b, shape.d)
-            )
+            width = shape.b if isinstance(shape, (RectShape, AngleShape, TubeShape)) else shape.bf
+            return _symmetric(shape.d, width) if project.ndm == 2 else _symmetric(width, shape.d)
         return _elastic_extents(section.A, section.Iz, section.Iy)
     if isinstance(section, FiberSection):
         ys: list[float] = []

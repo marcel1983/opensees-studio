@@ -41,6 +41,7 @@ from dataclasses import dataclass, replace
 from opensees_studio.core.sections import ElasticSection, FiberSection, Fibre
 from opensees_studio.core.sections.geometry import (
     CircleRegion,
+    Point,
     PolygonRegion,
     Region,
     rectangle,
@@ -99,6 +100,52 @@ def _poly(points: Sequence[tuple[float, float]], y: float, z: float, hole: bool)
     return PolygonRegion(tuple((py + y, pz + z) for py, pz in points), hole)
 
 
+def profile_outline(kind: str, d: float, bf: float, tf: float, tw: float) -> list[Point]:
+    """Vertices of an ``ishape``, ``channel`` or ``tee``, depth along y, centred on its box."""
+    if kind == "ishape":
+        h, b, t, w = d / 2.0, bf / 2.0, tf, tw / 2.0
+        return [
+            (-h, -b),
+            (-h, b),
+            (-h + t, b),
+            (-h + t, w),
+            (h - t, w),
+            (h - t, b),
+            (h, b),
+            (h, -b),
+            (h - t, -b),
+            (h - t, -w),
+            (-h + t, -w),
+            (-h + t, -b),
+        ]
+    if kind == "channel":
+        h = d / 2.0
+        outline = [
+            (-h, 0.0),
+            (-h, bf),
+            (-h + tf, bf),
+            (-h + tf, tw),
+            (h - tf, tw),
+            (h - tf, bf),
+            (h, bf),
+            (h, 0.0),
+        ]
+        return [(py, pz - bf / 2.0) for py, pz in outline]
+    if kind == "tee":
+        h, b, w = d / 2.0, bf / 2.0, tw / 2.0
+        return [
+            (-h, -w),
+            (-h, w),
+            (h - tf, w),
+            (h - tf, b),
+            (h, b),
+            (h, -b),
+            (h - tf, -b),
+            (h - tf, -w),
+        ]
+    raise ValueError(f"Unknown profile {kind!r}.")
+
+
 def shape_regions(kind: str, words: Sequence[str], *, hole: bool = False) -> list[Region]:
     """The regions one shape command draws (``kind`` without the ``hole`` prefix)."""
     if kind == "rect":
@@ -133,47 +180,7 @@ def shape_regions(kind: str, words: Sequence[str], *, hole: bool = False) -> lis
         y, z = _at(v, 4)
         if tw >= bf or (2 if kind != "tee" else 1) * tf >= d:
             raise CommandError("The web and the flanges do not fit in the depth and width.")
-        if kind == "ishape":
-            h, b, t, w = d / 2.0, bf / 2.0, tf, tw / 2.0
-            outline = [
-                (-h, -b),
-                (-h, b),
-                (-h + t, b),
-                (-h + t, w),
-                (h - t, w),
-                (h - t, b),
-                (h, b),
-                (h, -b),
-                (h - t, -b),
-                (h - t, -w),
-                (-h + t, -w),
-                (-h + t, -b),
-            ]
-        elif kind == "channel":
-            h = d / 2.0
-            outline = [
-                (-h, 0.0),
-                (-h, bf),
-                (-h + tf, bf),
-                (-h + tf, tw),
-                (h - tf, tw),
-                (h - tf, bf),
-                (h, bf),
-                (h, 0.0),
-            ]
-            outline = [(py, pz - bf / 2.0) for py, pz in outline]
-        else:
-            h, b, w = d / 2.0, bf / 2.0, tw / 2.0
-            outline = [
-                (-h, -w),
-                (-h, w),
-                (h - tf, w),
-                (h - tf, b),
-                (h, b),
-                (h, -b),
-                (h - tf, -b),
-                (h - tf, -w),
-            ]
+        outline = profile_outline(kind, d, bf, tf, tw)
         return [_poly(outline, y, z, hole)]
     if kind == "angle":
         usage = "angle D B T [Y Z]"
