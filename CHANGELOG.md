@@ -11,6 +11,14 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **PyNite, a second engine that ships with OpenSees Studio** (MIT, no
+  download). Options → Solver → Engine → PyNite runs linear static cases of
+  elastic frames and trusses — nodal, uniform, trapezoidal, floor and point
+  loads, self weight, releases, support springs — and P-Delta when a member
+  uses the PDelta transformation. Its results come back in the same layout as
+  OpenSeesPy's and match them to rounding on those models (checked by the test
+  suite); anything it does not model is refused with a message naming it. The
+  bundle grows by about 140 MB (scipy).
 - **Choose the engine that runs the analyses** (Options → Solver → Engine). The
   analysis process now runs the cases with the engine chosen there instead of
   always with OpenSeesPy, so an engine installed as a Python package (the

@@ -218,14 +218,59 @@ class OpenSeesPyEngine:
         return OpenSeesRunner(project, on_progress=on_progress)
 
 
+#: Key of the bundled PyNite engine.
+PYNITE = "pynite"
+
+
+class PyNiteEngine:
+    """PyNite (MIT): linear static and P-Delta analysis of elastic frames.
+
+    Shipped with the application (the ``gui`` extra), so it needs no download.
+    What it models and what it refuses is in ``services.pynite_runner``.
+    """
+
+    key = PYNITE
+    name = "PyNite"
+    case_types = frozenset({"Static"})
+
+    def status(self, settings: SolverSettings) -> EngineStatus:
+        if importlib.util.find_spec("Pynite") is None:
+            return EngineStatus(
+                engine=self.key,
+                name=self.name,
+                available=False,
+                message="PyNite is not installed: pip install PyNiteFEA==3.2.0",
+                case_types=self.case_types,
+            )
+        try:
+            version = importlib.metadata.version("PyNiteFEA")
+        except importlib.metadata.PackageNotFoundError:
+            version = None
+        return EngineStatus(
+            engine=self.key,
+            name=self.name,
+            available=True,
+            version=version,
+            case_types=self.case_types,
+        )
+
+    def child_environment(self, settings: SolverSettings) -> dict[str, str]:
+        return {}
+
+    def create_runner(self, project: Any, on_progress: Any = None) -> Any:
+        from opensees_studio.services.pynite_runner import PyNiteRunner
+
+        return PyNiteRunner(project, on_progress=on_progress)
+
+
 # ──────────────────────────── registry ────────────────────────────
 def engines() -> dict[str, SolverEngine]:
-    """The built-in engine plus every one registered under :data:`ENTRY_POINT_GROUP`.
+    """The built-in engines plus every one registered under :data:`ENTRY_POINT_GROUP`.
 
     A plug-in that fails to load is skipped: a broken third-party engine must
     not stop the application from starting.
     """
-    found: dict[str, SolverEngine] = {OPENSEES_PY: OpenSeesPyEngine()}
+    found: dict[str, SolverEngine] = {OPENSEES_PY: OpenSeesPyEngine(), PYNITE: PyNiteEngine()}
     for entry in importlib.metadata.entry_points(group=ENTRY_POINT_GROUP):
         try:
             engine = entry.load()

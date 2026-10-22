@@ -205,7 +205,10 @@ These are non-obvious things that are easy to break if you don't know:
   never detect it by importing it. See `docs/adr/ADR-0003-solver-engines.md`.
   Scripts and web backends that solve install `.[opensees]`.
 - **GUI extra** (`pip install -e ".[gui]"`): adds PySide6, pyvista, pyvistaqt,
-  vtk, pyqtgraph, imageio, ifcopenshell. Required to launch the desktop app.
+  vtk, pyqtgraph, imageio, ifcopenshell, and `PyNiteFEA` — the bundled second
+  engine (MIT; `services/pynite_runner.py`, linear static and P-Delta of elastic
+  frames and trusses, results in OpenSees' layout and tested against it in
+  `tests/integration/test_pynite_parity.py`). Required to launch the desktop app.
 
 Desktop dev: `pip install -e ".[gui,dev]"` (`dev` pulls in `opensees`).
 Web / headless: `pip install -e .` (then verify with

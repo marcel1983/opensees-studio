@@ -88,6 +88,7 @@ lighter unpacked; the user downloads OpenSeesPy separately (86 MB on Linux,
 | ffmpeg (video export) | 77 MB |
 | OpenBLAS (numpy) | 37 MB |
 | PyVista's mypyc module | 36 MB |
+| scipy, for the bundled PyNite engine (added in 0.0.22) | ~140 MB |
 | everything else | the rest |
 
 ### Why VTK is not trimmed
