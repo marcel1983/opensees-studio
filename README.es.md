@@ -57,7 +57,11 @@ script o un notebook de Jupyter: la interfaz es una forma de usarlo, no la únic
   biblioteca de perfiles AISC v16; el **asistente de secciones de hormigón
   armado** (Define → Concrete Section Wizard: rectangular, circular, T o L, barras
   φ o #, núcleo confinado según Mander, sección de fibras y sección elástica con
-  inercia fisurada ACI); el Material Tester para ver la respuesta cíclica de un
+  inercia fisurada ACI); el **diseñador de secciones** (Define → Section
+  Designer: cualquier sección dibujada con comandos —`rect`, `circle`, `poly`,
+  `ishape`, `tube`, `pipe`, `hole`…— o importada de un DXF, con sus propiedades
+  y la constante de torsión de Saint-Venant calculada numéricamente, como sección
+  elástica o de fibras); el Material Tester para ver la respuesta cíclica de un
   material.
 - **Cargas y análisis**: patrones nodales, distribuidos, trapezoidales, puntuales,
   de superficie y de losa a vigas; peso propio; fuente de masa; casos estáticos,

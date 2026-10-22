@@ -5,17 +5,18 @@ polygons and circles — each solid or a hole. :func:`section_properties` gives
 the area, the centroid, the second moments about the centroidal axes (OpenSees'
 ``Iz = ∫ y² dA`` and ``Iy = ∫ z² dA``), the product ``Iyz``, the principal
 moments and their angle, the extreme fibres and elastic moduli, the plastic
-moduli and an estimate of the torsional constant. :func:`region_fibres` turns
-the regions into fibres for a ``FiberSection``.
+moduli. :func:`torsion_constant` solves Saint-Venant's torsion for ``J``, and
+:func:`region_fibres` turns the regions into fibres for a ``FiberSection``.
 
 Polygons use the shoelace sums, exact for straight edges; circles use their
-closed forms. A hole subtracts its own properties, so it must lie inside a
-solid region (nothing checks that it does).
+closed forms. The solids are added and the holes subtracted, which is exact
+when the solids do not overlap and every hole lies inside them;
+:func:`section_properties` notes by how much of the area a drawing breaks that
+(sampled on a grid).
 
-The torsional constant has no closed form for an arbitrary shape. The estimate
-is Saint-Venant's ``J ≈ A⁴ / (4 π² Ip)`` for a solid section (exact for a
-circle, within about 15 % for compact shapes) and is a poor guess for thin open
-or hollow shapes: the caller shows it as an editable value.
+The torsional constant has no closed form for an arbitrary shape: it is solved
+numerically (see :func:`torsion_constant`), within a fraction of a per cent for
+compact and hollow shapes and a few per cent for thin open ones.
 
 No Qt.
 """
@@ -168,8 +169,6 @@ class SectionProperties:
     """Angle of the major principal axis from the local z axis, degrees."""
     y_range: tuple[float, float]
     z_range: tuple[float, float]
-    J: float
-    """Torsional constant estimate (see the module docstring)."""
     Zz: float = 0.0
     """Plastic modulus for bending about z (0 when not computed)."""
     Zy: float = 0.0
@@ -212,16 +211,19 @@ def section_properties(regions: Sequence[Region], *, plastic: bool = True) -> Se
     iz = total.iyy - total.a * yc**2  # ∫ (y - yc)² dA
     iy = total.izz - total.a * zc**2
     iyz = total.iyz - total.a * yc * zc
+    ys = [p[0] for r in regions for p in outline(r)]
+    zs = [p[1] for r in regions for p in outline(r)]
     mean = (iz + iy) / 2.0
     radius = math.hypot((iz - iy) / 2.0, iyz)
     angle = 0.5 * math.degrees(math.atan2(-2.0 * iyz, iz - iy))
-    ys = [p[0] for r in regions for p in outline(r)]
-    zs = [p[1] for r in regions for p in outline(r)]
-    ip = iz + iy
     notes: list[str] = []
-    j = total.a**4 / (4.0 * math.pi**2 * ip) if ip > 0 else 0.0
-    if any(r.hole for r in regions):
-        notes.append("J is Saint-Venant's solid-section estimate; check it for a hollow shape.")
+    overlap = _overlap_share(regions, total.a, (min(ys), max(ys)), (min(zs), max(zs)))
+    if overlap > 0.005:
+        notes.append(
+            "Regions overlap, or a hole reaches outside the solid, over an area of "
+            f"{overlap:.1%} of the section's: the properties add solids and subtract "
+            "holes, so they count that area wrong."
+        )
     if abs(iyz) > 1e-9 * max(abs(iz), abs(iy)):
         notes.append(
             f"Unsymmetric: the principal axes are {angle:.1f}° from y and z; an elastic "
@@ -239,13 +241,46 @@ def section_properties(regions: Sequence[Region], *, plastic: bool = True) -> Se
         angle=angle,
         y_range=(min(ys), max(ys)),
         z_range=(min(zs), max(zs)),
-        J=j,
         notes=tuple(notes),
     )
     if not plastic:
         return props
     zz, zy = _plastic_moduli(regions, props)
     return SectionProperties(**{**props.__dict__, "Zz": zz, "Zy": zy})
+
+
+def _overlap_share(
+    regions: Sequence[Region],
+    area: float,
+    y_range: tuple[float, float],
+    z_range: tuple[float, float],
+    samples: int = 200,
+) -> float:
+    """Share of the area inside two solids at once, or inside a hole but no solid.
+
+    Sampled on a grid. Both are zero, whatever the grid, for a drawing whose
+    solids do not overlap and whose holes lie inside them.
+    """
+    if len(regions) < 2:
+        return 0.0
+    y = np.linspace(y_range[0], y_range[1], samples + 1)
+    z = np.linspace(z_range[0], z_range[1], samples + 1)
+    gy, gz = np.meshgrid((y[:-1] + y[1:]) / 2.0, (z[:-1] + z[1:]) / 2.0, indexing="ij")
+    py, pz = gy.ravel(), gz.ravel()
+    solids = np.zeros(py.shape, dtype=int)
+    holes = np.zeros(py.shape, dtype=bool)
+    for region in regions:
+        if isinstance(region, CircleRegion):
+            hit = (py - region.y) ** 2 + (pz - region.z) ** 2 < region.radius**2
+        else:
+            hit = _inside_polygon(py, pz, region.points)
+        if region.hole:
+            holes |= hit
+        else:
+            solids += hit
+    bad = (solids > 1) | (holes & (solids == 0))
+    cell = (y_range[1] - y_range[0]) * (z_range[1] - z_range[0]) / samples**2
+    return float(bad.sum()) * cell / area
 
 
 # ──────────────────────────── fibres ────────────────────────────
@@ -338,3 +373,135 @@ def _plastic_moduli(regions: Sequence[Region], props: SectionProperties) -> tupl
         out.append(float(np.sum(a * np.abs(c - axis))))
     del props
     return out[0], out[1]
+
+
+# ──────────────────────────── torsion ────────────────────────────
+#: Conductivity of a hole in the Prandtl problem: high enough to make the stress
+#: function constant across it (Bredt's condition), low enough to converge.
+_HOLE_CONDUCTIVITY = 1e4
+
+#: Smallest distance from a cell centre to the boundary, in cells, before the
+#: boundary coefficient is capped.
+_MIN_FRACTION = 1e-3
+
+
+def _labels(y: np.ndarray, z: np.ndarray, regions: Sequence[Region]) -> np.ndarray:
+    """0 outside the section, 1 in its material, 2 in a hole."""
+    material = _inside(y, z, regions)
+    hole = np.zeros(y.shape, dtype=bool)
+    for region in regions:
+        if not region.hole:
+            continue
+        if isinstance(region, CircleRegion):
+            hole |= (y - region.y) ** 2 + (z - region.z) ** 2 < region.radius**2
+        else:
+            hole |= _inside_polygon(y, z, region.points)
+    return np.where(material, 1, np.where(hole, 2, 0))
+
+
+def _crossing(
+    regions: Sequence[Region],
+    ya: np.ndarray,
+    za: np.ndarray,
+    yb: np.ndarray,
+    zb: np.ndarray,
+    label_a: np.ndarray,
+) -> np.ndarray:
+    """Fraction of the way from a to b where the label first changes (bisection)."""
+    low = np.zeros(ya.shape)
+    high = np.ones(ya.shape)
+    for _ in range(30):
+        mid = (low + high) / 2.0
+        same = _labels(ya + (yb - ya) * mid, za + (zb - za) * mid, regions) == label_a
+        low = np.where(same, mid, low)
+        high = np.where(same, high, mid)
+    return (low + high) / 2.0
+
+
+def torsion_constant(
+    regions: Sequence[Region], cells: int = 40_000, *, tolerance: float = 1e-10
+) -> float:
+    """Saint-Venant torsional constant ``J`` by finite differences on Prandtl's stress function.
+
+    ``∇·(k ∇φ) = -2`` over the section with ``φ = 0`` on its outer boundary;
+    ``J = 2 ∫ φ dA``. A hole is given a very large ``k``, which holds ``φ``
+    constant across it, and keeps the source, whose integral over the hole is
+    the circulation condition of its boundary; its ``φ`` counts in the integral
+    (Bredt's term).
+
+    The grid has about ``cells`` square cells over the bounding box, so a thin
+    shape gets cells across its thickness, not only along its length. Where
+    a link between two cell centres crosses the boundary, the crossing is found
+    by bisection and the link's coefficient uses the true distance
+    (Shortley-Weller at the outer boundary, conductances in series at a hole), so
+    the error falls with the square of the cell size instead of its first power,
+    and a wall a few cells thick is still resolved. The system is symmetric and
+    solved by Jacobi-preconditioned conjugate gradients.
+    """
+    props = section_properties(regions, plastic=False)
+    (y0, y1), (z0, z1) = props.y_range, props.z_range
+    h = math.sqrt((y1 - y0) * (z1 - z0) / cells)
+    ny = math.ceil((y1 - y0) / h) + 2
+    nz = math.ceil((z1 - z0) / h) + 2
+    gy, gz = np.meshgrid(
+        y0 - h / 2.0 + np.arange(ny) * h, z0 - h / 2.0 + np.arange(nz) * h, indexing="ij"
+    )
+    labels = _labels(gy.ravel(), gz.ravel(), regions).reshape(ny, nz)
+    domain = labels > 0
+    if not (labels == 1).any():
+        return 0.0
+    k = np.where(labels == 2, _HOLE_CONDUCTIVITY, 1.0)
+    diagonal = np.zeros((ny, nz))
+    couplings: list[np.ndarray] = []
+    for axis in (0, 1):
+        a = (slice(None, -1), slice(None)) if axis == 0 else (slice(None), slice(None, -1))
+        b = (slice(1, None), slice(None)) if axis == 0 else (slice(None), slice(1, None))
+        la, lb, ka, kb = labels[a], labels[b], k[a], k[b]
+        coupling = np.where((la == lb) & (la > 0), ka, 0.0)
+        extra_a = np.zeros(la.shape)
+        extra_b = np.zeros(la.shape)
+        cross = la != lb
+        if cross.any():
+            theta = np.full(la.shape, 0.5)
+            theta[cross] = _crossing(
+                regions, gy[a][cross], gz[a][cross], gy[b][cross], gz[b][cross], la[cross]
+            )
+            t_a = np.maximum(theta, _MIN_FRACTION)
+            t_b = np.maximum(1.0 - theta, _MIN_FRACTION)
+            inner = cross & (la > 0) & (lb > 0)
+            coupling = np.where(inner, 1.0 / (theta / ka + (1.0 - theta) / kb), coupling)
+            extra_a = np.where(cross & (la > 0) & (lb == 0), ka / t_a, 0.0)
+            extra_b = np.where(cross & (lb > 0) & (la == 0), kb / t_b, 0.0)
+        diagonal[a] += coupling + extra_a
+        diagonal[b] += coupling + extra_b
+        couplings.append(coupling)
+    diagonal = np.where(domain, diagonal, 1.0)
+    ky, kz = couplings
+
+    def apply(phi: np.ndarray) -> np.ndarray:
+        out = diagonal * phi
+        out[:-1, :] -= ky * phi[1:, :]
+        out[1:, :] -= ky * phi[:-1, :]
+        out[:, :-1] -= kz * phi[:, 1:]
+        out[:, 1:] -= kz * phi[:, :-1]
+        return np.where(domain, out, 0.0)
+
+    source = np.where(domain, 2.0 * h * h, 0.0)
+    phi = np.zeros((ny, nz))
+    residual = source.copy()
+    precond = residual / diagonal
+    direction = precond.copy()
+    rz = float(np.sum(residual * precond))
+    scale = float(np.sum(source * source))
+    for _ in range(40 * (ny + nz)):
+        q = apply(direction)
+        alpha = rz / float(np.sum(direction * q))
+        phi += alpha * direction
+        residual -= alpha * q
+        if float(np.sum(residual * residual)) < tolerance**2 * scale:
+            break
+        precond = residual / diagonal
+        rz_next = float(np.sum(residual * precond))
+        direction = precond + (rz_next / rz) * direction
+        rz = rz_next
+    return float(2.0 * np.sum(phi[domain]) * h * h)

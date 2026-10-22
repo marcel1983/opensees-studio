@@ -31,7 +31,9 @@ def _polygon(x: np.ndarray, y: np.ndarray, pen: Any, brush: Any) -> QGraphicsPol
     item = QGraphicsPolygonItem(
         QPolygonF([QPointF(float(a), float(b)) for a, b in zip(x, y, strict=True)])
     )
-    pen.setCosmetic(True)
+    # Width 0 is a one-pixel hairline. Any other width would be taken in model
+    # units by the item's bounding box and throw the auto-range off.
+    pen.setWidthF(0.0)
     item.setPen(pen)
     item.setBrush(brush)
     return item
@@ -62,8 +64,10 @@ class SectionPreview(pg.PlotWidget):  # type: ignore[misc]
             region = regions[k]
             x, y = _closed(outline(region))
             fill = HOLE_FILL if region.hole else SOLID_FILL
-            pen = pg.mkPen(SELECTED_PEN if k == selected else EDGE, width=2 if k == selected else 1)
-            self.addItem(_polygon(x, y, pen, pg.mkBrush(*fill)))
+            self.addItem(_polygon(x, y, pg.mkPen(EDGE), pg.mkBrush(*fill)))
+        if selected is not None and 0 <= selected < len(regions):
+            x, y = _closed(outline(regions[selected]))
+            self.addItem(pg.PlotCurveItem(x, y, pen=pg.mkPen(SELECTED_PEN, width=3)))
 
     def draw_outline(self, points: Sequence[Point], *, dashed: bool = True) -> None:
         x, y = _closed(points)
@@ -74,7 +78,7 @@ class SectionPreview(pg.PlotWidget):  # type: ignore[misc]
         """Bars at their true size (``diameter`` in model units)."""
         r = diameter / 2.0
         pen = pg.mkPen("#ffffff")
-        pen.setCosmetic(True)
+        pen.setWidthF(0.0)
         for y, z in centres:
             item = QGraphicsEllipseItem(z - r, y - r, 2 * r, 2 * r)
             item.setPen(pen)
@@ -95,6 +99,12 @@ class SectionPreview(pg.PlotWidget):  # type: ignore[misc]
     def fit(self) -> None:
         """Frame everything drawn."""
         self.getViewBox().autoRange(padding=0.12)
+
+    def resizeEvent(self, event: Any) -> None:
+        """Keep the section framed when the dialog opens or is resized."""
+        super().resizeEvent(event)
+        if getattr(self, "plotItem", None) is not None:
+            self.fit()
 
     def draw_points(self, points: Sequence[Point]) -> None:
         """Vertices of a polygon being entered."""

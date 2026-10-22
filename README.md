@@ -141,6 +141,13 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   the bars (`Steel02`), a fiber section, and optionally an elastic section with
   the ACI 318-19 cracked inertia (0.70 Ig columns, 0.35 Ig beams), in one undo
   step.
+- **Section Designer** — Define → Section Designer: draw any cross-section with
+  a command line (`rect`, `circle`, `poly`, `ishape`, `channel`, `tee`, `angle`,
+  `tube`, `pipe`, `hole …`, `move`, `delete`, `center`) or import its closed
+  outlines from a DXF (holes found by nesting, scaled by `$INSUNITS`). It shows
+  the area, centroid, second moments, principal axes, elastic and plastic moduli
+  and the Saint-Venant torsional constant (solved numerically, hollow shapes
+  included), and adds an elastic section or a fiber section of one material.
 - **AISC v16 shape library** — pick a shape by name in Define → Section
   Library → "Add from AISC…" (1,660 shapes across 13 families). The data is
   US customary and is shown both as published and converted to the project's

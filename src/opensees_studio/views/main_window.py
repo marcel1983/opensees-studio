@@ -489,6 +489,7 @@ class MainWindow(QMainWindow):
         self._act_ground_motions = QAction("&Ground Motions…", self, shortcut="Ctrl+Shift+G")
         self._act_section_library = QAction("&Section Library…", self, shortcut="Ctrl+Shift+S")
         self._act_concrete_section = QAction("&Concrete Section Wizard…", self)
+        self._act_section_designer = QAction("Section &Designer…", self)
         self._act_add_linear_ts = QAction("Add &Linear TimeSeries…", self)
         self._act_add_path_ts = QAction("Add &Path TimeSeries…", self)
         self._act_add_function_ts = QAction(
@@ -695,6 +696,7 @@ class MainWindow(QMainWindow):
                 self._act_ground_motions,
                 self._act_section_library,
                 self._act_concrete_section,
+                self._act_section_designer,
             ]
         )
         m_define.addSeparator()
@@ -1132,6 +1134,7 @@ class MainWindow(QMainWindow):
         self._act_ground_motions.triggered.connect(self._on_ground_motions)
         self._act_section_library.triggered.connect(self._on_section_library)
         self._act_concrete_section.triggered.connect(self._on_concrete_section)
+        self._act_section_designer.triggered.connect(self._on_section_designer)
         self._act_add_linear_ts.triggered.connect(self._on_add_linear_ts)
         self._act_add_path_ts.triggered.connect(self._on_add_path_ts)
         self._act_add_function_ts.triggered.connect(self._on_add_function_ts)
@@ -3882,6 +3885,22 @@ class MainWindow(QMainWindow):
             return
         sections = [s for s in (result.fiber, result.elastic) if s is not None]
         self._add_materials_and_sections("Concrete section", result.materials, sections)
+
+    def _on_section_designer(self) -> None:
+        """Define → Section Designer: a drawn or imported section, added in one undo step."""
+        from opensees_studio.views.dialogs.section_designer import SectionDesignerDialog
+
+        if self._vm.project is None:
+            self._on_new()
+        project = self._vm.project
+        if project is None:
+            return
+        dialog = SectionDesignerDialog(project, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        section = dialog.built_section()
+        if section is not None:
+            self._add_materials_and_sections("Designed section", [], [section])
 
     def _add_materials_and_sections(
         self, text: str, materials: list[Any], sections: list[Any]

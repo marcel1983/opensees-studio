@@ -11,6 +11,17 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **Define → Section Designer.** Draw any cross-section with a command line —
+  `rect`, `circle`, `poly`, `ishape`, `channel`, `tee`, `angle`, `tube`, `pipe`,
+  `hole …`, `move`, `delete`, `center`, with Undo — or import the closed
+  outlines of a DXF (polylines with arcs, circles, ellipses, splines; an outline
+  inside another is a hole; scaled by `$INSUNITS` and centred). It shows the
+  area, centroid, Iz, Iy, Iyz, principal moments and angle, elastic and plastic
+  moduli and the Saint-Venant torsional constant, solved by finite differences
+  on Prandtl's stress function with boundary-fitted coefficients (hollow shapes
+  included), and warns when regions overlap. OK adds an elastic section (E, ν,
+  editable J) or a fiber section of one uniaxial material.
+
 - **Define → Concrete Section Wizard.** A rectangular, circular, T or L
   reinforced concrete section from its dimensions, clear cover, metric or US bar
   sizes and counts, ties and strengths, drawn as you type. It adds the cover and
