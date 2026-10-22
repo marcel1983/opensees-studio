@@ -150,6 +150,11 @@ These are non-obvious things that are easy to break if you don't know:
 - An option added to an existing model keeps old files byte-identical by
   leaving its default out of the dump: `core._base.omit_when_default`
   (used by the beam integration rule and the numberer).
+- `ops.wipe()` does not reset OpenSees' class-static scratch. `truss` shares
+  its force vector and stiffness matrix between 3D ndf 3 and 2D ndf 3 and in
+  2D never writes the rotation rows, so `OpenSeesRunner.build` clears them
+  (`_clear_truss_scratch`) before a 2D ndf 3 model with trusses. Suspect the
+  same when a result depends on what ran earlier in the process.
 - `Entity.id` is `PositiveInt` (>0). The sentinel `999999` is reserved
   for in-flight / temporary objects that haven't been assigned a real id.
 - Eigen determinism rule. ARPACK keeps its random start vector across
