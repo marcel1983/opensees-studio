@@ -80,6 +80,7 @@ class ProjectViewModel(QObject):
         # linear static analysis that runs it): every model File → New makes
         # starts with it, so drawing a frame and pressing Run already gives a
         # gravity result.
+        self._retire_run_snapshot()
         self._project = Project(ndm=ndm, ndf=ndf)
         if dead_case:
             ensure_dead_load_case(self._project)
@@ -90,7 +91,9 @@ class ProjectViewModel(QObject):
 
     def open(self, path: str | Path) -> None:
         path = Path(path)
-        self._project = load_project(path, on_notice=self.noticePosted.emit)
+        project = load_project(path, on_notice=self.noticePosted.emit)
+        self._retire_run_snapshot()
+        self._project = project
         self._path = path
         self._undo_stack.clear()
         self._set_dirty(False)
@@ -172,6 +175,15 @@ class ProjectViewModel(QObject):
     def discard_run_snapshot(self) -> bool:
         """Delete the current project's snapshot, if there is one."""
         return discard_run_snapshot(self._path)
+
+    def _retire_run_snapshot(self) -> None:
+        """The project being replaced (New, Open) takes its snapshot with it.
+
+        Called only once the replacement is certain: a cancelled prompt or a
+        failed load keeps the current project, and with it the snapshot.
+        """
+        if self._project is not None:
+            discard_run_snapshot(self._path)
 
     # ── command application ─────────────────────────────────────────
     def apply_command(self, command) -> None:  # type: ignore[no-untyped-def]
