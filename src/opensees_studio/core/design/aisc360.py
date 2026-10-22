@@ -431,18 +431,23 @@ class SteelShape(Protocol):
     """
 
     @property
-    def name(self) -> str: ...
+    def name(self) -> str:
+        """The AISC name of the shape."""
 
     @property
-    def A(self) -> float: ...
+    def A(self) -> float:
+        """Gross area."""
 
     @property
-    def Ix(self) -> float: ...
+    def Ix(self) -> float:
+        """Moment of inertia about the major axis."""
 
     @property
-    def Iy(self) -> float: ...
+    def Iy(self) -> float:
+        """Moment of inertia about the minor axis."""
 
-    def tension(self, steel: Steel, method: Method) -> Strength: ...
+    def tension(self, steel: Steel, method: Method) -> Strength:
+        """Available tensile strength (D2)."""
 
     def compression(
         self,
@@ -453,19 +458,24 @@ class SteelShape(Protocol):
         length_y: float,
         k_x: float = 1.0,
         k_y: float = 1.0,
-    ) -> Strength: ...
+    ) -> Strength:
+        """Available compressive strength (E3 to E7) for the unbraced lengths and K."""
 
     def flexure_major(
         self, steel: Steel, method: Method, *, unbraced: float, cb: float = 1.0
-    ) -> Strength: ...
+    ) -> Strength:
+        """Available flexural strength about the major axis (chapter F)."""
 
     def flexure_minor(
         self, steel: Steel, method: Method, *, unbraced: float, cb: float = 1.0
-    ) -> Strength: ...
+    ) -> Strength:
+        """Available flexural strength about the minor axis (chapter F)."""
 
-    def shear_major(self, steel: Steel, method: Method, *, length: float) -> Strength: ...
+    def shear_major(self, steel: Steel, method: Method, *, length: float) -> Strength:
+        """Available shear strength along the major-axis shear direction (chapter G)."""
 
-    def shear_minor(self, steel: Steel, method: Method, *, length: float) -> Strength: ...
+    def shear_minor(self, steel: Steel, method: Method, *, length: float) -> Strength:
+        """Available shear strength along the minor-axis shear direction (chapter G)."""
 
 
 @dataclass(frozen=True)

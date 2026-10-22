@@ -420,13 +420,13 @@ class EqualLegAngle:
     def Iw(self) -> float:
         """Major principal moment of inertia (about the axis of symmetry)."""
         mean = (self.Ix + self.Iy) / 2.0
-        return mean + math.sqrt(((self.Ix - self.Iy) / 2.0) ** 2 + self.Ixy**2)
+        return mean + math.hypot((self.Ix - self.Iy) / 2.0, self.Ixy)
 
     @property
     def Iz(self) -> float:
         """Minor principal moment of inertia."""
         mean = (self.Ix + self.Iy) / 2.0
-        return mean - math.sqrt(((self.Ix - self.Iy) / 2.0) ** 2 + self.Ixy**2)
+        return mean - math.hypot((self.Ix - self.Iy) / 2.0, self.Ixy)
 
     @property
     def rz(self) -> float:
