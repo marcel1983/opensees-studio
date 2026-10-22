@@ -12,7 +12,15 @@ from __future__ import annotations
 import warnings
 from typing import Annotated, Literal, get_args
 
-from pydantic import Field, PositiveFloat, PositiveInt, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PositiveFloat,
+    PositiveInt,
+    field_validator,
+    model_validator,
+)
 
 from opensees_studio.core._base import Entity, omit_when_default
 from opensees_studio.core.modal import KNOWN_SOLVERS, OFFERED_SOLVERS, SOLVER_AUTO
@@ -442,7 +450,55 @@ class ResponseSpectrumCase(Entity):
         return value
 
 
+class Axle(BaseModel):
+    """One axle of a moving load: its force and its distance behind the front axle."""
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    load: float = Field(..., description="Axle force, along the case's load direction.")
+    offset: float = Field(
+        default=0.0, ge=0.0, description="Distance behind the front axle along the path."
+    )
+
+
+class InfluenceLineCase(Entity):
+    """A unit load walked along a chain of frame members, one linear static solve per stop.
+
+    ``path`` lists the members in the order the load travels; consecutive
+    members must share a joint, and each is walked from the joint it shares
+    with the previous one. The load stops at ``stations`` equal intervals of
+    every member (joints included once), acting along the global
+    ``direction`` with the value ``load`` (-1 = a unit load downward along Z).
+
+    The result holds every response (displacements, reactions, member end
+    forces) at every stop: an influence line per quantity. ``axles`` describe
+    a vehicle whose extreme effects :mod:`core.influence` finds from them.
+    Linear elastic analysis only: the solve uses the Linear algorithm.
+    """
+
+    type: Literal["InfluenceLine"] = "InfluenceLine"
+    path: list[PositiveInt] = Field(..., min_length=1)
+    stations: PositiveInt = Field(default=10, le=200)
+    direction: Literal["X", "Y", "Z"] = "Z"
+    load: float = Field(default=-1.0, description="Value of the moving load along direction.")
+    axles: list[Axle] = Field(default_factory=list)
+
+    serialize_without_defaults = omit_when_default("axles")
+
+    @field_validator("load")
+    @classmethod
+    def _nonzero(cls, value: float) -> float:
+        if value == 0.0:
+            raise ValueError("The moving load cannot be zero.")
+        return value
+
+
 AnalysisCase = Annotated[
-    StaticCase | ModalCase | TransientCase | PushoverCase | ResponseSpectrumCase,
+    StaticCase
+    | ModalCase
+    | TransientCase
+    | PushoverCase
+    | ResponseSpectrumCase
+    | InfluenceLineCase,
     Field(discriminator="type"),
 ]

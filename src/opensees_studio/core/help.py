@@ -78,6 +78,7 @@ GROUP_ORDER: tuple[str, ...] = (
     "Assign — groups",
     "Analyze",
     "Display",
+    "Design",
     "View",
     "Options",
     "Help",
@@ -938,6 +939,236 @@ you drew two hundred has to say so.
             "define.portal_frame",
             "edit.check_duplicates",
         ),
+        "file.import_s3d": _t(
+            "File → Import → PORTICO Model (.s3d)",
+            "File",
+            "A model saved by PORTICO, as a new project scaled to the units you choose.",
+            """
+Reads a `.s3d` file from PORTICO (the browser-based structural analysis program,
+`jpreyes/portico-core`) and makes it the **current project**. It replaces what is
+open, so unsaved changes are asked about first, and the new project has no file
+until you save it.
+
+# Units
+PORTICO never converts: the file's `units` label says which system its numbers
+are in. **File units** is filled in from that label (`kN-m`, `kip-in`, `lb-in`,
+…); change it if the label is wrong. **Project units** is the system the project
+gets, and every value is **scaled** to it by its dimension: lengths, forces,
+moments, stresses, masses, densities, spring stiffnesses and loads. A `kN-m`
+file opened in `SI (m, N, kg, s, Pa)` has its forces multiplied by 1000 and its
+densities in kg/m³. The **Scale** line shows the length and force factors.
+
+Self weight is the material density times g in the project's units. PORTICO
+always multiplies by 9.80665, which is only right for its own `kN-m`.
+
+# What comes across
+- Nodes, supports, support springs and nodal masses.
+- Frame elements as elastic beam-columns. A section with shear areas makes a
+  Timoshenko member, as in PORTICO, and the consistent mass matrix is used.
+- Sections and materials: one elastic section per section, material and
+  orientation used, with PORTICO's section modifiers applied to the values.
+- End releases (torsion and bending) and end springs on released actions.
+- Static load cases with their nodal, uniform and trapezoidal loads and self
+  weight, each as a load pattern plus a linear static case of the same name.
+- Prescribed support displacements, as one pattern every static case runs (as
+  PORTICO imposes them in every static case).
+- Load combinations and grid lines.
+- **Areas** (quadrilaterals) as `ShellMITC4` with an elastic plate section per
+  material and thickness; their element ids follow the members'. PORTICO's
+  membrane and plate areas become full shells (a membrane gains bending, a plate
+  gains membrane stiffness), which the log notes.
+- **Diaphragms** as rigid diaphragms on PORTICO's master node (`masterId`, else
+  the first node). The floor mass is spread equally over the floor's nodes on UX
+  and UY (PORTICO uses the tributary of the beams).
+- **Links**: a rigid link with all six DOFs is a rigid `beam` link, with the three
+  translations a `bar`; a non-rigid link is an equalDOF of its DOFs.
+- The **mass source**: its load cases and factors, the self weight when ticked,
+  and the mass on all three translations, as PORTICO does.
+- A model loaded only by prescribed displacements (a patch test) gets a static
+  case of its own.
+- **Cable** and **compression-only** members as trusses whose elastic material
+  goes slack on the other side (`Eneg = 0` for a cable, a stiffness of 1e-9 E in
+  tension for a strut). The static cases then run with Newton, and their
+  combinations are no longer an exact superposition.
+
+# Local axes
+PORTICO gives a beam its local **y** up; OpenSees gives it local **z** up. Per
+member the importer works out how the two triads relate and swaps `Iz`/`Iy`,
+`Avy`/`Avz` and the bending releases where needed (the section name then ends in
+"(axes 2-3)"). Distributed loads are re-projected onto the OpenSees axes, so they
+keep their global direction.
+
+# What it does not do (yet)
+Counted in the summary and the log, never dropped silently: triangular areas
+(there is no 3-node shell), areas of a 2D model, temperature loads, response
+spectrum cases (the spectrum is not in the file), translational end releases,
+unilateral, coupled and soil springs, a diaphragm's rotational mass and
+accidental eccentricity, and distributed loads on a cable or a strut (a truss
+takes none). A member with releases or a
+trapezoidal load loses its shear deformation, because OpenSees' Timoshenko beam
+takes neither.
+""",
+            "file.open",
+            "file.import_dxf",
+        ),
+        "display.influence_line": _t(
+            "Display → Influence Line",
+            "Display",
+            "Any response of an influence-line case against the load's position, and a vehicle on it.",
+            """
+An **influence-line case** (Analyze → Cases… → Add → *InfluenceLine*) walks a
+load along a chain of frame members — a bridge girder, a crane runway — and
+solves the model once per stop. Each stop's result holds every displacement,
+reaction and member end force with the load there.
+
+# Defining the case
+- **Path**: the member ids in the order the load travels. Consecutive members
+  must share a joint; each is walked from the joint it shares with the previous
+  one, so a path can turn corners.
+- **Stops per member**: equal intervals of every member (a joint shared by two
+  members is one stop). Ten is plenty for straight members.
+- **Load direction** and **value**: -1 along Z, the default, is a unit load
+  downward. The analysis is linear elastic.
+- **Vehicle axles** (optional): `load@offset` pairs, the offset measured behind
+  the front axle, for example `35@0, 145@4.3, 145@8.6`. They prefill the dialog.
+
+# The dialog
+Pick the **response**: a joint displacement or a reaction (by joint and DOF) or a
+member end force (by member, component and end, in the sign of the force
+diagrams). The plot is its value **per unit load** in the sense of the case's
+load, against the distance along the path.
+
+**Envelope** moves the vehicle across the path in **both directions**, axle by
+axle (an axle off the path counts nothing), and reports the largest and the
+smallest effect and where the front axle stood. Axle loads are in the sense of
+the case's load: with the default case a downward axle is positive.
+""",
+            "analyze.cases",
+            "display.force_diagram",
+        ),
+        "design.steel_check": _t(
+            "Design → Steel Frame Check (AISC 360-16)",
+            "Design",
+            "Demand/capacity ratios of steel members over the results of this session.",
+            """
+Checks every frame member whose section is an AISC shape of a covered family
+against ANSI/AISC 360-16, by LRFD or ASD: **W, M, S, HP** (I-shapes), **C, MC**
+(channels), **WT, MT, ST** (tees), **L with equal legs**, **rectangular and
+square HSS**, **round HSS** and **pipes**. The section's **name** says which shape it is
+(sections from Define → Section Library are named that way); type another shape
+in the overrides to check a member with it.
+
+# What is checked
+- **Tension** D2-1 (yielding of the gross section). Rupture needs the net area
+  and is left to you.
+- **Compression** E3 flexural buckling about both axes, E4 torsional buckling,
+  and the E7 effective area when the flange or the web is slender.
+- **Major-axis flexure** F2 yielding and lateral-torsional buckling (with Lp, Lr
+  and Cb), F3 flange local buckling. A noncompact web is noted, not checked (F4).
+- **Minor-axis flexure** F6, **shear** G2.1 along the web and G6 along the flanges.
+- **Interaction** H1-1a / H1-1b of the axial force and both moments.
+
+The other families use their own sections of the Specification:
+- **Channels**: E4 flexural-torsional buckling about the axis of symmetry, F2
+  with c from F2-8b, F6, G2.1(b) and G6 with the full flange width.
+- **Tees**: E4 flexural-torsional buckling, the stem as an unstiffened element
+  (E7), F9 yielding, lateral-torsional buckling, flange and stem local buckling.
+  The sign of the moment is not tracked, so the strength is the smaller of the
+  stem in tension and the stem in compression.
+- **Equal-leg angles**: E3 about the minor principal axis z, E4, F10 about the
+  geometric axes without lateral-torsional restraint (0.8 My, toe in
+  compression), G3. Unequal-leg angles are not designed (their flexure is about
+  the principal axes).
+- **Rectangular HSS**: E7 walls, F7 flange and web local buckling (the effective
+  section modulus of F7-3 for a slender flange) and lateral-torsional buckling
+  of a deep tube, G4. **Round HSS and pipes**: E7-6, F8, G5 with Lv half the
+  member length.
+
+HSS walls use the design thickness 0.93 tnom. The default Fy is 50 ksi: set it
+for the material (A500 Grade C round HSS 46 ksi, A53 pipe 35 ksi). Torsion is
+not checked.
+
+The clear web height is taken as `d - 2 tf` (the table has no `k`), which is
+slightly conservative.
+
+# Where the demands come from
+The dialog uses the results of the cases already **run in this session**; it runs
+nothing. Tick the load sets to envelope (by default every combination, or every
+static case when there is none). A combination is expanded into sums of cases:
+Linear Add adds its terms, Envelope keeps each term, and a response spectrum
+case enters as plus and minus its peak. Absolute Add and SRSS combinations have
+no signed demands and are skipped with a note.
+
+Each member is read at 25 stations along its length, span loads included. The
+largest axial force, moments and shears are taken together (conservative for the
+interaction), and Cb comes from the major-axis moment diagram (F1-1) unless you
+set it. **Set Cb = 1.0 for a cantilever**: F1-1 assumes both ends braced.
+
+# The values the dialog asks for
+- **Method** LRFD (φ) or ASD (Ω); **Fy** (50 ksi by default, in the project's
+  stress unit); **ratio limit** above which a member is reported **NG**.
+- **Overrides for the selected members**: the AISC shape, K about each axis, the
+  unbraced length of the compression flange Lb (0 = the member length) and Cb
+  (0 = from the diagram). The buckling lengths are the member length times K.
+
+Results: one row per member with its governing ratio, the check and equation
+that govern and the load set that produced them; **Select failing members**
+closes the dialog with them selected, and **Show ratios on the model** closes it
+and paints every member by its ratio (Design → Display Steel Ratios on Model).
+The settings are saved with the project, and File → Export → Report prints the
+check when they are.
+""",
+            "design.steel_ratios",
+            "design.drift_check",
+            "define.load_combinations",
+        ),
+        "design.steel_ratios": _t(
+            "Design → Display Steel Ratios on Model",
+            "Design",
+            "Paint every frame member by its governing AISC 360-16 ratio.",
+            """
+Runs the steel frame check with the settings saved in the project (or the
+defaults: LRFD, 50 ksi, every combination) over the results of this session, and
+draws each member in the colour of its governing demand/capacity ratio, with the
+ratio written at mid-length:
+
+- blue up to 0.5, teal up to 0.7, green up to 0.9 and orange up to the ratio limit
+  (the steps are those fractions of the limit, so a limit of 0.95 keeps the reading);
+- **red above the limit**;
+- grey for a member the check does not cover (no AISC shape, or a section name
+  that is not one).
+
+The panel on the right shows the legend, the summary and the notes (load sets
+skipped because a case has no result yet). **Select failing members** selects
+the red ones; **Back to model** (or Display → Back to Model) removes the colours.
+
+Nothing is stored: change the settings in Design → Steel Frame Check, then display
+the ratios again.
+""",
+            "design.steel_check",
+            "file.export_report",
+        ),
+        "design.drift_check": _t(
+            "Design → Storey Drift Check",
+            "Design",
+            "Amplified inter-storey drift ratios against an allowable ratio.",
+            """
+For every static and response spectrum case with a result in this session, the
+drift ratio of each storey (the difference of the floor displacements over the
+storey height, see Define → Storeys) is multiplied by the **amplification** and
+compared with the **allowable drift ratio**. A ratio above 1 is over the limit.
+
+The **Code** list fills in common limits: ASCE 7-22 Table 12.12-1 (0.020, 0.015 or
+0.010 h by risk category; set the amplification to Cd / Ie, since the analysis
+gives elastic drifts), NCh433 (0.002 h at the centre of mass) and Eurocode 8.
+Response spectrum drifts are combined per storey by the case's own rule, never
+taken as the difference of two peak displacements.
+
+The project needs storeys; the limit and the amplification are saved with it.
+""",
+            "design.steel_check",
+            "define.storeys",
+        ),
         "file.export_report": _t(
             "File → Export → Report (HTML / PDF)",
             "File",
@@ -959,6 +1190,10 @@ browser and pastes into Word).
   now*: peak displacements (and where), support reactions with their sum, the
   pushover curve, the periods, the storey table and the section cuts. Values
   are in the display units, with the Results panel's signs.
+- **Steel frame check** — when the project has design settings (saved by
+  Design → Steel Frame Check): the method, Fy, ratio limit and load sets, every
+  checked member with its governing ratio, check, equation and load set, and the
+  amplified storey drifts against the limit. Its values are in the project's units.
 
 # Notes
 - Results computed before the last model change are left out; run the cases again
@@ -1839,6 +2074,111 @@ about a record is computed once, here.
             "mechanics.ground_motions",
             "define.linear_ts",
         ),
+        "define.section_designer": _t(
+            "Define → Section Designer",
+            "Define",
+            "Draw any cross-section, or import it from a DXF, and add it as an elastic or fibre section.",
+            """
+For a section no library has: a built-up girder, a shape with openings, a
+precast profile, a section drawn in CAD. The section is a list of **regions** —
+polygons and circles, each solid or a **hole** — in the local (y, z) plane: y up
+the depth, z across, lengths in the project's unit.
+
+# Drawing
+Type a command and press Enter (the buttons type one for you; edit the numbers
+before running it):
+
+- `rect W H [Y Z]` — a rectangle W wide by H deep, centred at (Y, Z);
+- `circle D [Y Z]`;
+- `poly Y1,Z1 Y2,Z2 Y3,Z3 ...` — a polygon through its vertices;
+- `ishape D BF TF TW`, `channel D BF TF TW`, `tee D BF TF TW`, `angle D B T`,
+  `tube W H T`, `pipe D T`, each with an optional `Y Z`;
+- `hole <shape> ...` — any shape as a hole (`hole circle 0.1 0 0.05`);
+- `move N DY DZ`, `delete N` (N is the number in the list, or `last`),
+  `center` (centroid to the origin), `clear`.
+
+**Undo** steps back one command; **Solid / hole** flips the selected region.
+
+# Import DXF
+Reads the closed outlines of a drawing: closed polylines (arcs from bulges
+included), circles, closed ellipses and splines; curves are flattened finely, a
+circle stays exact. An outline inside another is a hole (inside two, solid
+again). The drawing's X becomes z and its Y becomes y. `$INSUNITS` gives the
+scale to the project's unit (a unitless file is taken as project lengths, and
+the message says so); the section is then centred. Lines, open polylines and
+text are counted and left out.
+
+# Properties
+Area, centroid, Iz = ∫y² dA and Iy = ∫z² dA about the centroid, the product
+Iyz and the principal moments with their angle, elastic and plastic moduli,
+radii of gyration, and the **torsional constant J**, solved for Saint-Venant
+torsion on a grid (Prandtl stress function, hollow shapes included): within a
+fraction of a per cent for compact and hollow shapes, a few per cent for thin
+open ones. An unsymmetric section is noted: OpenSees' elastic section has no
+Iyz, so its principal axes are not followed.
+
+# What OK adds
+- **Elastic section**: A, Iz, Iy, J and E with G = E / (2 (1 + ν)). Pick a
+  material to copy its initial modulus, or type E.
+- **Fiber section**: one uniaxial material on a grid of fibres (cells per side
+  of the bounding box); each fibre sits at the centroid of the part of its cell
+  inside the section, measured from the section's centroid, and the fibre areas
+  add up to the exact area. GJ (for 3D members) starts at G J.
+""",
+            "define.section_library",
+            "define.concrete_section",
+            "file.import_dxf",
+        ),
+        "define.concrete_section": _t(
+            "Define → Concrete Section Wizard",
+            "Define",
+            "A reinforced concrete section, its concrete and steel materials, from a few inputs.",
+            """
+Builds a reinforced concrete frame section the way it is drawn on a plan, and
+adds the materials it needs, in one undo step. The drawing on the right shows the
+concrete, the core inside the bar centrelines (dashed) and the bars at their true
+size, with the centroid.
+
+# Shape
+- **Rectangle** (column or beam), **Circle** (column), **T-beam** (flange on
+  top, centred on the web) and **L-beam** (edge beam, flange to +z).
+- Depth h runs along local **y**, width b along local **z**: assign the section
+  so local y is the direction the member bends in (Assign → Frame → Local Axes).
+
+# Reinforcement
+- Bar sizes **metric** (φ6 to φ40 mm) or **US** (#3 to #18).
+- Top and bottom bars (at least two each) and intermediate bars on each side
+  face; a circle takes its bars evenly around.
+- **Clear cover** is to the outside of the ties: the bars sit at cover + tie +
+  half a bar from the face.
+- Tie size and spacing give the transverse ratio ρs (two legs each way for
+  hoops, 4 Asp / (ds s) for a spiral), used for the confinement.
+
+# Materials it adds
+- **Cover concrete**: `Concrete02`, f'c at a strain 2 f'c / Ec (so its initial
+  slope is Ec = 4700 sqrt(f'c) MPa, ACI 318-19), spalling to zero at 0.005,
+  tension 0.33 sqrt(f'c) MPa.
+- **Core concrete**: with **Confined core (Mander)** ticked, f'cc, εcc and εcu of
+  Mander, Priestley and Park (1988) with ke = 0.75 for hoops and 0.95 for a
+  spiral, εcu = 0.004 + 1.4 ρs fyh εsu / f'cc; otherwise the cover concrete.
+- **Bars**: `Steel02` with fy, Es and 1 % hardening.
+
+# Sections it adds
+- **Fiber section** (default): core, cover strips, flange overhangs and bars as
+  layers, for force- or displacement-based members. Its GJ is the gross elastic
+  one (G = Ec / 2.4).
+- **Elastic section with cracked inertia**: the gross area, Ec and I times the
+  factor of ACI 318-19 Table 6.6.3.1.1 — **0.70 for a column, 0.35 for a beam** —
+  for a linear model; change the factor if your code asks for another.
+
+A column's longitudinal ratio outside ACI's 1 % to 8 % is noted. Edit the
+materials afterwards in Define → Material Library, and the fibre layout in
+Define → Section Library (double-click the section).
+""",
+            "define.section_library",
+            "define.section_designer",
+            "define.material_library",
+        ),
         "define.section_library": _t(
             "Define → Section Library",
             "Define",
@@ -2661,6 +3001,46 @@ length is unchanged, and an axial force along the offset axis bends it.
 """,
             "assign.frame_releases",
         ),
+        "assign.temperature_load": _t(
+            "Assign → Frame → Temperature Load",
+            "Assign — frame",
+            "A temperature change of the selected members: uniform, and across each axis.",
+            """
+The member's temperature changes by `ΔT + g_y·y + g_z·z` at the point `(y, z)` of
+its cross section, in the member's local axes:
+
+- **α** — the coefficient of thermal expansion, about 1.2e-5 per °C for steel and
+  for concrete;
+- **Uniform ΔT** — heats (positive) or cools the whole section: a free member grows
+  `α ΔT L`, a member held at both ends takes a compression `EA α ΔT`;
+- **Gradient along local y / z** — the temperature difference per unit depth,
+  `(T on the + face - T on the - face) / depth`. A free member bends to a
+  curvature `α g` toward the cooler face; a member held at both ends takes a
+  constant moment `EI α g`. Which axis is "up": a horizontal member's local
+  **y** points up in a **2D** model, its local **z** in a **3D** one (local y is
+  then horizontal), so a hot top face is a positive `gradient_y` in 2D and a
+  positive `gradient_z` in 3D.
+
+# How it is solved
+OpenSees' elastic frame elements take no thermal load, so the member is held
+fixed, its fixed-end forces are applied to the structure with the opposite sign,
+and the fixed-end forces are added back to the member's end forces. The
+displacements, reactions, force diagrams, combinations and the steel check then
+see the real member forces: `N = EA (ε - α ΔT)`, `M = EI (κ - α g)`.
+
+# Limits
+- Elastic beam-columns with an elastic section (property modifiers on A and the
+  inertias apply), **without end releases, end offsets or an insertion point**:
+  the action refuses other members before changing anything.
+- **Static cases only**, under LoadControl with a Linear or Constant time series
+  (a case with N steps applies it in N parts). Other case types refuse a pattern
+  that carries temperature loads.
+- The load goes into the active Plain pattern (a default one is created if there
+  is none); Edit → Mesh and Replicate carry it to the new members.
+""",
+            "assign.distributed_load",
+            "analyze.cases",
+        ),
         "assign.trapezoidal_load": _t(
             "Assign → Frame → Trapezoidal Load",
             "Assign — frame",
@@ -2800,7 +3180,7 @@ TOPICS.update(
 A case is what to solve. Several cases coexist on one model — a gravity static
 case, a modal case and a pushover, for instance — each with its own settings.
 
-# The five types
+# The six types
 - **Static** — equilibrium under the patterns' loads, in N steps. See
   **Static analysis**.
 - **Modal** — eigenvalues and mode shapes; needs mass. See **Modal analysis**.
@@ -2810,6 +3190,8 @@ case, a modal case and a pushover, for instance — each with its own settings.
   **Transient analysis**.
 - **Response spectrum** — modal maxima combined by SRSS or CQC. See
   **Response spectrum**.
+- **Influence line** — a unit load walked along a chain of members, one linear
+  solve per stop, with an optional vehicle. See **Display → Influence Line**.
 
 # Options that apply to most types
 - **Steps** and, for a transient, **dt**.
@@ -2842,6 +3224,7 @@ gravity state. The case list applies the patterns in the order given.
 """,
             "mechanics.static",
             "analyze.run",
+            "display.influence_line",
         ),
         "analyze.stability": _t(
             "Analyze → Check Model Stability",
@@ -3928,6 +4311,11 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_save": "file.save",
     "_act_save_as": "file.save_as",
     "_act_import_dxf": "file.import_dxf",
+    "_act_import_s3d": "file.import_s3d",
+    "_act_steel_check": "design.steel_check",
+    "_act_influence_line": "display.influence_line",
+    "_act_drift_check": "design.drift_check",
+    "_act_steel_ratios": "design.steel_ratios",
     "_act_export_script": "file.export_script",
     "_act_export_ifc": "file.export_ifc",
     "_act_export_report": "file.export_report",
@@ -3984,6 +4372,8 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_material_tester": "define.material_tester",
     "_act_ground_motions": "define.ground_motions",
     "_act_section_library": "define.section_library",
+    "_act_concrete_section": "define.concrete_section",
+    "_act_section_designer": "define.section_designer",
     "_act_add_linear_ts": "define.linear_ts",
     "_act_add_path_ts": "define.path_ts",
     "_act_add_function_ts": "define.function_ts",
@@ -4019,6 +4409,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_assign_insertion": "assign.insertion_point",
     "_act_assign_modifiers": "assign.property_modifiers",
     "_act_assign_trapezoidal_load": "assign.trapezoidal_load",
+    "_act_assign_temperature_load": "assign.temperature_load",
     "_act_assign_hinge": "assign.hinge",
     # ── Analyze ─────────────────────────────────────────────────────
     "_act_case_manager": "analyze.cases",

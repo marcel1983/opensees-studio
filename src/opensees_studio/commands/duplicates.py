@@ -298,6 +298,31 @@ class FixDuplicatesCommand(ProjectCommand):
             pattern.element_loads[:] = kept
             self._move_point_loads(project, pattern, from_id, to_id)
             self._move_distributed_loads(project, pattern, from_id, to_id)
+            self._move_temperature_loads(project, pattern, from_id, to_id)
+
+    def _move_temperature_loads(
+        self, project: Project, pattern: PlainLoadPattern, from_id: int, to_id: int
+    ) -> None:
+        # A reversed duplicate has its local y the other way, so its y gradient flips.
+        by_id = {element.id: element for element in project.elements}
+        reversed_ = tuple(by_id[from_id].nodes) != tuple(by_id[to_id].nodes)
+        seen = {load.model_dump_json() for load in pattern.temperature_loads}
+        kept = []
+        for load in pattern.temperature_loads:
+            if load.element_id != from_id:
+                kept.append(load)
+                continue
+            update: dict[str, Any] = {"element_id": to_id}
+            if reversed_:
+                update["gradient_y"] = -load.gradient_y
+            moved = load.model_copy(update=update)
+            if moved.model_dump_json() in seen:
+                self.report.dropped_copy_loads += 1
+                continue
+            seen.add(moved.model_dump_json())
+            self.report.repointed_loads += 1
+            kept.append(moved)
+        pattern.temperature_loads[:] = kept
 
     def _move_distributed_loads(
         self, project: Project, pattern: PlainLoadPattern, from_id: int, to_id: int
@@ -368,6 +393,11 @@ class FixDuplicatesCommand(ProjectCommand):
             ]
             self.report.dropped_copy_loads += len(pattern.distributed_loads) - len(kept_distributed)
             pattern.distributed_loads[:] = kept_distributed
+            kept_thermal = [
+                load for load in pattern.temperature_loads if load.element_id != element_id
+            ]
+            self.report.dropped_copy_loads += len(pattern.temperature_loads) - len(kept_thermal)
+            pattern.temperature_loads[:] = kept_thermal
 
 
 class MergeJointsCommand(FixDuplicatesCommand):

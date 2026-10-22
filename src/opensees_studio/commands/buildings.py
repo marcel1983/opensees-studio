@@ -14,6 +14,7 @@ from opensees_studio.core import (
     RigidLink,
     Storey,
 )
+from opensees_studio.core.design.settings import DesignSettings
 
 if TYPE_CHECKING:
     from opensees_studio.viewmodels import ProjectViewModel
@@ -67,6 +68,24 @@ class SetMassSourceCommand(ProjectCommand):
 
     def undo(self) -> None:
         self.project.mass_source = self._old
+        self._notify()
+
+
+class SetDesignSettingsCommand(ProjectCommand):
+    """Set the design check settings (Design → Steel Frame Check / Storey Drift Check)."""
+
+    def __init__(self, vm: ProjectViewModel, settings: DesignSettings | None) -> None:
+        super().__init__(vm, "Set design settings")
+        self._new = settings
+        self._old: DesignSettings | None = None
+
+    def redo(self) -> None:
+        self._old = self.project.design
+        self.project.design = self._new
+        self._notify()
+
+    def undo(self) -> None:
+        self.project.design = self._old
         self._notify()
 
 

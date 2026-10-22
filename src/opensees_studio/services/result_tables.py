@@ -45,6 +45,7 @@ from opensees_studio.core.storeys import (
 from opensees_studio.core.units import UnitConverter, UnitLabels, UnitSystem
 from opensees_studio.services.results import (
     CombinationResults,
+    InfluenceLineResults,
     ModalResults,
     PushoverResults,
     ResponseSpectrumResults,
@@ -579,6 +580,20 @@ def storey_table(results: object, project: Project | None) -> ResultTable | None
         )
         return table
     return None
+
+
+def influence_stops_table(results: InfluenceLineResults) -> ResultTable:
+    """Where the moving load stood at each stop of an influence-line run."""
+    table = ResultTable(
+        "Stops of the moving load", ["Stop", "Distance along the path", "Member", "x / L"]
+    )
+    table.rows = [
+        [k + 1, float(d), int(e), float(f)]
+        for k, (d, e, f) in enumerate(
+            zip(results.distances, results.element_ids, results.fractions, strict=True)
+        )
+    ]
+    return table
 
 
 def section_cut_table(results: object, project: Project | None) -> ResultTable | None:

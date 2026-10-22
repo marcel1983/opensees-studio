@@ -13,6 +13,12 @@
   <em>Status: Pre-alpha. Active development. APIs and file formats will change.</em>
 </p>
 
+<p align="center">
+  <strong>English</strong> · <a href="README.es.md">Español</a> ·
+  <a href="docs/tutorials/README.md">Tutorials</a> ·
+  <a href="docs/verification-manual.md">Verification Manual</a>
+</p>
+
 ---
 
 ![OpenSees Studio main window](docs/screenshots/main_window.png)
@@ -91,7 +97,8 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   joints, elements and joint loads as spreadsheets, with Excel copy and paste,
   added and deleted rows, and one validated undo step.
 - **Calculation report** — File → Export → Report: model, loads, cases and the
-  current results as a PDF or an HTML page.
+  current results as a PDF or an HTML page, plus the steel frame check and the
+  storey drifts when the project has design settings.
 - **Section cuts** — Define → Section Cuts: the force and moment through a group
   (storey or pier shear, overturning moment), in the Results panel of static
   cases.
@@ -127,6 +134,20 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   `BeamWithHinges`, and `ElasticMembranePlateSection` (E, ν, h, ρ) for shells;
   geometric transformations and beam integration rules are assignable per
   element.
+- **Concrete Section Wizard** — Define → Concrete Section Wizard: a rectangular,
+  circular, T or L reinforced concrete section from its dimensions, clear cover,
+  bar sizes (metric φ or US #) and counts, ties and strengths. It adds the cover
+  and core concrete (`Concrete02`, the core confined after Mander when asked) and
+  the bars (`Steel02`), a fiber section, and optionally an elastic section with
+  the ACI 318-19 cracked inertia (0.70 Ig columns, 0.35 Ig beams), in one undo
+  step.
+- **Section Designer** — Define → Section Designer: draw any cross-section with
+  a command line (`rect`, `circle`, `poly`, `ishape`, `channel`, `tee`, `angle`,
+  `tube`, `pipe`, `hole …`, `move`, `delete`, `center`) or import its closed
+  outlines from a DXF (holes found by nesting, scaled by `$INSUNITS`). It shows
+  the area, centroid, second moments, principal axes, elastic and plastic moduli
+  and the Saint-Venant torsional constant (solved numerically, hollow shapes
+  included), and adds an elastic section or a fiber section of one material.
 - **AISC v16 shape library** — pick a shape by name in Define → Section
   Library → "Add from AISC…" (1,660 shapes across 13 families). The data is
   US customary and is shown both as published and converted to the project's
@@ -141,6 +162,18 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   pushover, transient time-history with Rayleigh damping. Chained workflows:
   gravity preload → `loadConst -time 0.0` → pushover or transient. Numberer
   and system options per case.
+- **Temperature loads** — Assign → Frame → Temperature Load: a uniform change
+  and a gradient across each local axis of elastic members (α ΔT, α g), in static
+  cases. OpenSees' elastic elements take no thermal load, so the fixed-end forces
+  are applied as equivalent joint loads and added back to the member forces:
+  diagrams, combinations and the steel check see `N = EA (ε - α ΔT)` and
+  `M = EI (κ - α g)`.
+- **Influence lines and moving loads** — an *InfluenceLine* case walks a unit
+  load along a chain of frame members (a girder, a crane runway), one linear
+  solve per stop, keeping every displacement, reaction and member end force.
+  Display → Influence Line plots any of them against the load's position and
+  moves a vehicle (axle loads and spacings, e.g. the HL-93 truck) across it in
+  both directions, reporting the extreme effects and where the front axle stood.
 - **Load combinations and envelopes** (Define → Load Combinations…) — Linear
   Add, Envelope (max/min), Absolute Add and SRSS of static and response spectrum
   cases, or of other combinations, each with a scale factor. Combining is
@@ -197,7 +230,27 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   (plan, elevation or 3D) chosen before anything is inserted. Endpoints that
   land on the same point become one node, and what is not a straight bar —
   circles, text, hatches — is counted and reported rather than guessed at. The
-  whole import is one undo step.
+  whole import is one undo step. File → Import → PORTICO Model (.s3d) opens a
+  model saved by [PORTICO](https://github.com/jpreyes/portico-core) as a new
+  project: nodes, supports, springs, masses, frame members (Timoshenko when the
+  section has shear areas), releases, static load cases and combinations, every
+  value scaled from the file's unit system (`kN-m`, `kip-in`, …) to the one
+  you pick, and PORTICO's local axes (beam y up) mapped onto OpenSees' (beam z
+  up). Quadrilateral areas become `ShellMITC4`, diaphragms rigid diaphragms on
+  PORTICO's master node, links rigid links or equalDOFs, and the mass source
+  comes along; triangular areas and spectrum cases are not imported yet and are
+  counted and reported.
+- **Design** — Design → Steel Frame Check (AISC 360-16, LRFD or ASD): every
+  frame member whose section is a W, M, S or HP shape gets its tension (D2),
+  compression (E3, E4, E7), flexure (F2, F3, F6), shear (G2, G6) and H1
+  interaction ratios — channels (E4, F2), tees (F9), equal-leg angles (F10),
+  rectangular HSS (F7, G4) and round HSS and pipes (F8, G5) too — over the combinations already run, read at 25 stations
+  along the member, with `Cb` from the moment diagram and per-member K, Lb and
+  Cb overrides; failing members can be selected in the model, and Design →
+  Display Steel Ratios on Model paints every member by its ratio (blue to red,
+  grey when not designed). The report prints the check. Design → Storey
+  Drift Check compares amplified storey drifts with ASCE 7, NCh433 or Eurocode 8
+  limits. The settings are saved with the project.
 - **Export** — the model, with or without one analysis case, as a plain
   OpenSeesPy script generated from the same command sequence the solver
   receives, so it reproduces the application's numbers; or as **IFC4** (File →
@@ -355,12 +408,14 @@ of that history:
 Prebuilt desktop bundles are attached to the
 [releases](https://github.com/ogunc/opensees-studio/releases): download the
 archive for your system, unpack it anywhere and run `OpenSeesStudio` (or
-`OpenSeesStudio.exe`). Nothing else has to be installed — the bundle carries
-its own Python, Qt, VTK and OpenSees.
+`OpenSeesStudio.exe`). The bundle carries its own Python, Qt and VTK. The
+OpenSees solver has its own license and is not inside it: install it once from
+Options → Solver, which downloads OpenSeesPy from PyPI after you accept its
+license.
 
 Unpack the whole folder, not the executable on its own: the libraries live
-beside it. A bundle is about 1.3 GB unpacked and roughly 570 MB to download,
-most of it the VTK renderer, the OpenSees solver and the Qt runtime.
+beside it. A bundle is about 1 GB unpacked, most of it the VTK renderer and the
+Qt runtime.
 
 The first launch of a downloaded bundle may be blocked by the operating
 system, since these binaries are not code-signed: on macOS, right-click →
@@ -676,6 +731,18 @@ pytest tests/integration   # real OpenSeesPy runs on bundled examples
 
 CI runs lint + the non-`slow` subset on Linux / macOS / Windows
 × Python 3.12.
+
+## Verification
+
+The [Verification Manual](docs/verification-manual.md) compares OpenSees Studio
+with closed-form and published solutions: beams (Euler-Bernoulli and Timoshenko,
+2D and 3D), trusses, support settlement, P-Δ, modal frequencies, a step-load time
+history, a response spectrum, a simply supported plate of shells and the plastic
+moment of a fibre section, and the AISC 360-16 design examples E.1A, F.1, G.1A
+and H.1A plus an end-to-end beam check, each with its relative error and
+tolerance. The file is
+generated from real runs by `tools/verification_manual.py` (`--write` regenerates
+it), and CI fails when a case leaves its tolerance or the file is stale.
 
 ## Roadmap
 

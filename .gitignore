@@ -66,3 +66,6 @@ examples/ozan*.osmodel
 examples/ozan_results/
 /Ex*.csv
 /Ex*.png
+
+# Results databases a run writes next to a bundled example
+examples/*_results.sqlite
