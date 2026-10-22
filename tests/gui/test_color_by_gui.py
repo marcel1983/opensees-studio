@@ -33,6 +33,10 @@ def _window(qtbot):  # type: ignore[no-untyped-def]
             ],
         )
     )
+    # A clean start: nothing selected, a single colour (whatever an earlier
+    # window left behind).
+    mw._act_color_none.trigger()
+    mw._canvas.selection.clear()
     return mw
 
 
