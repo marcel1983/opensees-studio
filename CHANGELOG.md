@@ -9,6 +9,15 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.22] — 2026-10-22
+
+A second engine ships with the application: PyNite (MIT) runs linear static
+and P-Delta cases of elastic frames and trusses with no download, giving the
+same results as OpenSeesPy on those models, and Options → Solver chooses which
+engine runs the cases. Also fixed: a stale pre-run snapshot after New / Open,
+and truss forces that leaked from one OpenSees model into the next one solved
+in the same process.
+
 ### Added
 
 - **PyNite, a second engine that ships with OpenSees Studio** (MIT, no
