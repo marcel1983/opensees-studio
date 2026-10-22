@@ -9,6 +9,14 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Added
+
+- **View → Rotate, and rotate buttons in the View toolbar.** Rotate Left / Right
+  (Alt+Left / Alt+Right) turn the point of view 15° about the vertical axis, Tilt
+  Up / Down (Alt+Up / Alt+Down) 15° about the horizontal screen axis, and Spin
+  keeps it turning to present the model until switched off. Only the camera
+  moves; turning it leaves a plan or elevation view, as Isometric does.
+
 ## [0.0.22] — 2026-10-22
 
 A second engine ships with the application: PyNite (MIT) runs linear static
