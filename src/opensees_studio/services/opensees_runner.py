@@ -38,7 +38,7 @@ import os
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from typing import Any
 
 import numpy as np
@@ -206,6 +206,14 @@ class OpenSeesRunner:
         plan = self._frame_plan = plan_frame_members(self.project)
 
         ops = self._ops
+        # Only the solver itself has the state; a recorder (script export) or a mock must not
+        # see the commands.
+        if (
+            isinstance(ops, ModuleType)
+            and (self.project.ndm, self.project.ndf) == (2, 3)
+            and any(isinstance(el, TrussElement) for el in self.project.elements)
+        ):
+            self._clear_truss_scratch()
         ops.wipe()
         ops.model("basic", "-ndm", self.project.ndm, "-ndf", self.project.ndf)
 
@@ -288,6 +296,33 @@ class OpenSeesRunner:
                 *spring.orient,
             )
         self._run_custom_commands("after_elements")
+
+    def _clear_truss_scratch(self) -> None:
+        """Zero the force vector and matrix OpenSees' ``truss`` shares between 3D and 2D ndf 3.
+
+        ``Truss`` keeps one class-wide vector and matrix per DOF count, and a 2D
+        truss with rotations writes only their translation rows, so whatever
+        the last 3D truss with three DOFs left in the rotation rows came back
+        as a moment: in the reactions, and as a load and a stiffness at a joint
+        free to rotate. One step of a 3D bar along X writes every entry, the Z
+        rows as zero.
+        """
+        ops = self._ops
+        ops.wipe()
+        ops.model("basic", "-ndm", 3, "-ndf", 3)
+        ops.node(1, 0.0, 0.0, 0.0)
+        ops.node(2, 1.0, 0.0, 0.0)
+        ops.fix(1, 1, 1, 1)
+        ops.fix(2, 0, 1, 1)
+        ops.uniaxialMaterial("Elastic", 1, 1.0)
+        ops.element("truss", 1, 1, 2, 1.0, 1)
+        ops.system("BandGen")
+        ops.numberer("Plain")
+        ops.constraints("Plain")
+        ops.integrator("LoadControl", 0.0)
+        ops.algorithm("Linear")
+        ops.analysis("Static")
+        ops.analyze(1)
 
     def _run_custom_commands(self, stage: str) -> None:
         """Execute the enabled custom blocks of ``stage`` (Define → Custom OpenSees Commands)."""
