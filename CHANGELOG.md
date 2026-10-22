@@ -11,6 +11,12 @@ refused instead of silently downgraded).
 
 ### Fixed
 
+- **Opening another project no longer leaves a stale pre-run snapshot
+  behind.** File → Open and File → New now remove the snapshot of the project
+  they replace, as save and close already did, so reopening a project that was
+  run and left with nothing unsaved no longer offers to restore it. Cancelling
+  the unsaved-changes prompt or the file dialog, or a file that fails to load,
+  keeps the snapshot.
 - **A 2D frame model (three DOFs per node) with `truss` members no longer
   inherits forces from a 3D truss model solved earlier in the same process.**
   OpenSees' `truss` shares its force vector and stiffness matrix between 3D
