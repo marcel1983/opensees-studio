@@ -117,6 +117,7 @@ def filtered_project(project: Project, nodes: frozenset[int], elements: frozense
             ("distributed_loads", "element_id", elements),
             ("point_loads", "element_id", elements),
             ("surface_loads", "element_id", elements),
+            ("temperature_loads", "element_id", elements),
         ):
             items = getattr(pattern, name, None)
             if items is not None:

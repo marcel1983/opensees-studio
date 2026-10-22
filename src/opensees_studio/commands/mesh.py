@@ -69,6 +69,19 @@ class MeshCommand(ProjectCommand):
                 else:
                     distributed.append(dload)
             pattern.distributed_loads[:] = distributed
+            # A temperature change is the same on every piece of a divided member.
+            pattern.temperature_loads[:] = [
+                piece
+                for load in pattern.temperature_loads
+                for piece in (
+                    [load]
+                    if load.element_id not in removed
+                    else [
+                        load.model_copy(update={"element_id": new_id})
+                        for new_id in self._plan.replacements.get(load.element_id, [])
+                    ]
+                )
+            ]
             # A uniform pressure is the same on every piece of a meshed shell.
             pattern.surface_loads[:] = [
                 piece

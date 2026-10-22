@@ -27,6 +27,7 @@ from typing import Any
 import numpy as np
 
 from opensees_studio.services.results import (
+    InfluenceLineResults,
     ModalResults,
     PushoverResults,
     ResponseSpectrumResults,
@@ -39,7 +40,12 @@ MANIFEST_NAME = "manifest.json"
 MANIFEST_SCHEMA = 1
 
 AnyResults = (
-    StaticResults | PushoverResults | ModalResults | ResponseSpectrumResults | TransientResults
+    StaticResults
+    | PushoverResults
+    | ModalResults
+    | ResponseSpectrumResults
+    | TransientResults
+    | InfluenceLineResults
 )
 
 
@@ -119,6 +125,16 @@ def write_results(results: AnyResults, out_dir: str | Path) -> dict[str, Any]:
                 _write_int_dict(f, "storey_shear", results.storey_shear)
             if results.section_cut_forces:
                 _write_int_dict(f, "section_cut_forces", results.section_cut_forces)
+        elif isinstance(results, InfluenceLineResults):
+            entry["completed_steps"] = results.n_steps
+            entry["load"] = results.load
+            entry["direction"] = results.direction
+            f.create_dataset("distances", data=np.asarray(results.distances, dtype=float))
+            f.create_dataset("element_ids", data=np.asarray(results.element_ids, dtype=np.int64))
+            f.create_dataset("fractions", data=np.asarray(results.fractions, dtype=float))
+            _write_int_dict(f, "node_disp", results.node_disp)
+            _write_int_dict(f, "node_reaction", results.node_reaction)
+            _write_int_dict(f, "element_forces", results.element_forces)
         elif isinstance(results, PushoverResults):
             entry["completed_steps"] = results.n_steps
             entry["control_node"] = results.control_node
@@ -204,6 +220,19 @@ def load_results(entry: dict[str, Any], out_dir: str | Path) -> AnyResults:
                 element_stresses=_read_int_dict(f, "element_stresses"),
                 storey_shear=_read_int_dict(f, "storey_shear"),
                 section_cut_forces=_read_int_dict(f, "section_cut_forces"),
+            )
+        if kind == "InfluenceLineResults":
+            return InfluenceLineResults(
+                case_id=case_id,
+                case_name=case_name,
+                distances=np.asarray(f["distances"][:], dtype=float),
+                element_ids=np.asarray(f["element_ids"][:], dtype=int),
+                fractions=np.asarray(f["fractions"][:], dtype=float),
+                load=float(entry.get("load", -1.0)),
+                direction=str(entry.get("direction", "Z")),
+                node_disp=_read_int_dict(f, "node_disp"),
+                node_reaction=_read_int_dict(f, "node_reaction"),
+                element_forces=_read_int_dict(f, "element_forces"),
             )
         if kind == "PushoverResults":
             return PushoverResults(

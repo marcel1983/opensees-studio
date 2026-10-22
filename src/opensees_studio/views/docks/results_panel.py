@@ -34,6 +34,7 @@ from opensees_studio.services.result_tables import (
     ResultTable,
     combination_tables,
     display_text,
+    influence_stops_table,
     modal_tables,
     node_history_table,
     pushover_tables,
@@ -45,6 +46,7 @@ from opensees_studio.services.result_tables import (
 )
 from opensees_studio.services.results import (
     CombinationResults,
+    InfluenceLineResults,
     ModalResults,
     PushoverResults,
     ResponseSpectrumResults,
@@ -205,6 +207,12 @@ class ResultsPanel(QWidget):
             tabs.append("Modes")
             for name, table in zip(tabs, response_spectrum_tables(results, project), strict=True):
                 self._add_table_tab(table, name)
+        elif isinstance(results, InfluenceLineResults):
+            self._title.setText(
+                f"<b>Influence line — case #{results.case_id} '{results.case_name}'</b>  "
+                f"({results.n_steps} stops; Display → Influence Line plots a response)"
+            )
+            self._add_table_tab(influence_stops_table(results), "Stops")
         elif isinstance(results, CombinationResults):
             bounds = "" if results.single_valued else ", max and min"
             cases = ", ".join(f"#{cid}" for cid in results.case_ids)

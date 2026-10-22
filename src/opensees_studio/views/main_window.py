@@ -49,6 +49,7 @@ from opensees_studio.commands import (
     AddNodesCommand,
     AddPointElementLoadsCommand,
     AddSectionsCommand,
+    AddTemperatureLoadsCommand,
     AddTrapezoidalElementLoadsCommand,
     AssignMaterialCommand,
     AssignSectionCommand,
@@ -70,6 +71,7 @@ from opensees_studio.commands.buildings import (
     AddDiaphragmCommand,
     AddRigidLinkCommand,
     RemoveConstraintsCommand,
+    SetDesignSettingsCommand,
     SetMassSourceCommand,
     SetStoreysCommand,
 )
@@ -98,6 +100,7 @@ from opensees_studio.core.connectivity import (
     joints_on_shell_edges,
     loose_joints,
 )
+from opensees_studio.core.design.settings import DesignSettings
 from opensees_studio.core.duplicates import default_tolerance
 from opensees_studio.core.geometry.ordering import QuadOrderError, order_quad_nodes
 from opensees_studio.core.groups import Group, colour_for, group_members
@@ -127,6 +130,7 @@ from opensees_studio.services.element_forces import (
 from opensees_studio.services.opensees_script import case_label, export_script
 from opensees_studio.services.results import (
     CombinationResults,
+    InfluenceLineResults,
     ModalResults,
     PushoverResults,
     ResponseSpectrumResults,
@@ -136,10 +140,12 @@ from opensees_studio.services.results import (
 from opensees_studio.services.results_db import database_path, delete_all_results, record_results
 from opensees_studio.services.shell_fields import shell_elements
 from opensees_studio.services.stability import StabilityReport
+from opensees_studio.services.steel_design import steel_frame_check
 from opensees_studio.viewmodels import AnalysisRunner, ProjectViewModel
 from opensees_studio.viewmodels.case_results import CaseResultsCache
 from opensees_studio.viewmodels.stability_checker import StabilityChecker
 from opensees_studio.views.canvas3d import ModelCanvas
+from opensees_studio.views.canvas3d.design_ratio_renderer import DesignRatioRenderer
 from opensees_studio.views.canvas3d.diagram_renderer import DiagramRenderer
 from opensees_studio.views.canvas3d.model_renderer import RendererMode
 from opensees_studio.views.canvas3d.shell_contour_renderer import ShellContourRenderer
@@ -158,9 +164,11 @@ from opensees_studio.views.dialogs import (
     AssignPointElementLoadDialog,
     AssignSectionDialog,
     AssignSupportDialog,
+    AssignTemperatureLoadDialog,
     AssignZeroLengthSectionDialog,
     CoordinateGridSystemsDialog,
     DisplayOptionsDialog,
+    DriftCheckDialog,
     DuplicatesDialog,
     DxfImportDialog,
     FrameEndOffsetsDialog,
@@ -170,6 +178,7 @@ from opensees_studio.views.dialogs import (
     FrameWizard,
     FrictionLibraryDialog,
     GroundMotionsDialog,
+    InfluenceLineDialog,
     LinearTimeSeriesDialog,
     MaterialLibraryDialog,
     MaterialTesterDialog,
@@ -180,7 +189,9 @@ from opensees_studio.views.dialogs import (
     PlainPatternDialog,
     ReplicateDialog,
     RunAnalysisDialog,
+    S3dImportDialog,
     SectionLibraryDialog,
+    SteelDesignDialog,
     TrapezoidalLoadDialog,
     UniformExcitationDialog,
     member_sections,
@@ -215,6 +226,7 @@ from opensees_studio.views.dialogs.solver_settings import SolverSettingsDialog
 from opensees_studio.views.dialogs.view_colors import ViewColorsDialog
 from opensees_studio.views.docks import (
     DeformedShapeView,
+    DesignRatioView,
     ForceDiagramView,
     HysteresisView,
     ModeShapeAnimator,
@@ -324,6 +336,7 @@ class MainWindow(QMainWindow):
         # Diagram overlay paints onto the same plotter as the model.
         self._diagram_renderer = DiagramRenderer(self._main_canvas)
         self._contour_renderer = ShellContourRenderer(self._main_canvas)
+        self._ratio_renderer = DesignRatioRenderer(self._main_canvas)
 
     @property
     def _canvas(self) -> ModelCanvas:
@@ -400,6 +413,7 @@ class MainWindow(QMainWindow):
         self._act_save = QAction("&Save", self, shortcut=QKeySequence.StandardKey.Save)
         self._act_save_as = QAction("Save &As…", self, shortcut=QKeySequence.StandardKey.SaveAs)
         self._act_import_dxf = QAction("&DXF Drawing…", self)
+        self._act_import_s3d = QAction("&PORTICO Model (.s3d)…", self)
         self._act_export_script = QAction("OpenSees &script (.py)…", self)
         self._act_export_ifc = QAction("&IFC (.ifc)…", self)
         self._act_export_report = QAction("&Report (HTML / PDF)…", self)
@@ -474,6 +488,8 @@ class MainWindow(QMainWindow):
         self._act_material_tester = QAction("Material &Tester…", self, shortcut="Ctrl+Shift+T")
         self._act_ground_motions = QAction("&Ground Motions…", self, shortcut="Ctrl+Shift+G")
         self._act_section_library = QAction("&Section Library…", self, shortcut="Ctrl+Shift+S")
+        self._act_concrete_section = QAction("&Concrete Section Wizard…", self)
+        self._act_section_designer = QAction("Section &Designer…", self)
         self._act_add_linear_ts = QAction("Add &Linear TimeSeries…", self)
         self._act_add_path_ts = QAction("Add &Path TimeSeries…", self)
         self._act_add_function_ts = QAction(
@@ -512,6 +528,7 @@ class MainWindow(QMainWindow):
         self._act_assign_insertion = QAction("I&nsertion Point…", self)
         self._act_assign_modifiers = QAction("Property M&odifiers…", self)
         self._act_assign_trapezoidal_load = QAction("&Trapezoidal Load…", self)
+        self._act_assign_temperature_load = QAction("Te&mperature Load…", self)
 
         # Display (post-processing)
         self._act_select_results = QAction("Show Results &Of…", self)
@@ -527,6 +544,7 @@ class MainWindow(QMainWindow):
         self._act_export_th_animation = QAction("Export Time-History &Animation…", self)
         self._act_show_hysteresis = QAction("&Hysteresis Plot…", self)
         self._act_show_pushover = QAction("Show &Pushover Curve…", self)
+        self._act_influence_line = QAction("&Influence Line…", self)
         self._act_show_response_spectrum = QAction("Show &Response Spectrum…", self)
         self._act_display_options = QAction("Display &Options…", self)
         self._act_back_to_model = QAction("Back to &Model View", self, shortcut="Ctrl+Shift+B")
@@ -538,6 +556,9 @@ class MainWindow(QMainWindow):
         self._act_run_all = QAction("Run &All Cases", self, shortcut=QKeySequence("Shift+F5"))
         self._act_run_selected = QAction("Run Se&lected Cases…", self)
         self._act_clear_results = QAction("Delete &All Results…", self)
+        self._act_steel_check = QAction("&Steel Frame Check (AISC 360-16)…", self)
+        self._act_drift_check = QAction("Storey &Drift Check…", self)
+        self._act_steel_ratios = QAction("Display Steel &Ratios on Model", self)
         self._act_check_stability = QAction("Check Model &Stability…", self)
 
         # View
@@ -630,6 +651,7 @@ class MainWindow(QMainWindow):
         m_file.addSeparator()
         m_import = m_file.addMenu("&Import")
         m_import.addAction(self._act_import_dxf)
+        m_import.addAction(self._act_import_s3d)
         m_export = m_file.addMenu("&Export")
         m_export.addAction(self._act_export_script)
         m_export.addAction(self._act_export_ifc)
@@ -673,6 +695,8 @@ class MainWindow(QMainWindow):
                 self._act_material_tester,
                 self._act_ground_motions,
                 self._act_section_library,
+                self._act_concrete_section,
+                self._act_section_designer,
             ]
         )
         m_define.addSeparator()
@@ -718,6 +742,7 @@ class MainWindow(QMainWindow):
             self._act_assign_distributed_load,
             self._act_assign_trapezoidal_load,
             self._act_assign_frame_point_load,
+            self._act_assign_temperature_load,
             self._act_assign_hinge,
         ]
         self._area_actions: list[QAction | None] = [
@@ -757,11 +782,17 @@ class MainWindow(QMainWindow):
         m_display.addAction(self._act_export_th_animation)
         m_display.addAction(self._act_show_hysteresis)
         m_display.addAction(self._act_show_pushover)
+        m_display.addAction(self._act_influence_line)
         m_display.addAction(self._act_show_response_spectrum)
         m_display.addSeparator()
         m_display.addAction(self._act_display_options)
         m_display.addSeparator()
         m_display.addAction(self._act_back_to_model)
+
+        m_design = mb.addMenu("Desi&gn")
+        m_design.addAction(self._act_steel_check)
+        m_design.addAction(self._act_steel_ratios)
+        m_design.addAction(self._act_drift_check)
 
         m_view = mb.addMenu("&View")
         m_view.addAction(self._act_zoom_in)
@@ -1027,6 +1058,7 @@ class MainWindow(QMainWindow):
         self._act_save.triggered.connect(self._on_save)
         self._act_save_as.triggered.connect(self._on_save_as)
         self._act_import_dxf.triggered.connect(self._on_import_dxf)
+        self._act_import_s3d.triggered.connect(self._on_import_s3d)
         self._act_export_script.triggered.connect(self._on_export_script)
         self._act_export_ifc.triggered.connect(self._on_export_ifc)
         self._act_export_report.triggered.connect(self._on_export_report)
@@ -1101,6 +1133,8 @@ class MainWindow(QMainWindow):
         self._act_material_tester.triggered.connect(self._on_material_tester)
         self._act_ground_motions.triggered.connect(self._on_ground_motions)
         self._act_section_library.triggered.connect(self._on_section_library)
+        self._act_concrete_section.triggered.connect(self._on_concrete_section)
+        self._act_section_designer.triggered.connect(self._on_section_designer)
         self._act_add_linear_ts.triggered.connect(self._on_add_linear_ts)
         self._act_add_path_ts.triggered.connect(self._on_add_path_ts)
         self._act_add_function_ts.triggered.connect(self._on_add_function_ts)
@@ -1147,6 +1181,7 @@ class MainWindow(QMainWindow):
         self._act_assign_insertion.triggered.connect(self._on_assign_insertion)
         self._act_assign_modifiers.triggered.connect(self._on_assign_modifiers)
         self._act_assign_trapezoidal_load.triggered.connect(self._on_assign_trapezoidal_load)
+        self._act_assign_temperature_load.triggered.connect(self._on_assign_temperature_load)
 
         # Analyze
         self._act_case_manager.triggered.connect(self._on_case_manager)
@@ -1154,6 +1189,9 @@ class MainWindow(QMainWindow):
         self._act_run_all.triggered.connect(self._on_run_all_cases)
         self._act_run_selected.triggered.connect(self._on_run_selected_cases)
         self._act_clear_results.triggered.connect(self._on_clear_results)
+        self._act_steel_check.triggered.connect(self._on_steel_check)
+        self._act_drift_check.triggered.connect(self._on_drift_check)
+        self._act_steel_ratios.triggered.connect(self._on_steel_ratios)
         self._act_check_stability.triggered.connect(self._on_check_stability)
         self._stability.log.connect(self._log)
         self._stability.finished.connect(self._on_stability_report)
@@ -1177,6 +1215,7 @@ class MainWindow(QMainWindow):
         self._act_export_th_animation.triggered.connect(self._on_export_th_animation)
         self._act_show_hysteresis.triggered.connect(self._on_show_hysteresis)
         self._act_show_pushover.triggered.connect(self._on_show_pushover)
+        self._act_influence_line.triggered.connect(self._on_influence_line)
         self._act_show_response_spectrum.triggered.connect(self._on_show_response_spectrum)
         self._act_display_options.triggered.connect(self._on_display_options)
         self._act_back_to_model.triggered.connect(self._on_back_to_model)
@@ -2099,6 +2138,130 @@ class MainWindow(QMainWindow):
         drawing = dialog.drawing()
         if drawing is not None and drawing.skipped_summary():
             self._log(drawing.skipped_summary())
+
+    def _on_import_s3d(self) -> None:
+        """File → Import → PORTICO Model: a ``.s3d`` file as a new, unsaved project.
+
+        The whole model is replaced, so this asks about unsaved changes like Open
+        does. What the file has and the import cannot carry is written to the log.
+        """
+        if not self._confirm_discard_changes("Importing a PORTICO model"):
+            return
+        dialog = S3dImportDialog(parent=self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        imported = dialog.imported()
+        if imported is None:
+            return
+        self._vm.adopt(imported.project)
+        self._apply_project_view_settings()
+        source = dialog.source()
+        self._log(
+            f"Imported {source.name if source else 'the PORTICO model'} "
+            f"({imported.source_units} → {imported.project.meta.units.value}): "
+            f"{imported.summary()}"
+        )
+        for note in imported.notes:
+            self._log(note)
+
+    def _on_influence_line(self) -> None:
+        """Display → Influence Line: one response of the influence-line case on screen."""
+        results = self._latest_results
+        if not isinstance(results, InfluenceLineResults) or self._vm.project is None:
+            QMessageBox.information(
+                self,
+                "Influence Line",
+                "Run an influence-line case first (Analyze → Cases… → Add → InfluenceLine).",
+            )
+            return
+        dialog = InfluenceLineDialog(self._vm.project, results, parent=self)
+        dialog.exec()
+
+    def _on_steel_check(self) -> None:
+        """Design → Steel Frame Check: AISC 360-16 ratios over this session's results.
+
+        The dialog reads the case results cache and runs nothing itself; its
+        settings are stored on OK with one undoable command.
+        """
+        project = self._vm.project
+        if project is None:
+            return
+        dialog = SteelDesignDialog(
+            project,
+            dict(self._case_results.current(project)),
+            selected_elements=frozenset(self._canvas.selection.elements),
+            parent=self,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        settings = dialog.settings()
+        if settings != project.design:
+            self._vm.apply_command(SetDesignSettingsCommand(self._vm, settings))
+        report = dialog.report()
+        if report is not None:
+            self._log(f"Steel frame check (AISC 360-16, {settings.method}): {report.summary()}")
+            for note in report.notes:
+                self._log(note)
+        if dialog.select_failing_requested:
+            failing = dialog.failing_elements()
+            self._canvas.selection.set_selection(set(), failing)
+            self.statusBar().showMessage(f"Selected {len(failing)} failing member(s).", 4000)
+        if dialog.show_ratios_requested and report is not None:
+            self._show_design_ratios(report, settings)
+
+    def _on_steel_ratios(self) -> None:
+        """Design → Display Steel Ratios: paint the members by the stored check's ratios.
+
+        Runs the AISC 360-16 check with the project's design settings (the
+        defaults when none were stored) over this session's results, as the
+        Steel Frame Check dialog would, and shows the overlay with its legend.
+        """
+        project = self._vm.project
+        if project is None:
+            return
+        settings = project.design or DesignSettings()
+        report = steel_frame_check(project, dict(self._case_results.current(project)), settings)
+        if not any(m.status != "not designed" for m in report.members):
+            reason = " ".join(report.notes) or (
+                "No frame member has an AISC section the check covers."
+            )
+            QMessageBox.information(self, "Display Steel Ratios", reason)
+            return
+        self._log(f"Steel frame check (AISC 360-16, {settings.method}): {report.summary()}")
+        self._show_design_ratios(report, settings)
+
+    def _show_design_ratios(self, report: Any, settings: DesignSettings) -> None:
+        """The ratio overlay and its legend dock; Back to model clears both."""
+        self._on_back_to_model()
+        self._ratio_renderer.render(self._vm.project, report.members, limit=settings.ratio_limit)
+        view = DesignRatioView()
+        view.set_report(report, method=settings.method, limit=settings.ratio_limit)
+        dock = QDockWidget("Steel Ratios", self)
+        dock.setWidget(view)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
+        self._post_dock = dock
+        failing = {m.element_id for m in report.failing}
+
+        def _select_failing() -> None:
+            self._canvas.selection.set_selection(set(), failing)
+            self.statusBar().showMessage(f"Selected {len(failing)} failing member(s).", 4000)
+
+        view.selectFailing.connect(_select_failing)
+        view.closed.connect(self._on_back_to_model)
+        self._set_result_caption(f"Steel ratios · AISC 360-16 {settings.method}")
+        self._canvas.render()
+
+    def _on_drift_check(self) -> None:
+        """Design → Storey Drift Check: amplified drift ratios against the allowable one."""
+        project = self._vm.project
+        if project is None:
+            return
+        dialog = DriftCheckDialog(project, dict(self._case_results.current(project)), parent=self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        settings = dialog.settings()
+        if settings != project.design:
+            self._vm.apply_command(SetDesignSettingsCommand(self._vm, settings))
 
     def _on_mesh(self) -> None:
         """Edit → Mesh: subdivide members and shells, and join the mesh up.
@@ -3509,6 +3672,49 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, "Assign Distributed Load failed", str(exc))
 
+    def _on_assign_temperature_load(self) -> None:
+        """Assign → Frame → Temperature Load: uniform ΔT and gradients on the selected members.
+
+        Every selected member is checked before anything changes: the method needs
+        elastic members without releases or end offsets (see ``core.thermal``).
+        """
+        from opensees_studio.core import TemperatureLoad
+        from opensees_studio.core.thermal import ThermalLoadError, fixed_end_forces
+
+        project = self._vm.project
+        selected = set(self._canvas.selection.elements)
+        if project is None or not selected:
+            QMessageBox.information(
+                self, "Assign Temperature Load", "Select one or more frame members first."
+            )
+            return
+        refused = []
+        for element_id in sorted(selected):
+            try:
+                fixed_end_forces(project, TemperatureLoad(element_id=element_id, alpha=1.0))
+            except ThermalLoadError as exc:
+                refused.append(str(exc))
+        if refused:
+            QMessageBox.warning(self, "Assign Temperature Load", "\n".join(refused[:8]))
+            return
+        dialog = AssignTemperatureLoadDialog(len(selected), ndm=project.ndm, parent=self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        try:
+            values = dialog.values()
+            self._vm.apply_command(
+                AddTemperatureLoadsCommand(
+                    self._vm,
+                    selected,
+                    alpha=values["alpha"],
+                    uniform=values["uniform"],
+                    gradient_y=values["gradient_y"],
+                    gradient_z=values["gradient_z"],
+                )
+            )
+        except Exception as exc:
+            QMessageBox.critical(self, "Assign Temperature Load failed", str(exc))
+
     def _on_assign_frame_point_load(self) -> None:
         """Assign → Frame → Point Load: a concentrated load inside each selected frame."""
         from opensees_studio.core import FRAME_ELEMENT_CLASSES
@@ -3661,6 +3867,58 @@ class MainWindow(QMainWindow):
         if self._vm.project is None:
             self._on_new()
         SectionLibraryDialog(self._vm, self).exec()
+
+    def _on_concrete_section(self) -> None:
+        """Define → Concrete Section Wizard: materials and sections in one undo step."""
+        from opensees_studio.views.dialogs.concrete_section import ConcreteSectionDialog
+
+        if self._vm.project is None:
+            self._on_new()
+        project = self._vm.project
+        if project is None:
+            return
+        dialog = ConcreteSectionDialog(project, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        result = dialog.built_section()
+        if result is None:
+            return
+        sections = [s for s in (result.fiber, result.elastic) if s is not None]
+        self._add_materials_and_sections("Concrete section", result.materials, sections)
+
+    def _on_section_designer(self) -> None:
+        """Define → Section Designer: a drawn or imported section, added in one undo step."""
+        from opensees_studio.views.dialogs.section_designer import SectionDesignerDialog
+
+        if self._vm.project is None:
+            self._on_new()
+        project = self._vm.project
+        if project is None:
+            return
+        dialog = SectionDesignerDialog(project, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        section = dialog.built_section()
+        if section is not None:
+            self._add_materials_and_sections("Designed section", [], [section])
+
+    def _add_materials_and_sections(
+        self, text: str, materials: list[Any], sections: list[Any]
+    ) -> None:
+        """Add ``materials`` then ``sections`` as one undo step, and say what was added."""
+        from opensees_studio.commands import AddMaterialsCommand
+
+        stack = self._vm.undo_stack
+        stack.beginMacro(text)
+        try:
+            if materials:
+                self._vm.apply_command(AddMaterialsCommand(self._vm, materials))
+            if sections:
+                self._vm.apply_command(AddSectionsCommand(self._vm, sections))
+        finally:
+            stack.endMacro()
+        names = ", ".join(f"#{s.id} {s.name}" for s in sections)
+        self._log(f"{text}: added {len(materials)} material(s) and section(s) {names}.")
 
     # ── slots: assign property ──────────────────────────────────────
     def _on_assign_section(self) -> None:
@@ -4927,6 +5185,7 @@ class MainWindow(QMainWindow):
         if self._diagram_renderer is not None:
             self._diagram_renderer.clear()
         self._contour_renderer.clear()
+        self._ratio_renderer.clear()
         self._canvas._renderer.set_mode(RendererMode.MODEL)
         self._canvas.render()
 
@@ -5277,6 +5536,9 @@ class MainWindow(QMainWindow):
         )
         db_there = has_project and database_path(self._vm.path).exists()
         self._act_clear_results.setEnabled(bool(has_project and (stored or db_there)))
+        self._act_steel_check.setEnabled(has_project)
+        self._act_drift_check.setEnabled(has_project)
+        self._act_steel_ratios.setEnabled(has_project)
         self._act_check_stability.setEnabled(
             has_project
             and solver
@@ -5325,6 +5587,7 @@ class MainWindow(QMainWindow):
             self._act_assign_insertion,
             self._act_assign_modifiers,
             self._act_assign_trapezoidal_load,
+            self._act_assign_temperature_load,
         ):
             action.setEnabled(has_project and has_selected_elements)
         self._act_delete.setEnabled(has_project and has_selection)
@@ -5346,6 +5609,7 @@ class MainWindow(QMainWindow):
         self._act_export_th_animation.setEnabled(has_transient)
         self._act_show_hysteresis.setEnabled(has_transient)
         self._act_show_pushover.setEnabled(has_pushover)
+        self._act_influence_line.setEnabled(isinstance(self._latest_results, InfluenceLineResults))
         self._act_show_response_spectrum.setEnabled(has_rs)
         self._act_display_options.setEnabled(has_project)
         self._act_back_to_model.setEnabled(self._post_dock is not None)

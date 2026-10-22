@@ -25,6 +25,7 @@ from opensees_studio.core import (
     SYSTEM_NOTES,
     SYSTEMS,
     AnalysisCase,
+    InfluenceLineCase,
     LoadPattern,
     ModalCase,
     PushoverCase,
@@ -38,6 +39,7 @@ from opensees_studio.core.analysis import (
     TESTS,
     TRANSIENT_INTEGRATORS,
     TRANSIENT_PARAMS,
+    Axle,
 )
 from opensees_studio.core.modal import (
     SOLVER_ARPACK,
@@ -599,6 +601,66 @@ class ResponseSpectrumCaseForm(CaseFormBase):
         )
 
 
+class InfluenceLineCaseForm(CaseFormBase):
+    type_label = "Influence line — a unit load walked along a chain of members"
+
+    def __init__(
+        self,
+        patterns: list[LoadPattern],
+        analyses: list[AnalysisCase],
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(patterns, analyses, parent)
+        self._path = QLineEdit()
+        self._path.setPlaceholderText("member ids in travel order, e.g. 1, 2, 3")
+        self._stations = _int_spin(10, minimum=1, maximum=200)
+        self._direction = QComboBox()
+        self._direction.addItems(["Z", "X", "Y"])
+        self._load = _spin(-1.0, minimum=-1e15, maximum=1e15, step=1.0)
+        self._axles = QLineEdit()
+        self._axles.setPlaceholderText("load@offset, … e.g. 35@0, 145@4.3, 145@8.6")
+        self._layout.addRow("Path (members):", self._path)
+        self._layout.addRow("Stops per member:", self._stations)
+        self._layout.addRow("Load direction:", self._direction)
+        self._layout.addRow("Load value:", self._load)
+        self._layout.addRow("Vehicle axles:", self._axles)
+        self._layout.addRow(
+            _note(
+                "<i>One linear static solve per stop: every displacement, reaction and member "
+                "end force with the load there. Consecutive members must share a joint. The "
+                "default load, -1 along Z, is a unit load downward. Display → Influence "
+                "Line plots any response and moves the vehicle across it.</i>"
+            )
+        )
+
+    def _populate_specific(self, c: AnalysisCase) -> None:
+        assert isinstance(c, InfluenceLineCase)
+        self._path.setText(", ".join(str(e) for e in c.path))
+        self._stations.setValue(c.stations)
+        self._direction.setCurrentText(c.direction)
+        self._load.setValue(c.load)
+        self._axles.setText(", ".join(f"{a.load:g}@{a.offset:g}" for a in c.axles))
+
+    def _read_specific(self, cid: int) -> InfluenceLineCase:
+        path = [int(x) for x in self._path.text().replace(",", " ").split() if x]
+        axles = []
+        for chunk in self._axles.text().split(","):
+            chunk = chunk.strip()
+            if not chunk:
+                continue
+            load, _, offset = chunk.partition("@")
+            axles.append(Axle(load=float(load), offset=float(offset or 0.0)))
+        return InfluenceLineCase(
+            id=cid,
+            name=self._name_edit.text(),
+            path=path,
+            stations=self._stations.value(),
+            direction=self._direction.currentText(),  # type: ignore[arg-type]
+            load=self._load.value(),
+            axles=axles,
+        )
+
+
 # ─────────────────────────── registry ───────────────────────────
 FORM_REGISTRY: dict[str, type[CaseFormBase]] = {
     "Static": StaticCaseForm,
@@ -606,6 +668,7 @@ FORM_REGISTRY: dict[str, type[CaseFormBase]] = {
     "Transient": TransientCaseForm,
     "Pushover": PushoverCaseForm,
     "ResponseSpectrum": ResponseSpectrumCaseForm,
+    "InfluenceLine": InfluenceLineCaseForm,
 }
 
 

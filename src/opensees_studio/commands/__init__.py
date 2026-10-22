@@ -10,6 +10,7 @@ from opensees_studio.commands.buildings import (
     AddDiaphragmCommand,
     AddRigidLinkCommand,
     RemoveConstraintsCommand,
+    SetDesignSettingsCommand,
     SetMassSourceCommand,
     SetStoreysCommand,
 )
@@ -57,6 +58,7 @@ from opensees_studio.commands.loads import (
     AddNodalLoadsCommand,
     AddPatternLoadsCommand,
     AddPointElementLoadsCommand,
+    AddTemperatureLoadsCommand,
     AddTrapezoidalElementLoadsCommand,
 )
 from opensees_studio.commands.materials import (
@@ -108,6 +110,7 @@ __all__ = [
     "AddRigidLinkCommand",
     "AddSectionsCommand",
     "AddSpectrumCommand",
+    "AddTemperatureLoadsCommand",
     "AddTimeSeriesCommand",
     "AddTrapezoidalElementLoadsCommand",
     "ApplyModelTablesCommand",
@@ -137,6 +140,7 @@ __all__ = [
     "ReplicateCommand",
     "SetCoordSystemsCommand",
     "SetCustomCommandsCommand",
+    "SetDesignSettingsCommand",
     "SetGridSystemCommand",
     "SetGroupsCommand",
     "SetMassCommand",

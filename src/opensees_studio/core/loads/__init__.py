@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt, model_validator
 
 from opensees_studio.core._base import Entity, omit_when_default
 
@@ -371,6 +371,31 @@ class ImposedDisplacement(BaseModel):
     value: float
 
 
+class TemperatureLoad(BaseModel):
+    """A temperature change of a frame member: uniform, and a gradient across each axis.
+
+    The member's temperature is ``uniform + gradient_y * y + gradient_z * z`` at
+    the point ``(y, z)`` of its cross section, in the member's local axes
+    (``gradient_y`` is the temperature difference per unit depth along local
+    y: a face at ``+y`` hotter than the one at ``-y`` has ``gradient_y > 0``).
+    ``alpha`` is the coefficient of thermal expansion (per degree).
+
+    OpenSees' elastic frame elements take no thermal load, so the runner applies
+    the equivalent nodal loads (minus the member's fixed-end forces) and adds the
+    fixed-end forces back to the member's end forces: ``N = EA (ε - α ΔT)``,
+    ``M = EI (κ - α g)``. Elastic members without releases or end offsets only;
+    static cases only.
+    """
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    element_id: PositiveInt
+    alpha: PositiveFloat = Field(..., description="Coefficient of thermal expansion, 1/°.")
+    uniform: float = Field(default=0.0, description="Uniform temperature change, °.")
+    gradient_y: float = Field(default=0.0, description="Temperature change per unit local y.")
+    gradient_z: float = Field(default=0.0, description="Temperature change per unit local z.")
+
+
 # ──────────────────────────── Patterns ────────────────────────────
 class PlainLoadPattern(Entity):
     """``pattern Plain`` — links a time series to a set of nodal and element loads."""
@@ -384,6 +409,7 @@ class PlainLoadPattern(Entity):
     surface_loads: list[SurfaceLoad] = Field(default_factory=list)
     floor_loads: list[FloorLoad] = Field(default_factory=list)
     imposed_displacements: list[ImposedDisplacement] = Field(default_factory=list)
+    temperature_loads: list[TemperatureLoad] = Field(default_factory=list)
     self_weight: float = Field(
         default=0.0,
         description=(
@@ -399,6 +425,7 @@ class PlainLoadPattern(Entity):
         "surface_loads",
         "floor_loads",
         "imposed_displacements",
+        "temperature_loads",
         "self_weight",
     )
 

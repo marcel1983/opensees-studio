@@ -18,6 +18,144 @@ refused instead of silently downgraded).
   the unsaved-changes prompt or the file dialog, or a file that fails to load,
   keeps the snapshot.
 
+## [0.0.21] — 2026-10-22
+
+Models come in from PORTICO and go out designed: File → Import → PORTICO Model
+reads `.s3d` files scaled to the project's units; the new Design menu checks
+steel members against AISC 360-16 (I-shapes, channels, tees, angles, HSS and
+pipes), paints them by their ratio and checks storey drifts; influence lines,
+moving loads and temperature loads join the analyses; the Concrete Section
+Wizard and the Section Designer build any section; and a generated Verification
+Manual compares every result family with closed-form and published solutions.
+
+### Added
+
+- **Define → Section Designer.** Draw any cross-section with a command line —
+  `rect`, `circle`, `poly`, `ishape`, `channel`, `tee`, `angle`, `tube`, `pipe`,
+  `hole …`, `move`, `delete`, `center`, with Undo — or import the closed
+  outlines of a DXF (polylines with arcs, circles, ellipses, splines; an outline
+  inside another is a hole; scaled by `$INSUNITS` and centred). It shows the
+  area, centroid, Iz, Iy, Iyz, principal moments and angle, elastic and plastic
+  moduli and the Saint-Venant torsional constant, solved by finite differences
+  on Prandtl's stress function with boundary-fitted coefficients (hollow shapes
+  included), and warns when regions overlap. OK adds an elastic section (E, ν,
+  editable J) or a fiber section of one uniaxial material.
+
+- **Define → Concrete Section Wizard.** A rectangular, circular, T or L
+  reinforced concrete section from its dimensions, clear cover, metric or US bar
+  sizes and counts, ties and strengths, drawn as you type. It adds the cover and
+  core concrete (`Concrete02`; the core confined after Mander, Priestley and Park
+  when asked), the bars (`Steel02`), a fiber section and, optionally, an elastic
+  section with the ACI 318-19 cracked inertia (0.70 Ig for columns, 0.35 Ig for
+  beams), all in one undo step.
+
+- **Steel frame check: channels, tees, angles, HSS and pipes.** Design → Steel
+  Frame Check now covers C and MC channels (E4 flexural-torsional buckling, F2,
+  F6, G2, G6), WT, MT and ST tees (F9, stem as an unstiffened element), equal-leg
+  angles (E3 about z, E4, F10, G3), rectangular HSS (E7 walls, F7 with the
+  effective section modulus and lateral-torsional buckling, G4) and round HSS and
+  pipes (E7-6, F8, G5). Section names are matched whatever their case and
+  whether they write `.` and `/` or the table's `_`. Unequal-leg angles stay not
+  designed.
+
+- **Design → Display Steel Ratios on Model.** Paints every frame member by its
+  governing AISC 360-16 ratio (blue, teal, green, orange up to the limit, red
+  above it, grey when not designed) with the ratio at mid-length, and a panel
+  with the legend, the summary and Select failing members. The Steel Frame Check
+  dialog gains **Show ratios on the model**. The calculation report (File →
+  Export → Report) prints the steel check and the storey drifts when the project
+  has design settings.
+
+- **Temperature loads on frames** (Assign → Frame → Temperature Load). A uniform
+  temperature change and a gradient across local y and z, with the coefficient of
+  expansion α, on elastic members without releases or end offsets, in static
+  cases. The members' fixed-end forces are applied to the joints with the
+  opposite sign and added back to their end forces, so a free member grows α ΔT L
+  or bends to α g with no force, and a held one carries EA α ΔT and EI α g
+  (Verification Manual V-17). Mesh, Replicate and Merge Joints carry the loads;
+  other case types refuse a pattern that has them. PORTICO member temperature
+  loads are imported with their material's α. `.osmodel`: an optional
+  `temperature_loads` list on plain patterns, absent when empty.
+
+- **Influence lines and moving loads.** A new analysis case type,
+  *InfluenceLine* (Analyze → Cases…), walks a load (a unit load downward by
+  default) along a chain of frame members, stopping at equal intervals of each,
+  and solves the model once per stop: the result keeps every displacement,
+  reaction and member end force at every stop, through the analysis CLI and the
+  result store like any case. **Display → Influence Line** plots any of them per
+  unit load against the distance along the path and moves a vehicle — axle loads
+  and their offsets, stored on the case — across it in both directions, reporting
+  the largest and smallest effect and where the front axle stood. Verified
+  against Müller-Breslau on a two-span continuous beam (Verification Manual
+  V-16). New example `bridge_influence_line` (three-span girder, HL-93 truck).
+
+- **Tutorials, in English and Spanish** (`docs/tutorials/`): designing a steel
+  moment frame with the AISC check and the drift check, a building with rigid
+  floors (modes, CQC spectrum, NCh433 drift), and importing a PORTICO model. Their
+  dialog screenshots are generated from the current code by
+  `tools/tutorial_screenshots.py`.
+- **`README.es.md`**, a Spanish overview of the README, linked from it.
+- **Example `steel_frame_design`**: a two-bay, two-storey frame of AISC W shapes
+  with three combinations and design settings, for the steel check.
+- **Design → Steel Frame Check (AISC 360-16).** LRFD or ASD ratios of every frame
+  member whose section is an AISC W, M, S or HP shape (by its name, or named per
+  member): tension yielding (D2), flexural and torsional buckling with the
+  effective area of slender elements (E3, E4, E7), major-axis flexure with
+  lateral-torsional buckling and flange local buckling (F2, F3), minor-axis
+  flexure (F6), shear (G2.1, G6) and the H1-1 interaction. Demands come from the
+  results already run in the session, at 25 stations per member with span loads;
+  Linear Add and Envelope combinations are expanded into their cases and a
+  response spectrum case enters as ± its peak. Cb comes from the moment diagram
+  (F1-1) unless set; K, the unbraced length and Cb can be overridden per member.
+  The table shows the governing ratio, check, equation and load set, and
+  **Select failing members** selects them. Verified against the AISC Design
+  Examples E.1A, F.1-1A, F.1-2A, G.1A and H.1A (Verification Manual D-01 to D-05).
+- **Design → Storey Drift Check.** Storey drift ratios of the static and response
+  spectrum results, times an amplification (Cd / Ie for ASCE 7), against an
+  allowable ratio, with ASCE 7-22, NCh433 and Eurocode 8 presets.
+- **`.osmodel`: `design`.** The check settings (method, Fy, load sets, member
+  overrides, drift limit) are saved in an optional `design` object. A project that
+  never opened the Design menu saves byte-identical, and editing the settings
+  does not make results stale.
+
+- **Verification Manual** (`docs/verification-manual.md`). Twenty-two cases with a
+  closed-form or published reference — cantilevers, simply supported and
+  fixed-fixed beams, a Timoshenko beam, 3D biaxial bending and torsion, a two-bar
+  truss, a support settlement, P-Δ, SDOF and cantilever frequencies, a step load
+  in time history, a response spectrum, a simply supported plate and the plastic
+  moment of a fibre section, plus the AISC 360-16 design examples E.1A, F.1, G.1A
+  and H.1A and an end-to-end beam check — each with the computed value, the reference, the
+  relative error and its tolerance. It is generated from real runs by
+  `tools/verification_manual.py`, and the integration suite fails when a case
+  leaves its tolerance or the manual is out of date.
+
+- **File → Import → PORTICO Model (.s3d).** Opens a model saved by PORTICO
+  (`jpreyes/portico-core`) as a new, unsaved project. Nodes, supports, support
+  springs, nodal masses, frame members, sections (with PORTICO's section
+  modifiers applied), end releases and end springs, static load cases (nodal,
+  uniform and trapezoidal loads, self weight), prescribed support
+  displacements, combinations and grid lines come across. The dialog reads the
+  file's unit system from its `units` label and scales **every** value to the
+  project units you pick, by dimension: a `kN-m` file opened in SI metres has
+  its forces in newtons and its densities in kg/m³. PORTICO gives a beam its
+  local y up and OpenSees its local z, so each member's `Iz`/`Iy`, shear areas
+  and bending releases are swapped where needed and distributed loads are
+  re-projected onto the OpenSees axes. Quadrilateral areas become `ShellMITC4`,
+  diaphragms become rigid diaphragms on PORTICO's master node (the floor mass
+  spread over its nodes), rigid links become `rigidLink`s and the other links
+  equalDOFs, the mass source comes along, and cable and compression-only
+  members become trusses that go slack on the other side (their static cases
+  run with Newton; SAP2000 Example 1-012 reproduced). Triangular areas, temperature
+  loads and response spectrum cases are not imported yet; the dialog and the
+  log count them. PORTICO's own verification models (support settlement, link
+  offset, static portal, modal cantilever, Bathe–Wilson frame) solve to the same
+  numbers as its published OpenSeesPy runs, to 1e-10.
+
+### Fixed
+
+- The README no longer says the desktop bundle includes OpenSees: since 0.0.20 the
+  solver is installed from Options → Solver.
+
 ## [0.0.20] — 2026-10-21
 
 The solver becomes a separate download, and the model gets connected and

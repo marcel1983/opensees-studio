@@ -5,7 +5,7 @@ NumPy arrays — Pydantic is intentionally avoided here because results
 are produced in bulk, never validated, and never persisted as JSON
 (time-history series go to HDF5).
 
-Three result kinds, one per analysis case kind. They share no base
+One result kind per analysis case kind. They share no base
 class; consumers dispatch on ``isinstance`` (or on a separate ``kind``
 attribute). Avoid premature abstraction — these are leaf data, not a
 type hierarchy.
@@ -222,6 +222,33 @@ class ResponseSpectrumResults:
     """Damping the CQC correlation used (None for SRSS)."""
     warnings: list[str] = field(default_factory=list)
     """Closely spaced modes under SRSS, damping substitutions."""
+
+
+@dataclass
+class InfluenceLineResults:
+    """Every response of a unit load walked along a path (one row per stop).
+
+    ``node_disp``, ``node_reaction`` and ``element_forces`` have the layout of
+    :class:`StaticResults` with the step axis replaced by the stop: row ``k`` is
+    the response with the load at stop ``k``. ``distances`` is each stop's
+    distance along the path, ``element_ids`` / ``fractions`` where it is.
+    A column of any of them is an influence line.
+    """
+
+    case_id: int
+    case_name: str
+    distances: np.ndarray
+    element_ids: np.ndarray
+    fractions: np.ndarray
+    load: float = -1.0
+    direction: str = "Z"
+    node_disp: dict[int, np.ndarray] = field(default_factory=dict)
+    node_reaction: dict[int, np.ndarray] = field(default_factory=dict)
+    element_forces: dict[int, np.ndarray] = field(default_factory=dict)
+
+    @property
+    def n_steps(self) -> int:
+        return int(self.distances.size)
 
 
 @dataclass

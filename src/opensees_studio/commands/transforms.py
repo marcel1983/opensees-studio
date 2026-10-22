@@ -184,6 +184,13 @@ class ReplicateCommand(ProjectCommand):
                     )
                     pattern.distributed_loads.append(copied)
                     self._added_distributed_loads.append((pattern, copied))
+            for tload in list(pattern.temperature_loads):
+                if tload.element_id in element_mapping:
+                    copied_t = tload.model_copy(
+                        update={"element_id": element_mapping[tload.element_id]}
+                    )
+                    pattern.temperature_loads.append(copied_t)
+                    self._added_area_loads.append((pattern, "temperature_loads", copied_t))
             for sload in list(pattern.surface_loads):
                 if sload.element_id in element_mapping:
                     copied_s = sload.model_copy(

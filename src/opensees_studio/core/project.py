@@ -26,6 +26,7 @@ from opensees_studio.core.analysis import AnalysisCase
 from opensees_studio.core.combinations import LoadCombination
 from opensees_studio.core.constraints import EqualDOFConstraint, RigidDiaphragm, RigidLink
 from opensees_studio.core.custom_commands import CustomCommandBlock
+from opensees_studio.core.design.settings import DesignSettings
 from opensees_studio.core.diaphragms import constraint_chain_problems, diaphragm_problems
 from opensees_studio.core.friction import FrictionModel
 from opensees_studio.core.geometry import (
@@ -94,6 +95,7 @@ class Project(BaseModel):
         "section_cuts",
         "custom_commands",
         "view",
+        "design",
     )
 
     # 1 = pre ground-motion catalog (records embedded in PathTimeSeries),
@@ -217,6 +219,10 @@ class Project(BaseModel):
     section_cuts: list[SectionCut] = Field(
         default_factory=list,
         description="Resultant forces through a group (Define → Section Cuts; additive).",
+    )
+    design: DesignSettings | None = Field(
+        default=None,
+        description="Steel frame and storey drift check settings (Design menu); None = unused.",
     )
 
     # ─────────────────── invariants ───────────────────
@@ -464,6 +470,12 @@ class Project(BaseModel):
                 if pl.element_id not in element_ids:
                     problems.append(
                         f"Pattern {pat.id} has a point load on missing element {pl.element_id}."
+                    )
+            for tl in getattr(pat, "temperature_loads", []):
+                if tl.element_id not in element_ids:
+                    problems.append(
+                        f"Pattern {pat.id} has a temperature load on missing element "
+                        f"{tl.element_id}."
                     )
             for dl in getattr(pat, "distributed_loads", []):
                 if dl.element_id not in element_ids:
