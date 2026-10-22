@@ -869,6 +869,9 @@ than the application is refused rather than quietly rewritten.
 - If the current project has unsaved changes you are asked first.
 - If an earlier run left a **pre-run snapshot** newer than the file, the
   application offers to restore it: that is the crash recovery path.
+- The project you are leaving takes its own pre-run snapshot with it, so
+  reopening it later does not offer a recovery nobody needs. Cancelling the
+  prompt or the file dialog keeps both.
 - An old `schema_version` is migrated on load and stamped with the current one
   on the next save.
 """,

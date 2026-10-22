@@ -42,8 +42,10 @@ architecture document.
   means the child died. Results travel through `services/result_store.py`
   (float64 HDF5 plus `manifest.json`, lossless) and are rebuilt with
   `load_results`. The snapshot doubles as crash recovery: on open, a
-  snapshot newer than the file prompts to restore or discard; a normal save
-  or close removes it. `OPENSEES_STUDIO_IN_PROCESS=1` runs the previous
+  snapshot newer than the file prompts to restore or discard; a normal save,
+  a close, or New/Open replacing the project removes it
+  (`ProjectViewModel._retire_run_snapshot`, only once the replacement has
+  happened). `OPENSEES_STUDIO_IN_PROCESS=1` runs the previous
   threaded in-process worker (debugging, no cancel).
   `OPENSEES_STUDIO_CLI_HARD_EXIT_AFTER=N` is a test-only hook that makes the
   CLI hard-exit with 255 after N progress lines.

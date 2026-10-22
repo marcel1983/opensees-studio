@@ -9,6 +9,15 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Opening another project no longer leaves a stale pre-run snapshot
+  behind.** File → Open and File → New now remove the snapshot of the project
+  they replace, as save and close already did, so reopening a project that was
+  run and left with nothing unsaved no longer offers to restore it. Cancelling
+  the unsaved-changes prompt or the file dialog, or a file that fails to load,
+  keeps the snapshot.
+
 ## [0.0.20] — 2026-10-21
 
 The solver becomes a separate download, and the model gets connected and
