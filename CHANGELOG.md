@@ -19,6 +19,25 @@ refused instead of silently downgraded).
   solved, with a message naming what it does run. The stability check and the
   Material Tester keep using OpenSeesPy whatever the engine.
 
+### Fixed
+
+- **Opening another project no longer leaves a stale pre-run snapshot
+  behind.** File → Open and File → New now remove the snapshot of the project
+  they replace, as save and close already did, so reopening a project that was
+  run and left with nothing unsaved no longer offers to restore it. Cancelling
+  the unsaved-changes prompt or the file dialog, or a file that fails to load,
+  keeps the snapshot.
+- **A 2D frame model (three DOFs per node) with `truss` members no longer
+  inherits forces from a 3D truss model solved earlier in the same process.**
+  OpenSees' `truss` shares its force vector and stiffness matrix between 3D
+  models with three DOFs and 2D models with three, and in 2D leaves their
+  rotation rows untouched, so the earlier model's last bar force came back as
+  moment reactions at truss joints and, where a frame joint is free to rotate,
+  as a spurious moment and stiffness that changed the displacements. The
+  runner now clears them before building such a model. A normal analysis runs
+  one project per process, so it showed up mainly in scripts, tests, the
+  in-process mode (`OPENSEES_STUDIO_IN_PROCESS=1`) and Check Stability.
+
 ## [0.0.21] — 2026-10-22
 
 Models come in from PORTICO and go out designed: File → Import → PORTICO Model

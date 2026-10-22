@@ -341,7 +341,8 @@ the model unchanged. If OpenSees exits hard, the application survives and
 shows the exit code with the solver's last messages. If the application
 itself is killed mid-run, the next File > Open of that project offers
 "Restore unsaved changes from the last analysis run?"; the snapshot is
-removed by a normal save or close.
+removed by a normal save or close, and when File > New or File > Open
+replaces the project.
 
 ### Modal analysis: deterministic results
 

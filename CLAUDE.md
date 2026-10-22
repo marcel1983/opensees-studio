@@ -42,8 +42,10 @@ architecture document.
   means the child died. Results travel through `services/result_store.py`
   (float64 HDF5 plus `manifest.json`, lossless) and are rebuilt with
   `load_results`. The snapshot doubles as crash recovery: on open, a
-  snapshot newer than the file prompts to restore or discard; a normal save
-  or close removes it. `OPENSEES_STUDIO_IN_PROCESS=1` runs the previous
+  snapshot newer than the file prompts to restore or discard; a normal save,
+  a close, or New/Open replacing the project removes it
+  (`ProjectViewModel._retire_run_snapshot`, only once the replacement has
+  happened). `OPENSEES_STUDIO_IN_PROCESS=1` runs the previous
   threaded in-process worker (debugging, no cancel).
   `OPENSEES_STUDIO_CLI_HARD_EXIT_AFTER=N` is a test-only hook that makes the
   CLI hard-exit with 255 after N progress lines.
@@ -150,6 +152,11 @@ These are non-obvious things that are easy to break if you don't know:
 - An option added to an existing model keeps old files byte-identical by
   leaving its default out of the dump: `core._base.omit_when_default`
   (used by the beam integration rule and the numberer).
+- `ops.wipe()` does not reset OpenSees' class-static scratch. `truss` shares
+  its force vector and stiffness matrix between 3D ndf 3 and 2D ndf 3 and in
+  2D never writes the rotation rows, so `OpenSeesRunner.build` clears them
+  (`_clear_truss_scratch`) before a 2D ndf 3 model with trusses. Suspect the
+  same when a result depends on what ran earlier in the process.
 - `Entity.id` is `PositiveInt` (>0). The sentinel `999999` is reserved
   for in-flight / temporary objects that haven't been assigned a real id.
 - Eigen determinism rule. ARPACK keeps its random start vector across
