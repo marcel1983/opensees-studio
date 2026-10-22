@@ -9,6 +9,15 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Added
+
+- **Edit → Delete Loads.** Removes loads by type — joint forces, imposed
+  displacements, uniform, trapezoidal and point frame loads, temperature loads,
+  shell pressures, floor loads, and the self weight — from the chosen load
+  patterns, on the selection (through its joints and elements) or the whole
+  model. Each type shows how many it would remove before you accept; one undo
+  step brings them all back.
+
 ## [0.0.22] — 2026-10-22
 
 A second engine ships with the application: PyNite (MIT) runs linear static

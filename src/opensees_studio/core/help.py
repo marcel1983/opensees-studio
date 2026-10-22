@@ -3933,6 +3933,29 @@ available (or not) whatever engine you choose.
 """,
             "analyze.run",
         ),
+        "edit.delete_loads": _t(
+            "Edit → Delete Loads",
+            "Edit and tools",
+            "Remove loads by type, by load pattern, from the selection or the whole model.",
+            """
+# Values
+- **Delete from** — the selection, or the entire model. A joint load goes with
+  its joint, a frame or shell load with its element, a floor load when all four
+  of its corner joints are selected.
+- **Load types** — tick the ones to remove; the number next to each is how many
+  the current choice would remove: joint forces and moments, imposed joint
+  displacements, uniform / trapezoidal / point frame loads, frame temperature
+  loads, shell pressures, floor loads, and the self weight (the pattern's
+  self-weight multiplier is set to 0; only on the entire model, since it belongs
+  to no joint or element).
+- **Load patterns** — the patterns to remove them from (all, to start with).
+
+Everything removed comes back with one Ctrl+Z. The log says what was removed.
+""",
+            "assign.load",
+            "assign.distributed_load",
+            "define.plain_pattern",
+        ),
         "options.units": _t(
             "Options → Set Display Units",
             "Options",
@@ -4489,6 +4512,7 @@ ACTION_TOPICS: dict[str, str] = {
     # ── Options and Help ────────────────────────────────────────────
     "_act_set_units": "options.units",
     "_act_solver_settings": "options.solver",
+    "_act_delete_loads": "edit.delete_loads",
     "_act_help_contents": "help.contents",
     "_act_about": "help.about",
 }
