@@ -112,6 +112,13 @@ de tu sistema, descomprímelo donde quieras y ejecuta `OpenSeesStudio` (o
 su propia licencia y no viene incluido: instálalo una vez desde **Options →
 Solver**, que descarga OpenSeesPy de PyPI después de que aceptes su licencia.
 
+Sí viene incluido un segundo motor, **[PyNite](https://github.com/JWock82/PyNite)**
+(licencia MIT): elígelo en **Options → Solver → Engine** para resolver casos
+estáticos lineales y P-Delta de pórticos y cerchas elásticos sin descargar nada.
+Da los mismos resultados que OpenSeesPy en esos modelos y rechaza, con un
+mensaje, lo que no modela (materiales no lineales, shells, aisladores, casos
+modales y transitorios…), que entonces necesita OpenSeesPy.
+
 Descomprime la carpeta completa, no sólo el ejecutable. La primera vez el sistema
 puede bloquearlo porque los binarios no están firmados: en macOS, clic derecho →
 Abrir; en Windows, "Más información" → "Ejecutar de todas formas".

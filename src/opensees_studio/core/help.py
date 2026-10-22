@@ -3904,7 +3904,25 @@ check that their use fits its terms.
 
 # Engine
 The **Engine** list shows every engine installed, with the analysis types it
-runs. More engines plug in as Python packages (the `opensees_studio.engines`
+runs.
+
+- **OpenSeesPy** — every analysis type: static, modal, transient, pushover,
+  response spectrum, influence lines; nonlinear materials, fibre sections,
+  hinges, bearings, shells. A separate download with its own license.
+- **PyNite** — ships with OpenSees Studio (MIT license), no download. Linear
+  static cases of elastic frames (elastic sections, Euler-Bernoulli) and
+  trusses (elastic material), with nodal, uniform, trapezoidal, floor and
+  point loads, self weight, moment and torsion releases and support springs;
+  **P-Delta** when a member uses the PDelta transformation. It matches
+  OpenSeesPy to rounding on those models. It refuses, with a message saying
+  what, anything else: shells, zero-length elements, bearings and links,
+  constraints, rigid links and diaphragms, partial fixity, end offsets, shear
+  areas, surface / temperature / imposed-displacement loads, corotational
+  members, and a joint lying inside a member it is not connected to (PyNite
+  would connect it — use Edit → Divide Frames at Joints). Its P-Delta iterates
+  on the whole model, so it is closer to the exact second-order answer than a
+  single OpenSees element with the PDelta transformation, which leaves out the
+  member's own P-delta. More engines plug in as Python packages (the `opensees_studio.engines`
 entry point). A case of a type the chosen engine does not run is refused when
 you run it, with a message naming the engine and what it does run. The
 stability check and the Material Tester always use OpenSeesPy, so they stay

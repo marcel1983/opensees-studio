@@ -463,6 +463,13 @@ bundle does not include it), or points to another Python 3.12 that has
 `openseespy`, or to a folder holding the package. Without it, Run, Check Model Stability and the
 Material Tester are disabled. See `docs/adr/ADR-0003-solver-engines.md`.
 
+**A second engine ships with it: [PyNite](https://github.com/JWock82/PyNite)**
+(MIT). Choose it in Options → Solver → Engine to run linear static and P-Delta
+cases of elastic frames and trusses with no download; it gives the same
+results as OpenSeesPy on those models and refuses, with a message, anything it
+does not model (nonlinear materials, shells, bearings, transient and modal
+cases…), which then needs OpenSeesPy.
+
 Python 3.12 is required: the `openseespywin` and `openseespylinux` 3.8.0.0
 wheels declare `Requires-Python >=3.12`, and the Windows `opensees.pyd` links
 against `python312.dll` (so use 3.12 exactly on Windows). Pin both

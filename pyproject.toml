@@ -54,8 +54,12 @@ gui = [
     "imageio[ffmpeg]>=2.34",
     # File → Export → IFC (services/ifc_export.py); imported only when exporting.
     "ifcopenshell>=0.8.4",
-    # scipy and pandas are listed for forward-compatibility; they are not
-    # currently imported by any module in this repo (phantom deps as of 2026-06-15).
+    # The bundled second engine (ADR-0003): linear static and P-Delta of
+    # elastic frames, MIT. Pinned: services/pynite_runner.py maps its result
+    # conventions onto OpenSees' and is tested against them.
+    "PyNiteFEA==3.2.0",
+    # scipy is what the PyNite engine solves with; pandas is listed for
+    # forward-compatibility and imported by no module (phantom dep since 2026-06-15).
     "scipy>=1.11",
     "pandas>=2.1",
 ]
@@ -135,7 +139,7 @@ disallow_untyped_defs = true
 plugins = []
 
 [[tool.mypy.overrides]]
-module = ["openseespy.*", "pyvista.*", "pyvistaqt.*", "vtk.*", "pyqtgraph.*"]
+module = ["openseespy.*", "pyvista.*", "pyvistaqt.*", "vtk.*", "pyqtgraph.*", "Pynite.*"]
 ignore_missing_imports = true
 
 # ─────────── Import Linter ───────────

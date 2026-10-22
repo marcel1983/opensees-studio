@@ -173,7 +173,7 @@ def test_plug_in_engines_register_and_broken_ones_are_skipped(
         lambda group: [_Entry(_Engine), _Entry(ImportError("broken"))],
     )
     found = engines.engines()
-    assert set(found) == {engines.OPENSEES_PY, "toy"}
+    assert set(found) == {engines.OPENSEES_PY, engines.PYNITE, "toy"}
     toy = engines.SolverSettings(engine="toy")
     assert engines.current_status(toy).name == "Toy solver"
     assert engines.child_environment(toy) == {engines.ENGINE_KEY_ENV: "toy", "TOY": "1"}

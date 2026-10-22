@@ -86,3 +86,15 @@ status rather than the chosen engine's.
   arm64 are the platforms OpenSeesPy 3.8.0.0 publishes; elsewhere the user
   points to an installation of their own. Moving to another OpenSeesPy
   version means updating `WHEELS` (and the `opensees` extra) together.
+
+## 5. PyNite, the bundled second engine (2026-10-22)
+
+`PyNiteFEA==3.2.0` (MIT) ships in the `gui` extra and in the bundle (with scipy,
+about 140 MB). `PyNiteEngine` (`key = "pynite"`, case types `{"Static"}`) runs
+`services/pynite_runner.py`: linear static and P-Delta of elastic frames and
+trusses, results in OpenSees' layout (DOF order and global signs, frame
+`localForce`, truss end forces), each member rolled so PyNite's local axes are
+OpenSees' (checked after building). Anything it does not model is refused with
+a message rather than approximated. `tests/integration/test_pynite_parity.py`
+holds it to OpenSeesPy within 1e-7 of the largest value on 2D and 3D frames and
+trusses, and to the closed form for P-Delta.

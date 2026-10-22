@@ -21,9 +21,9 @@ instead of a one-line ``pyinstaller`` call:
   ``python -m``), and ``__main__`` dispatches it. Nothing extra is needed in
   the spec for that, but the smoke test in ``packaging/build.py`` and in CI
   exists to prove it still works.
-* **scipy and pandas are excluded deliberately.** ``pyproject.toml`` carries
-  them as forward-compatibility extras that no module imports; freezing them
-  would add about 180 MB of dead weight.
+* **pandas is excluded deliberately.** ``pyproject.toml`` carries it as a
+  forward-compatibility extra that no module imports. scipy used to be excluded
+  for the same reason; the bundled PyNite engine needs it now (about 140 MB).
 
 ``console=False`` is what makes the Windows/macOS bundle a normal windowed
 application. The analysis child is then started with ``CREATE_NO_WINDOW``
@@ -47,8 +47,9 @@ binaries = []
 hiddenimports = []
 
 # ifcopenshell (File → Export → IFC) is imported lazily and ships a native
-# library plus its schema files, so it is collected whole.
-for package in ("ifcopenshell",):
+# library plus its schema files, so it is collected whole; so is the PyNite
+# engine, imported only when it runs.
+for package in ("ifcopenshell", "Pynite"):
     try:
         pkg_datas, pkg_binaries, pkg_hidden = collect_all(package)
     except Exception as exc:  # platform-specific wheel of the other OS
@@ -106,7 +107,6 @@ excludes = [
     "openseespylinux",
     "openseespywin",
     "openseespymac",
-    "scipy",
     "pandas",
     "matplotlib.tests",
     "pytest",
