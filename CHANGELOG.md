@@ -9,6 +9,19 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Added
+
+- **Assign → Frame → RC Wall (MVLEM).** The selected vertical members of a 2D
+  model become OpenSees `MVLEM` reinforced concrete wall segments: vertical
+  fibres of concrete and steel across the wall length (with optional boundary
+  elements of their own steel ratio) and a shear spring, created per segment
+  height with the stiffness `G L t / h` or taken from an existing material. A
+  stack of segments converges to the elastic cantilever's flexure plus shear
+  (40 segments: 1 %), and a reinforced wall softens once its boundary steel
+  yields. `.osmodel`: a new element type `MVLEM`. gidopensees' `FiberInt`
+  shear-flexure section, which this replaces in the gap analysis, does not
+  exist in OpenSeesPy 3.8.
+
 ### Changed
 
 - **`ElasticPPGap` refuses `Fy` and `gap` of opposite signs.** OpenSees accepts

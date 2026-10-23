@@ -134,6 +134,10 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   `BeamWithHinges`, and `ElasticMembranePlateSection` (E, ν, h, ρ) for shells;
   geometric transformations and beam integration rules are assignable per
   element.
+- **RC walls** — Assign → Frame → RC Wall (MVLEM): the selected vertical members
+  of a 2D model become OpenSees `MVLEM` wall segments, with concrete and steel
+  fibres across the wall (optional boundary elements) and a shear spring per
+  segment height.
 - **Concrete Section Wizard** — Define → Concrete Section Wizard: a rectangular,
   circular, T or L reinforced concrete section from its dimensions, clear cover,
   bar sizes (metric φ or US #) and counts, ties and strengths. It adds the cover

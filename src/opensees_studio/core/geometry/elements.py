@@ -29,6 +29,7 @@ from opensees_studio.core.geometry.frame_options import (
     FrameReleases,
 )
 from opensees_studio.core.geometry.links import TripleFrictionPendulumElement, TwoNodeLinkElement
+from opensees_studio.core.geometry.walls import MVLEMElement
 
 GeomTransfType = Literal["Linear", "PDelta", "Corotational"]
 """``geomTransf`` of a frame element. All three take effect in OpenSeesPy 3.8.0, in 2D and
@@ -316,7 +317,8 @@ Element = Annotated[
     | FlatSliderBearingElement
     | SingleFPBearingElement
     | TwoNodeLinkElement
-    | TripleFrictionPendulumElement,
+    | TripleFrictionPendulumElement
+    | MVLEMElement,
     Field(discriminator="type"),
 ]
 

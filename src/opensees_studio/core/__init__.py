@@ -120,6 +120,7 @@ from opensees_studio.core.geometry import (
     FrameReleases,
     GridLine,
     GridSystem,
+    MVLEMElement,
     Node,
     QuadElement,
     ShellMITC4Element,
@@ -141,6 +142,7 @@ from opensees_studio.core.geometry import (
     pendulum_period,
     pendulum_restoring_stiffness,
     sliding_yield_displacement,
+    wall_fibres,
 )
 from opensees_studio.core.ground_motion import (
     GroundMotionAccelUnits,
@@ -513,6 +515,8 @@ __all__ = [  # noqa: RUF022 - grouped by domain under section comments, not alph
     "SingleFPBearingElement",
     "TwoNodeLinkElement",
     "TripleFrictionPendulumElement",
+    "MVLEMElement",
+    "wall_fibres",
     "SlidingBearingElement",
     "friction_cycle_energy",
     "pendulum_period",

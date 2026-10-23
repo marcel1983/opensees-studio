@@ -245,7 +245,7 @@ Priority rationale:
 | Section | Elastic_Section | `ElasticSection` | ✅ | ✅ | P0 |
 | Section | Fiber | `FiberSection` | ✅ | ✅ | P0 |
 | Section | Fiber_Custom | `FiberSection` fibres from Define → Section Designer (any drawn or DXF outline) | ✅ | ✅ | P0 |
-| Section | FiberInt (interaction P-M) | — | ❌ | ✅ | P1 |
+| Section | FiberInt (shear-flexure interaction, with `dispBeamColumnInt`) | not in OpenSeesPy 3.8 (`section FiberInt` is unknown to its interpreter); RC walls use `MVLEMElement` (Assign → Frame → RC Wall) | 🟡 | ✅ | P1 |
 | Section | Plate_Fiber | `PlateFiberSection` | ✅ | ✅ | P2 |
 | Section | Elastic_Membrane_Plate | `ElasticMembranePlateSection` | ✅ | ✅ | P2 |
 | Section | LayeredShell | `LayeredShellSection` | ✅ | ✅ | P2 |
@@ -364,14 +364,17 @@ Recounted from the tables on 2026-10-23.
 | Status | Count |
 |---|---|
 | ✅ Fully in OpenSees Studio | 61 |
-| 🟡 Partial (3 at P1, 6 at P2) | 9 |
-| ❌ P1 targets | 3 |
+| 🟡 Partial (4 at P1, 6 at P2) | 10 |
+| ❌ P1 targets | 2 |
 | ❌ P2 deferred | 15 |
 | Total rows | 88 |
 
 **Top targets** (highest earthquake-engineering impact, not fully in Studio yet):
 
-1. `FiberInt` — P-M interaction section for axial-flexure coupling.
+1. ~~`FiberInt`~~: it is gidopensees' *shear-flexure* interaction section for
+   walls (with `dispBeamColumnInt`), not a P-M section, and OpenSeesPy 3.8 does
+   not define it. RC walls are modelled with `MVLEM` (Assign → Frame → RC
+   Wall); `SFI_MVLEM` with the `FSAM` panel material would add the coupling.
 2. `ConcreteCM` (Chang-Mander) — cyclic confined concrete; `Concrete04` and the
    Mander-confined `Concrete02` of the Concrete Section Wizard cover the
    monotonic envelope only.
