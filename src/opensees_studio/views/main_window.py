@@ -418,8 +418,10 @@ class MainWindow(QMainWindow):
         self._act_save_as = QAction("Save &As…", self, shortcut=QKeySequence.StandardKey.SaveAs)
         self._act_import_dxf = QAction("&DXF Drawing…", self)
         self._act_import_s3d = QAction("&PORTICO Model (.s3d)…", self)
+        self._act_import_s2k = QAction("SAP2000 &Text (.s2k / .$2k)…", self)
         self._act_export_script = QAction("OpenSees &script (.py)…", self)
         self._act_export_ifc = QAction("&IFC (.ifc)…", self)
+        self._act_export_s2k = QAction("SAP2000 &Text (.s2k)…", self)
         self._act_export_report = QAction("&Report (HTML / PDF)…", self)
         self._act_run_batch = QAction("Run &Batch…", self)
         self._act_quit = QAction("&Quit", self, shortcut=QKeySequence.StandardKey.Quit)
@@ -689,9 +691,11 @@ class MainWindow(QMainWindow):
         m_import = m_file.addMenu("&Import")
         m_import.addAction(self._act_import_dxf)
         m_import.addAction(self._act_import_s3d)
+        m_import.addAction(self._act_import_s2k)
         m_export = m_file.addMenu("&Export")
         m_export.addAction(self._act_export_script)
         m_export.addAction(self._act_export_ifc)
+        m_export.addAction(self._act_export_s2k)
         m_export.addAction(self._act_export_report)
         m_file.addSeparator()
         m_file.addAction(self._act_run_batch)
@@ -1123,8 +1127,10 @@ class MainWindow(QMainWindow):
         self._act_save_as.triggered.connect(self._on_save_as)
         self._act_import_dxf.triggered.connect(self._on_import_dxf)
         self._act_import_s3d.triggered.connect(self._on_import_s3d)
+        self._act_import_s2k.triggered.connect(self._on_import_s2k)
         self._act_export_script.triggered.connect(self._on_export_script)
         self._act_export_ifc.triggered.connect(self._on_export_ifc)
+        self._act_export_s2k.triggered.connect(self._on_export_s2k)
         self._act_export_report.triggered.connect(self._on_export_report)
         self._act_run_batch.triggered.connect(self._on_run_batch)
         self._act_quit.triggered.connect(self._on_quit)
@@ -1633,6 +1639,30 @@ class MainWindow(QMainWindow):
         self._log(report.summary())
         if report.notes:
             QMessageBox.information(self, "Export IFC", report.summary())
+
+    def _on_export_s2k(self) -> None:
+        """File → Export → SAP2000 Text: the frame model as SAP2000 text tables."""
+        from opensees_studio.services.sap2000_text import Sap2000TextError, export_s2k
+
+        if self._vm.project is None:
+            QMessageBox.information(self, "Export SAP2000 Text", "Open or create a project first.")
+            return
+        default = (self._vm.path.stem if self._vm.path is not None else "model") + ".s2k"
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export SAP2000 Text", default, "SAP2000 text (*.s2k *.$2k)"
+        )
+        if not path:
+            return
+        if not path.lower().endswith((".s2k", ".$2k")):
+            path += ".s2k"
+        try:
+            report = export_s2k(self._vm.project, path)
+        except Sap2000TextError as exc:
+            QMessageBox.critical(self, "Export SAP2000 Text failed", str(exc))
+            return
+        self._log(f"Exported {Path(path).name}: {report.summary()}")
+        if report.skipped:
+            QMessageBox.information(self, "Export SAP2000 Text", report.summary())
 
     def report_results(self) -> list[Any]:
         """The results the report includes: every current case, plus the one on screen."""
@@ -2285,6 +2315,38 @@ class MainWindow(QMainWindow):
             f"Imported {source.name if source else 'the PORTICO model'} "
             f"({imported.source_units} → {imported.project.meta.units.value}): "
             f"{imported.summary()}"
+        )
+        for note in imported.notes:
+            self._log(note)
+
+    def _on_import_s2k(self) -> None:
+        """File → Import → SAP2000 Text: a ``.s2k`` / ``.$2k`` file as a new, unsaved project.
+
+        The whole model is replaced, so this asks about unsaved changes like Open
+        does. What the file has and the import cannot carry is written to the log.
+        """
+        from opensees_studio.services.sap2000_text import Sap2000TextError, import_s2k
+
+        if not self._confirm_discard_changes("Importing a SAP2000 text file"):
+            return
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import SAP2000 Text",
+            "",
+            "SAP2000 text (*.s2k *.$2k *.S2K *.$2K);;All files (*)",
+        )
+        if not path:
+            return
+        try:
+            imported = import_s2k(path)
+        except Sap2000TextError as exc:
+            QMessageBox.critical(self, "Import SAP2000 Text failed", str(exc))
+            return
+        self._vm.adopt(imported.project)
+        self._apply_project_view_settings()
+        self._log(
+            f"Imported {Path(path).name} ({imported.source_units} → "
+            f"{imported.project.meta.units.value}): {imported.summary()}"
         )
         for note in imported.notes:
             self._log(note)
@@ -5723,6 +5785,7 @@ class MainWindow(QMainWindow):
         self._act_import_dxf.setEnabled(has_project)
         self._act_export_script.setEnabled(has_project)
         self._act_export_ifc.setEnabled(has_project)
+        self._act_export_s2k.setEnabled(has_project)
         self._act_export_report.setEnabled(has_project)
         self._act_grid.setEnabled(True)
         self._act_add_node.setEnabled(True)

@@ -217,7 +217,8 @@ the OpenSeesPy manual and where it lives (a form, automatic, or a custom block).
         """
 # File
 - New (3D frame, 2D frame, 2D truss), Open, Save, Save As, Quit.
-- Import → DXF drawing. Export → OpenSees script (.py), IFC (.ifc), Report (PDF or HTML).
+- Import → DXF drawing, PORTICO model (.s3d), SAP2000 text (.s2k / .$2k). Export →
+  OpenSees script (.py), IFC (.ifc), SAP2000 text (.s2k), Report (PDF or HTML).
 
 # Edit
 - Undo / Redo, Delete, Select All, Clear Selection.
@@ -1069,6 +1070,109 @@ takes neither.
 """,
             "file.open",
             "file.import_dxf",
+        ),
+        "file.import_s2k": _t(
+            "File → Import → SAP2000 Text (.s2k / .$2k)",
+            "File",
+            "A model saved as SAP2000 text tables, as a new project in the nearest unit system.",
+            """
+Reads a SAP2000 text file (`.s2k` or `.$2k`: tables of `Key=Value` records) and
+makes it the **current project**. It replaces what is open, so unsaved changes
+are asked about first, and the new project has no file until you save it.
+SAP2000 is a trademark of Computers and Structures, Inc.; this reader was
+written from the text format alone, without CSI software, and is not endorsed
+by CSI.
+
+# Units
+The file's `CurrUnits` (for example `"KN, m, C"`) say what its numbers are in.
+The project gets the nearest of the four systems (kN-m → m and N, kip-in → in
+and kip, N-mm → mm and N, …) and every value is **scaled** to it by its
+dimension. The log names both systems. A file without units is read as kN-m.
+
+# What comes across
+- **Joints** (global Cartesian, or with `GlobalX/Y/Z`) and their restraints.
+  When only UX, UZ and RY are active and every joint is at Y = 0, the model
+  becomes a **2D frame**.
+- **Grid lines** of the global system, with their labels.
+- **Frames** as elastic beam-columns: the section and material assigned to each
+  (a frame's own material overrides the section's), the local-axis angle, the
+  mass (unit mass × area) and the weight (unit weight × area, read by a load
+  pattern's self weight). Shear areas make a Timoshenko member, as SAP2000
+  includes shear deformation.
+- **Frame sections**: rectangular, I, pipe, box/tube and general by their
+  property columns (the dimensions give closed-form values when those are
+  missing), with the property modifiers applied to the values; other shapes by
+  their properties only. Rectangles, I-shapes, pipes and tubes keep their shape
+  for the extruded view.
+- **End releases** of torsion and bending, and partial-fixity springs.
+- **Load patterns** with their self-weight multiplier, **joint forces** (global),
+  **distributed frame loads** (uniform, trapezoidal or over part of the member,
+  global, gravity, projected or local directions) and **point frame loads**.
+- **Linear static load cases**, each with its load patterns. A pattern used with
+  a factor other than 1 becomes a scaled copy (`LIVE x 0.5`). A file without
+  load cases gets one per load pattern, as SAP2000 does.
+- **Combinations**: linear add, envelope, absolute add and SRSS, of cases and
+  of other combinations.
+- **Areas** with four joints and a shell section, as `ShellMITC4` with an
+  elastic plate section. A Shell-Thin area becomes this thick-shell element,
+  which also deforms in shear; the log notes it.
+
+# Local axes
+SAP2000 gives a frame's local 2 the upward direction in the member's vertical
+plane (global +X for a vertical member), turned by its local-axis angle; OpenSees
+gives a 3D beam its local z up. Per member the importer finds where local 2
+lies and maps `I33`/`I22`, `AS2`/`AS3` and the M2/M3 releases onto this
+program's axes (a section then used turned ends in "(axes 2-3)"). Loads are
+re-projected, so they keep their direction.
+
+# What it does not do (yet)
+Counted in the summary and the log, never dropped silently: tables it does not
+read (masses, springs, constraints, modal and nonlinear cases, area loads,
+design data, …) by name and number of rows; moment loads on frames; axial and
+shear end releases; range-add combinations; automatic lateral loads; areas
+with three or more than four joints; and a frame with releases or a non-uniform
+load keeps no shear deformation, because OpenSees' Timoshenko beam takes neither.
+""",
+            "file.export_s2k",
+            "file.import_s3d",
+            "file.open",
+        ),
+        "file.export_s2k": _t(
+            "File → Export → SAP2000 Text",
+            "File",
+            "The frame model as SAP2000 text tables, readable again by Import.",
+            """
+Writes the project as a SAP2000 text file (`.s2k`) in the project's own units
+(`CurrUnits`). Everything File → Import → SAP2000 Text reads is written, so an
+exported file imports back to the same model. SAP2000 is a trademark of
+Computers and Structures, Inc.; the file follows the text format and has not
+been checked by CSI or in SAP2000.
+
+# What is written
+- Joints, restraints, global grid lines and the active DOFs (UX, UZ, RY only for
+  a 2D frame).
+- Elastic beam-columns on elastic sections, with their end releases and
+  partial-fixity springs. Each section is written with SAP2000's local 2 on this
+  program's local z (local y in 2D), and a member whose axes differ from
+  SAP2000's default gets the local-axis angle that makes them match. A section
+  with a shape (rectangle, I, pipe, tube) is written as that shape, any other as
+  a general section; every one carries its area, inertias, torsion constant and
+  shear areas (0 when the member has no shear deformation).
+- One material per distinct set of modulus, shear modulus, unit weight and unit
+  mass (named MAT1, MAT2, …).
+- Shells (`ShellMITC4` on an elastic plate section) as thick-shell areas.
+- Plain load patterns with their self weight, joint forces, and uniform,
+  trapezoidal and point frame loads in local directions.
+- Linear static cases, and combinations of them and of each other.
+
+# What is not written
+The export reports what it leaves out: other element and section types, joint
+masses and springs, end offsets, insertion points, property modifiers, shell and
+floor loads, imposed displacements, temperature loads, nonlinear static,
+modal, spectrum and transient cases, constraints and diaphragms.
+""",
+            "file.import_s2k",
+            "file.export_ifc",
         ),
         "display.influence_line": _t(
             "Display → Influence Line",
@@ -4531,12 +4635,14 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_save_as": "file.save_as",
     "_act_import_dxf": "file.import_dxf",
     "_act_import_s3d": "file.import_s3d",
+    "_act_import_s2k": "file.import_s2k",
     "_act_steel_check": "design.steel_check",
     "_act_influence_line": "display.influence_line",
     "_act_drift_check": "design.drift_check",
     "_act_steel_ratios": "design.steel_ratios",
     "_act_export_script": "file.export_script",
     "_act_export_ifc": "file.export_ifc",
+    "_act_export_s2k": "file.export_s2k",
     "_act_export_report": "file.export_report",
     "_act_run_batch": "file.run_batch",
     "_act_quit": "file.quit",

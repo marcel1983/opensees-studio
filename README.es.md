@@ -88,8 +88,10 @@ script o un notebook de Jupyter: la interfaz es una forma de usarlo, no la únic
   derivas de piso con ASCE 7, NCh433 o Eurocódigo 8.
 - **Importar y exportar**: dibujos DXF, modelos de
   [PORTICO](https://github.com/jpreyes/portico-core) (`.s3d`, escalados a las
-  unidades que elijas), scripts de OpenSeesPy, IFC y un reporte de cálculo
-  HTML/PDF.
+  unidades que elijas), archivos de texto de SAP2000 (`.s2k` / `.$2k`, en ambos
+  sentidos, escritos desde el formato de tablas sin software de CSI; SAP2000 es
+  marca de Computers and Structures, Inc.), scripts de OpenSeesPy, IFC y un
+  reporte de cálculo HTML/PDF.
 
 ## Verificación
 
