@@ -530,6 +530,7 @@ class MainWindow(QMainWindow):
         self._act_assign_modifiers = QAction("Property M&odifiers…", self)
         self._act_assign_trapezoidal_load = QAction("&Trapezoidal Load…", self)
         self._act_assign_temperature_load = QAction("Te&mperature Load…", self)
+        self._act_assign_wall = QAction("RC &Wall (MVLEM)…", self)
 
         # Display (post-processing)
         self._act_select_results = QAction("Show Results &Of…", self)
@@ -568,6 +569,20 @@ class MainWindow(QMainWindow):
         self._act_view_top = QAction("&Top (XY)", self, shortcut="Ctrl+2")
         self._act_view_front = QAction("&Front (XZ)", self, shortcut="Ctrl+3")
         self._act_view_right = QAction("&Right (YZ)", self, shortcut="Ctrl+4")
+        # View → Rotate: the camera turns, the model does not.
+        self._act_rotate_left = QAction("↺ Rotate Left", self, shortcut=QKeySequence("Alt+Left"))
+        self._act_rotate_right = QAction("↻ Rotate Right", self, shortcut=QKeySequence("Alt+Right"))
+        self._act_rotate_up = QAction("⤒ Tilt Up", self, shortcut=QKeySequence("Alt+Up"))
+        self._act_rotate_down = QAction("⤓ Tilt Down", self, shortcut=QKeySequence("Alt+Down"))
+        self._act_spin = QAction("⟳ Spin", self, checkable=True)
+        for action, tip in (
+            (self._act_rotate_left, "Turn the view 15° to the left about the vertical axis"),
+            (self._act_rotate_right, "Turn the view 15° to the right about the vertical axis"),
+            (self._act_rotate_up, "Tilt the view 15° up"),
+            (self._act_rotate_down, "Tilt the view 15° down"),
+            (self._act_spin, "Turn the view continuously, to present the model"),
+        ):
+            action.setToolTip(tip)
         self._act_toggle_parallel = QAction("&Parallel projection", self, checkable=True)
         self._act_show_extruded = QAction("Show &Extruded Sections", self, checkable=True)
         # View → Color By: one colour, or a colour per section, material or group.
@@ -761,6 +776,7 @@ class MainWindow(QMainWindow):
             self._act_assign_frame_point_load,
             self._act_assign_temperature_load,
             self._act_assign_hinge,
+            self._act_assign_wall,
         ]
         self._area_actions: list[QAction | None] = [
             self._act_assign_surface_load,
@@ -819,6 +835,17 @@ class MainWindow(QMainWindow):
         m_view.addActions(
             [self._act_view_iso, self._act_view_top, self._act_view_front, self._act_view_right]
         )
+        m_rotate = m_view.addMenu("&Rotate")
+        m_rotate.addActions(
+            [
+                self._act_rotate_left,
+                self._act_rotate_right,
+                self._act_rotate_up,
+                self._act_rotate_down,
+            ]
+        )
+        m_rotate.addSeparator()
+        m_rotate.addAction(self._act_spin)
         m_view.addSeparator()
         m_view.addAction(self._act_toggle_parallel)
         m_view.addAction(self._act_show_extruded)
@@ -890,6 +917,15 @@ class MainWindow(QMainWindow):
         tb.addAction(self._act_view_top)
         tb.addAction(self._act_view_front)
         tb.addAction(self._act_view_right)
+        tb.addSeparator()
+        for action in (
+            self._act_rotate_left,
+            self._act_rotate_right,
+            self._act_rotate_up,
+            self._act_rotate_down,
+            self._act_spin,
+        ):
+            tb.addAction(action)
         tb.addSeparator()
         # SAP2000-style "Level" combo: when the user is in Top / Front /
         # Right mode AND the grid has multiple perpendicular-axis lines,
@@ -1201,6 +1237,7 @@ class MainWindow(QMainWindow):
         self._act_assign_modifiers.triggered.connect(self._on_assign_modifiers)
         self._act_assign_trapezoidal_load.triggered.connect(self._on_assign_trapezoidal_load)
         self._act_assign_temperature_load.triggered.connect(self._on_assign_temperature_load)
+        self._act_assign_wall.triggered.connect(self._on_assign_wall)
 
         # Analyze
         self._act_case_manager.triggered.connect(self._on_case_manager)
@@ -1252,6 +1289,11 @@ class MainWindow(QMainWindow):
         self._act_view_top.triggered.connect(self._on_view_top)
         self._act_view_front.triggered.connect(self._on_view_front)
         self._act_view_right.triggered.connect(self._on_view_right)
+        self._act_rotate_left.triggered.connect(lambda: self._on_rotate_view(-1, 0))
+        self._act_rotate_right.triggered.connect(lambda: self._on_rotate_view(1, 0))
+        self._act_rotate_up.triggered.connect(lambda: self._on_rotate_view(0, 1))
+        self._act_rotate_down.triggered.connect(lambda: self._on_rotate_view(0, -1))
+        self._act_spin.toggled.connect(self._on_spin)
         self._act_toggle_parallel.toggled.connect(self._on_toggle_parallel)
         self._act_zoom_in.triggered.connect(self._canvas.zoom_in)
         self._act_zoom_out.triggered.connect(self._canvas.zoom_out)
@@ -3809,6 +3851,37 @@ class MainWindow(QMainWindow):
             )
         self._log(message)
 
+    def _on_assign_wall(self) -> None:
+        """Assign → Frame → RC Wall: selected vertical members to MVLEM, one undo step."""
+        from opensees_studio.commands import AddMaterialsCommand, ReplaceElementsCommand
+        from opensees_studio.views.dialogs.assign_wall import AssignWallDialog
+
+        project = self._vm.project
+        selected = set(self._canvas.selection.elements)
+        if project is None or not selected:
+            QMessageBox.information(
+                self, "RC Wall", "Select the vertical members of the wall first."
+            )
+            return
+        dialog = AssignWallDialog(project, selected, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        conversion = dialog.conversion()
+        if conversion is None or not conversion.elements:
+            return
+        stack = self._vm.undo_stack
+        stack.beginMacro("Assign RC wall")
+        try:
+            if conversion.materials:
+                self._vm.apply_command(AddMaterialsCommand(self._vm, conversion.materials))
+            self._vm.apply_command(ReplaceElementsCommand(self._vm, conversion.elements))
+        finally:
+            stack.endMacro()
+        self._log(
+            f"RC wall: {len(conversion.elements)} member(s) became MVLEM segments"
+            + (f", {len(conversion.skipped)} left as they were." if conversion.skipped else ".")
+        )
+
     def _on_assign_hinge(self) -> None:
         from opensees_studio.core import BeamWithHingesElement
 
@@ -5231,6 +5304,23 @@ class MainWindow(QMainWindow):
         self._canvas.render()
 
     # ── SAP2000-style view switching + working level ───────────────
+    def _leave_plane_view(self) -> None:
+        """Turning the camera leaves a plan or elevation: back to full 3D snapping."""
+        self._canvas.clear_working_plane()
+        self._populate_level_combo(None)
+
+    def _on_rotate_view(self, left_right: int, up_down: int) -> None:
+        """View → Rotate: turn the camera one step (15°) about the model."""
+        self._leave_plane_view()
+        step = self._canvas.ROTATE_STEP_DEG
+        self._canvas.orbit(azimuth=left_right * step, elevation=up_down * step)
+
+    def _on_spin(self, on: bool) -> None:
+        """View → Spin: turn the view continuously until switched off."""
+        if on:
+            self._leave_plane_view()
+        self._canvas.set_spinning(on)
+
     def _on_view_iso(self) -> None:
         """Isometric: clear any working plane (full 3D snap)."""
         self._canvas.clear_working_plane()
@@ -5622,6 +5712,7 @@ class MainWindow(QMainWindow):
             self._act_assign_modifiers,
             self._act_assign_trapezoidal_load,
             self._act_assign_temperature_load,
+            self._act_assign_wall,
         ):
             action.setEnabled(has_project and has_selected_elements)
         self._act_delete.setEnabled(has_project and has_selection)

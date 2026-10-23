@@ -9,7 +9,10 @@ ties, the bar sizes and counts, the tie spacing and the material strengths.
   ``f'c`` at ``2 f'c / Ec``, spalled to zero at a strain of 0.005), the **core**
   concrete (``Concrete02``, confined by the ties after Mander, Priestley and
   Park 1988 when asked, otherwise the same as the cover) and the **bars**
-  (``Steel02``, 1 % hardening);
+  (``Steel02``, 1 % hardening). With ``concrete_model = "ConcreteCM"`` both
+  concretes are Chang and Mander's cyclic model instead: the cover with their
+  unconfined ``εc = f'c^(1/4) / 1150`` and ``r = f'c / 5.2 - 1.9`` (MPa), the
+  core on Mander's confined curve exactly (``rc = Ec / (Ec - f'cc / εcc)``);
 * a **fibre section**: core inside the bar centrelines, cover around it, bars as
   layers, so a nonlinear frame member reads the section directly;
 * optionally an **elastic section** with the gross properties and ``Ec`` of
@@ -37,6 +40,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from opensees_studio.core.materials import Concrete02, Steel02
+from opensees_studio.core.materials.library import ConcreteCM
 from opensees_studio.core.sections import (
     CircularPatch,
     ElasticSection,
@@ -59,6 +63,7 @@ from opensees_studio.core.units import UnitSystem, length_scale, stress_scale
 
 ShapeKind = Literal["rect", "circ", "tee", "ell"]
 Role = Literal["column", "beam"]
+ConcreteModel = Literal["Concrete02", "ConcreteCM"]
 
 #: Nominal bar diameter (in) and area (in²), ASTM A615.
 US_BARS: dict[str, tuple[float, float]] = {
@@ -137,6 +142,8 @@ class ConcreteSectionSpec:
     fyh: float = 420e6
     Es: float = 200e9
     confined: bool = True
+    concrete_model: ConcreteModel = "Concrete02"
+    """``Concrete02`` (monotonic envelope, linear unloading) or ``ConcreteCM`` (cyclic)."""
     role: Role = "column"
     units: UnitSystem = UnitSystem.SI_M_N
     name: str = ""
@@ -313,6 +320,13 @@ def build_concrete_section(
     name = spec.name or _default_name(spec)
     to_ft = math.sqrt(spec.fc * stress_scale(spec.units, UnitSystem.SI_MM_N))
     ft = 0.33 * to_ft / stress_scale(spec.units, UnitSystem.SI_MM_N)
+    if spec.concrete_model == "ConcreteCM":
+        cm_cover, cm_core, out.confinement = _chang_mander(spec, name, material_id, ec, ft)
+        bars = Steel02(id=material_id + 2, name=f"{name} bars", Fy=spec.fy, E0=spec.Es, b=0.01)
+        out.materials = [cm_cover, cm_core, bars]
+        return _sections(
+            spec, out, name, ec, material_id, section_id, fiber, elastic, cracked_factor
+        )
     cover = _concrete02(
         id=material_id,
         name=f"{name} cover",
@@ -340,15 +354,29 @@ def build_concrete_section(
         core = cover.model_copy(update={"id": material_id + 1, "name": f"{name} core"})
     steel = Steel02(id=material_id + 2, name=f"{name} bars", Fy=spec.fy, E0=spec.Es, b=0.01)
     out.materials = [cover, core, steel]
+    return _sections(spec, out, name, ec, material_id, section_id, fiber, elastic, cracked_factor)
 
+
+def _sections(
+    spec: ConcreteSectionSpec,
+    out: ConcreteSection,
+    name: str,
+    ec: float,
+    material_id: int,
+    section_id: int,
+    fiber: bool,
+    elastic: bool,
+    cracked_factor: float | None,
+) -> ConcreteSection:
+    """The fibre and elastic sections over the cover, core and steel at ``material_id`` + 0, 1, 2."""
     props = section_properties(spec.regions())
     out.properties = props
     if fiber:
         out.fiber = FiberSection(
             id=section_id,
             name=name,
-            patches=_patches(spec, cover.id, core.id),
-            layers=_layers(spec, steel.id),
+            patches=_patches(spec, material_id, material_id + 1),
+            layers=_layers(spec, material_id + 2),
             GJ=(ec / 2.4) * _torsion(spec, props),
         )
     if elastic:
@@ -372,6 +400,61 @@ def build_concrete_section(
     if not 0.01 <= rho_l <= 0.08 and spec.role == "column":
         out.notes.append(f"Longitudinal ratio {rho_l:.2%} is outside ACI's 1 % to 8 % for columns.")
     return out
+
+
+def chang_mander_strain(fc: float, units: UnitSystem) -> float:
+    """Chang and Mander's strain at peak of unconfined concrete: ``f'c^(1/4) / 1150`` (MPa)."""
+    to_mpa = stress_scale(units, UnitSystem.SI_MM_N)
+    return float((fc * to_mpa) ** 0.25 / 1150.0)
+
+
+def chang_mander_r(fc: float, units: UnitSystem) -> float:
+    """Chang and Mander's shape parameter of unconfined concrete: ``f'c / 5.2 - 1.9`` (MPa)."""
+    to_mpa = stress_scale(units, UnitSystem.SI_MM_N)
+    return max(1.1, fc * to_mpa / 5.2 - 1.9)
+
+
+def _chang_mander(
+    spec: ConcreteSectionSpec, name: str, material_id: int, ec: float, ft: float
+) -> tuple[ConcreteCM, ConcreteCM, Confinement | None]:
+    """Cover and core as ``ConcreteCM``: Chang-Mander unconfined, Mander-confined core.
+
+    The core's envelope is Mander's curve exactly: ``rc = Ec / (Ec - f'cc / εcc)``.
+    Tension follows Tsai's curve with ``n = rt = 1.2`` to ``ft`` (0.33 sqrt(f'c) MPa).
+    """
+    eps_c = chang_mander_strain(spec.fc, spec.units)
+    et = 1.2 * ft / ec
+    cover = ConcreteCM(
+        id=material_id,
+        name=f"{name} cover",
+        fpcc=-spec.fc,
+        epcc=-eps_c,
+        Ec=ec,
+        rc=chang_mander_r(spec.fc, spec.units),
+        xcrn=1.035,
+        ft=ft,
+        et=et,
+        rt=1.2,
+        xcrp=10000.0,
+    )
+    if not spec.confined:
+        return cover, cover.model_copy(update={"id": material_id + 1, "name": f"{name} core"}), None
+    conf = mander(spec, eps_c)
+    secant = conf.fcc / conf.eps_cc
+    core = ConcreteCM(
+        id=material_id + 1,
+        name=f"{name} core",
+        fpcc=-conf.fcc,
+        epcc=-conf.eps_cc,
+        Ec=ec,
+        rc=ec / (ec - secant),
+        xcrn=max(1.035, conf.eps_cu / conf.eps_cc),
+        ft=ft,
+        et=et,
+        rt=1.2,
+        xcrp=10000.0,
+    )
+    return cover, core, conf
 
 
 def _concrete02(**fields: object) -> Concrete02:

@@ -62,6 +62,7 @@ from opensees_studio.core import (
     LayeredShellSection,
     LinearTimeSeries,
     ModalCase,
+    MVLEMElement,
     NodalLoad,
     PathTimeSeries,
     PlainLoadPattern,
@@ -831,6 +832,8 @@ class OpenSeesRunner:
                 ops.element("twoNodeLink", el.id, *el.nodes, *el.opensees_args(self.project.ndm))
             case TripleFrictionPendulumElement():
                 ops.element("TripleFrictionPendulum", el.id, *el.nodes, *el.opensees_args())
+            case MVLEMElement():
+                ops.element("MVLEM", el.id, *el.opensees_args())
             case ZeroLengthSectionElement():
                 # element zeroLengthSection $eleTag $iNode $jNode $secTag
                 ops.element(
