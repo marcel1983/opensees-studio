@@ -17,7 +17,9 @@ ratchet: lower it in the commit that improves the numbers.
 from __future__ import annotations
 
 import argparse
+import gc
 import json
+import math
 import time
 from dataclasses import asdict, dataclass
 from typing import Any
@@ -161,13 +163,22 @@ def build_model(
     )
 
 
+#: Builds per model; the fastest one is reported. One build alone measured what
+#: else the process was doing (a garbage collection of a long test run's objects
+#: tripled it), not the renderer.
+REPEATS = 3
+
+
 def measure(project: Project, name: str) -> BenchResult:
-    """Build the scene for ``project`` once and report time, actors and labels."""
-    plotter = RecordingPlotter()
-    renderer = ModelRenderer(plotter)
-    started = time.perf_counter()
-    renderer.render(project)
-    build_ms = (time.perf_counter() - started) * 1000.0
+    """Build the scene for ``project`` and report the fastest time, actors and labels."""
+    build_ms = math.inf
+    for _ in range(REPEATS):
+        plotter = RecordingPlotter()
+        renderer = ModelRenderer(plotter)
+        gc.collect()
+        started = time.perf_counter()
+        renderer.render(project)
+        build_ms = min(build_ms, (time.perf_counter() - started) * 1000.0)
     return BenchResult(
         name=name,
         nodes=len(project.nodes),

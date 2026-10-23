@@ -9,6 +9,12 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.24] — 2026-10-23
+
+Batch analysis and SAP2000 interoperability: File → Run Batch… solves many
+projects unattended and keeps their results to open later, and SAP2000 text
+files (.s2k / .$2k) can be imported and exported.
+
 ### Added
 
 - **File → Run Batch…: solve many projects unattended and view the results
