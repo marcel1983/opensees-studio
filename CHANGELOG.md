@@ -11,6 +11,11 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **View → Rotate, and rotate buttons in the View toolbar.** Rotate Left / Right
+  (Alt+Left / Alt+Right) turn the point of view 15° about the vertical axis, Tilt
+  Up / Down (Alt+Up / Alt+Down) 15° about the horizontal screen axis, and Spin
+  keeps it turning to present the model until switched off. Only the camera
+  moves; turning it leaves a plan or elevation view, as Isometric does.
 - **Assign → Frame → RC Wall (MVLEM).** The selected vertical members of a 2D
   model become OpenSees `MVLEM` reinforced concrete wall segments: vertical
   fibres of concrete and steel across the wall length (with optional boundary

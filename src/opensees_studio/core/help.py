@@ -3985,6 +3985,25 @@ available (or not) whatever engine you choose.
 """,
             "analyze.run",
         ),
+        "view.rotate": _t(
+            "View → Rotate",
+            "View",
+            "Turn the point of view a step at a time, or keep it turning.",
+            """
+The model does not move: the camera turns about the point it looks at.
+
+# Entries
+- **Rotate Left / Right** (Alt+Left / Alt+Right) — 15° about the vertical axis.
+- **Tilt Up / Down** (Alt+Up / Alt+Down) — 15° about the horizontal screen axis.
+- **Spin** — keeps turning about the vertical axis until you switch it off, to
+  present the model. Zoom and the other view buttons still work while it turns.
+
+Turning the camera leaves a plan or elevation view (Top, Front, Right), so the
+working plane and the Level list are cleared, as Isometric does; pick the plane
+view again to draw on a level. The buttons are also in the View toolbar.
+""",
+            "view.iso",
+        ),
         "options.units": _t(
             "Options → Set Display Units",
             "Options",
@@ -4542,6 +4561,11 @@ ACTION_TOPICS: dict[str, str] = {
     # ── Options and Help ────────────────────────────────────────────
     "_act_set_units": "options.units",
     "_act_solver_settings": "options.solver",
+    "_act_rotate_left": "view.rotate",
+    "_act_rotate_right": "view.rotate",
+    "_act_rotate_up": "view.rotate",
+    "_act_rotate_down": "view.rotate",
+    "_act_spin": "view.rotate",
     "_act_help_contents": "help.contents",
     "_act_about": "help.about",
 }
