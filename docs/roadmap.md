@@ -343,7 +343,8 @@ Status legend: ✅ done · 🟡 partial · ⬜ planned · ✂️ deferred / out-
   application down; move it to the CLI path (a `--material-test` mode or a
   second entry point with the same JSON protocol) or guard the inputs
   before emission.
-- ⬜ ISO-3 Seismic isolators, `TripleFrictionPendulum`
+- ✅ ISO-3 Seismic isolators, `TripleFrictionPendulum` (0.0.13): the
+  `TripleFrictionPendulumElement` link, Assign → Joint → Link (twoNodeLink / TFP).
 - ✅ GM-1 Ground motions: import, metadata, catalog (2026-09-24). Core
   readers for PEER AT2 (NGA and old SMD headers), two-column
   time/acceleration with dt uniformity validation, and bare value lists
