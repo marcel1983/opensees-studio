@@ -61,6 +61,13 @@ from opensees_studio.core.geometry.grid import (
 )
 from opensees_studio.core.geometry.links import TripleFrictionPendulumElement, TwoNodeLinkElement
 from opensees_studio.core.geometry.node import Node
+from opensees_studio.core.geometry.walls import (
+    MVLEMElement,
+    WallConversion,
+    WallSpec,
+    wall_fibres,
+    walls_from_members,
+)
 
 __all__ = [
     "BEAM_INTEGRATION_RULES",
@@ -92,6 +99,7 @@ __all__ = [
     "FrameReleases",
     "GridLine",
     "GridSystem",
+    "MVLEMElement",
     "Node",
     "QuadElement",
     "ShellMITC4Element",
@@ -100,6 +108,8 @@ __all__ = [
     "TripleFrictionPendulumElement",
     "TrussElement",
     "TwoNodeLinkElement",
+    "WallConversion",
+    "WallSpec",
     "ZeroLengthElement",
     "ZeroLengthSectionElement",
     "bearing_effective_stiffness",
@@ -117,4 +127,6 @@ __all__ = [
     "pendulum_restoring_stiffness",
     "regular_grid_lines",
     "sliding_yield_displacement",
+    "wall_fibres",
+    "walls_from_members",
 ]

@@ -23,6 +23,7 @@ from opensees_studio.core.materials.library import (
     BoucWen,
     Concrete06,
     Concrete07,
+    ConcreteCM,
     ElasticBilin,
     ElasticMultiLinear,
     ElasticPPGap,
@@ -292,6 +293,7 @@ Material = Annotated[
     | ReinforcingSteel
     | Concrete06
     | Concrete07
+    | ConcreteCM
     | ModIMKPeakOriented
     | ModIMKPinching
     | Bilin

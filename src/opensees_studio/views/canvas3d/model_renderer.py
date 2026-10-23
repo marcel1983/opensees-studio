@@ -26,6 +26,7 @@ from opensees_studio.core import (
     ElasticBeamColumn,
     ForceBeamColumn,
     FrameMember,
+    MVLEMElement,
     NodalLoad,
     PlainLoadPattern,
     PointElementLoad,
@@ -79,6 +80,7 @@ _FRAME_CLASSES = (
     TrussElement,
     CorotTrussElement,
     ZeroLengthElement,
+    MVLEMElement,
     *BEARING_CLASSES,
 )
 

@@ -72,3 +72,14 @@ def test_the_menu_adds_materials_and_sections_in_one_undo_step(qtbot, monkeypatc
     assert "Concrete section: added 3 material(s)" in mw._console.toPlainText()
     mw._vm.undo_stack.undo()
     assert not project.materials and not project.sections
+
+
+@pytest.mark.gui
+def test_concrete_law_combo_builds_concrete_cm(qtbot) -> None:  # type: ignore[no-untyped-def]
+    dialog = ConcreteSectionDialog(Project(meta=ProjectMeta(), ndm=2, ndf=3))
+    qtbot.addWidget(dialog)
+    dialog._model.setCurrentIndex(dialog._model.findData("ConcreteCM"))
+    assert dialog.spec().concrete_model == "ConcreteCM"
+    result = dialog.built_section()
+    assert result is not None
+    assert [m.type for m in result.materials] == ["ConcreteCM", "ConcreteCM", "Steel02"]
