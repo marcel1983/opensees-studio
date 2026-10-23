@@ -1976,7 +1976,10 @@ Materials are the constitutive laws the elements and fibre sections point at.
   `Elastic`, `ElasticPP`, `Hardening`, `Steel01`, `Steel02`, `Concrete01`,
   `Concrete02`, `Concrete04`, `Hysteretic`, `HystereticSM`, and through one
   generic form, in the order and with the names of the OpenSeesPy manual:
-  - steel and concrete: `ReinforcingSteel`, `Concrete06`, `Concrete07`;
+  - steel and concrete: `ReinforcingSteel`, `Concrete06`, `Concrete07`,
+    `ConcreteCM` (Chang-Mander: Tsai's envelope in compression and tension,
+    cyclic rules for RC under earthquake loading; `-GapClose` 1 closes cracks more
+    gradually);
   - deterioration (plastic hinges): `ModIMKPeakOriented`, `ModIMKPinching`,
     `Bilin`, `Pinching4` (a symmetric envelope);
   - dampers and rate models: `ViscousDamper`, `BilinearOilDamper`, `Viscous`,
@@ -2171,6 +2174,11 @@ size, with the centroid.
   Mander, Priestley and Park (1988) with ke = 0.75 for hoops and 0.95 for a
   spiral, εcu = 0.004 + 1.4 ρs fyh εsu / f'cc; otherwise the cover concrete.
 - **Bars**: `Steel02` with fy, Es and 1 % hardening.
+- **Concrete law** `ConcreteCM` (Chang and Mander 1994) instead of `Concrete02`
+  for cyclic analyses: the cover peaks at εc = f'c^(1/4) / 1150 (MPa) with
+  r = f'c / 5.2 - 1.9, the core at Mander's f'cc and εcc with
+  r = Ec / (Ec - f'cc / εcc), which makes its envelope Mander's curve; tension
+  0.33 sqrt(f'c) MPa at 1.2 ft / Ec with r = 1.2.
 
 # Sections it adds
 - **Fiber section** (default): core, cover strips, flange overhangs and bars as

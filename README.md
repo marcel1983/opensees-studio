@@ -141,7 +141,8 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
 - **Concrete Section Wizard** — Define → Concrete Section Wizard: a rectangular,
   circular, T or L reinforced concrete section from its dimensions, clear cover,
   bar sizes (metric φ or US #) and counts, ties and strengths. It adds the cover
-  and core concrete (`Concrete02`, the core confined after Mander when asked) and
+  and core concrete (`Concrete02`, or the cyclic `ConcreteCM` of Chang and
+  Mander; the core confined after Mander when asked) and
   the bars (`Steel02`), a fiber section, and optionally an elastic section with
   the ACI 318-19 cracked inertia (0.70 Ig columns, 0.35 Ig beams), in one undo
   step.

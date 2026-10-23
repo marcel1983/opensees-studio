@@ -21,6 +21,10 @@ refused instead of silently downgraded).
   yields. `.osmodel`: a new element type `MVLEM`. gidopensees' `FiberInt`
   shear-flexure section, which this replaces in the gap analysis, does not
   exist in OpenSeesPy 3.8.
+- **`ConcreteCM` (Chang-Mander) concrete.** In the Material Library, and as the
+  Concrete Section Wizard's new **Concrete law** option: cover and core become
+  `ConcreteCM`, the core with Mander's `f'cc`, `εcc` and the `r` that makes
+  Tsai's envelope Mander's curve (pinned against the closed form to 0.2 %).
 
 ### Changed
 

@@ -93,6 +93,46 @@ class Concrete07(SignatureMaterial):
     r: PositiveFloat = Field(7.0, description="Shape parameter")
 
 
+class ConcreteCM(SignatureMaterial):
+    """Chang and Mander (1994) cyclic concrete, with Tsai's envelope in compression and tension.
+
+    The compression envelope is ``y = n x / (1 + (n - r / (r - 1)) x + x^r / (r - 1))``
+    with ``x = strain / epcc``, ``y = stress / fpcc`` and ``n = Ec epcc / fpcc``;
+    with ``rc = Ec / (Ec - fpcc / epcc)`` it is Mander's confined curve. ``xcrn``
+    and ``xcrp`` are where the envelopes turn into straight lines (the crushing
+    and cracking strains over the peak ones). Unlike Concrete07 it models gradual
+    crack closure, and ``-GapClose 1`` closes cracks more gradually.
+    """
+
+    type: Literal["ConcreteCM"] = "ConcreteCM"
+    fpcc: float = Field(-30e6, lt=0, description="Compressive strength (negative)")
+    epcc: float = Field(-0.002, lt=0, description="Strain at compressive strength (negative)")
+    Ec: PositiveFloat = Field(30e9, description="Initial tangent modulus")
+    rc: float = Field(7.0, gt=1, description="Shape parameter of the compression envelope")
+    xcrn: float = Field(1.035, gt=1, description="Critical strain over epcc, compression")
+    ft: PositiveFloat = Field(2e6, description="Tensile strength")
+    et: PositiveFloat = Field(0.00008, description="Strain at tensile strength")
+    rt: float = Field(1.2, gt=1, description="Shape parameter of the tension envelope")
+    xcrp: float = Field(10000.0, gt=1, description="Critical strain over et, tension")
+    gap_close: Literal[0, 1] = Field(
+        default=0, description="-GapClose: 0 less gradual crack closure, 1 more gradual"
+    )
+
+    def opensees_args(self) -> list[Any]:
+        args: list[Any] = [
+            self.fpcc,
+            self.epcc,
+            self.Ec,
+            self.rc,
+            self.xcrn,
+            self.ft,
+            self.et,
+            self.rt,
+            self.xcrp,
+        ]
+        return [*args, "-GapClose", 1] if self.gap_close else args
+
+
 # ─────────────────────── deterioration (IMK, Pinching4) ───────────────────────
 class _IMK(SignatureMaterial):
     """Fields shared by the modified Ibarra-Medina-Krawinkler models."""
@@ -479,6 +519,7 @@ SIGNATURE_MATERIALS: tuple[type[SignatureMaterial], ...] = (
     ReinforcingSteel,
     Concrete06,
     Concrete07,
+    ConcreteCM,
     ModIMKPeakOriented,
     ModIMKPinching,
     Bilin,

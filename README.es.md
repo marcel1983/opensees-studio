@@ -56,7 +56,8 @@ script o un notebook de Jupyter: la interfaz es una forma de usarlo, no la únic
   biblioteca de materiales de OpenSees; secciones de fibras con editor; la
   biblioteca de perfiles AISC v16; el **asistente de secciones de hormigón
   armado** (Define → Concrete Section Wizard: rectangular, circular, T o L, barras
-  φ o #, núcleo confinado según Mander, sección de fibras y sección elástica con
+  φ o #, núcleo confinado según Mander, hormigón `Concrete02` o el cíclico
+  `ConcreteCM` de Chang-Mander, sección de fibras y sección elástica con
   inercia fisurada ACI); **muros de hormigón armado** (Assign → Frame → RC Wall:
   macroelementos MVLEM en modelos 2D); el **diseñador de secciones** (Define → Section
   Designer: cualquier sección dibujada con comandos —`rect`, `circle`, `poly`,
