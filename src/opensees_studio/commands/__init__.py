@@ -60,6 +60,7 @@ from opensees_studio.commands.loads import (
     AddPointElementLoadsCommand,
     AddTemperatureLoadsCommand,
     AddTrapezoidalElementLoadsCommand,
+    DeleteLoadsCommand,
 )
 from opensees_studio.commands.materials import (
     AddMaterialsCommand,
@@ -122,6 +123,7 @@ __all__ = [
     "DeleteCombinationsCommand",
     "DeleteElementsCommand",
     "DeleteFrictionModelsCommand",
+    "DeleteLoadsCommand",
     "DeleteMaterialsCommand",
     "DeleteNodesCommand",
     "DeleteSectionsCommand",

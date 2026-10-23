@@ -11,6 +11,12 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **Edit → Delete Loads.** Removes loads by type — joint forces, imposed
+  displacements, uniform, trapezoidal and point frame loads, temperature loads,
+  shell pressures, floor loads, and the self weight — from the chosen load
+  patterns, on the selection (through its joints and elements) or the whole
+  model. Each type shows how many it would remove before you accept; one undo
+  step brings them all back.
 - **View → Color By: paint frames and shells by section, by material or by
   group.** Each category gets its own colour (groups keep the colour they were
   given in Define → Groups) and a legend in the viewport's corner names them.

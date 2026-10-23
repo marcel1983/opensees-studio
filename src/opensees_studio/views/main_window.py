@@ -452,6 +452,7 @@ class MainWindow(QMainWindow):
         self._act_replicate = QAction("&Replicate…", self, shortcut="Ctrl+Shift+R")
         self._act_check_duplicates = QAction("Check Model for &Duplicates…", self)
         self._act_mesh = QAction("&Mesh…", self)
+        self._act_delete_loads = QAction("Delete &Loads…", self)
         self._act_merge_joints = QAction("Merge &Joints…", self)
         self._act_divide_frames = QAction("Divide Frames at &Joints…", self)
         self._act_mirror = QAction("Mirr&or…", self)
@@ -703,6 +704,8 @@ class MainWindow(QMainWindow):
         m_edit.addAction(self._act_merge_joints)
         m_edit.addAction(self._act_divide_frames)
         m_edit.addAction(self._act_mesh)
+        m_edit.addSeparator()
+        m_edit.addAction(self._act_delete_loads)
 
         m_select = mb.addMenu("&Select")
         self._build_select_menu(m_select)
@@ -1160,6 +1163,7 @@ class MainWindow(QMainWindow):
         self._act_replicate.triggered.connect(self._on_replicate)
         self._act_check_duplicates.triggered.connect(self._on_check_duplicates)
         self._act_mesh.triggered.connect(self._on_mesh)
+        self._act_delete_loads.triggered.connect(self._on_delete_loads)
         self._act_merge_joints.triggered.connect(self._on_merge_joints)
         self._act_divide_frames.triggered.connect(self._on_divide_frames)
         self._act_mirror.triggered.connect(self._on_mirror)
@@ -2325,6 +2329,32 @@ class MainWindow(QMainWindow):
         settings = dialog.settings()
         if settings != project.design:
             self._vm.apply_command(SetDesignSettingsCommand(self._vm, settings))
+
+    def _on_delete_loads(self) -> None:
+        """Edit → Delete Loads: remove loads by type, pattern and selection, one undo step."""
+        from opensees_studio.commands import DeleteLoadsCommand
+        from opensees_studio.core.load_removal import KINDS_BY_KEY
+        from opensees_studio.views.dialogs.delete_loads import DeleteLoadsDialog
+
+        project = self._vm.project
+        if project is None:
+            return
+        dialog = DeleteLoadsDialog(
+            project,
+            selected_nodes=set(self._canvas.selection.nodes),
+            selected_elements=set(self._canvas.selection.elements),
+            parent=self,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        command = DeleteLoadsCommand(self._vm, dialog.kinds(), dialog.scope())
+        try:
+            self._vm.apply_command(command)
+        except Exception as exc:
+            QMessageBox.critical(self, "Could not delete the loads", str(exc))
+            return
+        done = [f"{n} {KINDS_BY_KEY[k].label.lower()}" for k, n in command.removed.items() if n]
+        self._log("Delete Loads: " + (", ".join(done) if done else "nothing removed") + ".")
 
     def _on_mesh(self) -> None:
         """Edit → Mesh: subdivide members and shells, and join the mesh up.
@@ -5670,6 +5700,7 @@ class MainWindow(QMainWindow):
             and not self._runner.is_running
         )
         self._act_mesh.setEnabled(has_project)
+        self._act_delete_loads.setEnabled(has_project)
         self._act_merge_joints.setEnabled(has_project)
         self._act_divide_frames.setEnabled(has_project)
         self._act_assign_support.setEnabled(has_project and has_selected_nodes)
