@@ -205,6 +205,20 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   spreadsheet or `sqlite3` can ask questions without opening the application.
   **Analyze → Run All Cases** (`Shift+F5`) and **Run Selected Cases…** run a
   whole batch in one child process.
+- **Batch runs of many files** — **File → Run Batch…** solves a list of
+  `.osmodel` files (or every one in a folder) unattended: all cases or the ones
+  named, several files at a time, a progress row per file and Cancel. Each
+  project keeps its results beside it (`<project>_batch_results/` plus the
+  results database), and opening it later offers to show them without solving
+  again while the model is unchanged. A summary (status, time, error per file)
+  is written as `batch_summary.json` and `.csv`. Without the window:
+
+  ```bash
+  python -m opensees_studio.batch models/ extra.osmodel --cases all --jobs 4
+  ```
+
+  (`--cases "Dead,Modal"` picks cases by name or id, `--engine` another engine,
+  `--summary` another summary path; a packaged build takes `--batch` instead.)
 - **Response spectra, by hand or by code** — in Ground Motions → Target
   spectrum: a **user table** (period in s, Sa in g), a spectrum from **ASCE/SEI
   7-16** (the mapped Ss and S1 with a site class, using Tables 11.4-1 and 11.4-2

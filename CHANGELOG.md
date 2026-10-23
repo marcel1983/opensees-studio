@@ -11,6 +11,16 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **File → Run Batch…: solve many projects unattended and view the results
+  later.** Add files or a folder, pick all cases or cases by name, choose how
+  many files solve at the same time, and follow a progress row per file (with
+  Cancel). Each project keeps its results beside it
+  (`<project>_batch_results/` and `<project>_results.sqlite`), and File → Open
+  offers to load them without running again while the model is unchanged. A
+  summary with the status, time and error of each file is written as
+  `batch_summary.json` and `batch_summary.csv`. The same from a terminal:
+  `python -m opensees_studio.batch models/ --cases all --jobs 4` (`--batch` in a
+  packaged build). The engine chosen in Options → Solver solves every file.
 - **File → Import → SAP2000 Text (.s2k / .$2k) and File → Export → SAP2000
   Text.** Reads a model saved as SAP2000 text tables as a new project: joints and
   restraints, global grid lines, frames with their sections (rectangular, I,

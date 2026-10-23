@@ -1,5 +1,10 @@
 """Analysis CLI: ``python -m opensees_studio.run --project P --cases IDS --out DIR``.
 
+``--record-db DB`` also appends every finished case to the results database
+``DB`` (:mod:`~opensees_studio.services.results_db`); the batch runner
+(:mod:`opensees_studio.services.batch`) uses it so its children fill the
+database themselves.
+
 ``--project P --check-stability`` instead builds the model and prints one
 ``stability`` line whose ``report`` is a
 :class:`~opensees_studio.services.stability.StabilityReport` dict (Analyze →
@@ -130,6 +135,11 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         "--case-override",
         default=None,
         help="JSON file with a list of case objects that replace the same-id cases for this run",
+    )
+    parser.add_argument(
+        "--record-db",
+        default=None,
+        help="also append every finished case to this results database (SQLite)",
     )
     args = parser.parse_args(argv)
     if not args.check_stability and (not args.cases or not args.out):
@@ -411,7 +421,33 @@ def main(argv: list[str] | None = None) -> int:
         protocol.emit(type="case_finished", **entry)
 
     write_manifest(out_dir, entries, str(args.project))
+    if args.record_db:
+        _record(protocol, args, project, entries)
     return EXIT_OK
+
+
+def _record(
+    protocol: _Protocol, args: argparse.Namespace, project: Any, entries: list[dict[str, Any]]
+) -> None:
+    """``--record-db``: append the finished cases to the results database.
+
+    Read back from the store, so a case that ran in a fresh process is recorded
+    too. As in the GUI, a database failure is a warning: the results are written.
+    """
+    from opensees_studio.services.result_store import load_results
+    from opensees_studio.services.results_db import record_results
+
+    for entry in entries:
+        try:
+            results = load_results(entry, args.out)
+            run_id = record_results(
+                results, project_path=args.project, project=project, db_path=args.record_db
+            )
+        except Exception as exc:
+            protocol.log(f"Warning: the results database was not written: {exc}")
+            return
+        if run_id is not None:
+            protocol.log(f"Results recorded in {args.record_db} (run {run_id}).")
 
 
 def _main_flushing() -> int:

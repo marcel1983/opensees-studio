@@ -47,6 +47,11 @@ architecture document.
   (`ProjectViewModel._retire_run_snapshot`, only once the replacement has
   happened). `OPENSEES_STUDIO_IN_PROCESS=1` runs the previous
   threaded in-process worker (debugging, no cancel).
+  Batch runs (File → Run Batch…, `python -m opensees_studio.batch`, `--batch`
+  in a frozen bundle) start the same CLI per project file with `--out
+  <stem>_batch_results --record-db <stem>_results.sqlite`; `services/batch.py`
+  plans jobs and writes `batch.json` (the model fingerprint), and File → Open
+  offers those results only while `model_fingerprint` still matches.
   `OPENSEES_STUDIO_CLI_HARD_EXIT_AFTER=N` is a test-only hook that makes the
   CLI hard-exit with 255 after N progress lines.
   `OPENSEES_STUDIO_TEST_SKIP_BEARING_ORIENT=1` is a test-only hook that leaves
