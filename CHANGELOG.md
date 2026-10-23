@@ -46,6 +46,15 @@ refused instead of silently downgraded).
 
 ### Changed
 
+- **View → Show Extruded Sections draws the real cross section** instead of a
+  box: AISC shapes as their profile (I, channel, tee, rectangular and round
+  tube, angle), fibre sections as their patches, a truss as the bar of its
+  area, anything else as the rectangle with the same area and second moments.
+  The section stands in the member's OpenSees local axes (an AISC beam in a 3D
+  model used to lie on its side) and sits on its insertion point. An AISC section now stores its
+  profile in project units (I, channel, tee and rectangular tube are new; an
+  HSS was stored as a solid rectangle), so the member size used by insertion
+  points, end offsets from connectivity and the IFC export is the real one.
 - **`ElasticPPGap` refuses `Fy` and `gap` of opposite signs.** OpenSees accepts
   them with a warning and then follows neither the tension nor the compression
   gap law; a tension gap takes both positive, a compression gap both negative.

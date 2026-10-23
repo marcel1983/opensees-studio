@@ -55,7 +55,16 @@ from opensees_studio.core.frame_members import section_extents
 from opensees_studio.core.geometry.elements import FRAME_ELEMENT_CLASSES
 from opensees_studio.core.geometry.local_axes import frame_local_axes
 from opensees_studio.core.plane import dof_indices
-from opensees_studio.core.sections import SHELL_SECTION_CLASSES, AngleShape, PipeShape, RectShape
+from opensees_studio.core.sections import (
+    SHELL_SECTION_CLASSES,
+    AngleShape,
+    ChannelShape,
+    PipeShape,
+    RectShape,
+    TeeShape,
+    TubeShape,
+    WideFlangeShape,
+)
 from opensees_studio.core.storeys import base_elevation, sorted_storeys
 from opensees_studio.core.units import UnitSystem, length_scale
 
@@ -247,6 +256,22 @@ class _Writer:
             return f.createIfcRectangleProfileDef("AREA", name, None, shape.b, shape.d), name
         if isinstance(shape, AngleShape):
             return f.createIfcLShapeProfileDef("AREA", name, None, shape.d, shape.b, shape.t), name
+        if isinstance(shape, WideFlangeShape):
+            return f.createIfcIShapeProfileDef(
+                "AREA", name, None, shape.bf, shape.d, shape.tw, shape.tf
+            ), name
+        if isinstance(shape, ChannelShape):
+            return f.createIfcUShapeProfileDef(
+                "AREA", name, None, shape.d, shape.bf, shape.tw, shape.tf
+            ), name
+        if isinstance(shape, TeeShape):
+            return f.createIfcTShapeProfileDef(
+                "AREA", name, None, shape.d, shape.bf, shape.tw, shape.tf
+            ), name
+        if isinstance(shape, TubeShape):
+            return f.createIfcRectangleHollowProfileDef(
+                "AREA", name, None, shape.b, shape.d, shape.t
+            ), name
         library = self._aisc_profile(name)
         if library is not None:
             return library, name

@@ -282,6 +282,7 @@ from opensees_studio.core.sections import (
     SHELL_SECTION_CLASSES,
     AggregatorDOF,
     AngleShape,
+    ChannelShape,
     CircularPatch,
     ElasticMembranePlateSection,
     ElasticSection,
@@ -297,6 +298,9 @@ from opensees_studio.core.sections import (
     SectionShape,
     ShellLayer,
     StraightLayer,
+    TeeShape,
+    TubeShape,
+    WideFlangeShape,
     w_shape_patches,
 )
 from opensees_studio.core.self_weight import self_weight_loads, total_self_weight
@@ -602,6 +606,10 @@ __all__ = [  # noqa: RUF022 - grouped by domain under section comments, not alph
     "PipeShape",
     "AngleShape",
     "RectShape",
+    "WideFlangeShape",
+    "ChannelShape",
+    "TeeShape",
+    "TubeShape",
     # Loads
     "TimeSeries",
     "LinearTimeSeries",
