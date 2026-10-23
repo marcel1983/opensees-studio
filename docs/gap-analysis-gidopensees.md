@@ -42,6 +42,16 @@ shell work, the PORTICO phases and the section tools landed, and 32 rows move:
   and `BeamContact`, and volume mass (there are no solid elements).
 - **Still 🟡.** Region-scoped Rayleigh damping (`region ... -rayleigh`).
 
+**Later the same day:** `ElasticPPGap`, `Viscous` and `ViscousDamper` moved
+🟡 → ✅. The 2026-10-04 findings had two causes, neither in the materials: the
+gap was measured with `Fy` and `gap` of opposite signs, which OpenSees accepts
+with a warning and then answers neither law (Studio now refuses it), and the
+dashpots were driven in static or ramped analyses, which have no strain rate. A
+transient single-degree-of-freedom oscillator built the application's way
+(`ZeroLength`, spring and dashpot in `Parallel`) gives the closed-form overshoot
+of a linearly damped system to 0.1 % with both dampers;
+`tests/integration/test_gap_and_damper_materials.py` pins the three laws.
+
 Studio-only work since 2026-10-04 that has no gidopensees row (not counted):
 PORTICO `.s3d` import, the AISC 360-16 steel check and storey drift check,
 influence lines and moving loads, temperature loads on frames, the Concrete
@@ -178,9 +188,9 @@ Priority rationale:
 |---|---|---|---|---|---|
 | Uniaxial / linear | Elastic | `ElasticUniaxial` | ✅ | ✅ | P0 |
 | Uniaxial / elastic-plastic | Elastic_Perfectly_Plastic | `ElasticPP` | ✅ | ✅ | P0 |
-| Uniaxial / elastic-plastic | Elastic_Perfectly_Plastic_with_Gap | `ElasticPPGap` (Material Library; response not validated, see 2026-10-04) | 🟡 | ✅ | P1 |
-| Uniaxial / damper | Viscous | `Viscous` (Material Library; the rate does not reach it through the elements built, see 2026-10-04) | 🟡 | ✅ | P1 |
-| Uniaxial / damper | Viscous_Damper (Maxwell) | `ViscousDamper` (Material Library; response not validated) | 🟡 | ✅ | P1 |
+| Uniaxial / elastic-plastic | Elastic_Perfectly_Plastic_with_Gap | `ElasticPPGap` (law pinned in `test_gap_and_damper_materials.py`; Fy and gap of one sign) | ✅ | ✅ | P1 |
+| Uniaxial / damper | Viscous | `Viscous` (transient SDOF through `ZeroLength` matches the closed form) | ✅ | ✅ | P1 |
+| Uniaxial / damper | Viscous_Damper (Maxwell) | `ViscousDamper` (same oscillator; a soft Maxwell spring damps less) | ✅ | ✅ | P1 |
 | Uniaxial / gap | Hyperbolic_Gap | — | ❌ | ✅ | P2 |
 | Uniaxial / soil | PySimple1 | `PySimple1` | ✅ | ✅ | P2 |
 | Uniaxial / soil | TzSimple1 | `TzSimple1` | ✅ | ✅ | P2 |
@@ -353,8 +363,8 @@ Recounted from the tables on 2026-10-23.
 
 | Status | Count |
 |---|---|
-| ✅ Fully in OpenSees Studio | 58 |
-| 🟡 Partial (6 at P1, 6 at P2) | 12 |
+| ✅ Fully in OpenSees Studio | 61 |
+| 🟡 Partial (3 at P1, 6 at P2) | 9 |
 | ❌ P1 targets | 3 |
 | ❌ P2 deferred | 15 |
 | Total rows | 88 |
@@ -367,9 +377,7 @@ Recounted from the tables on 2026-10-23.
    monotonic envelope only.
 3. `ShellDKGQ` — the shell for walls and slabs with drilling DOFs
    (`ShellMITC4` is there).
-4. `ElasticPPGap`, `Viscous`, `ViscousDamper` — in the library but unvalidated:
-   pin the gap law and route the strain rate to the dampers (a `twoNodeLink` or
-   `zeroLength` in a transient case), each with a closed-form test.
+4. ~~`ElasticPPGap`, `Viscous`, `ViscousDamper`~~: validated (see below).
 5. Region-scoped Rayleigh damping (`region ... -rayleigh`) — only the
    per-element `do_rayleigh` opt-in on `ZeroLengthElement` exists.
 6. Geometry-tied assignments (line and surface restraints, loads, constraints)

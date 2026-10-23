@@ -1980,9 +1980,15 @@ Materials are the constitutive laws the elements and fibre sections point at.
   - deterioration (plastic hinges): `ModIMKPeakOriented`, `ModIMKPinching`,
     `Bilin`, `Pinching4` (a symmetric envelope);
   - dampers and rate models: `ViscousDamper`, `BilinearOilDamper`, `Viscous`,
-    `BoucWen`;
-  - multilinear and gaps: `ElasticBilin`, `ElasticPPGap`, `MultiLinear`,
-    `ElasticMultiLinear` (a table of strain-stress points);
+    `BoucWen`. A dashpot answers the strain rate, so it acts only in a
+    transient case: put it in a zero-length or link element, in `Parallel`
+    with the spring it damps. Keep a `ViscousDamper`'s `K_el` realistic: when
+    Cd / K_el is some 1e5 times shorter than the time step its internal
+    integrator fails;
+  - multilinear and gaps: `ElasticBilin`, `ElasticPPGap` (no force until the
+    gap closes, then elastic up to Fy and plastic, the plastic strain widening
+    the gap; Fy and gap of one sign, negative for a compression gap),
+    `MultiLinear`, `ElasticMultiLinear` (a table of strain-stress points);
   - pile springs: `PySimple1`, `TzSimple1`, `QzSimple1`;
   - wrappers of other materials: `Parallel` (stresses added, optional factors),
     `Series` (strains added), `MinMax` (failure outside a strain range),

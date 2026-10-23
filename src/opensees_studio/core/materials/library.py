@@ -211,7 +211,14 @@ class Pinching4(SignatureMaterial):
 
 # ─────────────────────────── dampers and rate models ───────────────────────────
 class ViscousDamper(SignatureMaterial):
-    """Maxwell viscous damper: an elastic spring in series with a nonlinear dashpot."""
+    """Maxwell viscous damper: an elastic spring in series with a nonlinear dashpot.
+
+    A transient case only, like :class:`Viscous`. ``K_el`` is the brace or
+    device stiffness in series with the dashpot; a very stiff one leaves the
+    pure dashpot. Its internal integrator fails (NaN) when the relaxation time
+    ``Cd / K_el`` (alpha = 1) is some 1e5 times shorter than the time step: keep
+    ``K_el`` realistic rather than "infinite".
+    """
 
     type: Literal["ViscousDamper"] = "ViscousDamper"
     K_el: PositiveFloat = Field(1e8, description="Elastic stiffness of the linear spring")
@@ -242,7 +249,12 @@ class BilinearOilDamper(SignatureMaterial):
 
 
 class Viscous(SignatureMaterial):
-    """Nonlinear dashpot: stress = C · strain-rate^alpha (use with a transient case)."""
+    """Nonlinear dashpot: stress = C · strain-rate^alpha (use with a transient case).
+
+    Only a transient case has a strain rate: a static case leaves the dashpot
+    at zero force. Put it in a ``ZeroLength`` or link element, alone or in a
+    ``Parallel`` material with the spring it damps.
+    """
 
     type: Literal["Viscous"] = "Viscous"
     C: PositiveFloat = Field(1e5, description="Damping coefficient")
@@ -275,14 +287,33 @@ class ElasticBilin(SignatureMaterial):
 
 
 class ElasticPPGap(SignatureMaterial):
-    """Elastic-perfectly plastic gap: no force until the gap closes (negative gap: compression)."""
+    """Elastic-perfectly plastic gap: no force until the gap closes (negative gap: compression).
+
+    Beyond the gap the stress is ``E (strain - gap)`` up to ``Fy``, then ``Fy``
+    (plus ``eta E`` times the further strain); the plastic strain widens the gap.
+    ``Fy`` and ``gap`` take the same sign — OpenSees accepts mixed signs with a
+    warning and then answers neither law, so they are refused here.
+    """
 
     type: Literal["ElasticPPGap"] = "ElasticPPGap"
     E: PositiveFloat = Field(2e8, description="Tangent")
-    Fy: float = Field(1e5, description="Stress or force at which yielding occurs")
-    gap: float = Field(0.01, description="Initial gap (negative for a compression gap)")
+    Fy: float = Field(1e5, description="Stress or force at which yielding occurs (sign of gap)")
+    gap: float = Field(
+        0.01, description="Initial gap (negative, with a negative Fy, in compression)"
+    )
     eta: float = Field(0.0, ge=0, lt=1, description="Hardening ratio")
     damage: Literal["noDamage", "damage"] = Field("noDamage", description="Accumulate damage")
+
+    @model_validator(mode="after")
+    def _same_sign(self) -> ElasticPPGap:
+        if self.Fy == 0.0:
+            raise ValueError("Fy must not be zero.")
+        if self.gap * self.Fy < 0.0:
+            raise ValueError(
+                "Fy and gap take the same sign: positive for a tension gap, "
+                "negative for a compression gap."
+            )
+        return self
 
 
 class MultiLinear(SignatureMaterial):

@@ -9,6 +9,16 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Changed
+
+- **`ElasticPPGap` refuses `Fy` and `gap` of opposite signs.** OpenSees accepts
+  them with a warning and then follows neither the tension nor the compression
+  gap law; a tension gap takes both positive, a compression gap both negative.
+  The laws of `ElasticPPGap`, `Viscous` and `ViscousDamper` are now pinned by
+  tests (a strain path for the gap, a damped oscillator for the dashpots), and
+  the Material Library help says that a dashpot acts only in a transient case
+  and how stiff a `ViscousDamper` spring can be before its integrator fails.
+
 ## [0.0.22] — 2026-10-22
 
 A second engine ships with the application: PyNite (MIT) runs linear static
