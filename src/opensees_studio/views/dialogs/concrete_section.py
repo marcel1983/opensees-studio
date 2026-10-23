@@ -180,6 +180,11 @@ class ConcreteSectionDialog(FittedDialog):
         self._confined = QCheckBox("Confined core (Mander)")
         self._confined.toggled.connect(self._refresh)
         f.addRow(self._confined)
+        self._model = QComboBox()
+        self._model.addItem("Concrete02 (Kent-Park, linear tension softening)", "Concrete02")
+        self._model.addItem("ConcreteCM (Chang-Mander, Tsai envelope)", "ConcreteCM")
+        self._model.currentIndexChanged.connect(self._refresh)
+        f.addRow("Concrete law:", self._model)
         form_root.addWidget(mats)
 
         out = QGroupBox("Add to the project")
@@ -252,6 +257,7 @@ class ConcreteSectionDialog(FittedDialog):
         self._bar.setCurrentText(spec.bar)
         self._tie.setCurrentText(spec.tie)
         self._confined.setChecked(spec.confined)
+        self._model.setCurrentIndex(max(0, self._model.findData(spec.concrete_model)))
         self._on_shape()
 
     # ── reactions ───────────────────────────────────────────────────
@@ -309,6 +315,7 @@ class ConcreteSectionDialog(FittedDialog):
             fyh=self._fyh.value(),
             Es=self._es.value(),
             confined=self._confined.isChecked(),
+            concrete_model=self._model.currentData(),
             role=self._role.currentData(),
             units=self._units,
             name=self._name.text().strip(),

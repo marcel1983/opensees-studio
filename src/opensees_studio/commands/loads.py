@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from opensees_studio.commands.base import ProjectCommand
+from opensees_studio.commands.base import ProjectCommand, restore_project, snapshot_project
 from opensees_studio.core import (
     DEFAULT_PATTERN_NAME,
     FRAME_ELEMENT_CLASSES,
@@ -24,6 +24,7 @@ from opensees_studio.core import (
     make_default_pattern,
     make_default_time_series,
 )
+from opensees_studio.core.load_removal import Scope, remove_loads
 
 if TYPE_CHECKING:
     from opensees_studio.viewmodels import ProjectViewModel
@@ -349,3 +350,24 @@ class AddTemperatureLoadsCommand(_ElementLoadCommand):
         return [
             TemperatureLoad(element_id=eid, **self._values) for eid in sorted(self._element_ids)
         ]
+
+
+class DeleteLoadsCommand(ProjectCommand):
+    """Edit → Delete Loads: remove loads by type, pattern and selection, in one undo step."""
+
+    def __init__(self, vm: ProjectViewModel, kinds: set[str], scope: Scope) -> None:
+        super().__init__(vm, "Delete loads")
+        self._kinds = set(kinds)
+        self._scope = scope
+        self._before: dict[str, Any] | None = None
+        self.removed: dict[str, int] = {}
+
+    def redo(self) -> None:
+        self._before = snapshot_project(self.project)
+        self.removed = remove_loads(self.project, self._kinds, self._scope)
+        self._notify()
+
+    def undo(self) -> None:
+        if self._before is not None:
+            restore_project(self.project, self._before)
+        self._notify()

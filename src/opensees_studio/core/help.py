@@ -1976,13 +1976,22 @@ Materials are the constitutive laws the elements and fibre sections point at.
   `Elastic`, `ElasticPP`, `Hardening`, `Steel01`, `Steel02`, `Concrete01`,
   `Concrete02`, `Concrete04`, `Hysteretic`, `HystereticSM`, and through one
   generic form, in the order and with the names of the OpenSeesPy manual:
-  - steel and concrete: `ReinforcingSteel`, `Concrete06`, `Concrete07`;
+  - steel and concrete: `ReinforcingSteel`, `Concrete06`, `Concrete07`,
+    `ConcreteCM` (Chang-Mander: Tsai's envelope in compression and tension,
+    cyclic rules for RC under earthquake loading; `-GapClose` 1 closes cracks more
+    gradually);
   - deterioration (plastic hinges): `ModIMKPeakOriented`, `ModIMKPinching`,
     `Bilin`, `Pinching4` (a symmetric envelope);
   - dampers and rate models: `ViscousDamper`, `BilinearOilDamper`, `Viscous`,
-    `BoucWen`;
-  - multilinear and gaps: `ElasticBilin`, `ElasticPPGap`, `MultiLinear`,
-    `ElasticMultiLinear` (a table of strain-stress points);
+    `BoucWen`. A dashpot answers the strain rate, so it acts only in a
+    transient case: put it in a zero-length or link element, in `Parallel`
+    with the spring it damps. Keep a `ViscousDamper`'s `K_el` realistic: when
+    Cd / K_el is some 1e5 times shorter than the time step its internal
+    integrator fails;
+  - multilinear and gaps: `ElasticBilin`, `ElasticPPGap` (no force until the
+    gap closes, then elastic up to Fy and plastic, the plastic strain widening
+    the gap; Fy and gap of one sign, negative for a compression gap),
+    `MultiLinear`, `ElasticMultiLinear` (a table of strain-stress points);
   - pile springs: `PySimple1`, `TzSimple1`, `QzSimple1`;
   - wrappers of other materials: `Parallel` (stresses added, optional factors),
     `Series` (strains added), `MinMax` (failure outside a strain range),
@@ -2165,6 +2174,11 @@ size, with the centroid.
   Mander, Priestley and Park (1988) with ke = 0.75 for hoops and 0.95 for a
   spiral, εcu = 0.004 + 1.4 ρs fyh εsu / f'cc; otherwise the cover concrete.
 - **Bars**: `Steel02` with fy, Es and 1 % hardening.
+- **Concrete law** `ConcreteCM` (Chang and Mander 1994) instead of `Concrete02`
+  for cyclic analyses: the cover peaks at εc = f'c^(1/4) / 1150 (MPa) with
+  r = f'c / 5.2 - 1.9, the core at Mander's f'cc and εcc with
+  r = Ec / (Ec - f'cc / εcc), which makes its envelope Mander's curve; tension
+  0.33 sqrt(f'c) MPa at 1.2 ft / Ec with r = 1.2.
 
 # Sections it adds
 - **Fiber section** (default): core, cover strips, flange overhangs and bars as
@@ -3145,6 +3159,44 @@ reaction 6 E I d / L³ — the application matches it.
             "assign.support",
             "assign.load",
         ),
+        "assign.wall": _t(
+            "Assign → Frame → RC Wall (MVLEM)",
+            "Assign — frame",
+            "Turn the selected vertical members of a 2D model into reinforced concrete wall segments.",
+            """
+Replaces each selected **vertical** two-joint member with an OpenSees `MVLEM`
+segment (Multiple-Vertical-Line-Element Model, Orakcal, Wallace and Conte):
+vertical fibres across the wall length — concrete plus the steel at its ratio —
+couple axial load and flexure, and one horizontal shear spring at height `c h`
+carries the shear. Ids and joints are kept (bottom joint first); members that
+are not vertical are left as they are. 2D models only.
+
+# The section
+- **Wall length L** and **thickness t**, split into **vertical fibres** of equal
+  width; with a **boundary element length** > 0 each end is a boundary element
+  with its own **steel ratio** (and fibres of about the web's width).
+- **Concrete** and **steel** uniaxial materials (for example `Concrete02` and
+  `Steel02`, or those of the Concrete Section Wizard).
+- **Shear**: elastic with a shear modulus G (it starts at the concrete's initial
+  modulus over 2.4) — one material per segment height is created with stiffness
+  `G L t / h`, since the spring is a force-displacement spring of its own segment
+  — or an existing uniaxial material for every segment (a nonlinear shear law).
+- **Centre of rotation c** (0.4 is the usual value) and the **density** for
+  the segment's mass.
+
+# Modelling notes
+- The rotation of a segment is lumped at `c h`: use **several segments per
+  storey** (draw the wall's members split, or Edit → Divide Frames), and the
+  curvature converges to the continuous one — 40 segments give the elastic
+  cantilever's `P H³ / 3EI + P H / GA` to 1 %.
+- Floors frame into the wall's joints; the wall has no width in the drawing.
+- Shear and flexure are not coupled in `MVLEM`. gidopensees' `FiberInt` section
+  (shear-flexure interaction) is not available in OpenSeesPy 3.8.
+""",
+            "assign.hinge",
+            "define.concrete_section",
+            "define.material_library",
+        ),
         "assign.hinge": _t(
             "Assign → Frame → Hinge",
             "Assign — frame",
@@ -3950,6 +4002,75 @@ available (or not) whatever engine you choose.
 """,
             "analyze.run",
         ),
+        "edit.delete_loads": _t(
+            "Edit → Delete Loads",
+            "Edit and tools",
+            "Remove loads by type, by load pattern, from the selection or the whole model.",
+            """
+# Values
+- **Delete from** — the selection, or the entire model. A joint load goes with
+  its joint, a frame or shell load with its element, a floor load when all four
+  of its corner joints are selected.
+- **Load types** — tick the ones to remove; the number next to each is how many
+  the current choice would remove: joint forces and moments, imposed joint
+  displacements, uniform / trapezoidal / point frame loads, frame temperature
+  loads, shell pressures, floor loads, and the self weight (the pattern's
+  self-weight multiplier is set to 0; only on the entire model, since it belongs
+  to no joint or element).
+- **Load patterns** — the patterns to remove them from (all, to start with).
+
+Everything removed comes back with one Ctrl+Z. The log says what was removed.
+""",
+            "assign.load",
+            "assign.distributed_load",
+            "define.plain_pattern",
+        ),
+        "view.color_by": _t(
+            "View → Color By",
+            "View",
+            "Paint frames and shells by section, by material or by group.",
+            """
+Each viewport chooses its own colouring; a legend in its upper-right corner says
+which colour is which (at most 15 entries are listed).
+
+# Entries
+- **Single Colour** — every frame in the frame colour, every shell in the shell
+  colour (View → Colors…).
+- **By Section** — one colour per section; a BeamWithHinges member with two hinge
+  sections gets the colour of the pair. Members with no section (trusses) keep
+  the frame colour, listed as "(no section)".
+- **By Material** — one colour per material, followed through the section: a
+  reinforced-concrete fibre section is "concrete + steel". A truss is coloured by
+  its own material.
+- **By Group** — each group in its own colour (Define → Groups); an element in
+  several groups takes the first one in the list, and one in none is "(no
+  group)".
+
+The selection is still drawn in the selection colour on top of the categories.
+The choice is saved with the project, like the other display settings of the
+main viewport.
+""",
+            "view.colors",
+        ),
+        "view.rotate": _t(
+            "View → Rotate",
+            "View",
+            "Turn the point of view a step at a time, or keep it turning.",
+            """
+The model does not move: the camera turns about the point it looks at.
+
+# Entries
+- **Rotate Left / Right** (Alt+Left / Alt+Right) — 15° about the vertical axis.
+- **Tilt Up / Down** (Alt+Up / Alt+Down) — 15° about the horizontal screen axis.
+- **Spin** — keeps turning about the vertical axis until you switch it off, to
+  present the model. Zoom and the other view buttons still work while it turns.
+
+Turning the camera leaves a plan or elevation view (Top, Front, Right), so the
+working plane and the Level list are cleared, as Isometric does; pick the plane
+view again to draw on a level. The buttons are also in the View toolbar.
+""",
+            "view.iso",
+        ),
         "options.units": _t(
             "Options → Set Display Units",
             "Options",
@@ -4453,6 +4574,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_assign_trapezoidal_load": "assign.trapezoidal_load",
     "_act_assign_temperature_load": "assign.temperature_load",
     "_act_assign_hinge": "assign.hinge",
+    "_act_assign_wall": "assign.wall",
     # ── Analyze ─────────────────────────────────────────────────────
     "_act_case_manager": "analyze.cases",
     "_act_run": "analyze.run",
@@ -4506,6 +4628,16 @@ ACTION_TOPICS: dict[str, str] = {
     # ── Options and Help ────────────────────────────────────────────
     "_act_set_units": "options.units",
     "_act_solver_settings": "options.solver",
+    "_act_delete_loads": "edit.delete_loads",
+    "_act_color_none": "view.color_by",
+    "_act_color_section": "view.color_by",
+    "_act_color_material": "view.color_by",
+    "_act_color_group": "view.color_by",
+    "_act_rotate_left": "view.rotate",
+    "_act_rotate_right": "view.rotate",
+    "_act_rotate_up": "view.rotate",
+    "_act_rotate_down": "view.rotate",
+    "_act_spin": "view.rotate",
     "_act_help_contents": "help.contents",
     "_act_about": "help.about",
 }
