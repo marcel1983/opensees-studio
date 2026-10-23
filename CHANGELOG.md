@@ -9,6 +9,24 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Added
+
+- **File → Import → SAP2000 Text (.s2k / .$2k) and File → Export → SAP2000
+  Text.** Reads a model saved as SAP2000 text tables as a new project: joints and
+  restraints, global grid lines, frames with their sections (rectangular, I,
+  pipe, box/tube and general, with property modifiers), materials, local-axis
+  angles, end releases and partial fixity, load patterns with their self weight,
+  joint forces, distributed (uniform, trapezoidal, partial, projected) and point
+  frame loads, linear static cases (a pattern used with a factor becomes a scaled
+  copy), combinations, and four-node shells. Values are scaled from the file's
+  `CurrUnits` to the nearest unit system, a frame in the X-Z plane with only UX,
+  UZ and RY active becomes a 2D model, and SAP2000's local 2 and 3 are mapped
+  onto OpenSees' axes per member. Tables it does not read are listed by name in
+  the log. The export writes the same tables, so an exported file imports back
+  to the same model, and reports what it leaves out. Written from the text
+  format alone, without CSI software; SAP2000 is a trademark of Computers and
+  Structures, Inc.
+
 ## [0.0.23] — 2026-10-23
 
 Display and editing tools: the view rotates a step at a time or spins, members
