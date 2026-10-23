@@ -26,6 +26,7 @@ from opensees_studio.core import (
     ElasticBeamColumn,
     ForceBeamColumn,
     FrameMember,
+    MVLEMElement,
     NodalLoad,
     PlainLoadPattern,
     PointElementLoad,
@@ -38,6 +39,7 @@ from opensees_studio.core import (
     ZeroLengthElement,
 )
 from opensees_studio.core.area_loads import AreaLoadError, pattern_distributed_loads
+from opensees_studio.core.color_by import Categories, element_categories
 from opensees_studio.core.diaphragms import constrained_node_ids
 from opensees_studio.core.frame_members import member_layout
 from opensees_studio.core.geometry.local_axes import frame_local_axes
@@ -65,6 +67,9 @@ _TRIAD_COLORS: tuple[str, str, str] = ("#d0402f", "#2f9e4f", "#2f5fcf")
 _TRIAD_LENGTH_FRACTION = 0.08
 
 #: Elements drawn as surfaces (a filled face) rather than as lines.
+#: The Color By legend lists at most this many categories.
+LEGEND_MAX_ENTRIES = 15
+
 _SURFACE_CLASSES = (
     QuadElement,
     ShellMITC4Element,
@@ -79,6 +84,7 @@ _FRAME_CLASSES = (
     TrussElement,
     CorotTrussElement,
     ZeroLengthElement,
+    MVLEMElement,
     *BEARING_CLASSES,
 )
 
@@ -192,6 +198,7 @@ class ModelRenderer:
             self._build_frame_polydata(project)
         if self._settings.show_surfaces:
             self._build_surface_polydata(project)
+        self._build_color_legend(project)
         if self._settings.show_supports:
             self._build_supports(project)
         if self._settings.show_constraints:
@@ -283,21 +290,23 @@ class ModelRenderer:
             self._apply_node_states(states)
 
         if self._frame_pd is not None and self._frame_ids_ordered:
-            states = np.zeros(len(self._frame_ids_ordered), dtype=np.int8)
+            # Each cell keeps its Color By category; a selected one takes the
+            # last entry of the colour table.
+            frame_states = self._frame_base.copy()
             for eid in element_ids:
                 row = self._frame_id_to_row.get(eid)
                 if row is not None:
-                    states[row] = 1
-            self._frame_pd.cell_data["_oss_state"] = states
+                    frame_states[row] = self._frame_selected
+            self._frame_pd.cell_data["_oss_state"] = frame_states
             self._frame_pd.Modified()
 
         if self._surface_pd is not None and self._surface_ids_ordered:
-            states = np.zeros(len(self._surface_ids_ordered), dtype=np.int8)
+            surface_states = self._surface_base.copy()
             for eid in element_ids:
                 row = self._surface_id_to_row.get(eid)
                 if row is not None:
-                    states[row] = 1
-            self._surface_pd.cell_data["_oss_state"] = states
+                    surface_states[row] = self._surface_selected
+            self._surface_pd.cell_data["_oss_state"] = surface_states
             self._surface_pd.Modified()
 
     def set_mode(self, mode: RendererMode, deformation: DeformationSource | None = None) -> None:
@@ -438,16 +447,20 @@ class ModelRenderer:
         pd.lines = np.array(cells, dtype=np.int64)
         pd.cell_data["_oss_id"] = np.array(ids, dtype=np.int64)
         pd.cell_data["_oss_kind"] = np.array(["element"] * len(ids), dtype=object)
-        pd.cell_data["_oss_state"] = np.zeros(len(ids), dtype=np.int8)
+        categories = self._categories(project, self._settings.frame_color)
+        base = np.array([categories.index.get(eid, 0) for eid in ids], dtype=np.int32)
+        pd.cell_data["_oss_state"] = base.copy()
 
         self._frame_pd = pd
         self._frame_ids_ordered = ids
         self._frame_id_to_row = {eid: i for i, eid in enumerate(ids)}
+        self._frame_base = base
+        self._frame_selected = len(categories.colors)
         self._frame_actor = self._plotter.add_mesh(
             pd,
             scalars="_oss_state",
-            cmap=self._settings.frame_lut,
-            clim=[0, 1],
+            cmap=[*categories.colors, self._settings.selected_color],
+            clim=[0, len(categories.colors)],
             show_scalar_bar=False,
             line_width=3.0,
             pickable=True,
@@ -487,16 +500,20 @@ class ModelRenderer:
         pd.faces = np.array(cells, dtype=np.int64)
         pd.cell_data["_oss_id"] = np.array(ids, dtype=np.int64)
         pd.cell_data["_oss_kind"] = np.array(["element"] * len(ids), dtype=object)
-        pd.cell_data["_oss_state"] = np.zeros(len(ids), dtype=np.int8)
+        categories = self._categories(project, self._settings.surface_color)
+        base = np.array([categories.index.get(eid, 0) for eid in ids], dtype=np.int32)
+        pd.cell_data["_oss_state"] = base.copy()
 
         self._surface_pd = pd
         self._surface_ids_ordered = ids
         self._surface_id_to_row = {eid: i for i, eid in enumerate(ids)}
+        self._surface_base = base
+        self._surface_selected = len(categories.colors)
         self._surface_actor = self._plotter.add_mesh(
             pd,
             scalars="_oss_state",
-            cmap=self._settings.surface_lut,
-            clim=[0, 1],
+            cmap=[*categories.colors, self._settings.selected_color],
+            clim=[0, len(categories.colors)],
             show_scalar_bar=False,
             show_edges=True,
             edge_color="#5b6b7c",
@@ -1218,8 +1235,37 @@ class ModelRenderer:
         self._rebuild_labels()
 
     # ── helpers ─────────────────────────────────────────────────────
+    def _categories(self, project: Project, default_color: str) -> Categories:
+        """The View → Color By categories of the elements, ``default_color`` for "none"."""
+        return element_categories(project, self._settings.color_by, default_color)
+
+    def _build_color_legend(self, project: Project) -> None:
+        """A legend of the Color By categories the viewport shows (none for one colour)."""
+        if self._settings.color_by == "none":
+            return
+        shown = set(self._frame_ids_ordered) | set(self._surface_ids_ordered)
+        categories = self._categories(project, self._settings.frame_color)
+        used = sorted({categories.index[eid] for eid in shown if eid in categories.index})
+        if not used:
+            return
+        entries = [[categories.labels[k], categories.colors[k]] for k in used]
+        if len(entries) > LEGEND_MAX_ENTRIES:
+            entries = [*entries[: LEGEND_MAX_ENTRIES - 1], ["…", "#ffffff"]]
+        self._legend_actor = self._plotter.add_legend(
+            entries,
+            bcolor="#ffffff",
+            border=True,
+            loc="upper right",
+            face="rectangle",
+            size=(0.24, min(0.05 * len(entries), 0.6)),
+        )
+
     def _teardown_all(self) -> None:
         self._clear_label_actors()
+        if getattr(self, "_legend_actor", None) is not None:
+            with contextlib.suppress(Exception):
+                self._plotter.remove_legend(render=False)
+            self._legend_actor = None
         for a in (self._node_actor, self._frame_actor, self._surface_actor):
             if a is not None:
                 with contextlib.suppress(Exception):

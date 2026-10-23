@@ -17,7 +17,7 @@ from collections.abc import Callable
 from typing import Any
 
 import numpy as np
-from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, Signal
+from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QMouseEvent, QPainter, QPen, QResizeEvent
 from PySide6.QtWidgets import QLabel, QToolTip, QWidget
 from pyvistaqt import QtInteractor
@@ -820,6 +820,44 @@ class ModelCanvas(QtInteractor):
     def hidden(self) -> tuple[frozenset[int], frozenset[int]]:
         """``(nodes, elements)`` hidden in this viewport."""
         return self._renderer.hidden
+
+    #: One step of View → Rotate, in degrees.
+    ROTATE_STEP_DEG = 15.0
+    #: Spin: degrees per tick and tick interval (ms) — about 50 degrees a second.
+    SPIN_STEP_DEG = 2.0
+    SPIN_INTERVAL_MS = 40
+
+    def orbit(self, azimuth: float = 0.0, elevation: float = 0.0) -> None:
+        """Turn the camera about the focal point: ``azimuth`` about the view-up
+        axis (left/right), ``elevation`` about the horizontal screen axis (up/down).
+        The model does not move; only the point of view does."""
+        camera = self.camera
+        if camera is None:
+            return
+        if azimuth:
+            camera.Azimuth(azimuth)
+        if elevation:
+            camera.Elevation(elevation)
+            camera.OrthogonalizeViewUp()
+        self.renderer.ResetCameraClippingRange()
+        self.render()
+
+    def set_spinning(self, on: bool) -> None:
+        """Turn the view continuously about the vertical axis until switched off."""
+        timer = getattr(self, "_spin_timer", None)
+        if timer is None:
+            timer = self._spin_timer = QTimer(self)
+            timer.setInterval(self.SPIN_INTERVAL_MS)
+            timer.timeout.connect(lambda: self.orbit(azimuth=self.SPIN_STEP_DEG))
+        if on:
+            timer.start()
+        else:
+            timer.stop()
+
+    @property
+    def is_spinning(self) -> bool:
+        timer = getattr(self, "_spin_timer", None)
+        return bool(timer is not None and timer.isActive())
 
     def zoom_in(self, factor: float = 1.25) -> None:
         """Dolly the camera towards the model."""

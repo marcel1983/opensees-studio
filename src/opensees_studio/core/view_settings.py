@@ -16,8 +16,14 @@ customise live here so a view can be themed without touching the others.
 from __future__ import annotations
 
 import re
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from opensees_studio.core._base import omit_when_default
+
+#: View → Color By: one colour, or a colour per section, material or group.
+ColorBy = Literal["none", "section", "material", "group"]
 
 _HEX_COLOUR = re.compile(r"^#[0-9a-fA-F]{6}$")
 
@@ -40,6 +46,10 @@ class ViewSettings(BaseModel):
     show_node_labels: bool = False
     show_element_labels: bool = False
     show_extruded: bool = False
+    color_by: ColorBy = Field(
+        default="none",
+        description="Paint frames and shells by section, material or group (core.color_by).",
+    )
 
     # ── colours ──────────────────────────────────────────────────────
     background_top: str = Field(default="#dbe2ef")
@@ -63,6 +73,8 @@ class ViewSettings(BaseModel):
         if not _HEX_COLOUR.match(value):
             raise ValueError(f"expected a #rrggbb colour, got {value!r}")
         return value
+
+    serialize_without_defaults = omit_when_default("color_by")
 
     def with_changes(self, **changes: object) -> ViewSettings:
         """Return a copy with ``changes`` applied (the instance is immutable)."""

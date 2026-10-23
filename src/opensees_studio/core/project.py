@@ -36,6 +36,7 @@ from opensees_studio.core.geometry import (
     CoordinateGridSystem,
     Element,
     GridSystem,
+    MVLEMElement,
     Node,
     TripleFrictionPendulumElement,
     default_global_system,
@@ -411,6 +412,14 @@ class Project(BaseModel):
                         f"Element {el.id} ({el.type}) needs t_material_id and my_material_id "
                         "in a 3D model."
                     )
+            if isinstance(el, MVLEMElement):
+                if self.ndm != 2 or self.ndf != 3:
+                    problems.append(
+                        f"Element {el.id} (MVLEM) needs a 2D model with 3 DOF per joint."
+                    )
+                for m in el.material_reference_ids:
+                    if m not in material_ids:
+                        problems.append(f"Element {el.id} refers to missing material {m}.")
             if isinstance(el, TripleFrictionPendulumElement):
                 if self.ndm != 3 or self.ndf != 6:
                     problems.append(
