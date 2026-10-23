@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+import sys
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,7 @@ from PySide6.QtWidgets import QMessageBox
 
 from opensees_studio.core import Node
 from opensees_studio.services import batch, engines, load_project, save_project
+from opensees_studio.viewmodels import batch_runner
 from opensees_studio.views.dialogs.batch_run import BatchRunDialog
 from opensees_studio.views.main_window import MainWindow
 
@@ -77,16 +79,23 @@ def test_named_cases_run_only_those(qtbot, tmp_path) -> None:  # type: ignore[no
 
 
 @pytest.mark.gui
-def test_cancel_stops_the_running_file_and_drops_the_queue(qtbot, tmp_path) -> None:  # type: ignore[no-untyped-def]
-    paths = _copy(tmp_path, "portal_frame", "cantilever")
+def test_cancel_stops_the_running_file_and_drops_the_queue(qtbot, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    # A child that cannot finish on its own: a real solve may exit 0 before the
+    # cancel reaches it (on Windows terminate() only kills after 1.5 s), and an
+    # exit 0 is a finished job by design (services.batch.finish_job).
+    sleeper = [sys.executable, "-c", "import time; time.sleep(120)"]
+    monkeypatch.setattr(batch_runner, "analysis_cli_command", lambda: sleeper)
+    paths = _copy(tmp_path, "cantilever", "portal_frame")
     dlg = BatchRunDialog()
     qtbot.addWidget(dlg)
     dlg.add_paths(paths)
 
     with qtbot.waitSignal(dlg.runner.finished, timeout=60_000):
-        dlg.start()
+        with qtbot.waitSignal(dlg.runner.jobStarted, timeout=10_000):
+            dlg.start()
         dlg.reject()  # refused while running
         assert dlg.runner.is_running
+        assert _column(dlg, 1) == ["Running", "Queued"]
         dlg.runner.cancel()
 
     assert _column(dlg, 1) == ["Cancelled", "Cancelled"]
