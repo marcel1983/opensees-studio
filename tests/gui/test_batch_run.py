@@ -84,7 +84,7 @@ def test_cancel_stops_the_running_file_and_drops_the_queue(qtbot, tmp_path, monk
     # cancel reaches it (on Windows terminate() only kills after 1.5 s), and an
     # exit 0 is a finished job by design (services.batch.finish_job).
     sleeper = [sys.executable, "-c", "import time; time.sleep(120)"]
-    monkeypatch.setattr(batch_runner, "analysis_cli_command", lambda: sleeper)
+    monkeypatch.setattr(batch_runner, "analysis_cli_command", sleeper.copy)
     paths = _copy(tmp_path, "cantilever", "portal_frame")
     dlg = BatchRunDialog()
     qtbot.addWidget(dlg)
