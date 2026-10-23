@@ -11,6 +11,13 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **View → Color By: paint frames and shells by section, by material or by
+  group.** Each category gets its own colour (groups keep the colour they were
+  given in Define → Groups) and a legend in the viewport's corner names them.
+  Material follows the section's fibres, so a reinforced-concrete member reads
+  "concrete + steel"; members with no section, material or group keep the
+  ordinary colour. The selection still shows on top. Saved with the project's
+  view settings; a project that keeps a single colour saves byte-identical.
 - **View → Rotate, and rotate buttons in the View toolbar.** Rotate Left / Right
   (Alt+Left / Alt+Right) turn the point of view 15° about the vertical axis, Tilt
   Up / Down (Alt+Up / Alt+Down) 15° about the horizontal screen axis, and Spin

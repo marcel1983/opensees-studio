@@ -3985,6 +3985,33 @@ available (or not) whatever engine you choose.
 """,
             "analyze.run",
         ),
+        "view.color_by": _t(
+            "View → Color By",
+            "View",
+            "Paint frames and shells by section, by material or by group.",
+            """
+Each viewport chooses its own colouring; a legend in its upper-right corner says
+which colour is which (at most 15 entries are listed).
+
+# Entries
+- **Single Colour** — every frame in the frame colour, every shell in the shell
+  colour (View → Colors…).
+- **By Section** — one colour per section; a BeamWithHinges member with two hinge
+  sections gets the colour of the pair. Members with no section (trusses) keep
+  the frame colour, listed as "(no section)".
+- **By Material** — one colour per material, followed through the section: a
+  reinforced-concrete fibre section is "concrete + steel". A truss is coloured by
+  its own material.
+- **By Group** — each group in its own colour (Define → Groups); an element in
+  several groups takes the first one in the list, and one in none is "(no
+  group)".
+
+The selection is still drawn in the selection colour on top of the categories.
+The choice is saved with the project, like the other display settings of the
+main viewport.
+""",
+            "view.colors",
+        ),
         "view.rotate": _t(
             "View → Rotate",
             "View",
@@ -4561,6 +4588,10 @@ ACTION_TOPICS: dict[str, str] = {
     # ── Options and Help ────────────────────────────────────────────
     "_act_set_units": "options.units",
     "_act_solver_settings": "options.solver",
+    "_act_color_none": "view.color_by",
+    "_act_color_section": "view.color_by",
+    "_act_color_material": "view.color_by",
+    "_act_color_group": "view.color_by",
     "_act_rotate_left": "view.rotate",
     "_act_rotate_right": "view.rotate",
     "_act_rotate_up": "view.rotate",

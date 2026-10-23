@@ -585,6 +585,22 @@ class MainWindow(QMainWindow):
             action.setToolTip(tip)
         self._act_toggle_parallel = QAction("&Parallel projection", self, checkable=True)
         self._act_show_extruded = QAction("Show &Extruded Sections", self, checkable=True)
+        # View → Color By: one colour, or a colour per section, material or group.
+        self._act_color_none = QAction("&Single Colour", self, checkable=True)
+        self._act_color_section = QAction("By &Section", self, checkable=True)
+        self._act_color_material = QAction("By &Material", self, checkable=True)
+        self._act_color_group = QAction("By &Group", self, checkable=True)
+        self._color_by_actions = {
+            "none": self._act_color_none,
+            "section": self._act_color_section,
+            "material": self._act_color_material,
+            "group": self._act_color_group,
+        }
+        self._color_by_group = QActionGroup(self)
+        self._color_by_group.setExclusive(True)
+        for action in self._color_by_actions.values():
+            self._color_by_group.addAction(action)
+        self._act_color_none.setChecked(True)
         self._act_show_grids = QAction("Show &Grids", self, checkable=True, checked=True)
         self._act_grid_line_view = QAction("Grid &Line View…", self)
         self._act_show_all_objects = QAction("Show &All Objects", self)
@@ -833,6 +849,8 @@ class MainWindow(QMainWindow):
         m_view.addSeparator()
         m_view.addAction(self._act_toggle_parallel)
         m_view.addAction(self._act_show_extruded)
+        m_color = m_view.addMenu("&Color By")
+        m_color.addActions(list(self._color_by_actions.values()))
         m_view.addSeparator()
         # The model's own grid (a project entity) keeps its place next to the
         # other view furniture; the per-viewport toggles live in Visibility.
@@ -1287,6 +1305,8 @@ class MainWindow(QMainWindow):
         # "Show Extruded Sections" and its Visibility twin are the same state,
         # so both drive it and _sync_visibility_actions keeps both ticked.
         self._act_show_extruded.toggled.connect(self._on_vis_extruded)
+        for mode, action in self._color_by_actions.items():
+            action.triggered.connect(lambda _=False, mode=mode: self._on_color_by(mode))
         self._act_vis_extruded.toggled.connect(self._on_vis_extruded)
         for action, field in (
             (self._act_vis_grids, "show_grids"),
@@ -2622,6 +2642,10 @@ class MainWindow(QMainWindow):
             action.blockSignals(True)
             action.setChecked(checked)
             action.blockSignals(False)
+        color_by = self._color_by_actions[settings.color_by]
+        color_by.blockSignals(True)
+        color_by.setChecked(True)
+        color_by.blockSignals(False)
 
     def _on_visibility_toggle(self, field: str, checked: bool) -> None:
         """Apply one Visibility-menu toggle to the viewport."""
@@ -2636,6 +2660,10 @@ class MainWindow(QMainWindow):
         """Element labels, keeping the Display Options dialog's state in step."""
         self._show_element_labels = checked
         self._apply_view_settings(show_element_labels=checked)
+
+    def _on_color_by(self, mode: str) -> None:
+        """View → Color By: paint frames and shells by section, material or group."""
+        self._apply_view_settings(color_by=mode)
 
     def _on_vis_extruded(self, checked: bool) -> None:
         """Show Extruded Sections, from either of its two actions."""
