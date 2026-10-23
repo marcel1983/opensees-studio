@@ -9,6 +9,14 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.23] — 2026-10-23
+
+Display and editing tools: the view rotates a step at a time or spins, members
+and shells can be coloured by section, material or group, loads can be deleted
+by type, and Show Extruded Sections draws each member's real cross section. New
+modelling: reinforced concrete walls as MVLEM macro-elements and the ConcreteCM
+(Chang-Mander) concrete law.
+
 ### Added
 
 - **Edit → Delete Loads.** Removes loads by type — joint forces, imposed
