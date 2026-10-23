@@ -111,6 +111,7 @@ from opensees_studio.core.sections import SHELL_SECTION_CLASSES
 from opensees_studio.core.self_weight import section_weight_per_length
 from opensees_studio.core.view_settings import ViewSettings
 from opensees_studio.services import PROJECT_FILE_SUFFIX, engines
+from opensees_studio.services.batch import StoredResults, stored_results
 from opensees_studio.services.combination import MissingCaseResultsError
 from opensees_studio.services.deformation import (
     linear_static_auto_scale,
@@ -128,6 +129,7 @@ from opensees_studio.services.element_forces import (
     auto_scale as force_diagram_auto_scale,
 )
 from opensees_studio.services.opensees_script import case_label, export_script
+from opensees_studio.services.result_store import load_results
 from opensees_studio.services.results import (
     CombinationResults,
     InfluenceLineResults,
@@ -202,6 +204,7 @@ from opensees_studio.views.dialogs.area_loads import (
     SurfaceLoadDialog,
 )
 from opensees_studio.views.dialogs.assign_springs import AssignSpringsDialog
+from opensees_studio.views.dialogs.batch_run import BatchRunDialog
 from opensees_studio.views.dialogs.buildings import (
     AssignDiaphragmDialog,
     AssignRigidLinkDialog,
@@ -418,6 +421,7 @@ class MainWindow(QMainWindow):
         self._act_export_script = QAction("OpenSees &script (.py)…", self)
         self._act_export_ifc = QAction("&IFC (.ifc)…", self)
         self._act_export_report = QAction("&Report (HTML / PDF)…", self)
+        self._act_run_batch = QAction("Run &Batch…", self)
         self._act_quit = QAction("&Quit", self, shortcut=QKeySequence.StandardKey.Quit)
 
         # Edit (created from QUndoStack so text auto-tracks "Undo Add 4 nodes" etc.)
@@ -689,6 +693,8 @@ class MainWindow(QMainWindow):
         m_export.addAction(self._act_export_script)
         m_export.addAction(self._act_export_ifc)
         m_export.addAction(self._act_export_report)
+        m_file.addSeparator()
+        m_file.addAction(self._act_run_batch)
         m_file.addSeparator()
         m_file.addAction(self._act_quit)
 
@@ -1120,6 +1126,7 @@ class MainWindow(QMainWindow):
         self._act_export_script.triggered.connect(self._on_export_script)
         self._act_export_ifc.triggered.connect(self._on_export_ifc)
         self._act_export_report.triggered.connect(self._on_export_report)
+        self._act_run_batch.triggered.connect(self._on_run_batch)
         self._act_quit.triggered.connect(self._on_quit)
         self._act_about.triggered.connect(self._on_about)
         self._act_help_contents.triggered.connect(self._on_help_contents)
@@ -1407,6 +1414,7 @@ class MainWindow(QMainWindow):
         if snapshot is None:
             self._apply_project_view_settings()
             self._confirm_custom_commands()
+            self._offer_stored_results()
             return True
         if self._ask_restore_snapshot(snapshot):
             try:
@@ -1419,7 +1427,57 @@ class MainWindow(QMainWindow):
             self._log(f"Discarded {snapshot.name}.")
         self._apply_project_view_settings()
         self._confirm_custom_commands()
+        self._offer_stored_results()
         return True
+
+    def _offer_stored_results(self) -> None:
+        """Offer the results a batch stored for this model, so nothing has to run again."""
+        stored = stored_results(self._vm.path, self._vm.project)
+        if stored is None:
+            return
+        answer = QMessageBox.question(
+            self,
+            "Stored results",
+            f"Results of {len(stored.entries)} case(s) from a batch run "
+            f"({stored.finished_at or 'time unknown'}) are stored for this model, and the "
+            "model has not changed since.\n\nLoad them to view without running again?\n\n"
+            f"Folder: {stored.out_dir}",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            self.load_stored_results(stored)
+
+    def load_stored_results(self, stored: StoredResults) -> int:
+        """Load every case of ``stored`` as if it had just run; show the last one.
+
+        They are already in the results database, so nothing is recorded again.
+        Returns how many cases loaded.
+        """
+        loaded = []
+        for entry in stored.entries:
+            try:
+                results = load_results(entry, stored.out_dir)
+            except Exception as exc:
+                self._log(
+                    f"Warning: stored results of case {entry.get('case_id')} unreadable: {exc}"
+                )
+                continue
+            self._keep_case_results(results)
+            loaded.append(results)
+        if loaded:
+            self._display_results(loaded[-1])
+            self._log(f"Loaded {len(loaded)} stored case result(s) from {stored.out_dir}.")
+        return len(loaded)
+
+    def _on_run_batch(self) -> None:
+        """File → Run Batch…"""
+        start_dir = self._vm.path.parent if self._vm.path is not None else None
+        dlg = BatchRunDialog(self, start_dir=start_dir)
+        try:
+            dlg.exec()
+        finally:
+            dlg.deleteLater()
 
     def _confirm_custom_commands(self) -> None:
         """A file's custom Python blocks run only once the user trusts them."""
@@ -4494,12 +4552,15 @@ class MainWindow(QMainWindow):
 
     def _on_case_finished(self, results: object) -> None:
         """Keep each case result of a run for the load combinations."""
+        self._keep_case_results(results)
+        self._record_case_results(results)
+
+    def _keep_case_results(self, results: object) -> None:
         if self._vm.project is not None and not self._case_results.put(self._vm.project, results):
             # Modal, pushover and transient results: kept for the report only.
             case_id = getattr(results, "case_id", None)
             if case_id is not None:
                 self._report_extra[case_id] = (model_fingerprint(self._vm.project), results)
-        self._record_case_results(results)
 
     # ── what the viewport is showing ────────────────────────────────
     def _caption_for(self, results: object) -> str:
@@ -5677,6 +5738,8 @@ class MainWindow(QMainWindow):
         opensees = self._opensees.available
         self._act_run.setEnabled(solver)
         self._act_run.setStatusTip("" if solver else self._solver.summary())
+        self._act_run_batch.setEnabled(solver)
+        self._act_run_batch.setStatusTip("" if solver else self._solver.summary())
         # The Material Tester and the stability check call OpenSees itself,
         # whatever engine runs the cases.
         self._act_material_tester.setEnabled(opensees)

@@ -9,6 +9,19 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Added
+
+- **File → Run Batch…: solve many projects unattended and view the results
+  later.** Add files or a folder, pick all cases or cases by name, choose how
+  many files solve at the same time, and follow a progress row per file (with
+  Cancel). Each project keeps its results beside it
+  (`<project>_batch_results/` and `<project>_results.sqlite`), and File → Open
+  offers to load them without running again while the model is unchanged. A
+  summary with the status, time and error of each file is written as
+  `batch_summary.json` and `batch_summary.csv`. The same from a terminal:
+  `python -m opensees_studio.batch models/ --cases all --jobs 4` (`--batch` in a
+  packaged build). The engine chosen in Options → Solver solves every file.
+
 ## [0.0.23] — 2026-10-23
 
 Display and editing tools: the view rotates a step at a time or spins, members

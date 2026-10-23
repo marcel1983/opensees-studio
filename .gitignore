@@ -69,3 +69,6 @@ examples/ozan_results/
 
 # Results databases a run writes next to a bundled example
 examples/*_results.sqlite
+# Summary File → Run Batch / python -m opensees_studio.batch writes
+batch_summary.json
+batch_summary.csv

@@ -39,6 +39,10 @@ agrega una interfaz visual para:
   aparte).
 - Ver los resultados: deformada, modos, diagramas de esfuerzos, curvas pushover,
   historias en el tiempo, lazos de histéresis, tablas de pisos.
+- Correr muchos archivos en lote (**File → Run Batch…**, o
+  `python -m opensees_studio.batch carpeta/ --jobs 4`): cada proyecto guarda
+  sus resultados al lado y, al abrirlo después, se pueden ver sin volver a
+  calcular. Se escribe un resumen `batch_summary.json` / `.csv`.
 - Guardar el modelo en un único archivo JSON `.osmodel` que vuelve a cargarse
   idéntico (comparable en Git, programable desde Python).
 
