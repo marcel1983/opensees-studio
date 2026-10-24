@@ -189,6 +189,11 @@ These are non-obvious things that are easy to break if you don't know:
   displacements. They are peak magnitudes; `services.combination.case_bounds`
   turns them into ±peak. The load uses nodal mass only (as the participation
   factors do), not element density.
+- **No SAP2000-generated file enters the repository.** The `.s2k` files in
+  `tests/fixtures/s2k` are hand-written from the table format, and a test builds
+  its own text inline. A real export is used locally only, to check a table's
+  columns and fields, and is never copied in: the clean-room provenance of
+  `services/sap2000_text.py` depends on it.
 
 ## Dependency split
 

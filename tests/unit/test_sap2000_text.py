@@ -28,6 +28,7 @@ from opensees_studio.core.loads import (
     TrapezoidalElementLoad,
     UniformElementLoad,
 )
+from opensees_studio.core.mass_source import MassSource
 from opensees_studio.core.project import Project, ProjectMeta
 from opensees_studio.core.sections import (
     ElasticMembranePlateSection,
@@ -224,8 +225,11 @@ def test_portal_loads_cases_and_combinations() -> None:
     assert env.terms[0] == CombinationTerm(source="combination", ref_id=1)
     # What did not come across is reported, never silently dropped.
     assert imported.dropped["LinModal load case"] == 1
-    assert imported.unsupported_tables == {"JOINT ADDED MASS ASSIGNMENTS": 1}
-    assert "Tables not read: JOINT ADDED MASS ASSIGNMENTS (1)" in imported.summary()
+    # The added mass at joint 2 is kN.s2/m in a 2D model: MX survives, MY is reported.
+    node2 = next(n for n in project.nodes if n.id == 2)
+    assert node2.mass == pytest.approx((1000.0, 0.0, 0.0, 0.0, 0.0, 0.0))
+    assert imported.dropped["out-of-plane added mass component"] == 1
+    assert not imported.unsupported_tables
     grid = project.coord_systems[0].grid
     assert [(g.id, g.ordinate) for g in grid.x_grid_lines] == [("A", 0.0), ("B", 6.0)]
 
@@ -313,6 +317,98 @@ def test_projected_and_local_loads(tmp_path: Path) -> None:
     assert total == pytest.approx(2000 * 3 / 5)
 
 
+# ──────────────────────────── joint masses and springs ────────────────────────────
+_MASS_SPRINGS = """\
+TABLE:  "JOINT ADDED MASS ASSIGNMENTS"
+   Joint=B   CoordSys="Joint Local"   Mass1=1   Mass2=2   Mass3=5555   MMI1=2   MMI2=3   MMI3=4
+TABLE:  "JOINT SPRING ASSIGNMENTS 1 - UNCOUPLED"
+   Joint=A   CoordSys=Local   U1=12   U2=3   U3=222   R1=5   R2=6   R3=7
+"""
+
+
+def test_added_masses_and_springs_are_scaled_to_the_project(tmp_path: Path) -> None:
+    imported = import_s2k(_cantilever(tmp_path, units="Kgf, m, C", extra=_MASS_SPRINGS))
+    node_a, node_b = imported.project.nodes
+    kgf = 9.80665  # 1 kgf.s2/m is 1 kg, and 1 kgf.m.s2 is 1 kg.m2
+    assert node_b.mass == pytest.approx((kgf, 2 * kgf, 5555 * kgf, 2 * kgf, 3 * kgf, 4 * kgf))
+    assert node_a.spring == pytest.approx((12 * kgf, 3 * kgf, 222 * kgf, 5 * kgf, 6 * kgf, 7 * kgf))
+    assert not imported.dropped and not imported.unsupported_tables
+
+
+def test_an_all_zero_joint_assignment_is_not_a_mass(tmp_path: Path) -> None:
+    extra = (
+        'TABLE:  "JOINT ADDED MASS ASSIGNMENTS"\n'
+        '   Joint=B   CoordSys="Joint Local"   Mass1=0   Mass2=0   Mass3=0 _\n'
+        "      MMI1=0   MMI2=0   MMI3=0\n"
+        'TABLE:  "JOINT SPRING ASSIGNMENTS 1 - UNCOUPLED"\n'
+        "   Joint=A   CoordSys=Local   U1=0   U2=0   U3=0   R1=0   R2=0   R3=0\n"
+    )
+    imported = import_s2k(_cantilever(tmp_path, extra=extra))
+    assert all(not any(n.mass) for n in imported.project.nodes)
+    assert all(not n.has_spring for n in imported.project.nodes)
+    assert not imported.dropped
+
+
+def test_joint_assignments_on_a_missing_joint_are_reported(tmp_path: Path) -> None:
+    extra = _MASS_SPRINGS.replace("Joint=B", "Joint=Z").replace("Joint=A", "Joint=Y")
+    imported = import_s2k(_cantilever(tmp_path, extra=extra))
+    assert imported.dropped["added mass on a missing joint"] == 1
+    assert imported.dropped["support spring on a missing joint"] == 1
+
+
+def test_a_2d_model_keeps_only_its_in_plane_mass_and_springs(tmp_path: Path) -> None:
+    dofs = (
+        'TABLE:  "ACTIVE DEGREES OF FREEDOM"\n   UX=Yes   UY=No   UZ=Yes   RX=No   RY=Yes   RZ=No\n'
+    )
+    imported = import_s2k(_cantilever(tmp_path, units="Kgf, m, C", extra=dofs + _MASS_SPRINGS))
+    assert imported.project.ndm == 2
+    node_a, node_b = imported.project.nodes
+    kgf = 9.80665
+    assert node_b.mass == pytest.approx((kgf, 0.0, 5555 * kgf, 0.0, 3 * kgf, 0.0))
+    assert node_a.spring == pytest.approx((12 * kgf, 0.0, 222 * kgf, 0.0, 6 * kgf, 0.0))
+    assert imported.dropped["out-of-plane added mass component"] == 1
+    assert imported.dropped["out-of-plane support spring component"] == 1
+
+
+def test_rotated_joint_axes_leave_the_assignments_unread(tmp_path: Path) -> None:
+    extra = (
+        'TABLE:  "JOINT LOCAL AXES ASSIGNMENTS 1 - TYPICAL"\n   Joint=B   Angle=30\n'
+        + _MASS_SPRINGS
+    )
+    imported = import_s2k(_cantilever(tmp_path, extra=extra))
+    assert imported.dropped["added mass in rotated joint local axes"] == 1
+    assert imported.dropped["support spring in rotated joint local axes"] == 1
+    assert all(not any(n.mass) and not n.has_spring for n in imported.project.nodes)
+
+
+def test_a_negative_joint_mass_is_refused_with_its_line(tmp_path: Path) -> None:
+    extra = _MASS_SPRINGS.replace("Mass1=1", "Mass1=-1")
+    with pytest.raises(
+        Sap2000TextError,
+        match=r"JOINT ADDED MASS ASSIGNMENTS, line \d+\): an added mass must not be negative",
+    ):
+        import_s2k(_cantilever(tmp_path, extra=extra))
+
+
+def test_a_mass_source_that_excludes_masses_skips_the_table(tmp_path: Path) -> None:
+    extra = (
+        'TABLE:  "MASS SOURCE"\n'
+        "   MassSource=MSSSRC1   Elements=Yes   Masses=No   Loads=No   IsDefault=Yes\n"
+        + _MASS_SPRINGS
+    )
+    imported = import_s2k(_cantilever(tmp_path, extra=extra))
+    assert not any(any(n.mass) for n in imported.project.nodes)
+    assert any("excludes added joint masses" in note for note in imported.notes)
+    assert imported.project.nodes[0].has_spring  # the mass source does not touch springs
+
+
+def test_a_mass_source_with_loads_and_no_element_mass_is_reported(tmp_path: Path) -> None:
+    extra = 'TABLE:  "MASS SOURCE"\n   MassSource=MSSSRC1   Elements=No   Masses=Yes   Loads=Yes\n'
+    notes = " ".join(import_s2k(_cantilever(tmp_path, extra=extra)).notes)
+    assert "excludes element masses" in notes
+    assert "turns load patterns into mass" in notes
+
+
 # ──────────────────────────── writing ────────────────────────────
 def _totals(project: Project) -> dict[tuple[str, int], np.ndarray]:
     """Per pattern name and element, every frame load summed (distribution kept apart)."""
@@ -334,8 +430,8 @@ def _totals(project: Project) -> dict[tuple[str, int], np.ndarray]:
 
 def _assert_same_model(a: Project, b: Project) -> None:
     assert (a.ndm, a.meta.units) == (b.ndm, b.meta.units)
-    assert [(n.id, n.coords, n.restraint) for n in a.nodes] == [
-        (n.id, n.coords, n.restraint) for n in b.nodes
+    assert [(n.id, n.coords, n.restraint, n.mass, n.spring) for n in a.nodes] == [
+        (n.id, n.coords, n.restraint, n.mass, n.spring) for n in b.nodes
     ]
     assert len(a.elements) == len(b.elements)
     for ea, eb in zip(a.elements, b.elements, strict=True):
@@ -403,8 +499,13 @@ def _built_project() -> Project:
     return Project(
         meta=ProjectMeta(name="built", units=UnitSystem.SI_M_N),
         nodes=[
-            Node(id=1, coords=(0, 0, 0), restraint=(True,) * 6),
-            Node(id=2, coords=(0, 1, 3)),
+            Node(
+                id=1,
+                coords=(0, 0, 0),
+                restraint=(True,) * 6,
+                spring=(1e6, 2e6, 3e6, 4e6, 5e6, 6e6),
+            ),
+            Node(id=2, coords=(0, 1, 3), mass=(4.0, 5.0, 6.0, 7.0, 8.0, 9.0)),
             Node(id=3, coords=(4, 1, 3)),
         ],
         sections=[section],
@@ -445,12 +546,22 @@ def test_a_project_made_here_survives_the_trip() -> None:
 
 def test_the_export_reports_what_it_leaves_out() -> None:
     project = _built_project()
-    project.nodes[1].mass = (1.0, 1.0, 1.0, 0, 0, 0)
     project.analyses.append(StaticCase(id=2, name="push", pattern_ids=[1], n_steps=10))
     _, report = project_to_s2k(project)
-    assert report.skipped["joint mass"] == 1
+    # Added masses and springs are written now, so they are no longer in "skipped".
+    assert report.written["joint mass"] == 1
+    assert report.written["joint spring"] == 1
+    assert "joint mass" not in report.skipped and "joint spring" not in report.skipped
     assert report.skipped["Static analysis case"] == 1
     assert "Not written" in report.summary()
+
+
+def test_a_mass_source_is_reported_when_exporting() -> None:
+    project = _built_project()
+    project.mass_source = MassSource()
+    _, report = project_to_s2k(project)
+    assert report.skipped["mass source"] == 1
+    assert "mass source" in report.summary()
 
 
 def test_area_modifier_leaves_mass_and_weight_alone(tmp_path: Path) -> None:

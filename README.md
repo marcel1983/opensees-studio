@@ -260,14 +260,15 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   comes along; triangular areas and spectrum cases are not imported yet and are
   counted and reported.
   File → Import → SAP2000 Text (.s2k / .$2k) reads the text tables of a
-  SAP2000 model as a new project: joints, restraints, grid lines, frames with
-  their sections (rectangular, I, pipe, tube, general), materials, local-axis
-  angles and end releases, load patterns with joint, distributed and point
-  frame loads, linear static cases, combinations and four-node shells, scaled
-  from the file's `CurrUnits` to the nearest unit system. SAP2000's local 2 and
-  3 are mapped onto OpenSees' axes member by member, and every table it does not
-  read is named in the log. Written from the text format alone (SAP2000 is a
-  trademark of Computers and Structures, Inc.; no CSI software is used).
+  SAP2000 model as a new project: joints, restraints, added joint masses and
+  support springs, grid lines, frames with their sections (rectangular, I, pipe,
+  tube, general), materials, local-axis angles and end releases, load patterns
+  with joint, distributed and point frame loads, linear static cases,
+  combinations and four-node shells, scaled from the file's `CurrUnits` to the
+  nearest unit system. SAP2000's local 2 and 3 are mapped onto OpenSees' axes
+  member by member, and every table it does not read is named in the log.
+  Written from the text format alone (SAP2000 is a trademark of Computers and
+  Structures, Inc.; no CSI software is used).
 - **Design** — Design → Steel Frame Check (AISC 360-16, LRFD or ASD): every
   frame member whose section is a W, M, S or HP shape gets its tension (D2),
   compression (E3, E4, E7), flexure (F2, F3, F6), shear (G2, G6) and H1
