@@ -11,6 +11,21 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **SAP2000 text import: temperature loads, support settlements, frame added
+  mass and preloaded static cases.**
+  `FRAME LOADS - TEMPERATURE` becomes a `TemperatureLoad` with the material's
+  `A1`: the uniform change, a joint-pattern variation along the member (its mean
+  is used) and a gradient per unit length. `JOINT LOADS - GROUND DISPLACEMENT`
+  becomes an `ImposedDisplacement` on a restrained DOF; on a free or
+  spring-supported DOF it is counted in the report, because this program's
+  support spring has a fixed ground end. `FRAME ADDED MASS ASSIGNMENTS` is added
+  to the element's mass per length. A static case whose `InitialCond` names
+  another imported static case gets it as `preload_case_ids` (a new additive
+  field, omitted at its default, so existing files save unchanged) and the export
+  writes the name back. Found in SAP2000's example set: the six 1-002 temperature
+  cases match to 1e-16, the two restrained settlements (1-005a/c) to 5e-7 and
+  1-021's modal periods exactly.
+
 - **SAP2000 text import and export: response-spectrum cases.** A `LinRespSpec`
   case with a CQC or SRSS `ModalCombo` becomes a `ResponseSpectrumCase` on the
   file's first modal case, with its `U1..R3` direction, its `ConstDamp` and the

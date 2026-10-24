@@ -17,10 +17,11 @@ restraints, added joint masses and support springs, frames and their sections an
 materials (rectangular, I, pipe, tube or general properties; another shape by its
 properties), local-axis angles, end releases and partial fixity, load patterns
 with their self-weight multiplier, joint forces, distributed and point frame
-loads, linear static load cases, eigen modal cases, response-spectrum cases with
-their tabulated spectra, combinations, and four-node thin or thick shells with
-their sections. Every other table is counted in the import report, never dropped
-silently.
+loads, temperature loads, ground displacements on supports, frame added mass,
+linear static load cases (with the preload a case names), eigen modal cases,
+response-spectrum cases with their tabulated spectra, combinations, and four-node
+thin or thick shells with their sections. Every other table is counted in the
+import report, never dropped silently.
 
 Diagnostics. A record the reader cannot use names the table and the line it came
 from (``Frame 3 (CONNECTIVITY - FRAME, line 57): joint 'C' is not defined``), and
@@ -75,11 +76,13 @@ from opensees_studio.core.geometry.grid import (
 from opensees_studio.core.geometry.local_axes import frame_local_axes
 from opensees_studio.core.geometry.node import Node
 from opensees_studio.core.loads import (
+    ImposedDisplacement,
     LinearTimeSeries,
     NodalLoad,
     PlainLoadPattern,
     PointElementLoad,
     ResponseSpectrum,
+    TemperatureLoad,
     TrapezoidalElementLoad,
     UniformElementLoad,
 )
@@ -161,8 +164,12 @@ READ_TABLES: frozenset[str] = frozenset(
         "FRAME SECTION PROPERTIES 05 - NONPRISMATIC",
         "LOAD PATTERN DEFINITIONS",
         "JOINT LOADS - FORCE",
+        "JOINT LOADS - GROUND DISPLACEMENT",
+        "JOINT PATTERN ASSIGNMENTS",
         "FRAME LOADS - DISTRIBUTED",
         "FRAME LOADS - POINT",
+        "FRAME LOADS - TEMPERATURE",
+        "FRAME ADDED MASS ASSIGNMENTS",
         "LOAD CASE DEFINITIONS",
         "CASE - STATIC 1 - LOAD ASSIGNMENTS",
         "CASE - MODAL 1 - GENERAL",
@@ -574,6 +581,7 @@ class _Material:
     nu: float
     weight: float  # per volume, project units
     mass: float  # per volume, project units
+    alpha: float  # coefficient of thermal expansion, 1/degree
 
 
 class _Translator:
@@ -601,6 +609,12 @@ class _Translator:
         self.frames: dict[str, ElasticBeamColumn] = {}
         self.frame_ends: dict[str, tuple[str, str]] = {}
         self.angles: dict[str, float] = {}
+        #: Per frame: the thermal expansion coefficient of its material and any added mass.
+        self._frame_alpha: dict[str, float] = {}
+        self._added_mass: dict[str, float] = {}
+        self._added_mass_frames = 0
+        #: ``(pattern, joint) -> value`` of the joint patterns a temperature load varies with.
+        self._joint_patterns: dict[tuple[str, str], float] = {}
         self.shells: list[ShellMITC4Element] = []
         self.spectra: list[ResponseSpectrum] = []
         self._spectrum_ids: dict[tuple[str, float, float], int] = {}
@@ -815,6 +829,21 @@ class _Translator:
                 nu=nu,
                 weight=_number(row, "UnitWeight", where=where) * s.force / s.length**3,
                 mass=_number(row, "UnitMass", where=where) * s.density,
+                alpha=_number(row, "A1", 0.0, where=where),
+            )
+        for row in self.s2k.rows("JOINT PATTERN ASSIGNMENTS"):
+            pattern = row.get("Pattern", "")
+            joint = row.get("Joint", "")
+            self._joint_patterns[(pattern, joint)] = _number(
+                row,
+                "Value",
+                where=f"Joint pattern {pattern} ({_at('JOINT PATTERN ASSIGNMENTS', row)}): ",
+            )
+        for row in self.s2k.rows("FRAME ADDED MASS ASSIGNMENTS"):
+            self._added_mass[row.get("Frame", "")] = _number(
+                row,
+                "MassPerLen",
+                where=f"Frame {row.get('Frame')} ({_at('FRAME ADDED MASS ASSIGNMENTS', row)}): ",
             )
         for row in self.s2k.rows("FRAME SECTION PROPERTIES 01 - GENERAL"):
             self.frame_sections[row.get("SectionName", "")] = row
@@ -1071,6 +1100,7 @@ class _Translator:
             if not mat_name or mat_name.lower() == "default":
                 mat_name = sec_row.get("Material", "")
             material = self._material(mat_name, where)
+            self._frame_alpha[name] = material.alpha
             angle = self.angles.get(name, 0.0)
             orientation = _orientation(self.ndm, p_i, p_j, angle)
             # A 2D file may carry 0 in the axis it does not bend about; the one it does
@@ -1098,14 +1128,22 @@ class _Translator:
             section_id, mass = self._frame_section(
                 section, (values, sec_row), material, orientation, shear
             )
+            added = self._added_mass.get(name, 0.0) * self.scale.mass / self.scale.length
+            if added > 0.0:
+                self._added_mass_frames += 1
             self.frames[name] = ElasticBeamColumn(
                 id=ids[name],
                 nodes=(self.node_ids[ends[0]], self.node_ids[ends[1]]),
                 section_id=section_id,
-                rho=mass,
+                rho=mass + added,
                 releases=releases,
             )
             self.frame_ends[name] = ends
+        if self._added_mass_frames:
+            self.notes.append(
+                f"{self._added_mass_frames} frame(s) carry added mass (FRAME ADDED MASS "
+                "ASSIGNMENTS), included in the element mass per length."
+            )
 
     # ── areas ──
     def build_areas(self) -> None:
@@ -1404,6 +1442,101 @@ class _Translator:
             patterns[pattern_name].point_loads.append(
                 PointElementLoad(element_id=element_id, px=px, py=py, pz=pz, x=x)
             )
+
+        # Ground displacements: a support settlement, OpenSees' `sp`, in the pattern.
+        slots = _SLOTS_2D if self.ndm == 2 else tuple(range(6))
+        nodes_by_id = {node.id: node for node in self.nodes}
+        for row in self.s2k.rows("JOINT LOADS - GROUND DISPLACEMENT"):
+            pattern = pattern_of(row, "ground displacement")
+            joint = row.get("Joint", "")
+            if pattern is None:
+                continue
+            if joint not in self.node_ids:
+                self.dropped["ground displacement on a missing joint"] += 1
+                continue
+            if row.get("CoordSys", "GLOBAL").strip().upper() != "GLOBAL":
+                self.dropped["ground displacement in a local coordinate system"] += 1
+                continue
+            where = f"Joint {joint} ({_at('JOINT LOADS - GROUND DISPLACEMENT', row)}): "
+            values = [
+                _number(row, key, where=where) * (s.length if k < 3 else 1.0)
+                for k, key in enumerate(_DOF_KEYS)
+            ]
+            if self.ndm == 2 and any(values[k] for k in range(6) if k not in _SLOTS_2D):
+                self.dropped["out-of-plane ground displacement component"] += 1
+            node = nodes_by_id[self.node_ids[joint]]
+            for position, slot in enumerate(slots):
+                if not values[slot]:
+                    continue
+                if not node.restraint[slot]:
+                    # SAP moves the ground end of a spring support; this model's support
+                    # spring is a stiffness to a fixed point, so the load cannot be carried.
+                    self.dropped["ground displacement on a non-restrained DOF"] += 1
+                    continue
+                pattern.imposed_displacements.append(
+                    ImposedDisplacement(
+                        node_id=self.node_ids[joint], dof=position + 1, value=values[slot]
+                    )
+                )
+
+        # Temperature: uniform, a joint-pattern variation along the member (its mean is
+        # used) and a gradient along each local axis (SAP gives it per unit length).
+        for row in self.s2k.rows("FRAME LOADS - TEMPERATURE"):
+            pattern = pattern_of(row, "temperature load")
+            name = row.get("Frame", "")
+            if pattern is None:
+                continue
+            if name not in self.frames:
+                self.dropped["temperature load on a missing frame"] += 1
+                continue
+            where = f"Frame {name} ({_at('FRAME LOADS - TEMPERATURE', row)}): "
+            element = self.frames[name]
+            if element.releases.any or not element.end_offsets.is_default():
+                self.dropped["temperature load on a frame with releases or offsets"] += 1
+                continue
+            alpha = self._frame_alpha.get(name, 0.0)
+            if alpha <= 0.0:
+                self.dropped["temperature load on a material without thermal expansion"] += 1
+                continue
+            temperature = _number(row, "Temp", where=where)
+            joint_pattern = row.get("JtPattern", "None").strip()
+            if joint_pattern and joint_pattern.lower() not in ("none", ""):
+                # With a joint pattern, SAP2000 takes the temperatures from the pattern
+                # (a linear variation along the member) and its ``Temp`` is the reference.
+                ends = self.frame_ends[name]
+                pattern_values = [
+                    self._joint_patterns.get((joint_pattern, joint), 0.0) for joint in ends
+                ]
+                temperature = sum(pattern_values) / len(pattern_values)
+                self.dropped["temperature varying along the member (mean used)"] += 1
+            grad2 = _number(row, "TempGrad2", where=where)
+            grad3 = _number(row, "TempGrad3", where=where)
+            gradient_y = gradient_z = 0.0
+            if grad2 or grad3:
+                ends = self.frame_ends[name]
+                p_i, p_j = self.points[ends[0]], self.points[ends[1]]
+                sap = sap_local_axes(p_i, p_j, self.angles.get(name, 0.0))
+                ours = frame_local_axes(self.ndm, p_i.tolist(), p_j.tolist())
+                assert ours is not None
+                if grad2:  # SAP gives the gradient per unit length along local 2
+                    gradient_y += float(np.dot(sap[1], ours[1])) * grad2
+                    gradient_z += float(np.dot(sap[1], ours[2])) * grad2
+                if grad3:  # and along local 3
+                    gradient_y += float(np.dot(sap[2], ours[1])) * grad3
+                    gradient_z += float(np.dot(sap[2], ours[2])) * grad3
+            if self.ndm == 2 and abs(gradient_z) > 1e-12:
+                self.dropped["out-of-plane temperature gradient"] += 1
+                gradient_z = 0.0
+            if temperature or gradient_y or gradient_z:
+                pattern.temperature_loads.append(
+                    TemperatureLoad(
+                        element_id=element.id,
+                        alpha=alpha,
+                        uniform=temperature,
+                        gradient_y=gradient_y,
+                        gradient_z=gradient_z,
+                    )
+                )
         return patterns
 
     def _span(self, name: str) -> np.ndarray:
@@ -1434,6 +1567,7 @@ class _Translator:
         next_pattern = len(patterns) + 1
         scaled: dict[tuple[str, float], int] = {}
         modal_cases: dict[str, ModalCase] = {}
+        pending_preloads: list[tuple[StaticCase, str]] = []
         for row in definitions:
             name = row.get("Case", "")
             kind = row.get("Type", "")
@@ -1448,8 +1582,7 @@ class _Translator:
             if kind.lower() != "linstatic":
                 self.dropped[f"{kind or 'untyped'} load case"] += 1
                 continue
-            if row.get("InitialCond", "Zero").lower() not in ("zero", ""):
-                self.dropped["static case starting from another case (run from zero)"] += 1
+            initial = row.get("InitialCond", "Zero").strip()
             pattern_ids: list[int] = []
             for load in assignments.get(name, []):
                 if load.get("LoadType", "Load pattern").lower() != "load pattern":
@@ -1478,13 +1611,23 @@ class _Translator:
             if not pattern_ids:
                 self.dropped["static case with no load pattern"] += 1
                 continue
-            cases.append(StaticCase(id=len(cases) + 1, name=name, pattern_ids=pattern_ids))
+            case = StaticCase(id=len(cases) + 1, name=name, pattern_ids=pattern_ids)
+            cases.append(case)
+            if initial.lower() not in ("zero", "", "none"):
+                pending_preloads.append((case, initial))
         for row in definitions:
             if row.get("Type", "").lower() != "linrespspec":
                 continue
             spectrum = self._response_spectrum_case(row, len(cases) + 1, modal_cases)
             if spectrum is not None:
                 cases.append(spectrum)
+        by_name = {case.name: case for case in cases}
+        for case, initial in pending_preloads:
+            preload = by_name.get(initial)
+            if isinstance(preload, StaticCase):
+                case.preload_case_ids = [preload.id]
+            else:
+                self.dropped["static case starting from another case (run from zero)"] += 1
         if scaled:
             self.notes.append(
                 f"{len(scaled)} load pattern(s) scaled by a case's factor became pattern(s) of "
@@ -2452,11 +2595,22 @@ class _Writer:
                 continue
             name = case_of[case.id]
             static_cases += 1
+            initial = "Zero"
+            if case.preload_case_ids:
+                preload = by_id.get(case.preload_case_ids[0])
+                if (
+                    isinstance(preload, StaticCase)
+                    and preload.n_steps == 1
+                    and preload.algorithm == "Linear"
+                ):
+                    initial = case_of[preload.id]
+                else:
+                    self.report.skipped["static case on a preload not written"] += 1
             cases.append(
                 [
                     ("Case", _quote(name)),
                     ("Type", "LinStatic"),
-                    ("InitialCond", "Zero"),
+                    ("InitialCond", _quote(initial)),
                     ("RunCase", "Yes"),
                 ]
             )

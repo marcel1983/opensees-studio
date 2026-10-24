@@ -1116,9 +1116,16 @@ dimension. The log names both systems. A file without units is read as kN-m.
 - **Load patterns** with their self-weight multiplier, **joint forces** (global),
   **distributed frame loads** (uniform, trapezoidal or over part of the member,
   global, gravity, projected or local directions) and **point frame loads**.
+- **Temperature loads** on frames: a uniform change, a joint-pattern variation
+  along the member (its mean is used) and a cross-section gradient given per unit
+  length, with the material's thermal expansion coefficient (`A1`).
+- **Ground displacements** on restrained joints (support settlements), and
+  **frame added mass** (`FRAME ADDED MASS ASSIGNMENTS`) added to the element's
+  mass per length.
 - **Linear static load cases**, each with its load patterns. A pattern used with
   a factor other than 1 becomes a scaled copy (`LIVE x 0.5`). A file without
-  load cases gets one per load pattern, as SAP2000 does.
+  load cases gets one per load pattern, as SAP2000 does. A case whose
+  `InitialCond` names another imported static case runs it first as a preload.
 - **Eigen modal cases**: a `LinModal` case with `ModeType=Eigen` becomes a modal
   case that asks for its `MaxNumModes`, with the solver left on this program's
   automatic routing (dense at or below 500 free DOF, ARPACK above). Other modal
@@ -1158,7 +1165,8 @@ window down.
 Counted in the summary and the log, never dropped silently: tables it does not
 read (constraints, buckling, staged and nonlinear cases, other
 response-spectrum options, area loads, design data, …) by name and number of
-rows; moment loads on frames; axial and
+rows; ground displacements on a spring-supported joint; moment loads on frames;
+axial and
 shear end releases; range-add combinations; automatic lateral loads; areas
 with three or more than four joints; and a frame with releases or a non-uniform
 load keeps no shear deformation, because OpenSees' Timoshenko beam takes neither.

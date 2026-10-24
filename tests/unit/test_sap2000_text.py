@@ -37,6 +37,7 @@ from opensees_studio.core.sections import (
     RectShape,
     WideFlangeShape,
 )
+from opensees_studio.services.opensees_runner import OpenSeesRunner
 from opensees_studio.services.sap2000_text import (
     S2kFile,
     Sap2000Import,
@@ -610,6 +611,129 @@ def test_a_spectrum_damping_outside_zero_to_one_is_refused(tmp_path: Path) -> No
     extra = _SPECTRUM_CASE.replace("ConstDamp=0.05", "ConstDamp=1.5")
     with pytest.raises(Sap2000TextError, match="ConstDamp must be between 0 and 1"):
         _spectrum_file(tmp_path, extra)
+
+
+# ──────────────────────────── Wave 1: loads and mass ────────────────────────────
+def _temperature_file(tmp_path: Path, rows: str) -> Path:
+    body = _CANTILEVER.format(units="KN, m, C", x=5, z=0, extra="")
+    body = body.replace("U12=0.25", "U12=0.25   A1=1.2E-05")
+    body = body.replace(
+        'TABLE:  "FRAME SECTION ASSIGNMENTS"',
+        'TABLE:  "LOAD PATTERN DEFINITIONS"\n   LoadPat=T   SelfWtMult=0\n'
+        'TABLE:  "FRAME SECTION ASSIGNMENTS"',
+    )
+    return _write(tmp_path, body.replace("END TABLE DATA", rows + "END TABLE DATA"))
+
+
+def test_a_uniform_temperature_load_expands_the_member(tmp_path: Path) -> None:
+    rows = (
+        'TABLE:  "FRAME LOADS - TEMPERATURE"\n'
+        "   Frame=B1   LoadPat=T   Type=Temperature   Temp=20\n"
+    )
+    imported = import_s2k(_temperature_file(tmp_path, rows))
+    (pattern,) = imported.project.load_patterns
+    (temperature,) = pattern.temperature_loads
+    assert temperature.alpha == pytest.approx(1.2e-5)
+    assert (temperature.uniform, temperature.gradient_y, temperature.gradient_z) == (20, 0, 0)
+    result = OpenSeesRunner(imported.project).run(imported.project.analyses[0])
+    assert result.node_disp[2][-1][0] == pytest.approx(1.2e-5 * 20 * 5)  # alpha dT L
+
+
+def test_a_temperature_gradient_is_per_unit_length(tmp_path: Path) -> None:
+    rows = (
+        'TABLE:  "FRAME LOADS - TEMPERATURE"\n'
+        "   Frame=B1   LoadPat=T   Type=Gradient2   TempGrad2=20\n"
+    )
+    imported = import_s2k(_temperature_file(tmp_path, rows))
+    (temperature,) = imported.project.load_patterns[0].temperature_loads
+    assert temperature.uniform == 0
+    # A member along +X has SAP's local 2 on OpenSees' local z.
+    assert temperature.gradient_y == pytest.approx(0, abs=1e-12)
+    assert temperature.gradient_z == pytest.approx(20)
+
+
+def test_a_joint_pattern_temperature_uses_the_pattern_mean(tmp_path: Path) -> None:
+    rows = (
+        'TABLE:  "JOINT PATTERN ASSIGNMENTS"\n'
+        "   Joint=A   Pattern=GRAD1   Value=0\n"
+        "   Joint=B   Pattern=GRAD1   Value=20\n"
+        'TABLE:  "FRAME LOADS - TEMPERATURE"\n'
+        "   Frame=B1   LoadPat=T   Type=Temperature   Temp=1   JtPattern=GRAD1\n"
+    )
+    imported = import_s2k(_temperature_file(tmp_path, rows))
+    (temperature,) = imported.project.load_patterns[0].temperature_loads
+    assert temperature.uniform == pytest.approx(10)  # the pattern's mean; Temp is the reference
+    assert imported.dropped["temperature varying along the member (mean used)"] == 1
+
+
+def test_a_ground_displacement_needs_a_restrained_dof(tmp_path: Path) -> None:
+    rows = (
+        'TABLE:  "JOINT LOADS - GROUND DISPLACEMENT"\n'
+        "   Joint=A   LoadPat=T   CoordSys=GLOBAL   U3=-0.5\n"
+    )
+    imported = import_s2k(_temperature_file(tmp_path, rows))
+    (imposed,) = imported.project.load_patterns[0].imposed_displacements
+    assert (imposed.node_id, imposed.dof) == (1, 3)  # node A, U3
+    assert imposed.value == pytest.approx(-0.5)
+
+
+def test_a_ground_displacement_on_a_free_dof_is_reported(tmp_path: Path) -> None:
+    rows = (
+        'TABLE:  "JOINT LOADS - GROUND DISPLACEMENT"\n'
+        "   Joint=B   LoadPat=T   CoordSys=GLOBAL   U3=-0.5\n"
+    )
+    imported = import_s2k(_temperature_file(tmp_path, rows))
+    assert not imported.project.load_patterns[0].imposed_displacements
+    assert imported.dropped["ground displacement on a non-restrained DOF"] == 1
+
+
+def test_frame_added_mass_is_added_to_the_element_mass(tmp_path: Path) -> None:
+    rows = 'TABLE:  "FRAME ADDED MASS ASSIGNMENTS"\n   Frame=B1   MassPerLen=2\n'
+    imported = import_s2k(_temperature_file(tmp_path, rows))
+    (element,) = imported.project.elements
+    assert isinstance(element, ElasticBeamColumn)
+    # 2 kN.s2/m2 is 2000 kg/m in the project units; the material has no mass of its own.
+    assert element.rho == pytest.approx(2000)
+    assert any("added mass" in note for note in imported.notes)
+
+
+def _preload_file(tmp_path: Path, initial: str = "G") -> Path:
+    body = _CANTILEVER.format(units="KN, m, C", x=5, z=0, extra="")
+    rows = (
+        'TABLE:  "LOAD PATTERN DEFINITIONS"\n   LoadPat=G   SelfWtMult=0\n'
+        'TABLE:  "LOAD CASE DEFINITIONS"\n'
+        "   Case=G   Type=LinStatic   InitialCond=Zero   RunCase=Yes\n"
+        f"   Case=C   Type=LinStatic   InitialCond={initial}   RunCase=Yes\n"
+        'TABLE:  "CASE - STATIC 1 - LOAD ASSIGNMENTS"\n'
+        '   Case=G   LoadType="Load pattern"   LoadName=G   LoadSF=1\n'
+        '   Case=C   LoadType="Load pattern"   LoadName=G   LoadSF=1\n'
+    )
+    return _write(tmp_path, body.replace("END TABLE DATA", rows + "END TABLE DATA"))
+
+
+def test_a_static_case_starting_from_another_case_gets_a_preload(tmp_path: Path) -> None:
+    imported = import_s2k(_preload_file(tmp_path))
+    first, second = imported.project.analyses
+    assert isinstance(first, StaticCase) and isinstance(second, StaticCase)
+    assert second.preload_case_ids == [first.id]
+    assert not imported.dropped
+
+
+def test_a_preload_that_is_not_imported_runs_from_zero_and_is_reported(tmp_path: Path) -> None:
+    imported = import_s2k(_preload_file(tmp_path, initial="MISSING"))
+    second = imported.project.analyses[1]
+    assert isinstance(second, StaticCase)
+    assert second.preload_case_ids == []
+    assert imported.dropped["static case starting from another case (run from zero)"] == 1
+
+
+def test_the_export_writes_the_preload_case_name(tmp_path: Path) -> None:
+    project = import_s2k(_preload_file(tmp_path)).project
+    text, _ = project_to_s2k(project)
+    assert "InitialCond=G" in text
+    again = s2k_to_project(S2kFile(path=Path("again.s2k"), tables=parse_tables(text))).project
+    first, second = again.analyses
+    assert second.name == "C" and second.preload_case_ids == [first.id]
 
 
 # ──────────────────────────── writing ────────────────────────────
