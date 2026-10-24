@@ -66,7 +66,11 @@ from opensees_studio.core.analysis import (
 )
 from opensees_studio.core.combinations import CombinationTerm, CombinationType, LoadCombination
 from opensees_studio.core.geometry.elements import ElasticBeamColumn, ShellMITC4Element
-from opensees_studio.core.geometry.frame_options import EndRelease, FrameReleases
+from opensees_studio.core.geometry.frame_options import (
+    EndRelease,
+    FrameModifiers,
+    FrameReleases,
+)
 from opensees_studio.core.geometry.grid import (
     CoordinateGridSystem,
     GridLine,
@@ -158,6 +162,7 @@ READ_TABLES: frozenset[str] = frozenset(
         "MASS SOURCE",
         "CONNECTIVITY - FRAME",
         "FRAME SECTION ASSIGNMENTS",
+        "FRAME PROPERTY MODIFIERS",
         "FRAME LOCAL AXES ASSIGNMENTS 1 - TYPICAL",
         "FRAME RELEASE ASSIGNMENTS 1 - GENERAL",
         "FRAME RELEASE ASSIGNMENTS 2 - PARTIAL FIXITY",
@@ -616,6 +621,7 @@ class _Translator:
         self._shapes_reported: set[str] = set()
         self._release_rows = _by_frame(s2k.rows("FRAME RELEASE ASSIGNMENTS 1 - GENERAL"))
         self._partial_rows = _by_frame(s2k.rows("FRAME RELEASE ASSIGNMENTS 2 - PARTIAL FIXITY"))
+        self._frame_modifier_rows = _by_frame(s2k.rows("FRAME PROPERTY MODIFIERS"))
         self.sections: list[ElasticSection | ElasticMembranePlateSection | NonprismaticSection] = []
         self._section_keys: dict[tuple[Any, ...], int] = {}
         self.frames: dict[str, ElasticBeamColumn] = {}
@@ -625,6 +631,8 @@ class _Translator:
         self._frame_alpha: dict[str, float] = {}
         self._added_mass: dict[str, float] = {}
         self._added_mass_frames = 0
+        #: Nonprismatic frames whose shear-area property modifiers are ignored.
+        self._nonprismatic_shear_modifiers = 0
         #: ``(pattern, joint) -> value`` of the joint patterns a temperature load varies with.
         self._joint_patterns: dict[tuple[str, str], float] = {}
         self.shells: list[ShellMITC4Element] = []
@@ -1172,6 +1180,50 @@ class _Translator:
             )
         return FrameReleases(i=ends[0], j=ends[1])
 
+    def _frame_modifiers(self, name: str, orientation: _Orientation) -> FrameModifiers:
+        """SAP2000's per-frame property modifiers, mapped to our local axes.
+
+        SAP2000's axes 2/3 are not always ours, so the inertia and shear-area
+        modifiers follow the same swap as the section properties.  SAP2000
+        writes 0 in a shear-area modifier to mean "no shear deformation"; that
+        is accepted.  A zero on A, J, I22 or I33 would create a mechanism, and
+        is reported instead of being turned into a singular model.
+        """
+        row = self._frame_modifier_rows.get(name)
+        if row is None:
+            return FrameModifiers()
+        mod_where = f"Frame {name} ({_at('FRAME PROPERTY MODIFIERS', row)}): "
+
+        def value(key: str) -> float:
+            return _number(row, key, 1.0, where=mod_where)
+
+        area = value("AMod")
+        torsion = value("JMod")
+        if orientation.two_on_y:
+            i33, i22 = value("I33Mod"), value("I22Mod")
+            as2, as3 = value("AS2Mod"), value("AS3Mod")
+        else:
+            i33, i22 = value("I22Mod"), value("I33Mod")
+            as2, as3 = value("AS3Mod"), value("AS2Mod")
+        if min(area, torsion, i22, i33) <= 0.0:
+            raise Sap2000TextError(
+                f"{mod_where}a zero or negative A, J, I22 or I33 modifier would leave "
+                "the member without a usable stiffness."
+            )
+        try:
+            return FrameModifiers(
+                area=area,
+                as2=as2,
+                as3=as3,
+                torsion=torsion,
+                i22=i22,
+                i33=i33,
+                mass=value("MassMod"),
+                weight=value("WeightMod"),
+            )
+        except ValidationError as exc:
+            raise Sap2000TextError(f"{mod_where}{_first_error(exc)}") from exc
+
     def build_frames(self, non_uniform: set[str]) -> None:
         rows = self.s2k.rows("CONNECTIVITY - FRAME")
         names = [row.get("Frame", "") for row in rows]
@@ -1239,6 +1291,13 @@ class _Translator:
             if not orientation.exact and not symmetric:
                 self.oblique += 1
             releases = self._releases(name, orientation)
+            modifiers = self._frame_modifiers(name, orientation)
+            if is_nonprismatic and (modifiers.as2 != 1.0 or modifiers.as3 != 1.0):
+                # SAP2000 writes 0 shear modifiers on some nonprismatic frames, but
+                # its own results keep the shear flexibility of the segment
+                # sections. Let the segment shear areas govern here too.
+                modifiers = modifiers.model_copy(update={"as2": 1.0, "as3": 1.0})
+                self._nonprismatic_shear_modifiers += 1
             if self.ndm == 2:
                 has_shear = (values["AS2"] if orientation.two_on_y else values["AS3"]) > 0
             else:
@@ -1264,12 +1323,19 @@ class _Translator:
                 section_id=section_id,
                 rho=mass + added,
                 releases=releases,
+                modifiers=modifiers,
             )
             self.frame_ends[name] = ends
         if self._added_mass_frames:
             self.notes.append(
                 f"{self._added_mass_frames} frame(s) carry added mass (FRAME ADDED MASS "
                 "ASSIGNMENTS), included in the element mass per length."
+            )
+        if self._nonprismatic_shear_modifiers:
+            self.notes.append(
+                f"{self._nonprismatic_shear_modifiers} nonprismatic frame(s) carry shear-area "
+                "property modifiers; they are ignored, because the section's own segment "
+                "shear areas govern (as SAP2000's results do)."
             )
 
     # ── areas ──
@@ -2291,6 +2357,7 @@ class _Writer:
         angles: list[list[tuple[str, str]]] = []
         releases: list[list[tuple[str, str]]] = []
         partial: list[list[tuple[str, str]]] = []
+        modifier_rows: list[list[tuple[str, str]]] = []
         connectivity: list[list[tuple[str, str]]] = []
         frame_axes: dict[int, tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
         os_axes: dict[int, tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
@@ -2336,7 +2403,9 @@ class _Writer:
                 releases.append(row)
                 if springs:
                     partial.append(springs)
-            for option in ("end_offsets", "insertion", "modifiers"):
+            if not el.modifiers.is_default():
+                modifier_rows.append(self._modifier_row(el, frame_axes[el.id], axes))
+            for option in ("end_offsets", "insertion"):
                 if not getattr(el, option).is_default():
                     self.report.skipped[f"frame {option.replace('_', ' ')}"] += 1
             if el.consistent_mass:
@@ -2406,12 +2475,14 @@ class _Writer:
         self.table("AREA SECTION PROPERTIES", area_rows)
         self.table("CONNECTIVITY - FRAME", connectivity)
         self.table("FRAME SECTION ASSIGNMENTS", assignments)
+        self.table("FRAME PROPERTY MODIFIERS", modifier_rows)
         self.table("FRAME LOCAL AXES ASSIGNMENTS 1 - TYPICAL", angles)
         self.table("FRAME RELEASE ASSIGNMENTS 1 - GENERAL", releases)
         self.table("FRAME RELEASE ASSIGNMENTS 2 - PARTIAL FIXITY", partial)
         self.table("CONNECTIVITY - AREA", area_connectivity)
         self.table("AREA SECTION ASSIGNMENTS", area_assign)
         self.report.written["frame(s)"] = len(frames)
+        self.report.written["frame property modifier(s)"] = len(modifier_rows)
         self.report.written["shell(s)"] = len(shells)
         self.report.written["section(s)"] = len(section_rows) + len(area_rows)
         self._loads(set(frame_axes), frame_axes, os_axes)
@@ -2532,6 +2603,27 @@ class _Writer:
                 springs.append((f"{dof}{end}", _fmt(k)))
         row.append(("PartialFix", "Yes" if any_spring else "No"))
         return row, springs if any_spring else []
+
+    def _modifier_row(
+        self,
+        el: ElasticBeamColumn,
+        sap: tuple[np.ndarray, ...],
+        ours: tuple[np.ndarray, ...],
+    ) -> list[tuple[str, str]]:
+        """SAP2000's per-frame property-modifier row, with the axes swapped as needed."""
+        mods = el.modifiers
+        two_on_y = abs(float(np.dot(ours[1], sap[1]))) > 0.5
+        return [
+            ("Frame", str(el.id)),
+            ("AMod", _fmt(mods.area)),
+            ("AS2Mod", _fmt(mods.as2 if two_on_y else mods.as3)),
+            ("AS3Mod", _fmt(mods.as3 if two_on_y else mods.as2)),
+            ("JMod", _fmt(mods.torsion)),
+            ("I22Mod", _fmt(mods.i22 if two_on_y else mods.i33)),
+            ("I33Mod", _fmt(mods.i33 if two_on_y else mods.i22)),
+            ("MassMod", _fmt(mods.mass)),
+            ("WeightMod", _fmt(mods.weight)),
+        ]
 
     def _loads(
         self,

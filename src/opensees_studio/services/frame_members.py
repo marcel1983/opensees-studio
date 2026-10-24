@@ -656,8 +656,12 @@ def _plan_modifiers(
     if isinstance(el, ElasticBeamColumn):
         section = next((s for s in project.sections if s.id == el.section_id), None)
         if isinstance(section, ElasticSection) and section.has_shear_deformation:
-            member.timoshenko = _timoshenko_args(project, el, section, mods, torsion_free)
-            return
+            # A zero shear-area multiplier means "no shear deformation" (SAP2000).
+            # In 3D OpenSees needs both areas, so either zero takes the Euler route.
+            shear_active = mods.as2 > 0.0 and (project.ndm == 2 or mods.as3 > 0.0)
+            if shear_active:
+                member.timoshenko = _timoshenko_args(project, el, section, mods, torsion_free)
+                return
     if not mods.scales_stiffness and not torsion_free:
         return
     if isinstance(el, BeamWithHingesElement):

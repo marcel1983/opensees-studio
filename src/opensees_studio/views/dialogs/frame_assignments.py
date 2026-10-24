@@ -283,8 +283,9 @@ class FrameModifiersDialog(_AssignDialog):
             "Assign Frame Property Modifiers",
             n_selected,
             "Multipliers on the elastic section's properties (e.g. 0.35 on I33 for a cracked "
-            "beam). A fibre section takes only the mass and weight modifiers. The sections here "
-            "have no shear deformation, so the shear-area modifiers do not change a result.",
+            "beam). A fibre section takes only the mass and weight modifiers. A shear-area "
+            "multiplier of 0 turns shear deformation off for the member; a positive value "
+            "keeps the Timoshenko route when the section defines shear areas.",
             parent,
         )
         current = current or FrameModifiers()

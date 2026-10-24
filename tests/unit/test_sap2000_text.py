@@ -18,7 +18,11 @@ from opensees_studio.core import UnitSystem
 from opensees_studio.core.analysis import ModalCase, ResponseSpectrumCase, StaticCase
 from opensees_studio.core.combinations import CombinationTerm, LoadCombination
 from opensees_studio.core.geometry.elements import ElasticBeamColumn, ShellMITC4Element
-from opensees_studio.core.geometry.frame_options import EndRelease, FrameReleases
+from opensees_studio.core.geometry.frame_options import (
+    EndRelease,
+    FrameModifiers,
+    FrameReleases,
+)
 from opensees_studio.core.geometry.node import Node
 from opensees_studio.core.loads import (
     LinearTimeSeries,
@@ -456,6 +460,84 @@ def test_a_zero_torsional_constant_gets_a_small_one(tmp_path: Path) -> None:
     assert imported.dropped["zero torsional constant (a small one substituted)"] == 1
 
 
+def test_frame_property_modifiers_are_imported_and_mapped(tmp_path: Path) -> None:
+    extra = (
+        'TABLE:  "FRAME PROPERTY MODIFIERS"\n'
+        "   Frame=B1   AMod=0.5   AS2Mod=0   AS3Mod=0   JMod=0.4 _\n"
+        "      I22Mod=0.6   I33Mod=0.7   MassMod=0.8   WeightMod=0.9\n"
+    )
+    imported = import_s2k(_cantilever(tmp_path, extra=extra))
+    frame = imported.project.element(1)
+    assert isinstance(frame, ElasticBeamColumn)
+    # 3D: SAP's local 2 is our z. AS3Mod -> our As2, I22Mod -> our Iz.
+    assert frame.modifiers == FrameModifiers(
+        area=0.5,
+        as2=0.0,
+        as3=0.0,
+        torsion=0.4,
+        i22=0.7,
+        i33=0.6,
+        mass=0.8,
+        weight=0.9,
+    )
+    # The section has shear areas AS2=4/AS3=6, but both modifiers are zero:
+    # the member must run Euler-Bernoulli, not Timoshenko.
+    from opensees_studio.services.frame_members import plan_frame_members
+
+    member = plan_frame_members(imported.project).members[1]
+    assert member.timoshenko is None
+    assert member.section_id != 1  # the non-shear modifiers still make a derived section
+    assert "FRAME PROPERTY MODIFIERS" not in imported.unsupported_tables
+
+
+def test_frame_property_modifiers_use_the_2d_axis_mapping(tmp_path: Path) -> None:
+    extra = _2D_DOFS + (
+        'TABLE:  "FRAME PROPERTY MODIFIERS"\n'
+        "   Frame=B1   AMod=0.5   AS2Mod=0   AS3Mod=0   JMod=0.4 _\n"
+        "      I22Mod=0.6   I33Mod=0.7   MassMod=0.8   WeightMod=0.9\n"
+    )
+    imported = import_s2k(_cantilever(tmp_path, extra=extra))
+    frame = imported.project.element(1)
+    assert isinstance(frame, ElasticBeamColumn)
+    # 2D: SAP's local 2 is our local y, so the modifiers keep their names.
+    assert frame.modifiers == FrameModifiers(
+        area=0.5,
+        as2=0.0,
+        as3=0.0,
+        torsion=0.4,
+        i22=0.6,
+        i33=0.7,
+        mass=0.8,
+        weight=0.9,
+    )
+
+
+def test_frame_property_modifiers_round_trip_through_the_export(tmp_path: Path) -> None:
+    imported = import_s2k(_cantilever(tmp_path))
+    project = imported.project
+    modifiers = FrameModifiers(
+        area=0.5,
+        as2=0.0,
+        as3=0.0,
+        torsion=0.4,
+        i22=0.7,
+        i33=0.6,
+        mass=0.8,
+        weight=0.9,
+    )
+    frame = project.element(1)
+    project.elements[0] = frame.model_copy(update={"modifiers": modifiers})
+    target = tmp_path / "modified.s2k"
+    report = export_s2k(project, target)
+    text = target.read_text(encoding="utf-8-sig")
+    assert 'TABLE:  "FRAME PROPERTY MODIFIERS"' in text
+    assert "AMod=0.5" in text and "AS2Mod=0" in text and "I22Mod=0.6" in text
+    assert "I33Mod=0.7" in text and "MassMod=0.8" in text
+    assert "frame modifiers" not in report.skipped
+    again = import_s2k(target)
+    assert again.project.element(1).modifiers == modifiers
+
+
 def test_a_nonprismatic_section_is_subdivided(tmp_path: Path) -> None:
     extra = (
         'TABLE:  "FRAME SECTION PROPERTIES 01 - GENERAL"\n'
@@ -486,6 +568,32 @@ def test_a_nonprismatic_section_is_subdivided(tmp_path: Path) -> None:
     assert all(f.section_id == big.id for f in frames)
     assert any("subdivided into 12" in note for note in imported.notes)
     assert "nonprismatic section (imported as its start section)" not in imported.dropped
+
+
+def test_shear_modifiers_on_a_nonprismatic_frame_are_ignored(tmp_path: Path) -> None:
+    """SAP2000's own nonprismatic results keep the segment shear flexibility.
+
+    Its table can still say AS2Mod/AS3Mod = 0; applying that would make the
+    imported member stiffer than SAP2000's stored results.
+    """
+    extra = (
+        'TABLE:  "FRAME SECTION PROPERTIES 01 - GENERAL"\n'
+        "   SectionName=VAR   Shape=Nonprismatic\n"
+        'TABLE:  "FRAME SECTION PROPERTIES 05 - NONPRISMATIC"\n'
+        "   SectionName=VAR   StartSect=S   EndSect=S   LengthType=Relative _\n"
+        "      RelLength=1   EI33Var=Linear   EI22Var=Linear\n"
+        'TABLE:  "FRAME PROPERTY MODIFIERS"\n'
+        "   Frame=B1   AMod=1   AS2Mod=0   AS3Mod=0   JMod=1 _\n"
+        "      I22Mod=1   I33Mod=1   MassMod=1   WeightMod=1\n"
+    )
+    body = _CANTILEVER.format(units="KN, m, C", x=5, z=0, extra=extra).replace(
+        "AnalSect=S", "AnalSect=VAR"
+    )
+    imported = import_s2k(_write(tmp_path, body))
+    first = imported.project.element(1)
+    assert isinstance(first, ElasticBeamColumn)
+    assert first.modifiers.as2 == 1.0 and first.modifiers.as3 == 1.0
+    assert any("shear-area" in note for note in imported.notes)
 
 
 def test_nonprismatic_rows_keep_the_sap2000_table_order(tmp_path: Path) -> None:
