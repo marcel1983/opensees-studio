@@ -17,9 +17,9 @@ restraints, added joint masses and support springs, frames and their sections an
 materials (rectangular, I, pipe, tube or general properties; another shape by its
 properties), local-axis angles, end releases and partial fixity, load patterns
 with their self-weight multiplier, joint forces, distributed and point frame
-loads, linear static load cases, combinations, and four-node thin or thick shells
-with their sections. Every other table is counted in the import report, never
-dropped silently.
+loads, linear static load cases, eigen modal cases, combinations, and four-node
+thin or thick shells with their sections. Every other table is counted in the
+import report, never dropped silently.
 
 Diagnostics. A record the reader cannot use names the table and the line it came
 from (``Frame 3 (CONNECTIVITY - FRAME, line 57): joint 'C' is not defined``), and
@@ -56,7 +56,7 @@ from typing import Any, cast
 import numpy as np
 from pydantic import ValidationError
 
-from opensees_studio.core.analysis import StaticCase
+from opensees_studio.core.analysis import ModalCase, StaticCase
 from opensees_studio.core.combinations import CombinationTerm, CombinationType, LoadCombination
 from opensees_studio.core.geometry.elements import ElasticBeamColumn, ShellMITC4Element
 from opensees_studio.core.geometry.frame_options import EndRelease, FrameReleases
@@ -158,6 +158,7 @@ READ_TABLES: frozenset[str] = frozenset(
         "FRAME LOADS - POINT",
         "LOAD CASE DEFINITIONS",
         "CASE - STATIC 1 - LOAD ASSIGNMENTS",
+        "CASE - MODAL 1 - GENERAL",
         "COMBINATION DEFINITIONS",
         "CONNECTIVITY - AREA",
         "AREA SECTION ASSIGNMENTS",
@@ -540,7 +541,7 @@ class Sap2000Import:
             f"{len(project.nodes)} joint(s), {len(project.elements) - shells} frame(s), "
             f"{shells} shell(s), {len(project.sections)} section(s), "
             f"{len(project.load_patterns)} load pattern(s), "
-            f"{len(project.analyses)} static case(s), {len(project.combinations)} combination(s)."
+            f"{len(project.analyses)} analysis case(s), {len(project.combinations)} combination(s)."
         )
         if self.dropped:
             items = ", ".join(f"{count} {what}" for what, count in sorted(self.dropped.items()))
@@ -1398,10 +1399,10 @@ class _Translator:
     # ── cases and combinations ──
     def build_cases(
         self, patterns: dict[str, PlainLoadPattern]
-    ) -> tuple[list[PlainLoadPattern], list[StaticCase]]:
+    ) -> tuple[list[PlainLoadPattern], list[StaticCase | ModalCase]]:
         definitions = self.s2k.rows("LOAD CASE DEFINITIONS")
         extra: list[PlainLoadPattern] = []
-        cases: list[StaticCase] = []
+        cases: list[StaticCase | ModalCase] = []
         if not definitions:
             for pattern in patterns.values():
                 cases.append(
@@ -1420,6 +1421,11 @@ class _Translator:
         for row in definitions:
             name = row.get("Case", "")
             kind = row.get("Type", "")
+            if kind.lower() == "linmodal":
+                modal = self._modal_case(row, name, len(cases) + 1)
+                if modal is not None:
+                    cases.append(modal)
+                continue
             if kind.lower() != "linstatic":
                 self.dropped[f"{kind or 'untyped'} load case"] += 1
                 continue
@@ -1461,7 +1467,29 @@ class _Translator:
             )
         return extra, cases
 
-    def build_combinations(self, cases: list[StaticCase]) -> list[LoadCombination]:
+    def _modal_case(self, definition: S2kRow, name: str, case_id: int) -> ModalCase | None:
+        """A ``LinModal`` case from its ``CASE - MODAL 1 - GENERAL`` row, when it is an eigen one."""
+        table = "CASE - MODAL 1 - GENERAL"
+        row = next((r for r in self.s2k.rows(table) if r.get("Case", "") == name), None)
+        if row is None:
+            self.dropped["modal case without its general properties"] += 1
+            return None
+        mode = row.get("ModeType", "Eigen").strip()
+        if mode.lower() != "eigen":
+            self.dropped[f"{mode or 'untyped'} modal case"] += 1
+            return None
+        if definition.get("InitialCond", "Zero").lower() not in ("zero", ""):
+            self.dropped["modal case starting from another case (run from zero)"] += 1
+        where = f"Modal case {name} ({_at(table, row)}): "
+        modes = _number(row, "MaxNumModes", 0.0, where=where)
+        if modes < 1 or modes != int(modes):
+            raise Sap2000TextError(
+                f"{where}MaxNumModes must be a positive whole number, not {modes:g}."
+            )
+        # The case's solver is left on auto: this build routes dense/ARPACK itself.
+        return ModalCase(id=case_id, name=name, n_modes=int(modes))
+
+    def build_combinations(self, cases: list[StaticCase | ModalCase]) -> list[LoadCombination]:
         rows = self.s2k.rows("COMBINATION DEFINITIONS")
         order: list[str] = []
         grouped: dict[str, list[S2kRow]] = {}
@@ -1471,7 +1499,7 @@ class _Translator:
                 order.append(name)
             grouped.setdefault(name, []).append(row)
         combo_ids = {name: k for k, name in enumerate(order, start=1)}
-        case_ids = {case.name: case.id for case in cases}
+        case_ids = {case.name: case.id for case in cases if isinstance(case, StaticCase)}
         combinations: list[LoadCombination] = []
         for name in order:
             kind = next((r["ComboType"] for r in grouped[name] if r.get("ComboType")), "Linear Add")
@@ -2170,8 +2198,33 @@ class _Writer:
 
         case_names = _Names()
         cases, assignments = [], []
+        modal_rows: list[list[tuple[str, str]]] = []
         case_of: dict[int, str] = {}
+        static_cases = 0
         for case in p.analyses:
+            if isinstance(case, ModalCase):
+                name = case_names.take(case.name, f"CASE{case.id}")
+                cases.append(
+                    [
+                        ("Case", _quote(name)),
+                        ("Type", "LinModal"),
+                        ("InitialCond", "Zero"),
+                        ("RunCase", "Yes"),
+                    ]
+                )
+                modal_rows.append(
+                    [
+                        ("Case", _quote(name)),
+                        ("ModeType", "Eigen"),
+                        ("MaxNumModes", str(case.n_modes)),
+                        ("MinNumModes", "1"),
+                        ("EigenShift", "0"),
+                        ("EigenCutoff", "0"),
+                        ("EigenTol", "1E-09"),
+                        ("AutoShift", "Yes"),
+                    ]
+                )
+                continue
             if not (
                 isinstance(case, StaticCase) and case.n_steps == 1 and case.algorithm == "Linear"
             ):
@@ -2182,6 +2235,7 @@ class _Writer:
                 continue
             name = case_names.take(case.name, f"CASE{case.id}")
             case_of[case.id] = name
+            static_cases += 1
             cases.append(
                 [
                     ("Case", _quote(name)),
@@ -2201,7 +2255,9 @@ class _Writer:
                 )
         self.table("LOAD CASE DEFINITIONS", cases)
         self.table("CASE - STATIC 1 - LOAD ASSIGNMENTS", assignments)
-        self.report.written["static case(s)"] = len(cases)
+        self.table("CASE - MODAL 1 - GENERAL", modal_rows)
+        self.report.written["static case(s)"] = static_cases
+        self.report.written["modal case(s)"] = len(modal_rows)
 
         combo_of: dict[int, str] = {}
         for combination in p.combinations:

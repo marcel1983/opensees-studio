@@ -15,7 +15,7 @@ import numpy as np
 import pytest
 
 from opensees_studio.core import UnitSystem
-from opensees_studio.core.analysis import StaticCase
+from opensees_studio.core.analysis import ModalCase, StaticCase
 from opensees_studio.core.combinations import CombinationTerm, LoadCombination
 from opensees_studio.core.geometry.elements import ElasticBeamColumn, ShellMITC4Element
 from opensees_studio.core.geometry.frame_options import EndRelease, FrameReleases
@@ -224,7 +224,7 @@ def test_portal_loads_cases_and_combinations() -> None:
     assert env.combination_type == "Envelope"
     assert env.terms[0] == CombinationTerm(source="combination", ref_id=1)
     # What did not come across is reported, never silently dropped.
-    assert imported.dropped["LinModal load case"] == 1
+    assert imported.dropped["modal case without its general properties"] == 1
     # The added mass at joint 2 is kN.s2/m in a 2D model: MX survives, MY is reported.
     node2 = next(n for n in project.nodes if n.id == 2)
     assert node2.mass == pytest.approx((1000.0, 0.0, 0.0, 0.0, 0.0, 0.0))
@@ -492,6 +492,44 @@ def test_a_nonprismatic_section_without_a_usable_start_is_refused(
         import_s2k(_write(tmp_path, body))
 
 
+# ──────────────────────────── modal cases ────────────────────────────
+_MODAL_CASE = """\
+TABLE:  "LOAD PATTERN DEFINITIONS"
+   LoadPat=DEAD   SelfWtMult=0
+TABLE:  "LOAD CASE DEFINITIONS"
+   Case=DEAD   Type=LinStatic   InitialCond=Zero   RunCase=Yes
+   Case=MODAL   Type=LinModal   InitialCond=Zero   RunCase=Yes
+TABLE:  "CASE - STATIC 1 - LOAD ASSIGNMENTS"
+   Case=DEAD   LoadType="Load pattern"   LoadName=DEAD   LoadSF=1
+TABLE:  "CASE - MODAL 1 - GENERAL"
+   Case=MODAL   ModeType=Eigen   MaxNumModes=7   MinNumModes=1 _
+      EigenShift=0   EigenCutoff=0   EigenTol=1E-07   AutoShift=No
+"""
+
+
+def test_a_modal_case_comes_across_with_its_mode_count(tmp_path: Path) -> None:
+    imported = import_s2k(_cantilever(tmp_path, extra=_MODAL_CASE))
+    static, modal = imported.project.analyses
+    assert isinstance(static, StaticCase) and static.name == "DEAD"
+    assert isinstance(modal, ModalCase)
+    assert (modal.name, modal.n_modes, modal.solver) == ("MODAL", 7, "auto")
+    assert not imported.dropped
+
+
+def test_a_modal_case_that_is_not_an_eigen_one_is_reported(tmp_path: Path) -> None:
+    extra = _MODAL_CASE.replace("ModeType=Eigen", "ModeType=Ritz")
+    imported = import_s2k(_cantilever(tmp_path, extra=extra))
+    assert imported.dropped["Ritz modal case"] == 1
+    assert not any(isinstance(c, ModalCase) for c in imported.project.analyses)
+
+
+@pytest.mark.parametrize("modes", ["0", "2.5", "-3"])
+def test_a_modal_case_needs_a_positive_whole_mode_count(tmp_path: Path, modes: str) -> None:
+    extra = _MODAL_CASE.replace("MaxNumModes=7", f"MaxNumModes={modes}")
+    with pytest.raises(Sap2000TextError, match="MaxNumModes must be a positive whole number"):
+        import_s2k(_cantilever(tmp_path, extra=extra))
+
+
 # ──────────────────────────── writing ────────────────────────────
 def _totals(project: Project) -> dict[tuple[str, int], np.ndarray]:
     """Per pattern name and element, every frame load summed (distribution kept apart)."""
@@ -539,8 +577,24 @@ def _assert_same_model(a: Project, b: Project) -> None:
     assert ta.keys() == tb.keys()
     for key in ta:
         np.testing.assert_allclose(ta[key], tb[key], rtol=1e-12, atol=1e-15)
-    assert [(c.name, c.pattern_ids) for c in a.analyses] == [
-        (c.name, c.pattern_ids) for c in b.analyses
+    assert [
+        (
+            type(c),
+            c.name,
+            getattr(c, "pattern_ids", None),
+            getattr(c, "n_modes", None),
+            getattr(c, "solver", None),
+        )
+        for c in a.analyses
+    ] == [
+        (
+            type(c),
+            c.name,
+            getattr(c, "pattern_ids", None),
+            getattr(c, "n_modes", None),
+            getattr(c, "solver", None),
+        )
+        for c in b.analyses
     ]
     assert [(c.name, c.combination_type, c.terms) for c in a.combinations] == [
         (c.name, c.combination_type, c.terms) for c in b.combinations
@@ -611,7 +665,10 @@ def _built_project() -> Project:
                 point_loads=[PointElementLoad(element_id=2, py=3.0, pz=-4.0, x=0.3)],
             )
         ],
-        analyses=[StaticCase(id=1, name="Q", pattern_ids=[1])],
+        analyses=[
+            StaticCase(id=1, name="Q", pattern_ids=[1]),
+            ModalCase(id=2, name="M", n_modes=3),
+        ],
         combinations=[
             LoadCombination(id=1, name="1.5Q", terms=[CombinationTerm(ref_id=1, factor=1.5)])
         ],
@@ -629,7 +686,7 @@ def test_a_project_made_here_survives_the_trip() -> None:
 
 def test_the_export_reports_what_it_leaves_out() -> None:
     project = _built_project()
-    project.analyses.append(StaticCase(id=2, name="push", pattern_ids=[1], n_steps=10))
+    project.analyses.append(StaticCase(id=3, name="push", pattern_ids=[1], n_steps=10))
     _, report = project_to_s2k(project)
     # Added masses and springs are written now, so they are no longer in "skipped".
     assert report.written["joint mass"] == 1

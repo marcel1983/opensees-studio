@@ -1119,6 +1119,11 @@ dimension. The log names both systems. A file without units is read as kN-m.
 - **Linear static load cases**, each with its load patterns. A pattern used with
   a factor other than 1 becomes a scaled copy (`LIVE x 0.5`). A file without
   load cases gets one per load pattern, as SAP2000 does.
+- **Eigen modal cases**: a `LinModal` case with `ModeType=Eigen` becomes a modal
+  case that asks for its `MaxNumModes`, with the solver left on this program's
+  automatic routing (dense at or below 500 free DOF, ARPACK above). Other modal
+  types, and a modal case with no `CASE - MODAL 1 - GENERAL` row, are counted in
+  the report.
 - **Combinations**: linear add, envelope, absolute add and SRSS, of cases and
   of other combinations.
 - **Areas** with four joints and a shell section, as `ShellMITC4` with an
@@ -1143,7 +1148,7 @@ window down.
 
 # What it does not do (yet)
 Counted in the summary and the log, never dropped silently: tables it does not
-read (constraints, modal and nonlinear cases, area loads,
+read (constraints, spectral, buckling, staged and nonlinear cases, area loads,
 design data, …) by name and number of rows; moment loads on frames; axial and
 shear end releases; range-add combinations; automatic lateral loads; areas
 with three or more than four joints; and a frame with releases or a non-uniform
@@ -1179,7 +1184,8 @@ been checked by CSI or in SAP2000.
 - Shells (`ShellMITC4` on an elastic plate section) as thick-shell areas.
 - Plain load patterns with their self weight, joint forces, and uniform,
   trapezoidal and point frame loads in local directions.
-- Linear static cases, and combinations of them and of each other.
+- Linear static cases, eigen modal cases, and combinations of static cases and
+  of each other.
 
 # What is not written
 The export reports what it leaves out: other element and section types, end
