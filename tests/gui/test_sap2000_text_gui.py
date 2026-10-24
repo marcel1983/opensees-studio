@@ -41,7 +41,9 @@ def test_import_makes_the_file_the_unsaved_project(qtbot, monkeypatch) -> None: 
     assert mw._vm.path is None and mw._vm.is_dirty
     log = mw._console.toPlainText()
     assert "Imported portal_2d.s2k (KN, m, C → SI (m, N, kg, s, Pa))" in log
-    assert "JOINT ADDED MASS ASSIGNMENTS (1)" in log
+    assert "4 joint(s), 3 frame(s)" in log
+    # The fixture's added mass now comes across (MY is out of plane in this 2D model).
+    assert project.nodes[1].mass[0] == pytest.approx(1000.0)
 
 
 @pytest.mark.gui

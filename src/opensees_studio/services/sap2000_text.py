@@ -13,12 +13,13 @@ file. Anything else (the ``File ... was saved`` banner) is ignored.
 
 What is read: units (``PROGRAM CONTROL``), the active DOFs (a frame in the X-Z
 plane whose joints only move in it is a 2D model), grid lines, joints and their
-restraints, frames and their sections and materials (rectangular, I, pipe, tube
-or general properties; another shape by its properties), local-axis angles,
-end releases and partial fixity, load patterns with their self-weight
-multiplier, joint forces, distributed and point frame loads, linear static load
-cases, combinations, and four-node thin or thick shells with their sections.
-Every other table is counted in the import report, never dropped silently.
+restraints, added joint masses and support springs, frames and their sections and
+materials (rectangular, I, pipe, tube or general properties; another shape by its
+properties), local-axis angles, end releases and partial fixity, load patterns
+with their self-weight multiplier, joint forces, distributed and point frame
+loads, linear static load cases, combinations, and four-node thin or thick shells
+with their sections. Every other table is counted in the import report, never
+dropped silently.
 
 Diagnostics. A record the reader cannot use names the table and the line it came
 from (``Frame 3 (CONNECTIVITY - FRAME, line 57): joint 'C' is not defined``), and
@@ -139,6 +140,9 @@ READ_TABLES: frozenset[str] = frozenset(
         "GRID LINES",
         "JOINT COORDINATES",
         "JOINT RESTRAINT ASSIGNMENTS",
+        "JOINT ADDED MASS ASSIGNMENTS",
+        "JOINT SPRING ASSIGNMENTS 1 - UNCOUPLED",
+        "MASS SOURCE",
         "CONNECTIVITY - FRAME",
         "FRAME SECTION ASSIGNMENTS",
         "FRAME LOCAL AXES ASSIGNMENTS 1 - TYPICAL",
@@ -162,6 +166,10 @@ READ_TABLES: frozenset[str] = frozenset(
 
 _DOF_KEYS = ("U1", "U2", "U3", "R1", "R2", "R3")
 _FORCE_KEYS = ("F1", "F2", "F3", "M1", "M2", "M3")
+#: A joint mass record: the three translations, then the three mass moments of inertia.
+_MASS_KEYS = ("Mass1", "Mass2", "Mass3", "MMI1", "MMI2", "MMI3")
+#: A joint spring record: the three translations to ground, then the three rotations.
+_SPRING_KEYS = ("U1", "U2", "U3", "R1", "R2", "R3")
 #: Storage slots a 2D (X-Z) model keeps: Ux, Uz, Ry (see core.plane).
 _SLOTS_2D = (0, 2, 4)
 
@@ -577,6 +585,12 @@ class _Translator:
         self.angles: dict[str, float] = {}
         self.shells: list[ShellMITC4Element] = []
         self.oblique = 0
+        #: A mass source that excludes added masses makes those rows inert, as in SAP2000.
+        self._added_masses = all(_yes(row, "Masses") for row in s2k.rows("MASS SOURCE"))
+        #: A joint local system that is not global: masses and springs cannot be rotated here.
+        self._rotated_joint_axes = any(
+            rows for name, rows in s2k.tables.items() if name.startswith("JOINT LOCAL AXES")
+        )
 
     # ── model kind ──
     def _is_planar(self) -> bool:
@@ -645,6 +659,117 @@ class _Translator:
             self.points[name] = np.array([x, y, z])
         if restraints:
             self.dropped["restraint on a missing joint"] += len(restraints)
+
+    # ── joint masses and springs ──
+    def build_joint_assignments(self) -> None:
+        """Added joint masses and support springs (``JOINT ADDED MASS ASSIGNMENTS``,
+        ``JOINT SPRING ASSIGNMENTS 1 - UNCOUPLED``).
+
+        Both are given in SAP2000's joint local axes, which default to global; a file
+        that assigns rotated joint axes is refused row by row rather than turned
+        silently. The mass source decides whether added masses carry any weight.
+        """
+        by_id = {node.id: node for node in self.nodes}
+        nodes = {name: by_id[identifier] for name, identifier in self.node_ids.items()}
+        s = self.scale
+        self._read_mass_source()
+
+        if self._added_masses:
+            table = "JOINT ADDED MASS ASSIGNMENTS"
+            factors = (s.mass, s.mass, s.mass, s.mass_inertia, s.mass_inertia, s.mass_inertia)
+            for row in self.s2k.rows(table):
+                name = row.get("Joint", "")
+                where = f"Joint {name} ({_at(table, row)}): "
+                if name not in nodes:
+                    self.dropped["added mass on a missing joint"] += 1
+                    continue
+                if not self._joint_axes_are_global(row, "added mass"):
+                    continue
+                values = tuple(
+                    _number(row, key, where=where) * factor
+                    for key, factor in zip(_MASS_KEYS, factors, strict=True)
+                )
+                if any(value < 0.0 for value in values):
+                    raise Sap2000TextError(f"{where}an added mass must not be negative.")
+                if any(values):  # SAP2000 writes an all-zero row after clearing one
+                    self._assign(
+                        nodes[name],
+                        "mass",
+                        self._in_plane(values, "out-of-plane added mass component"),
+                        where,
+                    )
+
+        table = "JOINT SPRING ASSIGNMENTS 1 - UNCOUPLED"
+        factors = (s.line_load, s.line_load, s.line_load, s.moment, s.moment, s.moment)
+        for row in self.s2k.rows(table):
+            name = row.get("Joint", "")
+            where = f"Joint {name} ({_at(table, row)}): "
+            if name not in nodes:
+                self.dropped["support spring on a missing joint"] += 1
+                continue
+            if not self._joint_axes_are_global(row, "support spring"):
+                continue
+            values = tuple(
+                _number(row, key, where=where) * factor
+                for key, factor in zip(_SPRING_KEYS, factors, strict=True)
+            )
+            if any(value < 0.0 for value in values):
+                raise Sap2000TextError(f"{where}a spring stiffness must not be negative.")
+            if any(values):
+                self._assign(
+                    nodes[name],
+                    "spring",
+                    self._in_plane(values, "out-of-plane support spring component"),
+                    where,
+                )
+
+    def _read_mass_source(self) -> None:
+        """Report what the file's mass source includes that this import cannot."""
+        rows = self.s2k.rows("MASS SOURCE")
+        if not rows:
+            return
+        if not self._added_masses:
+            self.notes.append(
+                "The mass source excludes added joint masses: JOINT ADDED MASS ASSIGNMENTS "
+                "was not read."
+            )
+        if not all(_yes(row, "Elements") for row in rows):
+            self.notes.append(
+                "The mass source excludes element masses; the imported frames still carry "
+                "theirs (mass per length from the material's unit mass)."
+            )
+        if any(_yes(row, "Loads") for row in rows):
+            self.notes.append(
+                "The mass source turns load patterns into mass, which this import does not "
+                "model: only added joint masses and the elements' own mass are imported."
+            )
+
+    def _joint_axes_are_global(self, row: dict[str, str], what: str) -> bool:
+        """Whether a joint assignment's axes are the global ones (the only case read)."""
+        system = row.get("CoordSys", "GLOBAL").strip().lower()
+        if system not in ("global", "local", "joint local"):
+            self.dropped[f"{what} in coordinate system {row.get('CoordSys')}"] += 1
+            return False
+        if system != "global" and self._rotated_joint_axes:
+            self.dropped[f"{what} in rotated joint local axes"] += 1
+            return False
+        return True
+
+    def _in_plane(self, values: tuple[float, ...], what: str) -> tuple[float, ...]:
+        """Zero the components a 2D model cannot carry, counted once per record."""
+        if self.ndm == 3:
+            return values
+        if any(value for slot, value in enumerate(values) if slot not in _SLOTS_2D):
+            self.dropped[what] += 1
+        return tuple(value if slot in _SLOTS_2D else 0.0 for slot, value in enumerate(values))
+
+    @staticmethod
+    def _assign(node: Node, field: str, values: tuple[float, ...], where: str) -> None:
+        """Set a validated node field, naming the record when the model refuses it."""
+        try:
+            setattr(node, field, values)
+        except ValidationError as exc:
+            raise Sap2000TextError(f"{where}{_first_error(exc)}") from exc
 
     # ── materials and sections ──
     def build_materials(self) -> None:
@@ -1426,6 +1551,7 @@ def s2k_to_project(
             f"{s2k.path.name} has no joints (JOINT COORDINATES is missing or empty): "
             "there is no model to import."
         )
+    translator.build_joint_assignments()
     translator.build_materials()
     translator.build_frames(translator.non_uniform_frames())
     translator.build_areas()
@@ -1588,11 +1714,22 @@ class _Writer:
                 if any(n.restraint)
             ],
         )
-        for n in p.nodes:
-            if any(n.mass):
-                self.report.skipped["joint mass"] += 1
-            if any(getattr(n, "spring", ()) or ()):
-                self.report.skipped["joint spring"] += 1
+        mass_rows = [
+            [("Joint", str(n.id)), ("CoordSys", _quote("Joint Local"))]
+            + [(key, _fmt(value)) for key, value in zip(_MASS_KEYS, n.mass, strict=True)]
+            for n in p.nodes
+            if any(n.mass)
+        ]
+        self.table("JOINT ADDED MASS ASSIGNMENTS", mass_rows)
+        spring_rows = [
+            [("Joint", str(n.id)), ("CoordSys", "Local")]
+            + [(key, _fmt(value)) for key, value in zip(_SPRING_KEYS, n.spring, strict=True)]
+            for n in p.nodes
+            if n.has_spring
+        ]
+        self.table("JOINT SPRING ASSIGNMENTS 1 - UNCOUPLED", spring_rows)
+        self.report.written["joint mass"] = len(mass_rows)
+        self.report.written["joint spring"] = len(spring_rows)
 
         sections = {s.id: s for s in p.sections}
         frames = [
@@ -1759,6 +1896,10 @@ class _Writer:
         ):
             if items:
                 self.report.skipped[what] += len(items)
+        if p.mass_source is not None:
+            # SAP2000's mass source can be written, but this writer does not model it:
+            # say so instead of exporting a project whose mass changed silently.
+            self.report.skipped["mass source"] += 1
         self.lines.append("")
         self.lines.append("END TABLE DATA")
         return "\n".join(self.lines) + "\n"

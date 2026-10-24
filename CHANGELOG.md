@@ -9,6 +9,19 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Added
+
+- **SAP2000 text import and export: added joint masses and support springs.**
+  `JOINT ADDED MASS ASSIGNMENTS` (`Mass1..3`, `MMI1..3`) and `JOINT SPRING
+  ASSIGNMENTS 1 - UNCOUPLED` (`U1..3`, `R1..3`, springs to ground) now reach
+  `Node.mass` and `Node.spring`, scaled by their dimension to the project units,
+  and the export writes both tables back, so a mass-and-spring model round-trips.
+  The file's `MASS SOURCE` decides whether added masses count, and is reported
+  when it excludes element mass or asks for load mass; a 2D model keeps the
+  in-plane components and reports the rest; a file with rotated joint local axes
+  reports those rows instead of turning them silently. The export now also
+  reports a project mass source, which it cannot write.
+
 ### Fixed
 
 - **SAP2000 text import: a damaged file is refused with a message that names the

@@ -51,7 +51,8 @@ script o un notebook de Jupyter: la interfaz es una forma de usarlo, no la únic
 
 ## Qué funciona hoy (resumen)
 
-- **Modelación**: grillas cartesianas y cilíndricas, nodos, marcos (elásticos,
+- **Modelación**: grillas cartesianas y cilíndricas, nodos, masas añadidas y
+  resortes de apoyo, marcos (elásticos,
   basados en fuerza y en desplazamiento), barras, quads, cáscaras `ShellMITC4`,
   elementos de longitud cero, restricciones, equalDOF, diafragmas rígidos, rigid
   links, aisladores (elastoméricos y de fricción), liberaciones, brazos rígidos,

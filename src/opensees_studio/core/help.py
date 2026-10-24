@@ -1093,6 +1093,10 @@ dimension. The log names both systems. A file without units is read as kN-m.
 - **Joints** (global Cartesian, or with `GlobalX/Y/Z`) and their restraints.
   When only UX, UZ and RY are active and every joint is at Y = 0, the model
   becomes a **2D frame**.
+- **Added joint masses** (`Mass1..3` and `MMI1..3`) and **support springs**
+  (`U1..3`, `R1..3`), both in the joint local axes, which default to global. The
+  mass source decides whether the added masses carry weight; a 2D model keeps
+  only the in-plane components and reports the rest.
 - **Grid lines** of the global system, with their labels.
 - **Frames** as elastic beam-columns: the section and material assigned to each
   (a frame's own material overrides the section's), the local-axis angle, the
@@ -1135,7 +1139,7 @@ window down.
 
 # What it does not do (yet)
 Counted in the summary and the log, never dropped silently: tables it does not
-read (masses, springs, constraints, modal and nonlinear cases, area loads,
+read (constraints, modal and nonlinear cases, area loads,
 design data, …) by name and number of rows; moment loads on frames; axial and
 shear end releases; range-add combinations; automatic lateral loads; areas
 with three or more than four joints; and a frame with releases or a non-uniform
@@ -1157,8 +1161,8 @@ Computers and Structures, Inc.; the file follows the text format and has not
 been checked by CSI or in SAP2000.
 
 # What is written
-- Joints, restraints, global grid lines and the active DOFs (UX, UZ, RY only for
-  a 2D frame).
+- Joints, restraints, added joint masses and support springs, global grid lines
+  and the active DOFs (UX, UZ, RY only for a 2D frame).
 - Elastic beam-columns on elastic sections, with their end releases and
   partial-fixity springs. Each section is written with SAP2000's local 2 on this
   program's local z (local y in 2D), and a member whose axes differ from
@@ -1174,10 +1178,10 @@ been checked by CSI or in SAP2000.
 - Linear static cases, and combinations of them and of each other.
 
 # What is not written
-The export reports what it leaves out: other element and section types, joint
-masses and springs, end offsets, insertion points, property modifiers, shell and
-floor loads, imposed displacements, temperature loads, nonlinear static,
-modal, spectrum and transient cases, constraints and diaphragms.
+The export reports what it leaves out: other element and section types, end
+offsets, insertion points, property modifiers, the mass source, shell and floor
+loads, imposed displacements, temperature loads, nonlinear static, modal,
+spectrum and transient cases, constraints and diaphragms.
 """,
             "file.import_s2k",
             "file.export_ifc",
