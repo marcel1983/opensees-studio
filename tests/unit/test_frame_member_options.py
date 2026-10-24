@@ -536,6 +536,21 @@ def test_a_section_with_shear_areas_plans_a_timoshenko_member() -> None:
     assert plan_frame_members(_project()).members[1].timoshenko is None
 
 
+def test_a_zero_shear_modifier_turns_shear_deformation_off() -> None:
+    section = ElasticSection(id=1, E=E, A=A, Iz=IZ, G=8e7, As2=0.01)
+    element = _beam(modifiers=FrameModifiers(as2=0.0, i33=0.5))
+    plan = plan_frame_members(_project(element, sections=[section]))
+    assert plan.members[1].timoshenko is None
+    assert plan.members[1].section_id != 1  # the I33 modifier still derives a section
+
+
+def test_a_zero_as3_modifier_disables_shear_in_3d() -> None:
+    section = ElasticSection(id=1, E=E, A=A, Iz=IZ, Iy=IZ, G=8e7, J=3e-4, As2=0.01, As3=0.02)
+    element = _beam(modifiers=FrameModifiers(as3=0.0))
+    plan = plan_frame_members(_project(element, sections=[section], ndm=3))
+    assert plan.members[1].timoshenko is None
+
+
 def test_a_shear_area_needs_the_shear_modulus() -> None:
     section = ElasticSection(id=1, E=E, A=A, Iz=IZ, As2=0.01)
     with pytest.raises(ValueError, match="shear modulus"):

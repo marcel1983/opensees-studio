@@ -1116,7 +1116,12 @@ dimension. The log names both systems. A file without units is read as kN-m.
   and in the torsion constant; a 3D section whose `J` is 0 gets a small one,
   because OpenSees needs torsional stiffness. Both substitutions are counted in
   the report.
-- **End releases** of torsion and bending, and partial-fixity springs.
+- **End releases** of torsion and bending, partial-fixity springs, and each
+  frame's **property modifiers** (`AMod`, `AS2Mod`, `AS3Mod`, `JMod`,
+  `I22Mod`, `I33Mod`, `MassMod`, `WeightMod`, mapped to this program's local
+  axes). A zero shear-area modifier turns shear deformation off; on a
+  nonprismatic frame the segment sections' own shear areas govern, as in
+  SAP2000's stored results.
 - **Load patterns** with their self-weight multiplier, **joint forces** (global),
   **distributed frame loads** (uniform, trapezoidal or over part of the member,
   global, gravity, projected or local directions) and **point frame loads**.
@@ -1193,9 +1198,10 @@ been checked by CSI or in SAP2000.
 # What is written
 - Joints, restraints, added joint masses and support springs, global grid lines
   and the active DOFs (UX, UZ, RY only for a 2D frame).
-- Elastic beam-columns on elastic sections, with their end releases and
-  partial-fixity springs. Each section is written with SAP2000's local 2 on this
-  program's local z (local y in 2D), and a member whose axes differ from
+- Elastic beam-columns on elastic sections, with their end releases,
+  partial-fixity springs and per-frame property modifiers. Each section is
+  written with SAP2000's local 2 on this program's local z (local y in 2D), and
+  a member whose axes differ from
   SAP2000's default gets the local-axis angle that makes them match. A section
   with a shape (rectangle, I, pipe, tube) is written as that shape, any other as
   a general section; every one carries its area, inertias, torsion constant and
@@ -1211,9 +1217,9 @@ been checked by CSI or in SAP2000.
 
 # What is not written
 The export reports what it leaves out: other element and section types, end
-offsets, insertion points, property modifiers, the mass source, shell and floor
-loads, imposed displacements, temperature loads, nonlinear static, modal,
-spectrum and transient cases, constraints and diaphragms. A nonprismatic section
+offsets, insertion points, the mass source, shell and floor loads, imposed
+displacements, temperature loads, nonlinear static, modal, spectrum and
+transient cases, constraints and diaphragms. A nonprismatic section
 is written as the elastic pieces it was subdivided into, not as a SAP2000
 `NONPRISMATIC` table, so the exported file carries the same mechanical model but
 not the taper template.
@@ -2419,7 +2425,7 @@ Sections are what frame, shell and zero-length-section elements point at.
   trapezoidal loads on it are refused, and it takes no `-release`: a released end
   uses the hidden-node route instead. The member deflects by
   `P L³ / (3 E I) + P L / (G As)` on a cantilever; the Property Modifiers' shear
-  areas scale As2 / As3.
+  areas scale As2 / As3, and a multiplier of 0 turns shear deformation off.
 - **Nonprismatic (tapered) section** - a table of segments, each running from one
   **elastic** section to another over an absolute length or a fraction of the
   member, with a linear, parabolic or cubic variation. Assigning it splits each

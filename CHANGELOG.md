@@ -11,6 +11,18 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **SAP2000 text import and export: frame property modifiers.**
+  `FRAME PROPERTY MODIFIERS` (`AMod`, `AS2Mod`, `AS3Mod`, `JMod`, `I22Mod`,
+  `I33Mod`, `MassMod`, `WeightMod`) now reaches each frame's `FrameModifiers`,
+  mapped to this program's local axes, and the export writes the table back.
+  A shear-area multiplier of 0 is accepted and turns shear deformation off
+  (Euler-Bernoulli instead of `ElasticTimoshenkoBeam`); zero A, J, I22 or I33
+  is reported rather than turned into a mechanism. On a nonprismatic frame the
+  segment sections' own shear areas govern, matching SAP2000's stored results
+  for 1-006a/b (whose table asks for zero shear but whose results keep it).
+  The 68-file example set still imports in full; the comparison no longer marks
+  those two models incomplete for this table.
+
 - **Nonprismatic (tapered) sections, in the Section Library and the SAP2000
   import.** A `NonprismaticSection` is a template of segments between prismatic
   elastic sections, each with an absolute or relative length and a linear,

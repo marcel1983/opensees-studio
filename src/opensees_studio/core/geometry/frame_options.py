@@ -196,14 +196,20 @@ class FrameModifiers(_Options):
     ``weight`` its self weight.
 
     ``as2`` / ``as3`` scale the shear areas ``As2`` / ``As3`` of an elastic
-    section. They change a result only when the section defines shear areas
-    (the member then runs as an ``ElasticTimoshenkoBeam``); without them the
-    member is Euler-Bernoulli and they are kept for SAP2000 parity.
+    section. A multiplier of **0** turns shear deformation off for the member
+    (it runs as Euler-Bernoulli, not ``ElasticTimoshenkoBeam``), as in
+    SAP2000; any positive multiplier keeps the Timoshenko route. In 3D both
+    shear areas must be positive for that route, because OpenSees' Timoshenko
+    element takes both.
     """
 
     area: float = Field(default=1.0, gt=0.0, description="Cross-section area A.")
-    as2: float = Field(default=1.0, gt=0.0, description="Shear area in the 2 direction.")
-    as3: float = Field(default=1.0, gt=0.0, description="Shear area in the 3 direction.")
+    as2: float = Field(
+        default=1.0, ge=0.0, description="Shear area in the 2 direction (0 = no shear)."
+    )
+    as3: float = Field(
+        default=1.0, ge=0.0, description="Shear area in the 3 direction (0 = no shear)."
+    )
     torsion: float = Field(default=1.0, gt=0.0, description="Torsional constant J.")
     i22: float = Field(default=1.0, gt=0.0, description="Moment of inertia about local 2 (Iy).")
     i33: float = Field(default=1.0, gt=0.0, description="Moment of inertia about local 3 (Iz).")
