@@ -11,6 +11,19 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **SAP2000 text import and export: rigid diaphragms.**
+  `CONSTRAINT DEFINITIONS - DIAPHRAGM` and `JOINT CONSTRAINT ASSIGNMENTS`
+  become `RigidDiaphragm`s, and the export writes both tables back. SAP2000's
+  floating centre-of-mass joint (the one that usually carries the floor's added
+  mass and has no element) is used as the retained node, so the runner fixes
+  its out-of-plane DOFs automatically; choosing a real floor joint would leave
+  that mass-only joint singular. Supports are left out of the floor (OpenSees
+  would silently ignore them), and 2D, multi-level and out-of-plane cases are
+  counted in the report. This unblocks SAP2000's 1-024/1-025: their modal
+  periods now match to 3e-6 and 9e-7 relative, 1-024's CQC/SRSS peak
+  translations to 5e-7 absolute (2.4e-5 relative) and its reactions to 3.5e-6
+  absolute; both previously failed with a singular stiffness matrix.
+
 - **SAP2000 text import and export: frame property modifiers.**
   `FRAME PROPERTY MODIFIERS` (`AMod`, `AS2Mod`, `AS3Mod`, `JMod`, `I22Mod`,
   `I33Mod`, `MassMod`, `WeightMod`) now reaches each frame's `FrameModifiers`,

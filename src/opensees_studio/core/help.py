@@ -1131,6 +1131,12 @@ dimension. The log names both systems. A file without units is read as kN-m.
 - **Ground displacements** on restrained joints (support settlements), and
   **frame added mass** (`FRAME ADDED MASS ASSIGNMENTS`) added to the element's
   mass per length.
+- **Rigid diaphragms** (`CONSTRAINT DEFINITIONS - DIAPHRAGM` and
+  `JOINT CONSTRAINT ASSIGNMENTS`) as `RigidDiaphragm`, using SAP2000's
+  floating centre-of-mass joint as the retained node so the runner can fix its
+  out-of-plane DOFs. A diaphragm in a 2D model, a multi-level one, a joint
+  outside its plane and a support left out of the floor are counted in the
+  report.
 - **Linear static load cases**, each with its load patterns. A pattern used with
   a factor other than 1 becomes a scaled copy (`LIVE x 0.5`). A file without
   load cases gets one per load pattern, as SAP2000 does. A case whose
@@ -1209,6 +1215,8 @@ been checked by CSI or in SAP2000.
 - One material per distinct set of modulus, shear modulus, unit weight and unit
   mass (named MAT1, MAT2, …).
 - Shells (`ShellMITC4` on an elastic plate section) as thick-shell areas.
+- Rigid diaphragms (`CONSTRAINT DEFINITIONS - DIAPHRAGM` and
+  `JOINT CONSTRAINT ASSIGNMENTS`).
 - Plain load patterns with their self weight, joint forces, and uniform,
   trapezoidal and point frame loads in local directions.
 - Linear static cases, eigen modal cases, response-spectrum cases (CQC or SRSS)
@@ -1219,7 +1227,8 @@ been checked by CSI or in SAP2000.
 The export reports what it leaves out: other element and section types, end
 offsets, insertion points, the mass source, shell and floor loads, imposed
 displacements, temperature loads, nonlinear static, modal, spectrum and
-transient cases, constraints and diaphragms. A nonprismatic section
+transient cases, and constraints other than diaphragms (rigid links and
+equalDOFs). A nonprismatic section
 is written as the elastic pieces it was subdivided into, not as a SAP2000
 `NONPRISMATIC` table, so the exported file carries the same mechanical model but
 not the taper template.

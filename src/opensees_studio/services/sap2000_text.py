@@ -15,7 +15,8 @@ What is read: units (``PROGRAM CONTROL``), the active DOFs (a frame in the X-Z
 plane whose joints only move in it is a 2D model), grid lines, joints and their
 restraints, added joint masses and support springs, frames and their sections and
 materials (rectangular, I, pipe, tube or general properties; another shape by its
-properties), local-axis angles, end releases and partial fixity, load patterns
+properties), local-axis angles, end releases and partial fixity, per-frame
+property modifiers, rigid diaphragms, load patterns
 with their self-weight multiplier, joint forces, distributed and point frame
 loads, temperature loads, ground displacements on supports, frame added mass,
 linear static load cases (with the preload a case names), eigen modal cases,
@@ -65,6 +66,8 @@ from opensees_studio.core.analysis import (
     StaticCase,
 )
 from opensees_studio.core.combinations import CombinationTerm, CombinationType, LoadCombination
+from opensees_studio.core.constraints import RigidDiaphragm
+from opensees_studio.core.diaphragms import IN_PLANE_SLOTS, constrained_node_ids
 from opensees_studio.core.geometry.elements import ElasticBeamColumn, ShellMITC4Element
 from opensees_studio.core.geometry.frame_options import (
     EndRelease,
@@ -159,6 +162,8 @@ READ_TABLES: frozenset[str] = frozenset(
         "JOINT RESTRAINT ASSIGNMENTS",
         "JOINT ADDED MASS ASSIGNMENTS",
         "JOINT SPRING ASSIGNMENTS 1 - UNCOUPLED",
+        "CONSTRAINT DEFINITIONS - DIAPHRAGM",
+        "JOINT CONSTRAINT ASSIGNMENTS",
         "MASS SOURCE",
         "CONNECTIVITY - FRAME",
         "FRAME SECTION ASSIGNMENTS",
@@ -636,6 +641,23 @@ class _Translator:
         #: ``(pattern, joint) -> value`` of the joint patterns a temperature load varies with.
         self._joint_patterns: dict[tuple[str, str], float] = {}
         self.shells: list[ShellMITC4Element] = []
+        self.diaphragms: list[RigidDiaphragm] = []
+        self._diaphragm_defs = {
+            row.get("Name", ""): row
+            for row in s2k.rows("CONSTRAINT DEFINITIONS - DIAPHRAGM")
+            if row.get("Name")
+        }
+        self._constraint_joints: dict[str, list[str]] = {}
+        self._non_diaphragm_constraints = 0
+        for row in s2k.rows("JOINT CONSTRAINT ASSIGNMENTS"):
+            constraint = row.get("Constraint", "")
+            joint = row.get("Joint", "")
+            if not constraint or not joint:
+                continue
+            if constraint in self._diaphragm_defs:
+                self._constraint_joints.setdefault(constraint, []).append(joint)
+            else:
+                self._non_diaphragm_constraints += 1
         self.spectra: list[ResponseSpectrum] = []
         self._spectrum_ids: dict[tuple[str, float, float], int] = {}
         self._zero_period: set[str] = set()
@@ -1440,6 +1462,97 @@ class _Translator:
         self._section_keys[key] = section.id
         return section.id
 
+    # ── diaphragms ──
+    def build_diaphragms(self) -> None:
+        """Turn SAP2000 diaphragm definitions and joint assignments into ``RigidDiaphragm``.
+
+        SAP2000 places a *master* joint at the centre of the floor; it often
+        has no element (and carries the floor mass).  That joint is the right
+        ``rigidDiaphragm`` retained node: the runner fixes its out-of-plane
+        DOFs automatically.  Choosing a real floor joint instead would leave
+        a floating made-only-of-mass joint with free out-of-plane rotations,
+        which is the singular model the earlier prototype produced.
+        """
+        if self._non_diaphragm_constraints:
+            self.dropped["joint constraint other than a diaphragm"] += (
+                self._non_diaphragm_constraints
+            )
+        if not self._diaphragm_defs:
+            return
+        if self.ndm != 3:
+            self.dropped["rigid diaphragm in a 2D model"] += len(self._diaphragm_defs)
+            return
+        used: set[int] = set()
+        for frame in self.frames.values():
+            used.update(frame.nodes)
+        for shell in self.shells:
+            used.update(shell.nodes)
+        nodes = {node.id: node for node in self.nodes}
+        axis_of = {"X": 1, "Y": 2, "Z": 3, "1": 1, "2": 2, "3": 3}
+        for name, row in self._diaphragm_defs.items():
+            perp = axis_of.get(row.get("Axis", "Z").strip().upper())
+            if perp is None:
+                self.dropped["diaphragm with an unknown axis"] += 1
+                continue
+            perp = cast(Literal[1, 2, 3], perp)
+            if _yes(row, "MultiLevel"):
+                # OpenSees' rigidDiaphragm is a single plane.
+                self.dropped["multi-level rigid diaphragm"] += 1
+                continue
+            joints = self._constraint_joints.get(name, [])
+            missing = [joint for joint in joints if joint not in self.node_ids]
+            if missing:
+                self.dropped["diaphragm on a missing joint"] += len(missing)
+            ids = sorted({self.node_ids[joint] for joint in joints if joint in self.node_ids})
+            if len(ids) < 2:
+                self.dropped["rigid diaphragm with fewer than two joints"] += 1
+                continue
+
+            # The SAP master is the (normally floating) joint at the floor's
+            # centre; use it as the plane reference when it exists.
+            floating = [nid for nid in ids if nid not in used]
+            reference = floating[0] if floating else ids[0]
+            axis_index = perp - 1
+            scale = max(
+                1.0,
+                max(abs(node.coords[axis_index]) for node in nodes.values()),
+            )
+            tolerance = 1e-6 * scale
+            elevation = nodes[reference].coords[axis_index]
+            in_plane = [
+                nid for nid in ids if abs(nodes[nid].coords[axis_index] - elevation) <= tolerance
+            ]
+            if len(in_plane) < len(ids):
+                self.dropped["diaphragm joint outside the floor plane"] += len(ids) - len(in_plane)
+            slots = IN_PLANE_SLOTS[perp]
+            # A support cannot also follow the floor.  SAP2000 allows the
+            # assignment; OpenSees would silently ignore it.
+            free = [
+                nid for nid in in_plane if not any(nodes[nid].restraint[slot] for slot in slots)
+            ]
+            if len(free) < len(in_plane):
+                self.dropped["diaphragm joint restrained in the plane (left out)"] += len(
+                    in_plane
+                ) - len(free)
+            candidates = [nid for nid in free if nid in floating] or free
+            if not candidates:
+                self.dropped["rigid diaphragm with no free joint"] += 1
+                continue
+            retained = candidates[0]
+            constrained = tuple(nid for nid in free if nid != retained)
+            if not constrained:
+                self.dropped["rigid diaphragm with no constrained joint"] += 1
+                continue
+            self.diaphragms.append(
+                RigidDiaphragm(
+                    id=len(self.diaphragms) + 1,
+                    name=name,
+                    perp_dirn=perp,
+                    retained_node=retained,
+                    constrained_nodes=constrained,
+                )
+            )
+
     # ── loads ──
     def non_uniform_frames(self) -> set[str]:
         """Frames with a load an ElasticTimoshenkoBeam cannot take (partial, varying or point)."""
@@ -2127,6 +2240,7 @@ def s2k_to_project(
     translator.build_materials()
     translator.build_frames(translator.non_uniform_frames())
     translator.build_areas()
+    translator.build_diaphragms()
     patterns = translator.build_patterns()
     extra, cases = translator.build_cases(patterns)
     combinations = translator.build_combinations(cases)
@@ -2155,6 +2269,7 @@ def s2k_to_project(
             nodes=translator.nodes,
             sections=[*translator.sections],
             elements=elements,
+            diaphragms=[*translator.diaphragms],
             time_series=[LinearTimeSeries(id=1, name="Linear")],
             load_patterns=[*patterns.values(), *extra],
             spectra=[*translator.spectra],
@@ -2449,6 +2564,26 @@ class _Writer:
                 ]
             )
 
+        diaphragm_rows: list[list[tuple[str, str]]] = []
+        diaphragm_assignments: list[list[tuple[str, str]]] = []
+        diaphragm_names = _Names()
+        for diaphragm in p.diaphragms:
+            constrained = constrained_node_ids(p, diaphragm)
+            if not constrained:
+                self.report.skipped["empty rigid diaphragm"] += 1
+                continue
+            name = diaphragm_names.take(diaphragm.name, f"DIAPH{diaphragm.id}")
+            diaphragm_rows.append(
+                [
+                    ("Name", _quote(name)),
+                    ("CoordSys", "GLOBAL"),
+                    ("Axis", {1: "X", 2: "Y", 3: "Z"}[diaphragm.perp_dirn]),
+                    ("MultiLevel", "No"),
+                ]
+            )
+            for nid in sorted({diaphragm.retained_node, *constrained}):
+                diaphragm_assignments.append([("Joint", str(nid)), ("Constraint", _quote(name))])
+
         self.table(
             "MATERIAL PROPERTIES 01 - GENERAL",
             [
@@ -2481,13 +2616,15 @@ class _Writer:
         self.table("FRAME RELEASE ASSIGNMENTS 2 - PARTIAL FIXITY", partial)
         self.table("CONNECTIVITY - AREA", area_connectivity)
         self.table("AREA SECTION ASSIGNMENTS", area_assign)
+        self.table("CONSTRAINT DEFINITIONS - DIAPHRAGM", diaphragm_rows)
+        self.table("JOINT CONSTRAINT ASSIGNMENTS", diaphragm_assignments)
         self.report.written["frame(s)"] = len(frames)
         self.report.written["frame property modifier(s)"] = len(modifier_rows)
         self.report.written["shell(s)"] = len(shells)
+        self.report.written["rigid diaphragm(s)"] = len(diaphragm_rows)
         self.report.written["section(s)"] = len(section_rows) + len(area_rows)
         self._loads(set(frame_axes), frame_axes, os_axes)
         for what, items in (
-            ("rigid diaphragm", p.diaphragms),
             ("rigid link", p.rigid_links),
             ("equalDOF constraint", p.mp_constraints),
         ):
