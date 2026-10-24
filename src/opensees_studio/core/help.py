@@ -1125,6 +1125,14 @@ lies and maps `I33`/`I22`, `AS2`/`AS3` and the M2/M3 releases onto this
 program's axes (a section then used turned ends in "(axes 2-3)"). Loads are
 re-projected, so they keep their direction.
 
+# Damaged files
+Every error names the table and the line it came from ("Frame 3 (CONNECTIVITY -
+FRAME, line 57): joint 'C' is not defined."). A line inside a table that is not a
+`Key=Value` record is counted in the summary instead of being skipped in silence,
+and a file with no joints is refused rather than opened as an empty project. A
+truncated or corrupted file always fails with a message; it never takes the
+window down.
+
 # What it does not do (yet)
 Counted in the summary and the log, never dropped silently: tables it does not
 read (masses, springs, constraints, modal and nonlinear cases, area loads,

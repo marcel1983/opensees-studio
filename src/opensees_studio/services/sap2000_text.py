@@ -20,6 +20,13 @@ multiplier, joint forces, distributed and point frame loads, linear static load
 cases, combinations, and four-node thin or thick shells with their sections.
 Every other table is counted in the import report, never dropped silently.
 
+Diagnostics. A record the reader cannot use names the table and the line it came
+from (``Frame 3 (CONNECTIVITY - FRAME, line 57): joint 'C' is not defined``), and
+a line inside a table that is not a ``Key=Value`` record is counted in the import
+report instead of disappearing. A file with no joints is refused rather than
+opened as an empty project, and every failure reaches the caller as
+:class:`Sap2000TextError`: a damaged file must not take the window down.
+
 Units. A file is in its ``CurrUnits`` (``"KN, m, C"``); the project gets the
 nearest of our systems (or the one the caller picks) and every number is scaled
 by its dimension with :class:`~opensees_studio.services.s3d_import.UnitScale`.
@@ -222,17 +229,45 @@ _TABLE = re.compile(r'^TABLE:\s*"(?P<name>[^"]*)"\s*$', re.IGNORECASE)
 _PAIR = re.compile(r'([^\s=]+)=("(?P<quoted>[^"]*)"|(?P<bare>\S*))')
 
 
-def parse_tables(text: str) -> dict[str, list[dict[str, str]]]:
-    """Split SAP2000 text into ``{table name: [record, ...]}``, records as ``{key: value}``."""
-    tables: dict[str, list[dict[str, str]]] = {}
-    current: list[dict[str, str]] | None = None
+class S2kRow(dict[str, str]):
+    """One record of a table, and the line of the file it was read from.
+
+    A plain ``dict`` so every reader that already took records keeps working;
+    the line is what lets an error say *where* the record is, not only which
+    joint or frame it named.
+    """
+
+    line: int
+
+    def __init__(self, values: dict[str, str], line: int) -> None:
+        super().__init__(values)
+        self.line = line
+
+
+def parse_tables(
+    text: str, *, malformed: list[tuple[int, str]] | None = None
+) -> dict[str, list[S2kRow]]:
+    """Split SAP2000 text into ``{table name: [record, ...]}``, records as ``{key: value}``.
+
+    ``malformed``, when given, is filled with the ``(line, text)`` of every line
+    inside a table that is not a ``Key=Value`` record (or whose quotes do not
+    balance): a file that is not SAP2000 text then says so instead of importing
+    as an empty model.
+    """
+    tables: dict[str, list[S2kRow]] = {}
+    current: list[S2kRow] | None = None
     pending = ""
-    for raw in text.splitlines():
+    pending_line = 0
+    for number, raw in enumerate(text.splitlines(), start=1):
         line = raw.rstrip()
         if line.endswith(" _"):
+            pending_line = pending_line or number
             pending += line[:-2] + " "
             continue
         line = (pending + line).strip()
+        if pending_line:  # a continued record is reported where it started
+            number = pending_line
+        pending_line = 0
         pending = ""
         if not line or line.startswith(("$", ";")):
             continue
@@ -249,7 +284,9 @@ def parse_tables(text: str) -> dict[str, list[dict[str, str]]]:
             for m in _PAIR.finditer(line)
         }
         if record:
-            current.append(record)
+            current.append(S2kRow(record, number))
+        if malformed is not None and (not record or line.count('"') % 2):
+            malformed.append((number, line))
     return tables
 
 
@@ -258,9 +295,11 @@ class S2kFile:
     """A SAP2000 text file, split into tables but not yet translated."""
 
     path: Path
-    tables: dict[str, list[dict[str, str]]]
+    tables: dict[str, list[S2kRow]]
+    malformed: tuple[tuple[int, str], ...] = ()
+    """``(line, text)`` of every line inside a table that is not a record."""
 
-    def rows(self, table: str) -> list[dict[str, str]]:
+    def rows(self, table: str) -> list[S2kRow]:
         return self.tables.get(table, [])
 
     @property
@@ -297,10 +336,11 @@ def read_s2k(path: str | Path) -> S2kFile:
         text = raw.decode("utf-8-sig")
     except UnicodeDecodeError:
         text = raw.decode("latin-1")
-    tables = parse_tables(text)
+    malformed: list[tuple[int, str]] = []
+    tables = parse_tables(text, malformed=malformed)
     if not tables:
         raise Sap2000TextError(f"{source.name} has no SAP2000 table (no 'TABLE:' line).")
-    return S2kFile(path=source, tables=tables)
+    return S2kFile(path=source, tables=tables, malformed=tuple(malformed))
 
 
 # ──────────────────────────── local axes ────────────────────────────
@@ -379,17 +419,32 @@ def _first_error(exc: ValidationError) -> str:
     return f"{where}: {error.get('msg')}" if where else str(error.get("msg"))
 
 
-def _by_frame(rows: list[dict[str, str]]) -> dict[str, dict[str, str]]:
+def _at(table: str, row: dict[str, str]) -> str:
+    """Where a record came from, for an error message: ``JOINT COORDINATES, line 14``."""
+    line: int = getattr(row, "line", 0)
+    return f"{table}, line {line}" if line else table
+
+
+def _by_frame(rows: list[S2kRow]) -> dict[str, S2kRow]:
     return {row.get("Frame", ""): row for row in rows}
 
 
 def _ids(names: list[str]) -> tuple[dict[str, int], bool]:
     """Ids for object names: the names themselves when they are distinct positive integers."""
-    if all(n.isdigit() and int(n) > 0 for n in names) and len({int(n) for n in names}) == len(
-        names
+    try:
+        numbered = {name: int(name) for name in names if name.isdigit()}
+    except ValueError:
+        # ``isdigit`` is true for characters ``int`` refuses (``²``), and CPython
+        # caps integer conversion at 4 300 digits: a damaged name is renamed,
+        # it must not crash the import.
+        numbered = {}
+    if (
+        len(numbered) == len(names)
+        and len(set(numbered.values())) == len(names)
+        and all(value > 0 for value in numbered.values())
     ):
-        return {n: int(n) for n in names}, False
-    return {n: k for k, n in enumerate(names, start=1)}, True
+        return numbered, False
+    return {name: k for k, name in enumerate(names, start=1)}, True
 
 
 def _rect_props(d: float, b: float) -> dict[str, float]:
@@ -542,7 +597,7 @@ class _Translator:
 
     # ── joints ──
     def _coords(self, row: dict[str, str]) -> tuple[float, float, float]:
-        where = f"Joint {row.get('Joint')}: "
+        where = f"Joint {row.get('Joint')} ({_at('JOINT COORDINATES', row)}): "
         if "GlobalX" in row:
             return tuple(_number(row, k, where=where) for k in ("GlobalX", "GlobalY", "GlobalZ"))  # type: ignore[return-value]
         system = row.get("CoordSys", "GLOBAL").upper()
@@ -584,7 +639,9 @@ class _Translator:
                     Node(id=self.node_ids[name], coords=(x, y, z), restraint=tuple(fixed))  # type: ignore[arg-type]
                 )
             except ValidationError as exc:
-                raise Sap2000TextError(f"Joint {name}: {_first_error(exc)}") from exc
+                raise Sap2000TextError(
+                    f"Joint {name} ({_at('JOINT COORDINATES', row)}): {_first_error(exc)}"
+                ) from exc
             self.points[name] = np.array([x, y, z])
         if restraints:
             self.dropped["restraint on a missing joint"] += len(restraints)
@@ -594,7 +651,10 @@ class _Translator:
         s = self.scale
         for row in self.s2k.rows("MATERIAL PROPERTIES 02 - BASIC MECHANICAL PROPERTIES"):
             name = row.get("Material", "")
-            where = f"Material {name}: "
+            where = (
+                f"Material {name} "
+                f"({_at('MATERIAL PROPERTIES 02 - BASIC MECHANICAL PROPERTIES', row)}): "
+            )
             e = _number(row, "E1", where=where) * s.stress
             g = _number(row, "G12", where=where) * s.stress
             nu = _number(row, "U12", 0.0, where=where)
@@ -626,6 +686,7 @@ class _Translator:
         where = f"Frame section {name}: "
         if row is None:
             raise Sap2000TextError(f"{where}not in FRAME SECTION PROPERTIES 01 - GENERAL.")
+        where = f"Frame section {name} ({_at('FRAME SECTION PROPERTIES 01 - GENERAL', row)}): "
         shape = row.get("Shape", "General").strip().lower()
         given = {
             "A": _number(row, "Area", where=where),
@@ -720,7 +781,10 @@ class _Translator:
         try:
             section = ElasticSection(**fields)
         except ValidationError as exc:
-            raise Sap2000TextError(f"Frame section {name}: {_first_error(exc)}") from exc
+            raise Sap2000TextError(
+                f"Frame section {name} "
+                f"({_at('FRAME SECTION PROPERTIES 01 - GENERAL', row)}): {_first_error(exc)}"
+            ) from exc
         self.sections.append(section)
         self._section_keys[key] = section.id
         return section.id, mass
@@ -730,7 +794,7 @@ class _Translator:
         row = self._release_rows.get(name)
         if row is None:
             return FrameReleases()
-        springs_row = self._partial_rows.get(name, {})
+        springs_row: dict[str, str] = self._partial_rows.get(name, {})
         about2 = "M2" if orientation.two_on_y else "M3"
         about3 = "M3" if orientation.two_on_y else "M2"
         ends: list[EndRelease] = []
@@ -744,7 +808,14 @@ class _Translator:
                     self.dropped["out-of-plane end release"] += 1
                     continue
                 released.append(ours)
-                k = _number(springs_row, f"{sap}{end}", where=f"Frame {name}: ")
+                k = _number(
+                    springs_row,
+                    f"{sap}{end}",
+                    where=(
+                        f"Frame {name} "
+                        f"({_at('FRAME RELEASE ASSIGNMENTS 2 - PARTIAL FIXITY', springs_row)}): "
+                    ),
+                )
                 if k > 0 and _yes(row, "PartialFix"):
                     springs[ours] = k * self.scale.moment
             for sap in ("P", "V2", "V3"):
@@ -778,11 +849,18 @@ class _Translator:
             )
         assigned = {r.get("Frame", ""): r for r in self.s2k.rows("FRAME SECTION ASSIGNMENTS")}
         self.angles = {
-            r.get("Frame", ""): _number(r, "Angle", where=f"Frame {r.get('Frame')}: ")
+            r.get("Frame", ""): _number(
+                r,
+                "Angle",
+                where=(
+                    f"Frame {r.get('Frame')} "
+                    f"({_at('FRAME LOCAL AXES ASSIGNMENTS 1 - TYPICAL', r)}): "
+                ),
+            )
             for r in self.s2k.rows("FRAME LOCAL AXES ASSIGNMENTS 1 - TYPICAL")
         }
         for row, name in zip(rows, names, strict=True):
-            where = f"Frame {name}: "
+            where = f"Frame {name} ({_at('CONNECTIVITY - FRAME', row)}): "
             ends = (row.get("JointI", ""), row.get("JointJ", ""))
             for joint in ends:
                 if joint not in self.node_ids:
@@ -855,11 +933,15 @@ class _Translator:
         thin = 0
         kinds: Counter[str] = Counter()
         for row, name in zip(rows, names, strict=True):
-            where = f"Area {name}: "
-            joints = [
-                row.get(f"Joint{k}", "") for k in range(1, int(_number(row, "NumJoints", 0)) + 1)
-            ]
-            if len(joints) != 4 or len(set(joints)) != 4:
+            where = f"Area {name} ({_at('CONNECTIVITY - AREA', row)}): "
+            # Only a four-joint area is read. The count is checked before it is
+            # used as a loop bound: `NumJoints=1E9` in a damaged file used to
+            # hang the import, and 2.7 was silently truncated to 2.
+            if _number(row, "NumJoints", 0.0, where=where) != 4:
+                self.dropped["area with other than four joints"] += 1
+                continue
+            joints = [row.get(f"Joint{k}", "") for k in range(1, 5)]
+            if len(set(joints)) != 4:
                 self.dropped["area with other than four joints"] += 1
                 continue
             for joint in joints:
@@ -901,7 +983,14 @@ class _Translator:
         key = ("area", name, material.name)
         if key in self._section_keys:
             return self._section_keys[key]
-        h = _number(prop, "Thickness", where=f"Area section {name}: ") * self.scale.length
+        h = (
+            _number(
+                prop,
+                "Thickness",
+                where=f"Area section {name} ({_at('AREA SECTION PROPERTIES', prop)}): ",
+            )
+            * self.scale.length
+        )
         bend = _number(prop, "BendThick", 0.0) * self.scale.length
         if bend > 0 and not math.isclose(bend, h, rel_tol=1e-9):
             self.dropped["area bending thickness different from its membrane thickness"] += 1
@@ -916,7 +1005,9 @@ class _Translator:
                 unit_weight=material.weight,
             )
         except ValidationError as exc:
-            raise Sap2000TextError(f"Area section {name}: {_first_error(exc)}") from exc
+            raise Sap2000TextError(
+                f"Area section {name} ({_at('AREA SECTION PROPERTIES', prop)}): {_first_error(exc)}"
+            ) from exc
         self.sections.append(section)
         self._section_keys[key] = section.id
         return section.id
@@ -993,7 +1084,13 @@ class _Translator:
                 id=k,
                 name=pattern_name,
                 time_series_id=1,
-                self_weight=_number(row, "SelfWtMult", where=f"Load pattern {pattern_name}: "),
+                self_weight=_number(
+                    row,
+                    "SelfWtMult",
+                    where=(
+                        f"Load pattern {pattern_name} ({_at('LOAD PATTERN DEFINITIONS', row)}): "
+                    ),
+                ),
             )
         s = self.scale
 
@@ -1015,7 +1112,8 @@ class _Translator:
                 self.dropped["joint load in a local coordinate system"] += 1
                 continue
             forces = [
-                _number(row, key, where=f"Joint {joint}: ") * (s.force if k < 3 else s.moment)
+                _number(row, key, where=f"Joint {joint} ({_at('JOINT LOADS - FORCE', row)}): ")
+                * (s.force if k < 3 else s.moment)
                 for k, key in enumerate(_FORCE_KEYS)
             ]
             if self.ndm == 2:
@@ -1037,7 +1135,7 @@ class _Translator:
             if vector is None:
                 self.dropped[f"distributed load along {row.get('Dir')}"] += 1
                 continue
-            where = f"Frame {name}: "
+            where = f"Frame {name} ({_at('FRAME LOADS - DISTRIBUTED', row)}): "
             local = self._local(name, vector)
             a, b = (
                 _number(row, "RelDistA", 0.0, where=where),
@@ -1092,7 +1190,7 @@ class _Translator:
             if vector is None or row.get("Dir", "").lower().endswith(("projected", "proj")):
                 self.dropped[f"point load along {row.get('Dir')}"] += 1
                 continue
-            where = f"Frame {name}: "
+            where = f"Frame {name} ({_at('FRAME LOADS - POINT', row)}): "
             local = self._local(name, vector)
             x = _number(row, "RelDist", -1.0, where=where)
             if x < 0:
@@ -1155,7 +1253,12 @@ class _Translator:
                 if used is None:
                     self.dropped["undefined load pattern in a static case"] += 1
                     continue
-                factor = _number(load, "LoadSF", 1.0, where=f"Case {name}: ")
+                factor = _number(
+                    load,
+                    "LoadSF",
+                    1.0,
+                    where=(f"Case {name} ({_at('CASE - STATIC 1 - LOAD ASSIGNMENTS', load)}): "),
+                )
                 if math.isclose(factor, 1.0):
                     pattern_ids.append(used.id)
                     continue
@@ -1180,7 +1283,7 @@ class _Translator:
     def build_combinations(self, cases: list[StaticCase]) -> list[LoadCombination]:
         rows = self.s2k.rows("COMBINATION DEFINITIONS")
         order: list[str] = []
-        grouped: dict[str, list[dict[str, str]]] = {}
+        grouped: dict[str, list[S2kRow]] = {}
         for row in rows:
             name = row.get("ComboName", "")
             if name not in grouped:
@@ -1198,7 +1301,12 @@ class _Translator:
             terms: list[CombinationTerm] = []
             for row in grouped[name]:
                 ref = row.get("CaseName", row.get("Case", ""))
-                factor = _number(row, "ScaleFactor", 1.0, where=f"Combination {name}: ")
+                factor = _number(
+                    row,
+                    "ScaleFactor",
+                    1.0,
+                    where=f"Combination {name} ({_at('COMBINATION DEFINITIONS', row)}): ",
+                )
                 case_type = row.get("CaseType", "Linear Static").lower()
                 if case_type == "response combo" and ref in combo_ids and ref != name:
                     terms.append(
@@ -1236,7 +1344,15 @@ class _Translator:
                 continue
             axis = row.get("AxisDir", "").upper()
             if axis in lines:
-                ordinate = round(_number(row, "XRYZCoord") * self.scale.length, 12)
+                ordinate = round(
+                    _number(
+                        row,
+                        "XRYZCoord",
+                        where=f"Grid line ({_at('GRID LINES', row)}): ",
+                    )
+                    * self.scale.length,
+                    12,
+                )
                 label = row.get("GridID") or f"{axis}{len(lines[axis]) + 1}"
                 lines[axis].setdefault(ordinate, label)
         if not any(lines.values()):
@@ -1290,15 +1406,26 @@ def s2k_to_project(
     project's system, by default the one closest to the file's.
 
     Raises:
-        Sap2000TextError: on unknown units, a broken reference or a value the
-            project model refuses.
+        Sap2000TextError: on unknown units, a broken reference, a value the
+            project model refuses, or a file with no joints.
     """
     source = source_units or s2k.units
     target = units or default_target(source)
     translator = _Translator(s2k, target, source)
     if not s2k.has_units and source_units is None:
         translator.notes.append(f"The file declares no units: read as {DEFAULT_UNITS!r}.")
+    if s2k.malformed:
+        first_line, first_text = s2k.malformed[0]
+        translator.notes.append(
+            f"{len(s2k.malformed)} line(s) in the file are not Key=Value records and were "
+            f"skipped (first at line {first_line}: {first_text[:60]!r})."
+        )
     translator.build_joints()
+    if not translator.nodes:
+        raise Sap2000TextError(
+            f"{s2k.path.name} has no joints (JOINT COORDINATES is missing or empty): "
+            "there is no model to import."
+        )
     translator.build_materials()
     translator.build_frames(translator.non_uniform_frames())
     translator.build_areas()

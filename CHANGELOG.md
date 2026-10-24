@@ -9,6 +9,19 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Fixed
+
+- **SAP2000 text import: a damaged file is refused with a message that names the
+  table and the line, not with a crash or a hang.** A joint or frame name that
+  CPython cannot read as an integer (4 300+ digits, or a character such as `²`
+  that `isdigit` accepts) is numbered instead of raising `ValueError`; an area
+  whose `NumJoints` is not 4 no longer drives a billion-iteration loop; a file
+  with no joints is refused instead of opened as an empty project; and a line
+  inside a table that is not a `Key=Value` record is counted in the import
+  report instead of disappearing. A truncated or corrupted file now always
+  reaches the caller as `Sap2000TextError`, and exporting a project twice writes
+  the same bytes; both are pinned by tests.
+
 ## [0.0.24] — 2026-10-23
 
 Batch analysis and SAP2000 interoperability: File → Run Batch… solves many
