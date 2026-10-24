@@ -100,6 +100,14 @@ refused instead of silently downgraded).
   reports those rows instead of turning them silently. The export now also
   reports a project mass source, which it cannot write.
 
+### Documentation
+
+- **The SAP2000 text import remains a work in progress.** Its status, the
+  tables it reads, the known approximations and the unsupported objects are
+  documented in `docs/sap2000-import-status.md`, linked from both READMEs and
+  from the in-application help. The import report on each file remains the
+  authoritative list of what was left out.
+
 ### Fixed
 
 - **SAP2000 text import: real-world section definitions no longer stop a file.**
@@ -107,9 +115,10 @@ refused instead of silently downgraded).
   imports, with the in-plane inertia checked per member instead of demanding
   both; a 3D section whose torsional constant is 0 gets a small one, counted in
   the report, because OpenSees needs torsional stiffness; and a `Nonprismatic`
-  section imports as one prismatic member with the section at its I end, also
-  counted. Found importing SAP2000's own `Example 1-006`, `1-021`, `1-022` and
-  `1-024` models: 5 of 68 example files used to be refused, all 68 now import.
+  section no longer stops the file (it is subdivided into elastic pieces, as
+  described above). Found importing SAP2000's own `Example 1-006`, `1-021`,
+  `1-022` and `1-024` models: 5 of 68 example files used to be refused, all 68
+  now import.
 
 - **SAP2000 text import: a damaged file is refused with a message that names the
   table and the line, not with a crash or a hang.** A joint or frame name that

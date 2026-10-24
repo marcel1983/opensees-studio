@@ -102,6 +102,10 @@ script o un notebook de Jupyter: la interfaz es una forma de usarlo, no la únic
   marca de Computers and Structures, Inc.), scripts de OpenSeesPy, IFC y un
   reporte de cálculo HTML/PDF.
 
+**La importación de S2K está en proceso:** las tablas que lee, las
+aproximaciones y lo que no soporta están en
+[docs/sap2000-import-status.md](docs/sap2000-import-status.md).
+
 ## Verificación
 
 El [Manual de Verificación](docs/verification-manual.md) compara OpenSees Studio
