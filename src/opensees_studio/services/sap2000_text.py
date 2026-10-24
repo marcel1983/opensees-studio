@@ -90,6 +90,8 @@ from opensees_studio.core.project import Project, ProjectMeta
 from opensees_studio.core.sections import (
     ElasticMembranePlateSection,
     ElasticSection,
+    NonprismaticSection,
+    NonprismaticSegment,
     PipeShape,
     RectShape,
     SectionShape,
@@ -97,6 +99,7 @@ from opensees_studio.core.sections import (
     WideFlangeShape,
 )
 from opensees_studio.core.units import UnitSystem, gravity, metres_per_unit, newtons_per_unit
+from opensees_studio.services.nonprismatic import materialize_nonprismatic
 from opensees_studio.services.s3d_import import UnitScale
 
 _KIP_N = 4448.2216152605
@@ -585,10 +588,18 @@ class _Material:
 
 
 class _Translator:
-    def __init__(self, s2k: S2kFile, target: UnitSystem, units: str) -> None:
+    def __init__(
+        self,
+        s2k: S2kFile,
+        target: UnitSystem,
+        units: str,
+        *,
+        subdivisions: int = 12,
+    ) -> None:
         self.s2k = s2k
         self.target = target
         self.scale = unit_scale(units, target)
+        self.subdivisions = max(12, min(200, int(subdivisions)))
         self.notes: list[str] = []
         self.dropped: Counter[str] = Counter()
         self.ndm = 2 if self._is_planar() else 3
@@ -599,12 +610,13 @@ class _Translator:
         self.frame_sections: dict[str, dict[str, str]] = {}
         #: A nonprismatic section's first segment names the section at its I end.
         self.nonprismatic: dict[str, str] = {}
-        self._nonprismatic_reported: set[str] = set()
+        self._nonprismatic_rows: dict[str, list[S2kRow]] = {}
+        self._nonprismatic_templates: dict[tuple[Any, ...], tuple[int, float]] = {}
         self._zero_torsion: set[str] = set()
         self._shapes_reported: set[str] = set()
         self._release_rows = _by_frame(s2k.rows("FRAME RELEASE ASSIGNMENTS 1 - GENERAL"))
         self._partial_rows = _by_frame(s2k.rows("FRAME RELEASE ASSIGNMENTS 2 - PARTIAL FIXITY"))
-        self.sections: list[ElasticSection | ElasticMembranePlateSection] = []
+        self.sections: list[ElasticSection | ElasticMembranePlateSection | NonprismaticSection] = []
         self._section_keys: dict[tuple[Any, ...], int] = {}
         self.frames: dict[str, ElasticBeamColumn] = {}
         self.frame_ends: dict[str, tuple[str, str]] = {}
@@ -849,8 +861,10 @@ class _Translator:
             self.frame_sections[row.get("SectionName", "")] = row
         for row in self.s2k.rows("FRAME SECTION PROPERTIES 05 - NONPRISMATIC"):
             name = row.get("SectionName", "")
-            if name and name not in self.nonprismatic:
-                # The segments arrive in order: the first one starts at the member's I end.
+            if not name:
+                continue
+            self._nonprismatic_rows.setdefault(name, []).append(row)
+            if name not in self.nonprismatic:
                 self.nonprismatic[name] = row.get("StartSect", "")
 
     def _material(self, name: str, where: str) -> _Material:
@@ -864,8 +878,8 @@ class _Translator:
     def _section_row(self, name: str, seen: tuple[str, ...] = ()) -> dict[str, str]:
         """The properties row of a section, resolving a nonprismatic one to its start section.
 
-        A nonprismatic member is imported as one prismatic member with the section at
-        its I end; the import report says so.
+        The start section gives the material and the sanity checks; the actual
+        subdivision is built by :meth:`_nonprismatic_template`.
         """
         row = self.frame_sections.get(name)
         if row is None:
@@ -881,10 +895,113 @@ class _Translator:
                 "a Nonprismatic section needs a start section of its own in FRAME SECTION "
                 "PROPERTIES 05 - NONPRISMATIC."
             )
-        if name not in self._nonprismatic_reported:
-            self._nonprismatic_reported.add(name)
-            self.dropped["nonprismatic section (imported as its start section)"] += 1
         return self._section_row(start, (*seen, name))
+
+    def _ordered_nonprismatic(self, name: str) -> list[S2kRow]:
+        """The nonprismatic rows in member order.
+
+        SAP2000 writes the segments from the frame's I end to its J end, in
+        table order.  Do not reorder them by section name or by following
+        ``EndSect -> StartSect``: an advanced nonprismatic definition may have
+        discontinuous steps, and the table order is the physical one.  Two
+        identical rows are two identical segments, so they are kept.
+        """
+        rows = self._nonprismatic_rows.get(name, [])
+        if not rows:
+            raise Sap2000TextError(
+                f"Frame section {name}: no rows in FRAME SECTION PROPERTIES 05 - NONPRISMATIC."
+            )
+        return list(rows)
+
+    def _nonprismatic_template(
+        self,
+        name: str,
+        material: _Material,
+        orientation: _Orientation,
+        shear: bool,
+    ) -> tuple[int, float]:
+        """The project ``NonprismaticSection`` for a SAP2000 section, and its mass/length."""
+        key = (name, material.name, orientation.two_on_y, shear)
+        cached = self._nonprismatic_templates.get(key)
+        if cached is not None:
+            return cached
+        rows = self._ordered_nonprismatic(name)
+        section_ids: dict[str, int] = {}
+        segments: list[NonprismaticSegment] = []
+        start_mass: float | None = None
+        for index, row in enumerate(rows):
+            start = row.get("StartSect", "")
+            end = row.get("EndSect", "")
+            for section_name in (start, end):
+                if section_name in section_ids:
+                    continue
+                section_row = self.frame_sections.get(section_name)
+                if section_row is None:
+                    raise Sap2000TextError(
+                        f"Frame section {name}: nonprismatic segment {index + 1} refers to "
+                        f"{section_name!r}, which is not in FRAME SECTION PROPERTIES 01 - GENERAL."
+                    )
+                if section_row.get("Shape", "").strip().lower() == "nonprismatic":
+                    raise Sap2000TextError(
+                        f"Frame section {name}: nonprismatic segment {index + 1} refers to "
+                        f"another nonprismatic section {section_name!r}."
+                    )
+                values, row_values = self._section_values(section_name)
+                section_id, mass = self._frame_section(
+                    section_name, (values, row_values), material, orientation, shear
+                )
+                section_ids[section_name] = section_id
+                if index == 0 and section_name == start:
+                    start_mass = mass
+            length_type = row.get("LengthType", "Absolute").strip().lower()
+            if length_type not in ("absolute", "relative"):
+                raise Sap2000TextError(
+                    f"Frame section {name}: segment {index + 1} has LengthType "
+                    f"{row.get('LengthType')!r}; expected Absolute or Relative."
+                )
+            length_key = "AbsLength" if length_type == "absolute" else "RelLength"
+            length = _number(
+                row,
+                length_key,
+                where=f"Frame section {name} (FRAME SECTION PROPERTIES 05 - NONPRISMATIC): ",
+            )
+            variation = row.get("EI33Var", "Linear").strip().lower()
+            if variation not in ("linear", "parabolic", "cubic"):
+                raise Sap2000TextError(
+                    f"Frame section {name}: segment {index + 1} has EI33Var "
+                    f"{row.get('EI33Var')!r}; expected Linear, Parabolic or Cubic."
+                )
+            if row.get("EI22Var", row.get("EI33Var", "")).strip().lower() != variation:
+                self.dropped["nonprismatic EI22 variation (EI33 variation used)"] += 1
+            try:
+                segment = NonprismaticSegment(
+                    start_section_id=section_ids[start],
+                    end_section_id=section_ids[end],
+                    length_type=cast(Literal["absolute", "relative"], length_type),
+                    length=length,
+                    variation=cast(Literal["linear", "parabolic", "cubic"], variation),
+                )
+            except ValidationError as exc:
+                raise Sap2000TextError(
+                    f"Frame section {name}: segment {index + 1} is invalid: {_first_error(exc)}"
+                ) from exc
+            segments.append(segment)
+        if start_mass is None:
+            start_mass = 0.0
+        try:
+            template = NonprismaticSection(
+                id=len(self.sections) + 1,
+                name=f"{name} (nonprismatic)",
+                segments=segments,
+                subdivisions=self.subdivisions,
+            )
+        except ValidationError as exc:
+            raise Sap2000TextError(
+                f"Frame section {name}: the nonprismatic definition is invalid: {_first_error(exc)}"
+            ) from exc
+        self.sections.append(template)
+        self._nonprismatic_templates[key] = (template.id, start_mass)
+        return template.id, start_mass
 
     def _section_values(self, name: str) -> tuple[dict[str, float], dict[str, str]]:
         row = self._section_row(name)
@@ -1095,6 +1212,11 @@ class _Translator:
             if section.lower() == "none":
                 self.dropped["frame with section None"] += 1
                 continue
+            section_row = self.frame_sections.get(section)
+            is_nonprismatic = (
+                section_row is not None
+                and section_row.get("Shape", "").strip().lower() == "nonprismatic"
+            )
             values, sec_row = self._section_values(section)
             mat_name = assignment.get("MatProp", "Default")
             if not mat_name or mat_name.lower() == "default":
@@ -1125,9 +1247,14 @@ class _Translator:
             shear = has_shear and not releases.any and name not in non_uniform
             if has_shear and not shear:
                 self.dropped["shear deformation (frame with releases or a non-uniform load)"] += 1
-            section_id, mass = self._frame_section(
-                section, (values, sec_row), material, orientation, shear
-            )
+            if is_nonprismatic:
+                section_id, mass = self._nonprismatic_template(
+                    section, material, orientation, shear
+                )
+            else:
+                section_id, mass = self._frame_section(
+                    section, (values, sec_row), material, orientation, shear
+                )
             added = self._added_mass.get(name, 0.0) * self.scale.mass / self.scale.length
             if added > 0.0:
                 self._added_mass_frames += 1
@@ -1893,7 +2020,11 @@ def _scaled(pattern: PlainLoadPattern, factor: float, new_id: int) -> PlainLoadP
 
 
 def s2k_to_project(
-    s2k: S2kFile, *, units: UnitSystem | None = None, source_units: str | None = None
+    s2k: S2kFile,
+    *,
+    units: UnitSystem | None = None,
+    source_units: str | None = None,
+    nonprismatic_subdivisions: int | None = None,
 ) -> Sap2000Import:
     """Translate a parsed SAP2000 text file into a new project in ``units``.
 
@@ -1906,7 +2037,12 @@ def s2k_to_project(
     """
     source = source_units or s2k.units
     target = units or default_target(source)
-    translator = _Translator(s2k, target, source)
+    translator = _Translator(
+        s2k,
+        target,
+        source,
+        subdivisions=nonprismatic_subdivisions or 12,
+    )
     if not s2k.has_units and source_units is None:
         translator.notes.append(f"The file declares no units: read as {DEFAULT_UNITS!r}.")
     if s2k.malformed:
@@ -1959,6 +2095,16 @@ def s2k_to_project(
             analyses=[*cases],
             combinations=combinations,
         )
+        materialization = materialize_nonprismatic(project, subdivisions=nonprismatic_subdivisions)
+        if materialization.members:
+            pieces = sorted(set(materialization.subdivisions.values()))
+            piece_text = "/".join(str(n) for n in pieces) or "12"
+            translator.notes.append(
+                f"{materialization.members} nonprismatic frame(s) subdivided into "
+                f"{materialization.elements} elastic elements ({piece_text} pieces per "
+                "member). The subdivision count can be edited in Define > Section Library; "
+                "members already subdivided keep the number of pieces they were built with."
+            )
         project.validate_references()
     except (ValidationError, ValueError) as exc:
         detail = _first_error(exc) if isinstance(exc, ValidationError) else str(exc)
@@ -1974,10 +2120,19 @@ def s2k_to_project(
 
 
 def import_s2k(
-    path: str | Path, *, units: UnitSystem | None = None, source_units: str | None = None
+    path: str | Path,
+    *,
+    units: UnitSystem | None = None,
+    source_units: str | None = None,
+    nonprismatic_subdivisions: int | None = None,
 ) -> Sap2000Import:
     """:func:`read_s2k` then :func:`s2k_to_project`."""
-    return s2k_to_project(read_s2k(path), units=units, source_units=source_units)
+    return s2k_to_project(
+        read_s2k(path),
+        units=units,
+        source_units=source_units,
+        nonprismatic_subdivisions=nonprismatic_subdivisions,
+    )
 
 
 # ──────────────────────────── writing ────────────────────────────

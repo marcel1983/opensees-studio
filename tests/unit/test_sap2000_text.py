@@ -34,6 +34,7 @@ from opensees_studio.core.project import Project, ProjectMeta
 from opensees_studio.core.sections import (
     ElasticMembranePlateSection,
     ElasticSection,
+    NonprismaticSection,
     RectShape,
     WideFlangeShape,
 )
@@ -455,7 +456,7 @@ def test_a_zero_torsional_constant_gets_a_small_one(tmp_path: Path) -> None:
     assert imported.dropped["zero torsional constant (a small one substituted)"] == 1
 
 
-def test_a_nonprismatic_section_becomes_its_start_section(tmp_path: Path) -> None:
+def test_a_nonprismatic_section_is_subdivided(tmp_path: Path) -> None:
     extra = (
         'TABLE:  "FRAME SECTION PROPERTIES 01 - GENERAL"\n'
         "   SectionName=BIG   Material=M   Shape=Rectangular   t3=2   t2=1 _\n"
@@ -468,13 +469,50 @@ def test_a_nonprismatic_section_becomes_its_start_section(tmp_path: Path) -> Non
     body = _CANTILEVER.format(units="KN, m, C", x=5, z=0, extra=extra).replace(
         "AnalSect=S", "AnalSect=VAR"
     )
-    imported = import_s2k(_write(tmp_path, body))
-    section = imported.project.sections[0]
-    assert isinstance(section, ElasticSection)
-    assert section.name == "VAR"
-    assert (section.A, section.Iz, section.Iy) == pytest.approx((2.0, 0.1667, 0.6667))
-    assert pytest.approx(200_000.0) == section.E  # from BIG's material M, not VAR's (empty)
-    assert imported.dropped["nonprismatic section (imported as its start section)"] == 1
+    imported = import_s2k(_write(tmp_path, body), nonprismatic_subdivisions=12)
+    project = imported.project
+    template = next(s for s in project.sections if isinstance(s, NonprismaticSection))
+    assert template.name == "VAR (nonprismatic)"
+    assert template.subdivisions == 12
+    assert len(template.segments) == 1
+    assert template.segments[0].length_type == "relative"
+    assert template.segments[0].length == pytest.approx(1.0)
+    # A constant taper is the same section everywhere, so the 12 pieces reuse BIG.
+    big = next(s for s in project.sections if isinstance(s, ElasticSection) and s.name == "BIG")
+    assert (big.A, big.Iz, big.Iy) == pytest.approx((2.0, 0.1667, 0.6667))
+    assert pytest.approx(200_000.0) == big.E  # from BIG's material M, not VAR's (empty)
+    frames = [e for e in project.elements if isinstance(e, ElasticBeamColumn)]
+    assert len(frames) == 12
+    assert all(f.section_id == big.id for f in frames)
+    assert any("subdivided into 12" in note for note in imported.notes)
+    assert "nonprismatic section (imported as its start section)" not in imported.dropped
+
+
+def test_nonprismatic_rows_keep_the_sap2000_table_order(tmp_path: Path) -> None:
+    extra = (
+        'TABLE:  "FRAME SECTION PROPERTIES 01 - GENERAL"\n'
+        "   SectionName=S1   Material=M   Shape=Rectangular   t3=2   t2=1 _\n"
+        "      Area=2   TorsConst=0.5   I33=0.6667   I22=0.1667\n"
+        "   SectionName=S2   Material=M   Shape=Rectangular   t3=3   t2=1 _\n"
+        "      Area=3   TorsConst=1.2   I33=2.25   I22=0.25\n"
+        "   SectionName=S3   Material=M   Shape=Rectangular   t3=4   t2=1 _\n"
+        "      Area=4   TorsConst=2.5   I33=5.3333   I22=0.3333\n"
+        "   SectionName=VAR   Shape=Nonprismatic\n"
+        'TABLE:  "FRAME SECTION PROPERTIES 05 - NONPRISMATIC"\n'
+        "   SectionName=VAR   StartSect=S1   EndSect=S2   LengthType=Relative _\n"
+        "      RelLength=0.5   EI33Var=Linear   EI22Var=Linear\n"
+        "   SectionName=VAR   StartSect=S3   EndSect=S1   LengthType=Relative _\n"
+        "      RelLength=0.5   EI33Var=Linear   EI22Var=Linear\n"
+    )
+    body = _CANTILEVER.format(units="KN, m, C", x=5, z=0, extra=extra).replace(
+        "AnalSect=S", "AnalSect=VAR"
+    )
+    imported = import_s2k(_write(tmp_path, body), nonprismatic_subdivisions=12)
+    sections = {s.name: s for s in imported.project.sections if isinstance(s, ElasticSection)}
+    template = next(s for s in imported.project.sections if isinstance(s, NonprismaticSection))
+    assert [
+        (segment.start_section_id, segment.end_section_id) for segment in template.segments
+    ] == [(sections["S1"].id, sections["S2"].id), (sections["S3"].id, sections["S1"].id)]
 
 
 @pytest.mark.parametrize(

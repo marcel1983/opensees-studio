@@ -69,6 +69,13 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   Imposed Displacement (a static support settlement, `sp`, checked against
   6 E I d / L³ on a two-span beam). Temperature loads are not offered yet: they
   need OpenSees' thermal elements.
+- **Nonprismatic (tapered) sections** in the Section Library: build a section
+  from prismatic elastic sections with absolute or relative segment lengths and a
+  linear, parabolic or cubic variation, choose how many pieces a member is
+  subdivided into (minimum 12), and edit it later. Assigning the section
+  subdivides the selected members automatically and follows their loads; editing
+  the template refreshes the pieces already built from it (their piece count is
+  kept, so choose the subdivision count before assigning).
 - **SAP2000-style frame assignments** (Assign → Frame): end releases and
   partial-fixity springs (T, M2, M3 per end), end (length) offsets with a
   rigid-zone factor, cardinal-point insertion, and property modifiers
@@ -262,7 +269,8 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   File → Import → SAP2000 Text (.s2k / .$2k) reads the text tables of a
   SAP2000 model as a new project: joints, restraints, added joint masses and
   support springs, grid lines, frames with their sections (rectangular, I, pipe,
-  tube, general; a nonprismatic one as its start section), materials, local-axis
+  tube, general; a nonprismatic one is subdivided into elastic pieces, 12 by
+  default, from its segment table), materials, local-axis
   angles and end releases, load patterns
   with joint, distributed and point frame loads, temperature loads, support
   settlements and frame added mass, linear static, eigen modal and

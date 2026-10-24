@@ -11,6 +11,24 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **Nonprismatic (tapered) sections, in the Section Library and the SAP2000
+  import.** A `NonprismaticSection` is a template of segments between prismatic
+  elastic sections, each with an absolute or relative length and a linear,
+  parabolic or cubic variation, plus a user-editable subdivision count (minimum
+  and default 12). Assigning it subdivides each selected member into that many
+  ordinary elastic beam-columns, interpolating the section at every piece
+  (rectangle/I/pipe/tube dimensions are interpolated, so a depth taper follows
+  its true cubic inertia), copying the member's end releases, offsets, insertion
+  and modifiers, scaling its mass per length and splitting its uniform,
+  trapezoidal, point and temperature loads. The Section Library edits the
+  template and refreshes the pieces already built from it; a changed subdivision
+  count keeps their existing piece count, so choose it before assigning. The
+  SAP2000 import reads `FRAME SECTION PROPERTIES
+  05 - NONPRISMATIC` in the file's segment order, asks for the piece count, and
+  materialises the members. Validated locally against SAP2000's 1-006a/b: the
+  tip displacements under the example loads agree to 0.05-2.8% with 12 pieces,
+  where the previous "start section" approximation was 10-12% off.
+
 - **SAP2000 text import: temperature loads, support settlements, frame added
   mass and preloaded static cases.**
   `FRAME LOADS - TEMPERATURE` becomes a `TemperatureLoad` with the material's

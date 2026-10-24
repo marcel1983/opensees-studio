@@ -10,9 +10,16 @@ from __future__ import annotations
 from typing import Any
 
 from PySide6.QtWidgets import (
+    QComboBox,
     QFormLayout,
+    QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
+    QPushButton,
+    QSpinBox,
+    QTableWidget,
+    QVBoxLayout,
     QWidget,
 )
 
@@ -21,6 +28,8 @@ from opensees_studio.core import (
     ElasticMembranePlateSection,
     ElasticSection,
     FiberSection,
+    NonprismaticSection,
+    NonprismaticSegment,
     SectionAggregator,
 )
 from opensees_studio.views.float_field import FloatField
@@ -264,8 +273,194 @@ class ElasticMembranePlateSectionForm(SectionFormBase):
         )
 
 
+class NonprismaticSectionForm(SectionFormBase):
+    """Tapered section: a table of prismatic start/end sections and lengths.
+
+    Segments are applied from the member's I end to its J end in table order.
+    The subdivision count is used when the section is assigned to a member;
+    changing it later does not rebuild members that were already subdivided
+    (the Section Library refreshes their section properties, not their
+    topology).
+    """
+
+    type_label = "Nonprismatic Section"
+    needs_project = True
+
+    _HEADERS = ("Start section", "End section", "Length type", "Length", "Variation")
+
+    def __init__(self, project: Any = None, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._project = project
+        self._elastic_sections = (
+            [s for s in project.sections if isinstance(s, ElasticSection)]
+            if project is not None
+            else []
+        )
+        self._subdivisions = QSpinBox()
+        self._subdivisions.setRange(12, 200)
+        self._subdivisions.setValue(12)
+        self._subdivisions.setToolTip(
+            "Number of elastic beam-column elements a member is split into when the "
+            "section is assigned (minimum 12)."
+        )
+        self._layout.addRow("Subdivisions:", self._subdivisions)
+
+        table_box = QVBoxLayout()
+        self._table = QTableWidget(0, len(self._HEADERS))
+        self._table.setHorizontalHeaderLabels(self._HEADERS)
+        self._table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        table_box.addWidget(self._table)
+        buttons = QWidget()
+        button_row = QHBoxLayout(buttons)
+        button_row.setContentsMargins(0, 0, 0, 0)
+        add = QPushButton("Add segment")
+        remove = QPushButton("Remove segment")
+        add.clicked.connect(self._on_add_row)
+        remove.clicked.connect(self._on_remove_row)
+        button_row.addWidget(add)
+        button_row.addWidget(remove)
+        button_row.addStretch(1)
+        table_box.addWidget(buttons)
+        self._layout.addRow(table_box)
+        self._layout.addRow(
+            QLabel(
+                "<i>Segments run from end i to end j in table order. "
+                "Absolute lengths are member lengths; relative lengths are fractions "
+                "of the member. A member is subdivided into the number of pieces above."
+            )
+        )
+        if self._elastic_sections:
+            self._add_row(
+                start=self._elastic_sections[0].id,
+                end=self._elastic_sections[0].id,
+                length=1.0,
+            )
+        else:
+            warning = QLabel(
+                "<b>Define at least one Elastic Section first:</b> a nonprismatic "
+                "section is built from prismatic elastic sections."
+            )
+            warning.setWordWrap(True)
+            self._layout.addRow(warning)
+
+    def _section_combo(self, selected: int | None) -> QComboBox:
+        combo = QComboBox()
+        for section in self._elastic_sections:
+            label = f"#{section.id}  {section.name or '(unnamed)'}"
+            combo.addItem(label, section.id)
+        if selected is not None:
+            index = combo.findData(selected)
+            if index >= 0:
+                combo.setCurrentIndex(index)
+        return combo
+
+    def _length_type_combo(self, value: str) -> QComboBox:
+        combo = QComboBox()
+        combo.addItem("Absolute", "absolute")
+        combo.addItem("Relative (0-1)", "relative")
+        index = combo.findData(value)
+        combo.setCurrentIndex(max(0, index))
+        return combo
+
+    def _variation_combo(self, value: str) -> QComboBox:
+        combo = QComboBox()
+        for label, key in (
+            ("Linear", "linear"),
+            ("Parabolic", "parabolic"),
+            ("Cubic", "cubic"),
+        ):
+            combo.addItem(label, key)
+        index = combo.findData(value)
+        combo.setCurrentIndex(max(0, index))
+        return combo
+
+    def _add_row(
+        self,
+        start: int | None = None,
+        end: int | None = None,
+        length_type: str = "absolute",
+        length: float = 1.0,
+        variation: str = "linear",
+    ) -> None:
+        row = self._table.rowCount()
+        self._table.insertRow(row)
+        self._table.setCellWidget(row, 0, self._section_combo(start))
+        self._table.setCellWidget(row, 1, self._section_combo(end))
+        self._table.setCellWidget(row, 2, self._length_type_combo(length_type))
+        field = FloatField()
+        field.setRange(1e-12, 1e15)
+        field.setValue(length)
+        self._table.setCellWidget(row, 3, field)
+        self._table.setCellWidget(row, 4, self._variation_combo(variation))
+
+    def _on_add_row(self) -> None:
+        start = self._elastic_sections[0].id if self._elastic_sections else None
+        self._add_row(start=start, end=start)
+
+    def _on_remove_row(self) -> None:
+        row = self._table.currentRow()
+        if row < 0:
+            row = self._table.rowCount() - 1
+        if row >= 0:
+            self._table.removeRow(row)
+
+    def _populate_specific(self, s: NonprismaticSection) -> None:
+        self._subdivisions.setValue(s.subdivisions)
+        self._table.setRowCount(0)
+        for segment in s.segments:
+            self._add_row(
+                start=segment.start_section_id,
+                end=segment.end_section_id,
+                length_type=segment.length_type,
+                length=segment.length,
+                variation=segment.variation,
+            )
+
+    def _read_specific(self, section_id: int) -> NonprismaticSection:
+        if self._table.rowCount() == 0:
+            raise ValueError("A nonprismatic section needs at least one segment.")
+        segments: list[NonprismaticSegment] = []
+        for row in range(self._table.rowCount()):
+            start_widget = self._table.cellWidget(row, 0)
+            end_widget = self._table.cellWidget(row, 1)
+            type_widget = self._table.cellWidget(row, 2)
+            length_widget = self._table.cellWidget(row, 3)
+            variation_widget = self._table.cellWidget(row, 4)
+            if not (
+                isinstance(start_widget, QComboBox)
+                and isinstance(end_widget, QComboBox)
+                and isinstance(type_widget, QComboBox)
+                and isinstance(variation_widget, QComboBox)
+                and isinstance(length_widget, FloatField)
+            ):
+                raise ValueError(f"Segment {row + 1} is incomplete.")
+            start = start_widget.currentData()
+            end = end_widget.currentData()
+            if start is None or end is None:
+                raise ValueError(f"Segment {row + 1} needs a start and an end Elastic Section.")
+            length = float(length_widget.value())
+            if length <= 0.0:
+                raise ValueError(f"Segment {row + 1} needs a positive length.")
+            segments.append(
+                NonprismaticSegment(
+                    start_section_id=int(start),
+                    end_section_id=int(end),
+                    length_type=type_widget.currentData(),
+                    length=length,
+                    variation=variation_widget.currentData(),
+                )
+            )
+        return NonprismaticSection(
+            id=section_id,
+            name=self._name_edit.text(),
+            segments=segments,
+            subdivisions=int(self._subdivisions.value()),
+        )
+
+
 FORM_REGISTRY: dict[str, type[SectionFormBase]] = {
     "ElasticSection": ElasticSectionForm,
+    "NonprismaticSection": NonprismaticSectionForm,
     "FiberSection": FiberSectionSummaryForm,
     "SectionAggregator": SectionAggregatorSummaryForm,
     "ElasticMembranePlateSection": ElasticMembranePlateSectionForm,

@@ -25,7 +25,12 @@ from opensees_studio.commands import (
     UpdateSectionCommand,
 )
 from opensees_studio.viewmodels import ProjectViewModel
-from opensees_studio.views.dialogs.section_forms import FORM_REGISTRY, form_for, make_form
+from opensees_studio.views.dialogs.section_forms import (
+    FORM_REGISTRY,
+    SectionFormBase,
+    form_for,
+    make_form,
+)
 from opensees_studio.views.screen_fit import FittedDialog
 
 
@@ -146,11 +151,24 @@ class SectionLibraryDialog(FittedDialog):
         if self._stack.count() == 0 or self._vm.project is None:
             return
         form = self._stack.currentWidget()
+        if not isinstance(form, SectionFormBase):
+            return
         try:
             new_section = form.read()
-            self._vm.apply_command(UpdateSectionCommand(self._vm, new_section))
+            command = UpdateSectionCommand(self._vm, new_section)
+            self._vm.apply_command(command)
         except (ValidationError, ValueError) as exc:
             QMessageBox.critical(self, "Validation error", str(exc))
+            return
+        report = getattr(command, "refresh_report", None)
+        if report is not None and report.stale_counts:
+            QMessageBox.information(
+                self,
+                "Subdivision count changed",
+                "The section properties of the members already built from this template "
+                "were refreshed, but their number of pieces was kept. The new count "
+                "applies to members assigned or imported from now on.",
+            )
 
     def _on_add(self) -> None:
         if self._vm.project is None:

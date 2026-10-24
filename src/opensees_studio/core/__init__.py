@@ -289,6 +289,8 @@ from opensees_studio.core.sections import (
     FiberSection,
     Fibre,
     LayeredShellSection,
+    NonprismaticSection,
+    NonprismaticSegment,
     PipeShape,
     PlateFiberSection,
     RectangularPatch,
@@ -592,6 +594,8 @@ __all__ = [  # noqa: RUF022 - grouped by domain under section comments, not alph
     "HystereticSM",
     # Sections
     "Section",
+    "NonprismaticSection",
+    "NonprismaticSegment",
     "ElasticSection",
     "FiberSection",
     "w_shape_patches",

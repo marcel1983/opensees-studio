@@ -64,6 +64,7 @@ from opensees_studio.core import (
     ModalCase,
     MVLEMElement,
     NodalLoad,
+    NonprismaticSection,
     PathTimeSeries,
     PlainLoadPattern,
     PlateFiberSection,
@@ -495,6 +496,10 @@ class OpenSeesRunner:
 
     def _emit_section(self, sec: Any) -> None:
         ops = self._ops
+        if isinstance(sec, NonprismaticSection):
+            # A library template. Members that use it are materialised as
+            # ordinary elastic elements before the script is built.
+            return
         if isinstance(sec, ElasticMembranePlateSection):
             self._emit_plate_section(sec)
             return

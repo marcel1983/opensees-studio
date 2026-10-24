@@ -14,7 +14,7 @@ import pytest
 pytest.importorskip("PySide6")
 pytest.importorskip("pyvistaqt")
 
-from PySide6.QtWidgets import QFileDialog, QMessageBox
+from PySide6.QtWidgets import QFileDialog, QInputDialog, QMessageBox
 
 from opensees_studio.services.sap2000_text import import_s2k
 
@@ -44,6 +44,40 @@ def test_import_makes_the_file_the_unsaved_project(qtbot, monkeypatch) -> None: 
     assert "4 joint(s), 3 frame(s)" in log
     # The fixture's added mass now comes across (MY is out of plane in this 2D model).
     assert project.nodes[1].mass[0] == pytest.approx(1000.0)
+
+
+@pytest.mark.gui
+def test_import_asks_for_the_nonprismatic_subdivision_count(qtbot, monkeypatch, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    from opensees_studio.views.main_window import MainWindow
+
+    text = PORTAL.read_text(encoding="utf-8-sig").replace("AnalSect=R30x50", "AnalSect=VAR")
+    text = text.replace(
+        "END TABLE DATA",
+        'TABLE:  "FRAME SECTION PROPERTIES 01 - GENERAL"\n'
+        "   SectionName=VAR   Shape=Nonprismatic\n"
+        'TABLE:  "FRAME SECTION PROPERTIES 05 - NONPRISMATIC"\n'
+        "   SectionName=VAR   StartSect=R30x50   EndSect=R30x50 _\n"
+        "      LengthType=Relative   RelLength=1   EI33Var=Linear   EI22Var=Linear\n"
+        "END TABLE DATA",
+        1,
+    )
+    source = tmp_path / "taper.s2k"
+    source.write_text(text, encoding="utf-8")
+    mw = MainWindow()
+    qtbot.addWidget(mw)
+    mw._vm.new_project()
+    monkeypatch.setattr(
+        QFileDialog, "getOpenFileName", staticmethod(lambda *a, **k: (str(source), ""))
+    )
+    monkeypatch.setattr(QInputDialog, "getInt", staticmethod(lambda *a, **k: (24, True)))
+
+    mw._act_import_s2k.trigger()
+
+    project = mw._vm.project
+    assert len(project.elements) == 72  # three frames, 24 pieces each
+    template = next(s for s in project.sections if s.type == "NonprismaticSection")
+    assert template.subdivisions == 24
+    assert "24 pieces per member" in mw._console.toPlainText()
 
 
 @pytest.mark.gui
