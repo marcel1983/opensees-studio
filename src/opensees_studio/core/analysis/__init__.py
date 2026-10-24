@@ -191,6 +191,15 @@ class StaticCase(_SolverOptions):
     test: str = "NormDispIncr"
     tolerance: float = Field(default=1e-8, gt=0.0)
     max_iter: PositiveInt = 25
+    preload_case_ids: list[PositiveInt] = Field(
+        default_factory=list,
+        description=(
+            "StaticCase IDs run first, in order, as the gravity or axial preload. "
+            "Each applies its patterns and then locks the load with loadConst -time 0.0."
+        ),
+    )
+
+    serialize_without_defaults = omit_when_default("numberer", "system_args", "preload_case_ids")
 
 
 class ModalCase(Entity):
