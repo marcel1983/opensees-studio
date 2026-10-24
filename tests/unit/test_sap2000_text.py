@@ -8,6 +8,7 @@ Smaller cases are written inline, each the smallest file that shows one rule.
 
 from __future__ import annotations
 
+import random
 from pathlib import Path
 
 import numpy as np
@@ -126,7 +127,37 @@ def test_missing_and_empty_files_are_refused(tmp_path: Path) -> None:
 
 def test_a_broken_reference_is_named(tmp_path: Path) -> None:
     body = _CANTILEVER.format(units="KN, m, C", x=5, z=0, extra="").replace("JointJ=B", "JointJ=C")
-    with pytest.raises(Sap2000TextError, match="Frame B1: joint 'C' is not defined"):
+    with pytest.raises(Sap2000TextError, match=r"Frame B1 .*: joint 'C' is not defined"):
+        import_s2k(_write(tmp_path, body))
+
+
+def test_an_error_names_the_table_and_the_line(tmp_path: Path) -> None:
+    body = _CANTILEVER.format(units="KN, m, C", x=5, z=0, extra="").replace("JointJ=B", "JointJ=C")
+    line = next(
+        number for number, text in enumerate(body.splitlines(), start=1) if "JointJ=C" in text
+    )
+    with pytest.raises(
+        Sap2000TextError, match=rf"CONNECTIVITY - FRAME, line {line}\): joint 'C' is not defined"
+    ):
+        import_s2k(_write(tmp_path, body))
+
+
+def test_a_line_that_is_not_a_record_is_reported_not_fatal(tmp_path: Path) -> None:
+    extra = '   this is not a record at all\n   LoadPat=DEAD   Note="an unbalanced quote\n'
+    imported = import_s2k(_cantilever(tmp_path, extra=extra))
+    assert len(imported.project.nodes) == 2  # the model around the bad lines still imports
+    (note,) = [note for note in imported.notes if "not Key=Value records" in note]
+    assert note.startswith("2 line(s)")
+    assert "this is not a record at all" in note
+
+
+def test_a_file_without_joints_is_refused(tmp_path: Path) -> None:
+    body = (
+        'TABLE:  "PROGRAM CONTROL"\n   ProgramName=SAP2000   CurrUnits="KN, m, C"\n'
+        'TABLE:  "GRID LINES"\n   CoordSys=GLOBAL   AxisDir=X   GridID=A   XRYZCoord=0\n'
+        "END TABLE DATA\n"
+    )
+    with pytest.raises(Sap2000TextError, match="has no joints"):
         import_s2k(_write(tmp_path, body))
 
 
@@ -347,6 +378,15 @@ def test_round_trip_keeps_what_the_import_reads(tmp_path: Path, fixture: Path) -
     _assert_same_model(first, again.project)
 
 
+@pytest.mark.parametrize("fixture", [PORTAL, FRAME], ids=["portal_2d", "frame_3d"])
+def test_exporting_again_writes_the_same_text(tmp_path: Path, fixture: Path) -> None:
+    once = export_s2k(import_s2k(fixture).project, tmp_path / "once.s2k")
+    assert once.path is not None
+    twice = export_s2k(import_s2k(once.path).project, tmp_path / "twice.s2k")
+    assert twice.path is not None
+    assert once.path.read_text(encoding="utf-8") == twice.path.read_text(encoding="utf-8")
+
+
 def _built_project() -> Project:
     """A 3D project made in the application: a sloped brace, loads in local axes."""
     section = ElasticSection(
@@ -439,3 +479,52 @@ def test_a_load_in_a_user_coordinate_system_is_reported_not_guessed(tmp_path: Pa
     imported = import_s2k(_cantilever(tmp_path, extra=extra))
     assert imported.project.load_patterns[0].point_loads == []
     assert imported.dropped["point load in another coordinate system"] == 1
+
+
+# ──────────────────────────── damaged files ────────────────────────────
+@pytest.mark.parametrize("count", ["1000000000", "1E300", "2.7", "0", "3", "5"])
+def test_an_area_needs_exactly_four_joints(tmp_path: Path, count: str) -> None:
+    """A bad NumJoints is a dropped area, not a billion-iteration loop or a truncation."""
+    body = FRAME.read_text(encoding="utf-8").replace("NumJoints=4", f"NumJoints={count}")
+    imported = import_s2k(_write(tmp_path, body))
+    assert imported.dropped["area with other than four joints"] == 1
+    assert not [e for e in imported.project.elements if isinstance(e, ShellMITC4Element)]
+
+
+@pytest.mark.parametrize(
+    "name", ["9" * 5000, "²"], ids=["thousands-of-digits", "digit-int-refuses"]
+)
+def test_a_name_that_cannot_be_an_integer_is_numbered(tmp_path: Path, name: str) -> None:
+    """``isdigit`` is not an int guarantee: CPython refuses 4 300+ digits and ``²``."""
+    body = _CANTILEVER.format(units="KN, m, C", x=5, z=0, extra="")
+    for old, new in (("A", f"{name}A"), ("B", f"{name}B")):
+        body = (
+            body.replace(f"Joint={old} ", f"Joint={new} ")
+            .replace(f"JointI={old}", f"JointI={new}")
+            .replace(f"JointJ={old}", f"JointJ={new}")
+        )
+    imported = import_s2k(_write(tmp_path, body))
+    assert [n.id for n in imported.project.nodes] == [1, 2]
+    assert any("numbered 1" in note for note in imported.notes)
+
+
+def _imports_or_says_why(tmp_path: Path, text: str) -> None:
+    try:
+        import_s2k(_write(tmp_path, text))
+    except Sap2000TextError:
+        return
+
+
+@pytest.mark.parametrize("fixture", [PORTAL, FRAME], ids=["portal_2d", "frame_3d"])
+def test_a_damaged_file_only_ever_raises_a_message(tmp_path: Path, fixture: Path) -> None:
+    """Truncated and mutated files reach the caller as Sap2000TextError, never as a crash."""
+    text = fixture.read_text(encoding="utf-8")
+    lines = text.splitlines(keepends=True)
+    for cut in range(len(lines) + 1):
+        _imports_or_says_why(tmp_path, "".join(lines[:cut]))
+    rng = random.Random(20261024)
+    for _ in range(80):
+        body = list(text)
+        for _ in range(3):
+            body[rng.randrange(len(body))] = rng.choice('=" _\n\t0123456789xyz')
+        _imports_or_says_why(tmp_path, "".join(body))
