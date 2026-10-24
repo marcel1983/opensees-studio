@@ -460,6 +460,53 @@ def test_a_zero_torsional_constant_gets_a_small_one(tmp_path: Path) -> None:
     assert imported.dropped["zero torsional constant (a small one substituted)"] == 1
 
 
+def test_a_diaphragm_uses_the_floating_sap2000_master(tmp_path: Path) -> None:
+    extra = (
+        'TABLE:  "JOINT COORDINATES"\n'
+        "   Joint=C   CoordSys=GLOBAL   CoordType=Cartesian   XorR=2.5   Y=0   Z=0\n"
+        'TABLE:  "CONSTRAINT DEFINITIONS - DIAPHRAGM"\n'
+        "   Name=D1   CoordSys=GLOBAL   Axis=Z   MultiLevel=No\n"
+        'TABLE:  "JOINT CONSTRAINT ASSIGNMENTS"\n'
+        "   Joint=A   Constraint=D1\n"
+        "   Joint=B   Constraint=D1\n"
+        "   Joint=C   Constraint=D1\n"
+    )
+    imported = import_s2k(_cantilever(tmp_path, extra=extra))
+    project = imported.project
+    (diaphragm,) = project.diaphragms
+    # C is the floating SAP master; A is a support and cannot follow the floor.
+    assert diaphragm.retained_node == 3
+    assert diaphragm.constrained_nodes == (2,)
+    assert diaphragm.perp_dirn == 3
+    assert imported.dropped["diaphragm joint restrained in the plane (left out)"] == 1
+    project.validate_references()
+
+    target = tmp_path / "diaphragm.s2k"
+    report = export_s2k(project, target)
+    text = target.read_text(encoding="utf-8-sig")
+    assert 'TABLE:  "CONSTRAINT DEFINITIONS - DIAPHRAGM"' in text
+    assert "Joint=3   Constraint=D1" in text and "Joint=2   Constraint=D1" in text
+    assert "Joint=1   Constraint=D1" not in text  # the support is not a slave
+    assert report.written["rigid diaphragm(s)"] == 1
+    assert "rigid diaphragm" not in report.skipped
+    again = import_s2k(target)
+    (round_trip,) = again.project.diaphragms
+    assert (round_trip.retained_node, round_trip.constrained_nodes) == (3, (2,))
+
+
+def test_a_diaphragm_in_a_2d_model_is_reported(tmp_path: Path) -> None:
+    extra = _2D_DOFS + (
+        'TABLE:  "CONSTRAINT DEFINITIONS - DIAPHRAGM"\n'
+        "   Name=D1   CoordSys=GLOBAL   Axis=Z   MultiLevel=No\n"
+        'TABLE:  "JOINT CONSTRAINT ASSIGNMENTS"\n'
+        "   Joint=A   Constraint=D1\n"
+        "   Joint=B   Constraint=D1\n"
+    )
+    imported = import_s2k(_cantilever(tmp_path, extra=extra))
+    assert imported.project.diaphragms == []
+    assert imported.dropped["rigid diaphragm in a 2D model"] == 1
+
+
 def test_frame_property_modifiers_are_imported_and_mapped(tmp_path: Path) -> None:
     extra = (
         'TABLE:  "FRAME PROPERTY MODIFIERS"\n'

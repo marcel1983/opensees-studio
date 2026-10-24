@@ -271,7 +271,8 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   support springs, grid lines, frames with their sections (rectangular, I, pipe,
   tube, general; a nonprismatic one is subdivided into elastic pieces, 12 by
   default, from its segment table), materials, local-axis
-  angles, end releases and per-frame property modifiers, load patterns
+  angles, end releases, per-frame property modifiers and rigid diaphragms
+  (with their floating centre-of-mass master), load patterns
   with joint, distributed and point frame loads, temperature loads, support
   settlements and frame added mass, linear static, eigen modal and
   response-spectrum cases, combinations and four-node shells, scaled from the
