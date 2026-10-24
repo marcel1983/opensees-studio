@@ -1176,15 +1176,29 @@ and a file with no joints is refused rather than opened as an empty project. A
 truncated or corrupted file always fails with a message; it never takes the
 window down.
 
-# What it does not do (yet)
-Counted in the summary and the log, never dropped silently: tables it does not
-read (constraints, buckling, staged and nonlinear cases, other
-response-spectrum options, area loads, design data, …) by name and number of
-rows; ground displacements on a spring-supported joint; moment loads on frames;
-axial and
-shear end releases; range-add combinations; automatic lateral loads; areas
-with three or more than four joints; and a frame with releases or a non-uniform
-load keeps no shear deformation, because OpenSees' Timoshenko beam takes neither.
+# Work in progress
+This is not a complete SAP2000 reader. The full list of what is read, the known
+approximations and the unsupported objects is in
+`docs/sap2000-import-status.md` in the repository; the import log remains the
+authoritative report for a particular file. Counted in the summary and the log,
+never dropped silently:
+
+- links, tendons, cables, solids and area types other than four-node shells;
+- nonlinear/staged cases (`NonStatic`), buckling (`LinBuckling`), modal and
+  direct history (`LinModHist`), steady state and moving loads;
+- `ABS` and "10 Percent" spectrum combinations, a second direction/angle or
+  accidental eccentricity on a spectrum case, and a non-static initial
+  condition;
+- frame end offsets, length offsets, insertion points, P-Delta/Corotational
+  transformations, axial/shear releases and curved frames (imported straight);
+- rigid links, equalDOF and body constraints; storeys, groups and section cuts;
+  a 2D or multi-level diaphragm;
+- gravity loads, moment loads on frames, some point-load directions, a
+  temperature variation along the member (its mean is used), and ground
+  displacements on free or spring-supported DOFs;
+- range-add combinations and automatic lateral loads;
+- a frame with releases or a non-uniform load keeps no shear deformation,
+  because OpenSees' Timoshenko beam takes neither.
 """,
             "file.export_s2k",
             "file.import_s3d",

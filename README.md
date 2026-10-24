@@ -279,7 +279,10 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   file's `CurrUnits` to the nearest unit system. SAP2000's local 2 and 3 are mapped onto OpenSees'
   axes member by member, and every table it does not read is named in the log.
   Written from the text format alone (SAP2000 is a trademark of Computers and
-  Structures, Inc.; no CSI software is used).
+  Structures, Inc.; no CSI software is used). **The S2K import is a work in
+  progress:** the tables it reads, the approximations and the unsupported
+  objects are listed in
+  [docs/sap2000-import-status.md](docs/sap2000-import-status.md).
 - **Design** — Design → Steel Frame Check (AISC 360-16, LRFD or ASD): every
   frame member whose section is a W, M, S or HP shape gets its tension (D2),
   compression (E3, E4, E7), flexure (F2, F3, F6), shear (G2, G6) and H1
