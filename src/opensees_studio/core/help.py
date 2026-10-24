@@ -238,8 +238,9 @@ Weight; Joints of Selected Elements, Elements between Selected Joints.
 Section Cuts, Mass Source, Seismic Loads (ELF), Create Shell from 4 Nodes,
 Create Portal Frame, Create Truss.
 - Properties: Material Library (40 materials, Material Tester to check one),
-Friction Models, Ground Motions, Section Library (elastic, fibre with W and RC
-templates, aggregator, plate, LayeredShell, PlateFiber, AISC shapes).
+Friction Models, Ground Motions, Section Library (elastic, nonprismatic, fibre
+with W and RC templates, aggregator, plate, LayeredShell, PlateFiber, AISC
+shapes).
 - Loads: Add Linear / Path / Function TimeSeries, Add Plain Load Pattern, Add
 Uniform Excitation, Add Multi-Support Excitation, Load Combinations.
 - Custom OpenSees Commands: Python blocks for anything without a form.
@@ -1107,11 +1108,14 @@ dimension. The log names both systems. A file without units is read as kN-m.
   property columns (the dimensions give closed-form values when those are
   missing), with the property modifiers applied to the values; other shapes by
   their properties only. Rectangles, I-shapes, pipes and tubes keep their shape
-  for the extruded view. A **nonprismatic** section becomes one prismatic member
-  with the section at its I end. A 2D model accepts a 0 in the inertia it does
-  not bend about and in the torsion constant; a 3D section whose `J` is 0 gets a
-  small one, because OpenSees needs torsional stiffness. Both substitutions are
-  counted in the report.
+  for the extruded view. A **nonprismatic** section reads its segment table (in
+  SAP2000's order, from the I end to the J end) into a `NonprismaticSection`
+  template and subdivides each member into elastic pieces, 12 by default; the
+  import asks for the piece count and the section can be edited later in Define >
+  Section Library. A 2D model accepts a 0 in the inertia it does not bend about
+  and in the torsion constant; a 3D section whose `J` is 0 gets a small one,
+  because OpenSees needs torsional stiffness. Both substitutions are counted in
+  the report.
 - **End releases** of torsion and bending, and partial-fixity springs.
 - **Load patterns** with their self-weight multiplier, **joint forces** (global),
   **distributed frame loads** (uniform, trapezoidal or over part of the member,
@@ -1209,7 +1213,10 @@ been checked by CSI or in SAP2000.
 The export reports what it leaves out: other element and section types, end
 offsets, insertion points, property modifiers, the mass source, shell and floor
 loads, imposed displacements, temperature loads, nonlinear static, modal,
-spectrum and transient cases, constraints and diaphragms.
+spectrum and transient cases, constraints and diaphragms. A nonprismatic section
+is written as the elastic pieces it was subdivided into, not as a SAP2000
+`NONPRISMATIC` table, so the exported file carries the same mechanical model but
+not the taper template.
 """,
             "file.import_s2k",
             "file.export_ifc",
@@ -2399,7 +2406,7 @@ Define → Section Library (double-click the section).
         "define.section_library": _t(
             "Define → Section Library",
             "Define",
-            "Elastic, fibre, aggregated and plate sections, plus the AISC shapes.",
+            "Elastic, nonprismatic, fibre, aggregated and plate sections, plus the AISC shapes.",
             """
 Sections are what frame, shell and zero-length-section elements point at.
 
@@ -2413,7 +2420,20 @@ Sections are what frame, shell and zero-length-section elements point at.
   uses the hidden-node route instead. The member deflects by
   `P L³ / (3 E I) + P L / (G As)` on a cantilever; the Property Modifiers' shear
   areas scale As2 / As3.
-- **Fibre section** — patches and rebar layers tied to uniaxial materials. It
+- **Nonprismatic (tapered) section** - a table of segments, each running from one
+  **elastic** section to another over an absolute length or a fraction of the
+  member, with a linear, parabolic or cubic variation. Assigning it splits each
+  member into its **Subdivisions** pieces (minimum 12, default 12) of ordinary
+  elastic beam-columns; the section at each piece is interpolated from the
+  segment's start and end sections (the drawn rectangle/I/pipe/tube dimensions
+  are interpolated, so a rectangular depth taper follows its true cubic inertia).
+  The pieces keep the frame's end releases, end offsets, insertion and
+  modifiers, and every element load is split across them. Editing the template
+  refreshes the section properties of members already built from it; changing
+  the subdivision count keeps their existing piece count, so set the count
+  before assigning the section (or re-import the model) when the topology must
+  change.
+- **Fibre section** - patches and rebar layers tied to uniaxial materials. It
   yields and cracks where the material does, and needs a non-linear case.
 - **Section aggregator** — several responses (axial, bending, shear, torsion)
   combined into one section, each with its own material or section.

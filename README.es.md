@@ -57,6 +57,12 @@ script o un notebook de Jupyter: la interfaz es una forma de usarlo, no la únic
   elementos de longitud cero, restricciones, equalDOF, diafragmas rígidos, rigid
   links, aisladores (elastoméricos y de fricción), liberaciones, brazos rígidos,
   modificadores y puntos de inserción al estilo SAP2000.
+- **Secciones no prismáticas**: una rama definida a partir de secciones
+  elásticas con longitudes absolutas o relativas y variación lineal, parabólica o
+  cúbica; al asignarla, cada miembro se subdivide en piezas elásticas (mínimo 12,
+  por defecto 12) y la plantilla se puede editar después, refrescando las piezas
+  ya construidas (su número de piezas se conserva, así que elige la subdivisión
+  antes de asignar).
 - **Materiales y secciones**: Steel01/02, Concrete01/02/04, Hysteretic y la
   biblioteca de materiales de OpenSees; secciones de fibras con editor; la
   biblioteca de perfiles AISC v16; el **asistente de secciones de hormigón

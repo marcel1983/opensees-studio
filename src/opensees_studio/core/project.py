@@ -48,7 +48,7 @@ from opensees_studio.core.mass_source import MassSource
 from opensees_studio.core.materials import Material
 from opensees_studio.core.materials.library import material_reference_problems
 from opensees_studio.core.section_cuts import SectionCut, cut_problems
-from opensees_studio.core.sections import Section
+from opensees_studio.core.sections import ElasticSection, NonprismaticSection, Section
 from opensees_studio.core.storeys import Storey
 from opensees_studio.core.target_spectrum import TargetSpectrum
 from opensees_studio.core.units import UnitSystem
@@ -437,7 +437,28 @@ class Project(BaseModel):
                     f"{el.friction_model_id}."
                 )
 
+        sections_by_id = {s.id: s for s in self.sections}
         for sec in self.sections:
+            if isinstance(sec, NonprismaticSection):
+                for segment in sec.segments:
+                    for sid in (segment.start_section_id, segment.end_section_id):
+                        if sid == sec.id:
+                            problems.append(f"Nonprismatic section {sec.id} refers to itself.")
+                            continue
+                        ref = sections_by_id.get(sid)
+                        if ref is None:
+                            problems.append(
+                                f"Nonprismatic section {sec.id} refers to missing section {sid}."
+                            )
+                        elif not isinstance(ref, ElasticSection):
+                            problems.append(
+                                f"Nonprismatic section {sec.id} refers to section {sid} "
+                                f"({ref.type}); segments must use ElasticSection."
+                            )
+                try:
+                    sec.fractions()
+                except ValueError as exc:
+                    problems.append(f"Nonprismatic section {sec.id}: {exc}")
             # Every material referenced inside a section — explicit fibres,
             # fibre-section patches/layers, and aggregator pairings — must exist,
             # as must an aggregator's base section.

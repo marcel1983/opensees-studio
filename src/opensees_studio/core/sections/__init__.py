@@ -19,7 +19,7 @@ from __future__ import annotations
 import math
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt
+from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt, model_validator
 
 from opensees_studio.core._base import Entity, omit_when_default
 
@@ -597,12 +597,100 @@ class SectionAggregator(Entity):
     pairings: list[AggregatorDOF] = Field(..., min_length=1)
 
 
+NonprismaticVariation = Literal["linear", "parabolic", "cubic"]
+"""How a segment's properties vary from its start section to its end section."""
+
+
+class NonprismaticSegment(BaseModel):
+    """One segment of a :class:`NonprismaticSection`.
+
+    The segment runs from ``start_section_id`` to ``end_section_id`` over
+    ``length``. ``length_type`` says whether that length is an absolute
+    member length (``"absolute"``) or a fraction of the member (``"relative"``).
+    """
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    start_section_id: PositiveInt
+    end_section_id: PositiveInt
+    length_type: Literal["absolute", "relative"] = "relative"
+    length: PositiveFloat
+    variation: NonprismaticVariation = Field(
+        default="linear",
+        description=(
+            "Variation of the interpolated properties along this segment: linear, "
+            "parabolic (u^2) or cubic (u^3), with u measured from start to end."
+        ),
+    )
+
+
+class NonprismaticSection(Entity):
+    """A tapered frame section built from prismatic :class:`ElasticSection` pieces.
+
+    The section is a *library template*: a frame that references it is
+    subdivided into ``subdivisions`` elastic beam-column elements when the
+    model is materialised (on import or when the section is assigned). This
+    keeps the analysis a plain, linear ``elasticBeamColumn`` model while
+    following the taper.
+
+    ``subdivisions`` is the number of elements a member is split into. It is
+    deliberately user-editable in the Section Library and defaults to (and
+    never goes below) 12, the accuracy the SAP2000 nonprismatic import uses.
+    """
+
+    type: Literal["NonprismaticSection"] = "NonprismaticSection"
+    segments: list[NonprismaticSegment] = Field(
+        ...,
+        min_length=1,
+        description="Segments in member order, from end i to end j.",
+    )
+    subdivisions: int = Field(
+        default=12,
+        ge=12,
+        le=200,
+        description="Number of beam-column elements a member is split into (minimum 12).",
+    )
+
+    serialize_without_defaults = omit_when_default("subdivisions")
+
+    @model_validator(mode="after")
+    def _check_lengths(self) -> NonprismaticSection:
+        relative = sum(s.length for s in self.segments if s.length_type == "relative")
+        absolute = sum(s.length for s in self.segments if s.length_type == "absolute")
+        if absolute > 0.0 and relative >= 1.0:
+            raise ValueError(
+                "Relative segment lengths must add up to less than 1 when absolute "
+                f"lengths are also used (they add up to {relative:g})."
+            )
+        return self
+
+    def fractions(self) -> list[float]:
+        """The length of every segment as a fraction of the member (sums to 1).
+
+        Absolute lengths are measured against the member length implied by the
+        definition; relative lengths are fractions of that same member. A
+        definition made only of relative lengths is normalised so it always
+        covers the whole member.
+        """
+        relative = sum(s.length for s in self.segments if s.length_type == "relative")
+        absolute = sum(s.length for s in self.segments if s.length_type == "absolute")
+        if absolute > 0.0:
+            total = absolute / (1.0 - relative)
+            return [
+                s.length if s.length_type == "relative" else s.length / total for s in self.segments
+            ]
+        if relative <= 0.0:
+            raise ValueError("A nonprismatic section needs a positive total length.")
+        return [s.length / relative for s in self.segments]
+
+
 Section = Annotated[
     ElasticSection
     | FiberSection
     | SectionAggregator
     | ElasticMembranePlateSection
     | LayeredShellSection
-    | PlateFiberSection,
+    | PlateFiberSection
+    | NonprismaticSection,
     Field(discriminator="type"),
 ]

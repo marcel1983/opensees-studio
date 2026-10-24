@@ -83,6 +83,7 @@ from opensees_studio.commands.groups import (
 from opensees_studio.commands.tables import ApplyModelTablesCommand
 from opensees_studio.core import (
     SUPPORTED_NDF,
+    ElasticSection,
     Project,
     ShellMITC4Element,
     UnitConverter,
@@ -2325,7 +2326,11 @@ class MainWindow(QMainWindow):
         The whole model is replaced, so this asks about unsaved changes like Open
         does. What the file has and the import cannot carry is written to the log.
         """
-        from opensees_studio.services.sap2000_text import Sap2000TextError, import_s2k
+        from opensees_studio.services.sap2000_text import (
+            Sap2000TextError,
+            import_s2k,
+            read_s2k,
+        )
 
         if not self._confirm_discard_changes("Importing a SAP2000 text file"):
             return
@@ -2337,8 +2342,24 @@ class MainWindow(QMainWindow):
         )
         if not path:
             return
+        subdivisions: int | None = None
         try:
-            imported = import_s2k(path)
+            if read_s2k(path).rows("FRAME SECTION PROPERTIES 05 - NONPRISMATIC"):
+                subdivisions, ok = QInputDialog.getInt(
+                    self,
+                    "Nonprismatic members",
+                    "Pieces per nonprismatic member (minimum 12):",
+                    12,
+                    12,
+                    200,
+                )
+                if not ok:
+                    return
+        except Sap2000TextError as exc:
+            QMessageBox.critical(self, "Import SAP2000 Text failed", str(exc))
+            return
+        try:
+            imported = import_s2k(path, nonprismatic_subdivisions=subdivisions)
         except Sap2000TextError as exc:
             QMessageBox.critical(self, "Import SAP2000 Text failed", str(exc))
             return
@@ -2586,7 +2607,9 @@ class MainWindow(QMainWindow):
             )
             return
 
-        sections = [s for s in project.sections if not isinstance(s, SHELL_SECTION_CLASSES)]
+        # The wizard builds ElasticBeamColumns directly; a nonprismatic template
+        # is assigned afterwards, when it can subdivide the member and its loads.
+        sections = [s for s in project.sections if isinstance(s, ElasticSection)]
         wizard = FrameWizard(
             sections,
             ndm=project.ndm,
@@ -3629,10 +3652,6 @@ class MainWindow(QMainWindow):
                 key: {e.id for e in project.elements if e.id in ids and hasattr(e, key)}
                 for key in ("section_id", "material_id")
             }
-            if edit.section_id is not None and has["section_id"]:
-                self._vm.apply_command(
-                    AssignSectionCommand(self._vm, has["section_id"], edit.section_id)
-                )
             if edit.material_id is not None and has["material_id"]:
                 self._vm.apply_command(
                     AssignMaterialCommand(self._vm, has["material_id"], edit.material_id)
@@ -3645,6 +3664,12 @@ class MainWindow(QMainWindow):
                     AssignElementFieldsCommand(
                         self._vm, set(edit.per_element), {}, per_element=edit.per_element
                     )
+                )
+            # The section goes last: assigning a nonprismatic template splits the
+            # member into pieces, and it must see the other edits on the frame.
+            if edit.section_id is not None and has["section_id"]:
+                self._vm.apply_command(
+                    AssignSectionCommand(self._vm, has["section_id"], edit.section_id)
                 )
             self._log(f"Edited {len(ids)} element(s) from the Properties panel.")
         except Exception as exc:
