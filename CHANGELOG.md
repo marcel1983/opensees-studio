@@ -11,6 +11,15 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **SAP2000 text import and export: eigen modal cases.** A `LinModal` case whose
+  `CASE - MODAL 1 - GENERAL` row is `ModeType=Eigen` becomes a modal case asking
+  for its `MaxNumModes`, with the solver left on this program's automatic
+  routing (dense at or below 500 free DOF, ARPACK above), and the export writes
+  both tables back. Other modal types, and a modal case with no general row, are
+  counted in the report. Sixteen files of SAP2000's 68-file example set carry an
+  eigen modal case and now import it; the five that still have no runnable case
+  hold spectral, buckling, history, staged or nonlinear ones.
+
 - **SAP2000 text import and export: added joint masses and support springs.**
   `JOINT ADDED MASS ASSIGNMENTS` (`Mass1..3`, `MMI1..3`) and `JOINT SPRING
   ASSIGNMENTS 1 - UNCOUPLED` (`U1..3`, `R1..3`, springs to ground) now reach
