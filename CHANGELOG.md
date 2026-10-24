@@ -9,6 +9,8 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.25] - 2026-10-24
+
 ### Added
 
 - **SAP2000 text import and export: rigid diaphragms.**
