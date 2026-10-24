@@ -409,6 +409,89 @@ def test_a_mass_source_with_loads_and_no_element_mass_is_reported(tmp_path: Path
     assert "turns load patterns into mass" in notes
 
 
+# ──────────────────────────── real-world section definitions ────────────────────────────
+_2D_DOFS = (
+    'TABLE:  "ACTIVE DEGREES OF FREEDOM"\n   UX=Yes   UY=No   UZ=Yes   RX=No   RY=Yes   RZ=No\n'
+)
+
+
+def test_a_2d_frame_accepts_zero_out_of_plane_inertia_and_torsion(tmp_path: Path) -> None:
+    body = (
+        _CANTILEVER.format(units="KN, m, C", x=5, z=0, extra=_2D_DOFS)
+        .replace("I22=20", "I22=0")
+        .replace("TorsConst=3", "TorsConst=0")
+    )
+    imported = import_s2k(_write(tmp_path, body))
+    assert imported.project.ndm == 2
+    section = imported.project.sections[0]
+    assert isinstance(section, ElasticSection)
+    assert (section.A, section.Iz) == (10.0, 50.0)
+    # A 2D section carries no out-of-plane inertia and no torsion constant.
+    assert section.Iy is None and section.J is None
+    assert not imported.dropped
+
+
+def test_a_2d_member_without_in_plane_inertia_is_refused(tmp_path: Path) -> None:
+    extra = _2D_DOFS + (
+        'TABLE:  "FRAME LOCAL AXES ASSIGNMENTS 1 - TYPICAL"\n   Frame=B1   Angle=90\n'
+    )
+    body = _CANTILEVER.format(units="KN, m, C", x=5, z=0, extra=extra).replace("I22=20", "I22=0")
+    with pytest.raises(Sap2000TextError, match="no inertia about the member's in-plane axis"):
+        import_s2k(_write(tmp_path, body))
+
+
+def test_a_zero_torsional_constant_gets_a_small_one(tmp_path: Path) -> None:
+    body = _CANTILEVER.format(units="KN, m, C", x=5, z=0, extra="").replace(
+        "TorsConst=3", "TorsConst=0"
+    )
+    imported = import_s2k(_write(tmp_path, body))
+    section = imported.project.sections[0]
+    assert isinstance(section, ElasticSection)
+    assert section.Iy is not None
+    assert pytest.approx(1e-6 * min(section.Iz, section.Iy)) == section.J
+    assert imported.dropped["zero torsional constant (a small one substituted)"] == 1
+
+
+def test_a_nonprismatic_section_becomes_its_start_section(tmp_path: Path) -> None:
+    extra = (
+        'TABLE:  "FRAME SECTION PROPERTIES 01 - GENERAL"\n'
+        "   SectionName=BIG   Material=M   Shape=Rectangular   t3=2   t2=1 _\n"
+        "      Area=2   TorsConst=0.5   I33=0.6667   I22=0.1667\n"
+        "   SectionName=VAR   Shape=Nonprismatic\n"
+        'TABLE:  "FRAME SECTION PROPERTIES 05 - NONPRISMATIC"\n'
+        "   SectionName=VAR   StartSect=BIG   EndSect=BIG   LengthType=Relative _\n"
+        "      RelLength=1   EI33Var=Linear   EI22Var=Linear\n"
+    )
+    body = _CANTILEVER.format(units="KN, m, C", x=5, z=0, extra=extra).replace(
+        "AnalSect=S", "AnalSect=VAR"
+    )
+    imported = import_s2k(_write(tmp_path, body))
+    section = imported.project.sections[0]
+    assert isinstance(section, ElasticSection)
+    assert section.name == "VAR"
+    assert (section.A, section.Iz, section.Iy) == pytest.approx((2.0, 0.1667, 0.6667))
+    assert pytest.approx(200_000.0) == section.E  # from BIG's material M, not VAR's (empty)
+    assert imported.dropped["nonprismatic section (imported as its start section)"] == 1
+
+
+@pytest.mark.parametrize(
+    "segment", ["", "   SectionName=VAR   StartSect=VAR\n"], ids=["no-table", "a-cycle"]
+)
+def test_a_nonprismatic_section_without_a_usable_start_is_refused(
+    tmp_path: Path, segment: str
+) -> None:
+    extra = (
+        'TABLE:  "FRAME SECTION PROPERTIES 01 - GENERAL"\n   SectionName=VAR   Shape=Nonprismatic\n'
+    )
+    if segment:
+        extra += 'TABLE:  "FRAME SECTION PROPERTIES 05 - NONPRISMATIC"\n' + segment
+    body = _CANTILEVER.format(units="KN, m, C", x=5, z=0, extra=extra).replace(
+        "AnalSect=S", "AnalSect=VAR"
+    )
+    with pytest.raises(Sap2000TextError, match="needs a start section"):
+        import_s2k(_write(tmp_path, body))
+
+
 # ──────────────────────────── writing ────────────────────────────
 def _totals(project: Project) -> dict[tuple[str, int], np.ndarray]:
     """Per pattern name and element, every frame load summed (distribution kept apart)."""

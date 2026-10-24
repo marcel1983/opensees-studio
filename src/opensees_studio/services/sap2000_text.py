@@ -151,6 +151,7 @@ READ_TABLES: frozenset[str] = frozenset(
         "MATERIAL PROPERTIES 01 - GENERAL",
         "MATERIAL PROPERTIES 02 - BASIC MECHANICAL PROPERTIES",
         "FRAME SECTION PROPERTIES 01 - GENERAL",
+        "FRAME SECTION PROPERTIES 05 - NONPRISMATIC",
         "LOAD PATTERN DEFINITIONS",
         "JOINT LOADS - FORCE",
         "FRAME LOADS - DISTRIBUTED",
@@ -575,6 +576,10 @@ class _Translator:
         self.nodes: list[Node] = []
         self.materials: dict[str, _Material] = {}
         self.frame_sections: dict[str, dict[str, str]] = {}
+        #: A nonprismatic section's first segment names the section at its I end.
+        self.nonprismatic: dict[str, str] = {}
+        self._nonprismatic_reported: set[str] = set()
+        self._zero_torsion: set[str] = set()
         self._shapes_reported: set[str] = set()
         self._release_rows = _by_frame(s2k.rows("FRAME RELEASE ASSIGNMENTS 1 - GENERAL"))
         self._partial_rows = _by_frame(s2k.rows("FRAME RELEASE ASSIGNMENTS 2 - PARTIAL FIXITY"))
@@ -797,6 +802,11 @@ class _Translator:
             )
         for row in self.s2k.rows("FRAME SECTION PROPERTIES 01 - GENERAL"):
             self.frame_sections[row.get("SectionName", "")] = row
+        for row in self.s2k.rows("FRAME SECTION PROPERTIES 05 - NONPRISMATIC"):
+            name = row.get("SectionName", "")
+            if name and name not in self.nonprismatic:
+                # The segments arrive in order: the first one starts at the member's I end.
+                self.nonprismatic[name] = row.get("StartSect", "")
 
     def _material(self, name: str, where: str) -> _Material:
         material = self.materials.get(name)
@@ -806,11 +816,33 @@ class _Translator:
             raise Sap2000TextError(f"{where}material {name!r} has no modulus of elasticity.")
         return material
 
-    def _section_values(self, name: str) -> tuple[dict[str, float], dict[str, str]]:
+    def _section_row(self, name: str, seen: tuple[str, ...] = ()) -> dict[str, str]:
+        """The properties row of a section, resolving a nonprismatic one to its start section.
+
+        A nonprismatic member is imported as one prismatic member with the section at
+        its I end; the import report says so.
+        """
         row = self.frame_sections.get(name)
-        where = f"Frame section {name}: "
         if row is None:
-            raise Sap2000TextError(f"{where}not in FRAME SECTION PROPERTIES 01 - GENERAL.")
+            raise Sap2000TextError(
+                f"Frame section {name}: not in FRAME SECTION PROPERTIES 01 - GENERAL."
+            )
+        if row.get("Shape", "").strip().lower() != "nonprismatic":
+            return row
+        start = self.nonprismatic.get(name)
+        if not start or start in seen or start == name:
+            raise Sap2000TextError(
+                f"Frame section {name} ({_at('FRAME SECTION PROPERTIES 01 - GENERAL', row)}): "
+                "a Nonprismatic section needs a start section of its own in FRAME SECTION "
+                "PROPERTIES 05 - NONPRISMATIC."
+            )
+        if name not in self._nonprismatic_reported:
+            self._nonprismatic_reported.add(name)
+            self.dropped["nonprismatic section (imported as its start section)"] += 1
+        return self._section_row(start, (*seen, name))
+
+    def _section_values(self, name: str) -> tuple[dict[str, float], dict[str, str]]:
+        row = self._section_row(name)
         where = f"Frame section {name} ({_at('FRAME SECTION PROPERTIES 01 - GENERAL', row)}): "
         shape = row.get("Shape", "General").strip().lower()
         given = {
@@ -821,7 +853,15 @@ class _Translator:
             "AS2": _number(row, "AS2", where=where),
             "AS3": _number(row, "AS3", where=where),
         }
-        if given["A"] > 0 and given["I33"] > 0 and given["I22"] > 0:
+        # A 2D model uses one bending inertia; SAP2000 writes 0 in the other one and in J.
+        # The member's in-plane inertia is checked in build_frames, where the local axes
+        # are known. A 3D model needs both inertias.
+        complete = given["A"] > 0
+        if self.ndm == 3:
+            complete = complete and given["I33"] > 0 and given["I22"] > 0
+        else:
+            complete = complete and (given["I33"] > 0 or given["I22"] > 0)
+        if complete:
             values = given
             known = ("rectangular", "i/wide flange", "pipe", "box/tube", "general")
             if shape not in known and name not in self._shapes_reported:
@@ -890,7 +930,15 @@ class _Translator:
             "Iz": iz,
         }
         if self.ndm == 3:
-            fields.update(Iy=iy, G=material.g, J=values["J"] * s.inertia)
+            j = values["J"] * s.inertia
+            if j <= 0.0:
+                # OpenSees needs a torsional stiffness; SAP2000 allows J = 0. A tiny one
+                # keeps the member from spinning about its own axis, and the report says so.
+                if name not in self._zero_torsion:
+                    self._zero_torsion.add(name)
+                    self.dropped["zero torsional constant (a small one substituted)"] += 1
+                j = 1e-6 * min(iz, iy)
+            fields.update(Iy=iy, G=material.g, J=j)
         if shear:
             fields.update(G=material.g, As2=avy)
             if self.ndm == 3:
@@ -1009,6 +1057,14 @@ class _Translator:
             material = self._material(mat_name, where)
             angle = self.angles.get(name, 0.0)
             orientation = _orientation(self.ndm, p_i, p_j, angle)
+            # A 2D file may carry 0 in the axis it does not bend about; the one it does
+            # must not be 0, or the member has no stiffness the model can use.
+            in_plane = values["I33"] if orientation.two_on_y else values["I22"]
+            if in_plane <= 0.0:
+                raise Sap2000TextError(
+                    f"{where}the section has no inertia about the member's in-plane axis "
+                    f"(I33 = {values['I33']:g}, I22 = {values['I22']:g})."
+                )
             symmetric = math.isclose(values["I33"], values["I22"], rel_tol=1e-9) and math.isclose(
                 values["AS2"], values["AS3"], rel_tol=1e-9
             )

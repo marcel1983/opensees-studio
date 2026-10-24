@@ -24,6 +24,15 @@ refused instead of silently downgraded).
 
 ### Fixed
 
+- **SAP2000 text import: real-world section definitions no longer stop a file.**
+  A 2D frame with `I22 = 0` and `J = 0` (the out-of-plane zeros SAP2000 writes)
+  imports, with the in-plane inertia checked per member instead of demanding
+  both; a 3D section whose torsional constant is 0 gets a small one, counted in
+  the report, because OpenSees needs torsional stiffness; and a `Nonprismatic`
+  section imports as one prismatic member with the section at its I end, also
+  counted. Found importing SAP2000's own `Example 1-006`, `1-021`, `1-022` and
+  `1-024` models: 5 of 68 example files used to be refused, all 68 now import.
+
 - **SAP2000 text import: a damaged file is refused with a message that names the
   table and the line, not with a crash or a hang.** A joint or frame name that
   CPython cannot read as an integer (4 300+ digits, or a character such as `²`

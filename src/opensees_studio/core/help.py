@@ -1107,7 +1107,11 @@ dimension. The log names both systems. A file without units is read as kN-m.
   property columns (the dimensions give closed-form values when those are
   missing), with the property modifiers applied to the values; other shapes by
   their properties only. Rectangles, I-shapes, pipes and tubes keep their shape
-  for the extruded view.
+  for the extruded view. A **nonprismatic** section becomes one prismatic member
+  with the section at its I end. A 2D model accepts a 0 in the inertia it does
+  not bend about and in the torsion constant; a 3D section whose `J` is 0 gets a
+  small one, because OpenSees needs torsional stiffness. Both substitutions are
+  counted in the report.
 - **End releases** of torsion and bending, and partial-fixity springs.
 - **Load patterns** with their self-weight multiplier, **joint forces** (global),
   **distributed frame loads** (uniform, trapezoidal or over part of the member,
