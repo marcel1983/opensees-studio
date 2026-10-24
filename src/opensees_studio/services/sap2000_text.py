@@ -17,9 +17,10 @@ restraints, added joint masses and support springs, frames and their sections an
 materials (rectangular, I, pipe, tube or general properties; another shape by its
 properties), local-axis angles, end releases and partial fixity, load patterns
 with their self-weight multiplier, joint forces, distributed and point frame
-loads, linear static load cases, eigen modal cases, combinations, and four-node
-thin or thick shells with their sections. Every other table is counted in the
-import report, never dropped silently.
+loads, linear static load cases, eigen modal cases, response-spectrum cases with
+their tabulated spectra, combinations, and four-node thin or thick shells with
+their sections. Every other table is counted in the import report, never dropped
+silently.
 
 Diagnostics. A record the reader cannot use names the table and the line it came
 from (``Frame 3 (CONNECTIVITY - FRAME, line 57): joint 'C' is not defined``), and
@@ -51,12 +52,17 @@ import re
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import numpy as np
 from pydantic import ValidationError
 
-from opensees_studio.core.analysis import ModalCase, StaticCase
+from opensees_studio.core.analysis import (
+    AnalysisCase,
+    ModalCase,
+    ResponseSpectrumCase,
+    StaticCase,
+)
 from opensees_studio.core.combinations import CombinationTerm, CombinationType, LoadCombination
 from opensees_studio.core.geometry.elements import ElasticBeamColumn, ShellMITC4Element
 from opensees_studio.core.geometry.frame_options import EndRelease, FrameReleases
@@ -73,6 +79,7 @@ from opensees_studio.core.loads import (
     NodalLoad,
     PlainLoadPattern,
     PointElementLoad,
+    ResponseSpectrum,
     TrapezoidalElementLoad,
     UniformElementLoad,
 )
@@ -86,7 +93,7 @@ from opensees_studio.core.sections import (
     TubeShape,
     WideFlangeShape,
 )
-from opensees_studio.core.units import UnitSystem, metres_per_unit, newtons_per_unit
+from opensees_studio.core.units import UnitSystem, gravity, metres_per_unit, newtons_per_unit
 from opensees_studio.services.s3d_import import UnitScale
 
 _KIP_N = 4448.2216152605
@@ -159,6 +166,9 @@ READ_TABLES: frozenset[str] = frozenset(
         "LOAD CASE DEFINITIONS",
         "CASE - STATIC 1 - LOAD ASSIGNMENTS",
         "CASE - MODAL 1 - GENERAL",
+        "FUNCTION - RESPONSE SPECTRUM - USER",
+        "CASE - RESPONSE SPECTRUM 1 - GENERAL",
+        "CASE - RESPONSE SPECTRUM 2 - LOAD ASSIGNMENTS",
         "COMBINATION DEFINITIONS",
         "CONNECTIVITY - AREA",
         "AREA SECTION ASSIGNMENTS",
@@ -168,6 +178,8 @@ READ_TABLES: frozenset[str] = frozenset(
 
 _DOF_KEYS = ("U1", "U2", "U3", "R1", "R2", "R3")
 _FORCE_KEYS = ("F1", "F2", "F3", "M1", "M2", "M3")
+#: A response-spectrum load assignment's global direction as a DOF number.
+_DIRECTIONS: dict[str, int] = {key: index for index, key in enumerate(_DOF_KEYS, start=1)}
 #: A joint mass record: the three translations, then the three mass moments of inertia.
 _MASS_KEYS = ("Mass1", "Mass2", "Mass3", "MMI1", "MMI2", "MMI3")
 #: A joint spring record: the three translations to ground, then the three rotations.
@@ -590,6 +602,9 @@ class _Translator:
         self.frame_ends: dict[str, tuple[str, str]] = {}
         self.angles: dict[str, float] = {}
         self.shells: list[ShellMITC4Element] = []
+        self.spectra: list[ResponseSpectrum] = []
+        self._spectrum_ids: dict[tuple[str, float, float], int] = {}
+        self._zero_period: set[str] = set()
         self.oblique = 0
         #: A mass source that excludes added masses makes those rows inert, as in SAP2000.
         self._added_masses = all(_yes(row, "Masses") for row in s2k.rows("MASS SOURCE"))
@@ -1399,10 +1414,10 @@ class _Translator:
     # ── cases and combinations ──
     def build_cases(
         self, patterns: dict[str, PlainLoadPattern]
-    ) -> tuple[list[PlainLoadPattern], list[StaticCase | ModalCase]]:
+    ) -> tuple[list[PlainLoadPattern], list[AnalysisCase]]:
         definitions = self.s2k.rows("LOAD CASE DEFINITIONS")
         extra: list[PlainLoadPattern] = []
-        cases: list[StaticCase | ModalCase] = []
+        cases: list[AnalysisCase] = []
         if not definitions:
             for pattern in patterns.values():
                 cases.append(
@@ -1418,6 +1433,7 @@ class _Translator:
             assignments.setdefault(row.get("Case", ""), []).append(row)
         next_pattern = len(patterns) + 1
         scaled: dict[tuple[str, float], int] = {}
+        modal_cases: dict[str, ModalCase] = {}
         for row in definitions:
             name = row.get("Case", "")
             kind = row.get("Type", "")
@@ -1425,7 +1441,10 @@ class _Translator:
                 modal = self._modal_case(row, name, len(cases) + 1)
                 if modal is not None:
                     cases.append(modal)
+                    modal_cases[name] = modal
                 continue
+            if kind.lower() == "linrespspec":
+                continue  # second pass: its modal case must have an id first
             if kind.lower() != "linstatic":
                 self.dropped[f"{kind or 'untyped'} load case"] += 1
                 continue
@@ -1460,6 +1479,12 @@ class _Translator:
                 self.dropped["static case with no load pattern"] += 1
                 continue
             cases.append(StaticCase(id=len(cases) + 1, name=name, pattern_ids=pattern_ids))
+        for row in definitions:
+            if row.get("Type", "").lower() != "linrespspec":
+                continue
+            spectrum = self._response_spectrum_case(row, len(cases) + 1, modal_cases)
+            if spectrum is not None:
+                cases.append(spectrum)
         if scaled:
             self.notes.append(
                 f"{len(scaled)} load pattern(s) scaled by a case's factor became pattern(s) of "
@@ -1489,7 +1514,125 @@ class _Translator:
         # The case's solver is left on auto: this build routes dense/ARPACK itself.
         return ModalCase(id=case_id, name=name, n_modes=int(modes))
 
-    def build_combinations(self, cases: list[StaticCase | ModalCase]) -> list[LoadCombination]:
+    def _response_spectrum_case(
+        self, definition: S2kRow, case_id: int, modal_cases: dict[str, ModalCase]
+    ) -> ResponseSpectrumCase | None:
+        """A ``LinRespSpec`` case from its two tables, when it is one this model can run."""
+        table = "CASE - RESPONSE SPECTRUM 1 - GENERAL"
+        name = definition.get("Case", "")
+        general = next((r for r in self.s2k.rows(table) if r.get("Case", "") == name), None)
+        if general is None:
+            self.dropped["spectrum case without its general properties"] += 1
+            return None
+        where = f"Spectrum case {name} ({_at(table, general)}): "
+        rule = general.get("ModalCombo", "CQC").strip()
+        rules: dict[str, Literal["SRSS", "CQC"]] = {"srss": "SRSS", "cqc": "CQC"}
+        combination = rules.get(rule.lower())
+        if combination is None:
+            self.dropped[f"{rule or 'untyped'} modal combination"] += 1
+            return None
+        if _number(general, "EccenRatio", 0.0, where=where):
+            self.dropped["spectrum case with accidental eccentricity"] += 1
+            return None
+        if _number(general, "GMCf2", 0.0, where=where):
+            self.dropped["spectrum case with a second scale factor"] += 1
+            return None
+
+        loads = "CASE - RESPONSE SPECTRUM 2 - LOAD ASSIGNMENTS"
+        rows = [r for r in self.s2k.rows(loads) if r.get("Case", "") == name]
+        if len(rows) != 1:
+            self.dropped[
+                "spectrum case with no direction"
+                if not rows
+                else "spectrum case with more than one direction"
+            ] += 1
+            return None
+        load = rows[0]
+        load_where = f"Spectrum case {name} ({_at(loads, load)}): "
+        if load.get("CoordSys", "GLOBAL").strip().upper() != "GLOBAL":
+            self.dropped["spectrum in a user coordinate system"] += 1
+            return None
+        if _number(load, "Angle", 0.0, where=load_where):
+            self.dropped["spectrum at a non-zero angle"] += 1
+            return None
+        direction = _DIRECTIONS.get(load.get("LoadName", "").strip().upper())
+        if direction is None:
+            self.dropped[f"spectrum along {load.get('LoadName')!r}"] += 1
+            return None
+
+        modal_name = general.get("ModalCase", "")
+        modal = (
+            modal_cases.get(modal_name) if modal_name else next(iter(modal_cases.values()), None)
+        )
+        if modal is None:
+            self.dropped["spectrum case without a modal case"] += 1
+            return None
+        spectrum_id = self._spectrum(load, general, load_where)
+        if spectrum_id is None:
+            return None
+        damping = _number(general, "ConstDamp", 0.0, where=where)
+        if not 0.0 <= damping <= 1.0:
+            raise Sap2000TextError(f"{where}ConstDamp must be between 0 and 1, not {damping:g}.")
+        return ResponseSpectrumCase(
+            id=case_id,
+            name=name,
+            modal_case_id=modal.id,
+            spectrum_id=spectrum_id,
+            direction=direction,
+            combination=combination,
+            damping_ratio=damping if damping > 0.0 else None,
+        )
+
+    def _spectrum(self, load: S2kRow, general: S2kRow, where: str) -> int | None:
+        """The project spectrum a load assignment names, built once per function and scale."""
+        table = "FUNCTION - RESPONSE SPECTRUM - USER"
+        function = load.get("Function", "")
+        rows = [r for r in self.s2k.rows(table) if r.get("Name", "") == function]
+        if len(rows) < 2:
+            self.dropped[f"spectrum function {function!r} with fewer than two points"] += 1
+            return None
+        # TransAccSF takes the tabulated ordinates (usually in g) to the file's length/s2;
+        # a file that leaves it out is read as g, which is already in project units.
+        factor = _number(load, "TransAccSF", 0.0, where=where)
+        factor = gravity(self.target) if factor <= 0.0 else factor * self.scale.length
+        factor *= _number(general, "GMCf1", 1.0, where=where)
+        damping = min(max(_number(general, "ConstDamp", 0.05, where=where), 0.0), 1.0)
+        key = (function, factor, damping)
+        if key in self._spectrum_ids:
+            return self._spectrum_ids[key]
+        points: dict[float, float] = {}
+        for row in rows:
+            row_where = f"Spectrum {function} ({_at(table, row)}): "
+            period = _number(row, "Period", where=row_where)
+            if period < 0.0:
+                raise Sap2000TextError(f"{row_where}a period must not be negative.")
+            if period == 0.0:
+                # SAP2000's T = 0 point is the PGA; the model wants a positive period.
+                if function not in self._zero_period:
+                    self._zero_period.add(function)
+                    self.dropped["zero period in a response spectrum (read as 1e-6 s)"] += 1
+                period = 1e-6
+            points[period] = _number(row, "Accel", where=row_where) * factor
+        ordered = sorted(points.items())
+        if len(ordered) < 2:
+            self.dropped[f"spectrum function {function!r} with fewer than two periods"] += 1
+            return None
+        name = function
+        used = {spectrum.name for spectrum in self.spectra}
+        while name in used:
+            name = f"{function} ({len(self.spectra) + 1})"
+        spectrum = ResponseSpectrum(
+            id=len(self.spectra) + 1,
+            name=name,
+            periods=[period for period, _ in ordered],
+            accelerations=[value for _, value in ordered],
+            damping_ratio=damping,
+        )
+        self.spectra.append(spectrum)
+        self._spectrum_ids[key] = spectrum.id
+        return spectrum.id
+
+    def build_combinations(self, cases: list[AnalysisCase]) -> list[LoadCombination]:
         rows = self.s2k.rows("COMBINATION DEFINITIONS")
         order: list[str] = []
         grouped: dict[str, list[S2kRow]] = {}
@@ -1669,6 +1812,7 @@ def s2k_to_project(
             elements=elements,
             time_series=[LinearTimeSeries(id=1, name="Linear")],
             load_patterns=[*patterns.values(), *extra],
+            spectra=[*translator.spectra],
             analyses=[*cases],
             combinations=combinations,
         )
@@ -2196,14 +2340,87 @@ class _Writer:
         self.table("FRAME LOADS - POINT", point)
         self.report.written["load pattern(s)"] = len(definitions)
 
+        spectrum_names = _Names()
+        spectrum_of = {
+            spectrum.id: spectrum_names.take(spectrum.name, f"RS{spectrum.id}")
+            for spectrum in p.spectra
+        }
+        gravity_value = gravity(p.meta.units)
+        spectrum_rows: list[list[tuple[str, str]]] = []
+        for spectrum in p.spectra:
+            name = spectrum_of[spectrum.id]
+            for period, accel in zip(spectrum.periods, spectrum.accelerations, strict=True):
+                spectrum_rows.append(
+                    [
+                        ("Name", _quote(name)),
+                        ("Period", _fmt(period)),
+                        # Back to g; 12 significant digits keep a second export identical.
+                        ("Accel", _fmt(float(f"{accel / gravity_value:.12g}"))),
+                        ("FuncDamp", _fmt(spectrum.damping_ratio)),
+                    ]
+                )
+        self.table("FUNCTION - RESPONSE SPECTRUM - USER", spectrum_rows)
+        self.report.written["response spectrum(s)"] = len(p.spectra)
+
+        # Name every case first: a spectrum case refers to its modal case by id, and
+        # that case may be written after it.
         case_names = _Names()
+        case_of = {case.id: case_names.take(case.name, f"CASE{case.id}") for case in p.analyses}
+        by_id = {case.id: case for case in p.analyses}
         cases, assignments = [], []
         modal_rows: list[list[tuple[str, str]]] = []
-        case_of: dict[int, str] = {}
+        spectrum_general: list[list[tuple[str, str]]] = []
+        spectrum_loads: list[list[tuple[str, str]]] = []
         static_cases = 0
+        spectra_by_id = {spectrum.id: spectrum for spectrum in p.spectra}
         for case in p.analyses:
+            if isinstance(case, ResponseSpectrumCase):
+                name = case_of[case.id]
+                spectrum_name = spectrum_of.get(case.spectrum_id)
+                modal = by_id.get(case.modal_case_id)
+                if spectrum_name is None or not isinstance(modal, ModalCase):
+                    self.report.skipped[
+                        "spectrum case on a spectrum or modal case not written"
+                    ] += 1
+                    continue
+                entry = spectra_by_id.get(case.spectrum_id)
+                damping = (
+                    case.damping_ratio
+                    if case.damping_ratio is not None
+                    else (entry.damping_ratio if entry is not None else 0.05)
+                )
+                cases.append(
+                    [
+                        ("Case", _quote(name)),
+                        ("Type", "LinRespSpec"),
+                        ("RunCase", "Yes"),
+                    ]
+                )
+                spectrum_general.append(
+                    [
+                        ("Case", _quote(name)),
+                        ("ModalCombo", _quote(case.combination)),
+                        ("GMCf1", "1"),
+                        ("GMCf2", "0"),
+                        ("PerRigid", "SRSS"),
+                        ("DirCombo", "SRSS"),
+                        ("ConstDamp", _fmt(damping)),
+                        ("EccenRatio", "0"),
+                    ]
+                )
+                spectrum_loads.append(
+                    [
+                        ("Case", _quote(name)),
+                        ("LoadName", _DOF_KEYS[case.direction - 1]),
+                        ("CoordSys", "GLOBAL"),
+                        ("Function", _quote(spectrum_name)),
+                        ("Angle", "0"),
+                        ("TransAccSF", _fmt(gravity_value)),
+                    ]
+                )
+                continue
             if isinstance(case, ModalCase):
-                name = case_names.take(case.name, f"CASE{case.id}")
+                name = case_of[case.id]
                 cases.append(
                     [
                         ("Case", _quote(name)),
@@ -2233,8 +2450,7 @@ class _Writer:
             if not all(pid in pattern_names for pid in case.pattern_ids):
                 self.report.skipped["static case on a pattern not written"] += 1
                 continue
-            name = case_names.take(case.name, f"CASE{case.id}")
-            case_of[case.id] = name
+            name = case_of[case.id]
             static_cases += 1
             cases.append(
                 [
@@ -2256,8 +2472,11 @@ class _Writer:
         self.table("LOAD CASE DEFINITIONS", cases)
         self.table("CASE - STATIC 1 - LOAD ASSIGNMENTS", assignments)
         self.table("CASE - MODAL 1 - GENERAL", modal_rows)
+        self.table("CASE - RESPONSE SPECTRUM 1 - GENERAL", spectrum_general)
+        self.table("CASE - RESPONSE SPECTRUM 2 - LOAD ASSIGNMENTS", spectrum_loads)
         self.report.written["static case(s)"] = static_cases
         self.report.written["modal case(s)"] = len(modal_rows)
+        self.report.written["response spectrum case(s)"] = len(spectrum_general)
 
         combo_of: dict[int, str] = {}
         for combination in p.combinations:
