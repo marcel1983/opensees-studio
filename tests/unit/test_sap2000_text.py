@@ -15,7 +15,7 @@ import numpy as np
 import pytest
 
 from opensees_studio.core import UnitSystem
-from opensees_studio.core.analysis import ModalCase, StaticCase
+from opensees_studio.core.analysis import ModalCase, ResponseSpectrumCase, StaticCase
 from opensees_studio.core.combinations import CombinationTerm, LoadCombination
 from opensees_studio.core.geometry.elements import ElasticBeamColumn, ShellMITC4Element
 from opensees_studio.core.geometry.frame_options import EndRelease, FrameReleases
@@ -25,6 +25,7 @@ from opensees_studio.core.loads import (
     NodalLoad,
     PlainLoadPattern,
     PointElementLoad,
+    ResponseSpectrum,
     TrapezoidalElementLoad,
     UniformElementLoad,
 )
@@ -38,6 +39,7 @@ from opensees_studio.core.sections import (
 )
 from opensees_studio.services.sap2000_text import (
     S2kFile,
+    Sap2000Import,
     Sap2000TextError,
     export_s2k,
     import_s2k,
@@ -530,6 +532,86 @@ def test_a_modal_case_needs_a_positive_whole_mode_count(tmp_path: Path, modes: s
         import_s2k(_cantilever(tmp_path, extra=extra))
 
 
+# ──────────────────────────── response spectra ────────────────────────────
+_SPECTRUM_CASE = """\
+TABLE:  "FUNCTION - RESPONSE SPECTRUM - USER"
+   Name=FUNC   Period=0   Accel=0.4   FuncDamp=0
+   Name=FUNC   Period=0.5   Accel=1.0
+   Name=FUNC   Period=1   Accel=0.5
+TABLE:  "LOAD CASE DEFINITIONS"
+   Case=RSC   Type=LinRespSpec   RunCase=Yes
+TABLE:  "CASE - RESPONSE SPECTRUM 1 - GENERAL"
+   Case=RSC   ModalCombo=CQC   GMCf1=1   GMCf2=0   PerRigid=SRSS   DirCombo=SRSS _
+      ConstDamp=0.05   EccenRatio=0
+TABLE:  "CASE - RESPONSE SPECTRUM 2 - LOAD ASSIGNMENTS"
+   Case=RSC   LoadName=U1   CoordSys=GLOBAL   Function=FUNC   Angle=0   TransAccSF=9.80665
+"""
+
+
+def _spectrum_file(tmp_path: Path, extra: str = _SPECTRUM_CASE) -> Sap2000Import:
+    return import_s2k(_cantilever(tmp_path, extra=_MODAL_CASE + extra))
+
+
+def test_a_response_spectrum_case_comes_across(tmp_path: Path) -> None:
+    imported = _spectrum_file(tmp_path)
+    project = imported.project
+    (spectrum,) = project.spectra
+    g = 9.80665
+    assert spectrum.name == "FUNC"
+    assert spectrum.periods == pytest.approx([1e-6, 0.5, 1.0])
+    assert spectrum.accelerations == pytest.approx([0.4 * g, g, 0.5 * g])
+    assert spectrum.damping_ratio == pytest.approx(0.05)
+    static, modal, case = project.analyses
+    assert isinstance(static, StaticCase) and isinstance(modal, ModalCase)
+    assert isinstance(case, ResponseSpectrumCase)
+    assert (case.name, case.modal_case_id, case.spectrum_id) == ("RSC", modal.id, spectrum.id)
+    assert (case.direction, case.combination, case.damping_ratio) == (1, "CQC", 0.05)
+    assert imported.dropped["zero period in a response spectrum (read as 1e-6 s)"] == 1
+
+
+def test_the_modal_combination_rule_is_kept(tmp_path: Path) -> None:
+    imported = _spectrum_file(tmp_path, _SPECTRUM_CASE.replace("ModalCombo=CQC", "ModalCombo=SRSS"))
+    case = imported.project.analyses[-1]
+    assert isinstance(case, ResponseSpectrumCase) and case.combination == "SRSS"
+
+
+@pytest.mark.parametrize("rule", ["ABS", "10 Percent"])
+def test_a_modal_combination_without_a_counterpart_is_reported(tmp_path: Path, rule: str) -> None:
+    extra = _SPECTRUM_CASE.replace("ModalCombo=CQC", f'ModalCombo="{rule}"')
+    imported = _spectrum_file(tmp_path, extra)
+    assert imported.dropped[f"{rule} modal combination"] == 1
+    assert not any(isinstance(c, ResponseSpectrumCase) for c in imported.project.analyses)
+
+
+def test_a_spectrum_case_needs_one_direction(tmp_path: Path) -> None:
+    load = (
+        "   Case=RSC   LoadName=U1   CoordSys=GLOBAL   Function=FUNC   Angle=0   "
+        "TransAccSF=9.80665\n"
+    )
+    extra = _SPECTRUM_CASE.replace(load, load + load.replace("U1", "U2"))
+    imported = _spectrum_file(tmp_path, extra)
+    assert imported.dropped["spectrum case with more than one direction"] == 1
+
+
+def test_a_spectrum_at_an_angle_is_reported(tmp_path: Path) -> None:
+    imported = _spectrum_file(tmp_path, _SPECTRUM_CASE.replace("Angle=0", "Angle=15"))
+    assert imported.dropped["spectrum at a non-zero angle"] == 1
+
+
+def test_a_spectrum_needs_at_least_two_points(tmp_path: Path) -> None:
+    extra = _SPECTRUM_CASE.replace(
+        "   Name=FUNC   Period=0.5   Accel=1.0\n   Name=FUNC   Period=1   Accel=0.5\n", ""
+    )
+    imported = _spectrum_file(tmp_path, extra)
+    assert imported.dropped["spectrum function 'FUNC' with fewer than two points"] == 1
+
+
+def test_a_spectrum_damping_outside_zero_to_one_is_refused(tmp_path: Path) -> None:
+    extra = _SPECTRUM_CASE.replace("ConstDamp=0.05", "ConstDamp=1.5")
+    with pytest.raises(Sap2000TextError, match="ConstDamp must be between 0 and 1"):
+        _spectrum_file(tmp_path, extra)
+
+
 # ──────────────────────────── writing ────────────────────────────
 def _totals(project: Project) -> dict[tuple[str, int], np.ndarray]:
     """Per pattern name and element, every frame load summed (distribution kept apart)."""
@@ -577,25 +659,13 @@ def _assert_same_model(a: Project, b: Project) -> None:
     assert ta.keys() == tb.keys()
     for key in ta:
         np.testing.assert_allclose(ta[key], tb[key], rtol=1e-12, atol=1e-15)
-    assert [
-        (
-            type(c),
-            c.name,
-            getattr(c, "pattern_ids", None),
-            getattr(c, "n_modes", None),
-            getattr(c, "solver", None),
-        )
-        for c in a.analyses
-    ] == [
-        (
-            type(c),
-            c.name,
-            getattr(c, "pattern_ids", None),
-            getattr(c, "n_modes", None),
-            getattr(c, "solver", None),
-        )
-        for c in b.analyses
-    ]
+    assert [c.model_dump() for c in a.analyses] == [c.model_dump() for c in b.analyses]
+    assert len(a.spectra) == len(b.spectra)
+    for sa, sb in zip(a.spectra, b.spectra, strict=True):
+        assert (sa.id, sa.name) == (sb.id, sb.name)
+        assert sa.periods == pytest.approx(sb.periods)
+        assert sa.accelerations == pytest.approx(sb.accelerations, rel=1e-11)
+        assert sa.damping_ratio == pytest.approx(sb.damping_ratio)
     assert [(c.name, c.combination_type, c.terms) for c in a.combinations] == [
         (c.name, c.combination_type, c.terms) for c in b.combinations
     ]
@@ -656,6 +726,15 @@ def _built_project() -> Project:
             ),
         ],
         time_series=[LinearTimeSeries(id=1)],
+        spectra=[
+            ResponseSpectrum(
+                id=1,
+                name="RS",
+                periods=[0.1, 0.5, 2.0],
+                accelerations=[9.8, 3.0, 1.0],
+                damping_ratio=0.05,
+            )
+        ],
         load_patterns=[
             PlainLoadPattern(
                 id=1,
@@ -668,11 +747,47 @@ def _built_project() -> Project:
         analyses=[
             StaticCase(id=1, name="Q", pattern_ids=[1]),
             ModalCase(id=2, name="M", n_modes=3),
+            ResponseSpectrumCase(
+                id=3,
+                name="RS-CQC",
+                modal_case_id=2,
+                spectrum_id=1,
+                direction=1,
+                combination="CQC",
+                damping_ratio=0.05,
+            ),
         ],
         combinations=[
             LoadCombination(id=1, name="1.5Q", terms=[CombinationTerm(ref_id=1, factor=1.5)])
         ],
     )
+
+
+def _table_block(text: str, name: str) -> list[str]:
+    """The lines of one ``TABLE: "name"`` block, for comparing two exports."""
+    lines = text.splitlines()
+    start = lines.index(f'TABLE:  "{name}"')
+    end = next(
+        index
+        for index in range(start + 1, len(lines))
+        if lines[index].startswith(("TABLE:", "END TABLE"))
+    )
+    return lines[start:end]
+
+
+def test_a_spectrum_export_is_stable(tmp_path: Path) -> None:
+    once = export_s2k(_built_project(), tmp_path / "once.s2k")
+    assert once.path is not None
+    twice = export_s2k(import_s2k(once.path).project, tmp_path / "twice.s2k")
+    assert twice.path is not None
+    first = once.path.read_text(encoding="utf-8")
+    second = twice.path.read_text(encoding="utf-8")
+    for table in (
+        "FUNCTION - RESPONSE SPECTRUM - USER",
+        "CASE - RESPONSE SPECTRUM 1 - GENERAL",
+        "CASE - RESPONSE SPECTRUM 2 - LOAD ASSIGNMENTS",
+    ):
+        assert _table_block(first, table) == _table_block(second, table)
 
 
 def test_a_project_made_here_survives_the_trip() -> None:
@@ -686,7 +801,7 @@ def test_a_project_made_here_survives_the_trip() -> None:
 
 def test_the_export_reports_what_it_leaves_out() -> None:
     project = _built_project()
-    project.analyses.append(StaticCase(id=3, name="push", pattern_ids=[1], n_steps=10))
+    project.analyses.append(StaticCase(id=4, name="push", pattern_ids=[1], n_steps=10))
     _, report = project_to_s2k(project)
     # Added masses and springs are written now, so they are no longer in "skipped".
     assert report.written["joint mass"] == 1

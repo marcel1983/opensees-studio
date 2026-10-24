@@ -264,9 +264,9 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   support springs, grid lines, frames with their sections (rectangular, I, pipe,
   tube, general; a nonprismatic one as its start section), materials, local-axis
   angles and end releases, load patterns
-  with joint, distributed and point frame loads, linear static and eigen modal
-  cases, combinations and four-node shells, scaled from the file's `CurrUnits`
-  to the nearest unit system. SAP2000's local 2 and 3 are mapped onto OpenSees'
+  with joint, distributed and point frame loads, linear static, eigen modal and
+  response-spectrum cases, combinations and four-node shells, scaled from the
+  file's `CurrUnits` to the nearest unit system. SAP2000's local 2 and 3 are mapped onto OpenSees'
   axes member by member, and every table it does not read is named in the log.
   Written from the text format alone (SAP2000 is a trademark of Computers and
   Structures, Inc.; no CSI software is used).

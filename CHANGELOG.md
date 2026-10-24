@@ -11,6 +11,17 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **SAP2000 text import and export: response-spectrum cases.** A `LinRespSpec`
+  case with a CQC or SRSS `ModalCombo` becomes a `ResponseSpectrumCase` on the
+  file's first modal case, with its `U1..R3` direction, its `ConstDamp` and the
+  tabulated `FUNCTION - RESPONSE SPECTRUM - USER` as a project spectrum.
+  `TransAccSF` takes the ordinates to the project units and a `T = 0` point is
+  read as `1e-6 s`; `ABS` and "10 Percent" combinations, more than one direction,
+  a non-zero angle, accidental eccentricity and a second scale factor are counted
+  in the report. The export writes the three tables back. The four example files
+  with ten spectrum cases import (two of the ten are the ABS/10 Percent ones,
+  reported instead of guessed); the 68-file set still imports in full.
+
 - **SAP2000 text import and export: eigen modal cases.** A `LinModal` case whose
   `CASE - MODAL 1 - GENERAL` row is `ModeType=Eigen` becomes a modal case asking
   for its `MaxNumModes`, with the solver left on this program's automatic
