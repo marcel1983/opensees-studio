@@ -51,3 +51,61 @@ def test_more_mechanisms_than_listed_are_counted() -> None:
 def test_the_report_survives_the_cli_json() -> None:
     report = _report()
     assert StabilityReport.from_dict(report.to_dict()) == report
+
+
+def test_a_partial_or_negative_report_is_never_stable() -> None:
+    partial = StabilityReport(
+        n_equations=6,
+        rank=None,
+        completion="partial",
+        classification="no_mechanisms",
+        warnings=["only the lowest modes were checked"],
+    )
+    assert not partial.stable
+    assert "partial" in partial.summary()
+
+    negative = StabilityReport(
+        n_equations=6,
+        rank=6,
+        classification="negative_stiffness",
+        completion="complete",
+    )
+    assert not negative.stable
+    assert "negative" in negative.summary()
+
+
+def test_a_fully_restrained_model_is_a_distinct_success() -> None:
+    report = StabilityReport(
+        n_equations=0,
+        rank=0,
+        completion="complete",
+        classification="no_free_equations",
+    )
+    assert report.stable
+    assert "fully restrained" in report.summary()
+
+
+def test_the_new_report_fields_round_trip() -> None:
+    report = StabilityReport(
+        n_equations=8,
+        rank=None,
+        mechanisms=[],
+        n_mechanisms=0,
+        condition=None,
+        completion="partial",
+        classification="no_mechanisms",
+        analysis_state="initial",
+        nnz=42,
+        method="python_sparse_csr+sparse_eigsh_shift_invert",
+        backend="PythonSparse+scipy",
+        versions={"scipy": "1.0", "numpy": "2.0"},
+        scaling={"kind": "diagonal", "applied": True},
+        tolerances={"relative": 1e-10},
+        count_kind="estimate",
+        warnings=["only the lowest modes were checked"],
+        timings={"extract_ms": 1.5},
+        memory={"csr_bytes": 100, "estimated": True},
+        model_fingerprint="abc",
+    )
+    restored = StabilityReport.from_dict(report.to_dict())
+    assert restored == report

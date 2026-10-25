@@ -4515,11 +4515,15 @@ class MainWindow(QMainWindow):
         box = QMessageBox(self)
         box.setWindowTitle("Check Model Stability")
         box.setIcon(QMessageBox.Icon.Information if report.stable else QMessageBox.Icon.Warning)
-        box.setText(
-            "The model is statically stable."
-            if report.stable
-            else "The model is not statically stable."
-        )
+        if report.completion != "complete":
+            headline = "The stability check is incomplete."
+        elif report.classification == "no_free_equations":
+            headline = "The model is fully restrained."
+        elif report.stable:
+            headline = "The model is statically stable."
+        else:
+            headline = "The model is not statically stable."
+        box.setText(headline)
         box.setInformativeText(
             summary + ("\n\nThe joints that move are selected." if report.nodes else "")
         )

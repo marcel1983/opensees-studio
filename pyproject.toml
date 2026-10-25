@@ -40,6 +40,9 @@ dependencies = [
 opensees = [
     "openseespy==3.8.0.0",
     "openseespywin==3.8.0.0 ; sys_platform == 'win32'",
+    # The scalable stability check diagnoses the sparse stiffness matrix with
+    # SciPy. The desktop extra already needs SciPy for the PyNite engine.
+    "scipy>=1.11",
 ]
 # ── GUI / visualization stack (desktop app only) ──────────────────────────
 # Install with: pip install -e ".[gui]"   (desktop)

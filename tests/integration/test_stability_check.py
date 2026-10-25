@@ -78,6 +78,29 @@ def test_a_braced_truss_is_stable() -> None:
     assert report.n_equations == report.rank == 5
 
 
+def test_the_default_capture_is_sparse_and_the_small_diagnosis_is_dense() -> None:
+    report = check_stability(_truss(diagonal=True))
+    assert report.method.startswith("python_sparse_csr+")
+    assert report.backend.startswith("PythonSparse+")
+    assert report.nnz > 0
+    assert report.completion == "complete"
+    assert report.classification == "no_mechanisms"
+    assert report.count_kind == "exact"
+    assert report.versions["scipy"]
+    assert report.model_fingerprint
+
+
+def test_a_singular_sparse_capture_still_returns_the_mechanism() -> None:
+    report = check_stability(_truss(diagonal=False))
+    assert report.method.startswith("python_sparse_csr+")
+    assert report.nnz > 0
+    assert report.completion == "complete"
+    assert report.n_mechanisms == 1
+    mechanism = report.mechanisms[0]
+    assert mechanism.eigenvalue is not None
+    assert mechanism.residual is not None and mechanism.residual < 1e-8
+
+
 def test_a_square_without_a_diagonal_sways() -> None:
     report = check_stability(_truss(diagonal=False))
     assert not report.stable
@@ -99,6 +122,20 @@ def test_a_pinned_portal_with_a_pinned_beam_is_a_mechanism() -> None:
     assert report.n_mechanisms >= 1
     moved = {m.node for mech in report.mechanisms for m in mech.movers}
     assert moved & {2, 3}
+
+
+def test_a_fully_restrained_model_is_reported_as_such() -> None:
+    project = Project(
+        ndm=2,
+        ndf=3,
+        nodes=[Node(id=1, coords=(0.0, 0.0, 0.0), restraint=(True,) * 6)],
+    )
+    report = check_stability(project)
+    assert report.n_equations == 0
+    assert report.completion == "complete"
+    assert report.classification == "no_free_equations"
+    assert report.stable
+    assert "fully restrained" in report.summary()
 
 
 def test_a_node_nothing_connects_to_is_reported() -> None:

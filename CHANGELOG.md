@@ -11,6 +11,19 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **Scalable stability check.** `Analyze → Check Model Stability` now captures
+  the initial stiffness as a sparse CSR matrix through OpenSees'
+  `PythonSparse`, instead of assembling a dense matrix and reading it with
+  `printA`. Models up to 1 200 equations still use a dense symmetric reference;
+  larger models use a diagonally scaled, shifted sparse eigenvalue search. The
+  report distinguishes complete, partial, unsupported and error runs, separates
+  mechanisms from negative stiffness and ill-conditioning, reports `nnz`,
+  scaling, tolerances, residuals, timings, memory estimates and the model
+  fingerprint, and keeps old reports readable. The connectivity precheck only
+  warns about components without a restraint or grounded spring; it never calls
+  them unstable by itself. `scipy` is now part of the `opensees` extra (the
+  desktop extra already used it for PyNite).
+
 - **Opt-in performance diagnostics for large models.** Start with `--profile`,
   `OPENSEES_STUDIO_PERF=1` or **Help → Performance monitor**. The monitor times
   the SAP2000 importer (`s2k.*`), project I/O (`persistence.*`), analysis build

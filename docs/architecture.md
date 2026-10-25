@@ -53,10 +53,11 @@ The Qt main thread owns all widgets. OpenSees never runs in it:
   (HDF5 + `manifest.json`); a hard exit inside OpenSees cannot take the window
   down, and Cancel kills the process.
 - **Analyze → Check Model Stability** uses the same entry point with
-  `--project <snapshot> --check-stability`: the child builds the model, reads
-  the stiffness matrix (`services.stability`) and prints one `stability` line
-  whose report `viewmodels.StabilityChecker` turns back into a
-  `StabilityReport`.
+  `--project <snapshot> --check-stability`: the child builds the model, captures
+  the sparse initial stiffness through `PythonSparse` (`services.stability`),
+  diagnoses it with a dense reference up to 1 200 equations or a shifted sparse
+  eigenvalue search above that, and prints one `stability` line whose report
+  `viewmodels.StabilityChecker` turns back into a `StabilityReport`.
 - **Batch runs** (File → Run Batch…, `python -m opensees_studio.batch`) start
   the same CLI on each project file itself (no snapshot: the file is not open),
   with `--out <stem>_batch_results --record-db <stem>_results.sqlite`, so the
