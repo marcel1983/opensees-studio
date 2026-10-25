@@ -107,3 +107,16 @@ def test_zoom_in_and_out_change_the_camera_scale(qtbot) -> None:  # type: ignore
     # Zooming in magnifies: VTK narrows the view angle (perspective) or
     # shrinks the parallel scale (orthographic).
     assert zoomed_in[0] < before[0] or zoomed_in[1] < before[1]
+
+
+@pytest.mark.gui
+def test_zoom_refreshes_the_screen_relative_overlay_size(qtbot) -> None:  # type: ignore[no-untyped-def]
+    canvas = _canvas(qtbot)
+    renderer = canvas._renderer
+    before = renderer._screen_key
+    assert before is not None
+
+    canvas.zoom_in()
+    qtbot.wait(300)
+
+    assert renderer._screen_key != before

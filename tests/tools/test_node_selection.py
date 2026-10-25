@@ -1,9 +1,8 @@
-"""Selection recolours the node glyph in place instead of rebuilding it.
+"""Selection recolours the node point cloud in place instead of rebuilding it.
 
-The glyph output is a materialised copy, so the states are written onto it as the
-input array repeated by the glyph stride. That only works if the output keeps the
-input's point order; these tests check the colour lands on the right sphere, and
-that selecting does not add an actor.
+The nodes are one point per joint, drawn as screen-space spheres, so the state
+array is written directly onto the PolyData. These tests check the colour lands
+on the right joint and that selecting does not add an actor.
 """
 
 from __future__ import annotations
@@ -33,16 +32,14 @@ def test_selection_colours_the_sphere_of_the_selected_node() -> None:
 
     renderer.update_selection(frozenset({2}), frozenset())
 
-    assert renderer._node_glyph is not None
-    states = np.asarray(renderer._node_glyph["_oss_state"])
-    points = np.asarray(renderer._node_glyph.points)
+    assert renderer._node_pd is not None
+    states = np.asarray(renderer._node_pd["_oss_state"])
+    points = np.asarray(renderer._node_pd.points)
     coords = np.array([node.coords for node in project.nodes])
 
-    # Every glyph point belongs to the nearest input node; its colour must be
-    # that node's state. A stride or ordering mistake swaps a sphere's colour.
-    nearest = np.argmin(np.linalg.norm(points[:, None, :] - coords[None, :, :], axis=2), axis=1)
-    expected = np.isin(nearest, [1])  # node id 2 is row 1
-    assert np.array_equal(states.astype(bool), expected)
+    # One point per joint: the selected node (row 1) is the only cyan point.
+    assert np.array_equal(points, coords)
+    assert states.tolist() == [0, 1, 0]
 
 
 def test_selecting_does_not_add_an_actor() -> None:
@@ -63,6 +60,6 @@ def test_clearing_the_selection_clears_every_sphere() -> None:
     renderer.update_selection(frozenset({1, 2}), frozenset())
     renderer.update_selection(frozenset(), frozenset())
 
-    assert renderer._node_glyph is not None
-    states = np.asarray(renderer._node_glyph["_oss_state"])
+    assert renderer._node_pd is not None
+    states = np.asarray(renderer._node_pd["_oss_state"])
     assert not states.any()

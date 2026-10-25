@@ -190,6 +190,15 @@ python tools/perf_bench.py --size xlarge --solver --cprofile
 Consulta [`docs/performance-profiling.md`](docs/performance-profiling.md) para
 los nombres de etapa, el formato JSON y cómo interpretar el informe.
 
+## Marcadores relativos a la pantalla
+
+Los nodos, apoyos, flechas de carga, reacciones y marcadores de masa se dimensionan
+como un porcentaje de la altura del viewport, no como una fracción del modelo.
+Mantienen su tamaño en pantalla al hacer zoom, y **Display → Display Options**
+permite ajustar cada porcentaje; el tamaño del texto es un valor separado en
+píxeles. Las masas nodales se dibujan como rombos morados cuando esa opción está
+activa. Los tamaños y las visibilidades viajan con el proyecto.
+
 ## Licencia
 
 AGPL-3.0. Ver [LICENSE](LICENSE). OpenSeesPy es un programa aparte con su propia
