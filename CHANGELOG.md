@@ -9,6 +9,21 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Stability check no longer rejects a valid PythonSparse CSR matrix.** Some
+  OpenSees builds report the allocated `nnz` while the CSR `index_ptr` ends at
+  the stored entries. The check now treats the pointer as authoritative, uses
+  the corresponding prefix and reports the difference as a note instead of
+  stopping with `invalid CSR index pointer`. OpenSees integer buffers are read
+  as either 32-bit or 64-bit.
+- **Ungrounded components are diagnosed quickly.** For a connected component
+  with no restraint or grounded spring, the check verifies a rigid-body
+  translation against `K`. If the residual is zero it reports the component as a
+  mechanism and marks the report partial, because the remaining stiffness was
+  not searched; it no longer spends minutes in a sparse eigensolver that cannot
+  converge on the singular matrix.
+
 ## [0.0.27] - 2026-10-25
 
 ### Added
