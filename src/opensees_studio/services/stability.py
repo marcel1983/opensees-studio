@@ -1180,9 +1180,6 @@ def check_stability(
     nnz = 0
     extraction_method = "none"
     backend = "opensees"
-    build_done = started
-    extraction_started = started
-    extraction_done = started
 
     def stop_reason() -> str | None:
         if should_cancel is not None:
@@ -1226,7 +1223,6 @@ def check_stability(
         warnings += capture_warnings
         backend = "PythonSparse"
         extraction_method = "python_sparse_csr"
-        extraction_done = time.perf_counter()
         reason = stop_reason()
         if reason:
             return cancelled()
