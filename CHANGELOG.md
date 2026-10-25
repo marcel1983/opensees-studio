@@ -9,6 +9,8 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.29] - 2026-10-25
+
 ### Added
 
 - **Isolate Selected** in the View menu and the model's right-click menu. It
