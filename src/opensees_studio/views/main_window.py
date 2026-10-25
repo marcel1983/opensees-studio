@@ -111,6 +111,7 @@ from opensees_studio.core.reactions import ReactionRow, reaction_rows
 from opensees_studio.core.sections import SHELL_SECTION_CLASSES
 from opensees_studio.core.self_weight import section_weight_per_length
 from opensees_studio.core.view_settings import ViewSettings
+from opensees_studio.diagnostics.performance import perf
 from opensees_studio.services import PROJECT_FILE_SUFFIX, engines
 from opensees_studio.services.batch import StoredResults, stored_results
 from opensees_studio.services.combination import MissingCaseResultsError
@@ -189,6 +190,7 @@ from opensees_studio.views.dialogs import (
     MirrorDialog,
     MoveDialog,
     PathTimeSeriesDialog,
+    PerformanceDialog,
     PlainPatternDialog,
     ReplicateDialog,
     RunAnalysisDialog,
@@ -655,6 +657,7 @@ class MainWindow(QMainWindow):
 
         self._act_about = QAction("&About OpenSees Studio…", self)
         self._act_help_contents = QAction("&Help Contents (F1)", self)
+        self._act_performance = QAction("&Performance monitor…", self)
         self._act_set_units = QAction("Set Display &Units…", self)
         self._act_solver_settings = QAction("&Solver…", self)
 
@@ -906,6 +909,7 @@ class MainWindow(QMainWindow):
         m_help = mb.addMenu("&Help")
         m_help.addAction(self._act_help_contents)
         m_help.addSeparator()
+        m_help.addAction(self._act_performance)
         m_help.addAction(self._act_about)
 
         self._menus = {
@@ -1137,6 +1141,7 @@ class MainWindow(QMainWindow):
         self._act_quit.triggered.connect(self._on_quit)
         self._act_about.triggered.connect(self._on_about)
         self._act_help_contents.triggered.connect(self._on_help_contents)
+        self._act_performance.triggered.connect(self._on_performance)
         self._act_set_units.triggered.connect(self._on_set_units)
         self._act_solver_settings.triggered.connect(self._on_solver_settings)
 
@@ -2359,7 +2364,8 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Import SAP2000 Text failed", str(exc))
             return
         try:
-            imported = import_s2k(path, nonprismatic_subdivisions=subdivisions)
+            with perf.span("ui.import_s2k"):
+                imported = import_s2k(path, nonprismatic_subdivisions=subdivisions)
         except Sap2000TextError as exc:
             QMessageBox.critical(self, "Import SAP2000 Text failed", str(exc))
             return
@@ -5635,6 +5641,18 @@ class MainWindow(QMainWindow):
     def _on_selection_changed(self, nodes: frozenset[int], elements: frozenset[int]) -> None:
         self._props.update_for_selection(nodes, elements)
         self._refresh_action_enablement()
+
+    def _on_performance(self) -> None:
+        """Help → Performance monitor: opt-in timings, memory and cProfile."""
+        dialog = getattr(self, "_performance_dialog", None)
+        if dialog is None:
+            dialog = PerformanceDialog(self._vm, self)
+            dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+            dialog.destroyed.connect(lambda _=None: setattr(self, "_performance_dialog", None))
+            self._performance_dialog = dialog
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
 
     def _on_about(self) -> None:
         QMessageBox.about(

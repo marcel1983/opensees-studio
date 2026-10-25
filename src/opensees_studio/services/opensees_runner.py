@@ -121,6 +121,7 @@ from opensees_studio.core.section_cuts import cut_resultant, section_cuts
 from opensees_studio.core.self_weight import nodal_self_weight_loads, self_weight_loads
 from opensees_studio.core.storey_results import cut_force, storey_cuts
 from opensees_studio.core.thermal import equivalent_nodal_loads, fixed_end_forces
+from opensees_studio.diagnostics.performance import perf
 from opensees_studio.services.catalog_emitters import emit_catalog_material
 from opensees_studio.services.frame_members import FramePlan, plan_frame_members
 from opensees_studio.services.material_emitters import emit_material
@@ -356,23 +357,38 @@ class OpenSeesRunner:
             :class:`StaticResults` / :class:`ModalResults` / :class:`TransientResults`
             depending on case type.
         """
-        self._check_ground_motion_records(case)
-        self._check_temperature_loads(case)
-        self.build()
-        self._check_dof_coverage()
+        with perf.span(f"analysis.{type(case).__name__}"):
+            return self._run(case, results_dir)
+
+    def _run(self, case: Any, results_dir: Path | None = None) -> Any:
+        perf.gauge("analysis.nodes", len(self.project.nodes))
+        perf.gauge("analysis.elements", len(self.project.elements))
+        with perf.span("analysis.checks"):
+            self._check_ground_motion_records(case)
+            self._check_temperature_loads(case)
+        with perf.span("analysis.build"):
+            self.build()
+        with perf.span("analysis.dof_coverage"):
+            self._check_dof_coverage()
         if isinstance(case, StaticCase):
-            return self._run_static(case)
+            with perf.span("analysis.static"):
+                return self._run_static(case)
         if isinstance(case, ModalCase):
-            return self._run_modal(case)
+            with perf.span("analysis.modal"):
+                return self._run_modal(case)
         if isinstance(case, PushoverCase):
-            return self._run_pushover(case)
+            with perf.span("analysis.pushover"):
+                return self._run_pushover(case)
         if isinstance(case, ResponseSpectrumCase):
-            return self._run_response_spectrum(case)
+            with perf.span("analysis.response_spectrum"):
+                return self._run_response_spectrum(case)
         if isinstance(case, InfluenceLineCase):
-            return self._run_influence_line(case)
+            with perf.span("analysis.influence_line"):
+                return self._run_influence_line(case)
         if isinstance(case, TransientCase):
             target = results_dir or Path(tempfile.mkdtemp(prefix="osstudio_"))
-            return self._run_transient(case, target)
+            with perf.span("analysis.transient"):
+                return self._run_transient(case, target)
         raise TypeError(f"Unsupported analysis case type: {type(case).__name__}")
 
     def _check_temperature_loads(self, case: Any) -> None:

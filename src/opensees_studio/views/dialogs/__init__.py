@@ -49,6 +49,7 @@ from opensees_studio.views.dialogs.mesh import MeshDialog
 from opensees_studio.views.dialogs.mirror import MirrorDialog
 from opensees_studio.views.dialogs.move import MoveDialog
 from opensees_studio.views.dialogs.path_time_series import PathTimeSeriesDialog
+from opensees_studio.views.dialogs.performance import PerformanceDialog
 from opensees_studio.views.dialogs.plain_pattern import PlainPatternDialog
 from opensees_studio.views.dialogs.point_element_load import AssignPointElementLoadDialog
 from opensees_studio.views.dialogs.quick_grid_lines import QuickGridLinesDialog
@@ -105,6 +106,7 @@ __all__ = [
     "MirrorDialog",
     "MoveDialog",
     "PathTimeSeriesDialog",
+    "PerformanceDialog",
     "PlainPatternDialog",
     "QuickGridLinesDialog",
     "ReplicateDialog",

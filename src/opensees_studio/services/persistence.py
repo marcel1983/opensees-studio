@@ -58,6 +58,7 @@ from opensees_studio.core.ground_motion import (
     sanitize_record_filename,
 )
 from opensees_studio.core.plane import migrate_2d_payload_to_xz
+from opensees_studio.diagnostics.performance import perf
 
 PROJECT_FILE_SUFFIX = ".osmodel"
 
@@ -437,11 +438,16 @@ def save_project(
         (rec, rec.source_path, rec.content_hash, rec.status) for rec in project.ground_motions
     ]
     try:
-        if previous_path is not None:
-            _rebase_record_paths(project, Path(previous_path), target, on_notice)
-        _reanchor_absolute_paths(project, target, on_notice)
-        _write_pending_sidecars(project, target, on_notice)
-        _write_text_atomic(target, _project_json(project))
+        with perf.span("persistence.rebase"):
+            if previous_path is not None:
+                _rebase_record_paths(project, Path(previous_path), target, on_notice)
+            _reanchor_absolute_paths(project, target, on_notice)
+        with perf.span("persistence.sidecars"):
+            _write_pending_sidecars(project, target, on_notice)
+        with perf.span("persistence.serialize"):
+            text = _project_json(project)
+        with perf.span("persistence.write"):
+            _write_text_atomic(target, text)
     except BaseException:
         for rec, source_path, content_hash, status in before:
             rec.source_path, rec.content_hash, rec.status = source_path, content_hash, status
@@ -585,20 +591,23 @@ def load_project(path: str | Path, on_notice: Notice | None = None) -> Project:
     src = Path(path)
     if not src.exists():
         raise FileNotFoundError(f"Project file not found: {src}")
-    payload = json.loads(src.read_text(encoding="utf-8"))
-    if isinstance(payload, dict):
-        _reject_future_schema(payload, src)
-        if migrate_2d_payload_to_xz(payload) and on_notice is not None:
-            on_notice(
-                "2D model moved from the X-Y plane to the X-Z plane: Z is now the "
-                "elevation axis of every model. Saving writes the new layout."
-            )
-        _normalize_record_paths(payload)
-        _migrate_embedded_records(payload, src.parent, src.stem, on_notice)
-        _hydrate_record_backed_series(payload, src.parent, on_notice)
+    with perf.span("persistence.read"):
+        payload = json.loads(src.read_text(encoding="utf-8"))
+    with perf.span("persistence.migrate"):
+        if isinstance(payload, dict):
+            _reject_future_schema(payload, src)
+            if migrate_2d_payload_to_xz(payload) and on_notice is not None:
+                on_notice(
+                    "2D model moved from the X-Y plane to the X-Z plane: Z is now the "
+                    "elevation axis of every model. Saving writes the new layout."
+                )
+            _normalize_record_paths(payload)
+            _migrate_embedded_records(payload, src.parent, src.stem, on_notice)
+            _hydrate_record_backed_series(payload, src.parent, on_notice)
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always", UserWarning)
-        project = Project.model_validate(payload)
+        with perf.span("persistence.validate"):
+            project = Project.model_validate(payload)
     for w in caught:
         # Model validators warn about stored values they had to replace (for
         # example an eigen solver name this build does not offer).

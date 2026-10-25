@@ -786,6 +786,24 @@ pytest tests/integration   # real OpenSeesPy runs on bundled examples
 CI runs lint + the non-`slow` subset on Linux / macOS / Windows
 × Python 3.12.
 
+## Profiling large models
+
+The application has an opt-in performance monitor. Launch with `--profile` (or
+`OPENSEES_STUDIO_PERF=1`) and open **Help → Performance monitor** to see
+per-stage timings for the SAP2000 importer, project I/O, the analysis child, the
+renderer and undoable commands, plus UI stalls and a one-shot `cProfile`.
+`--perf-json report.json` writes the same report on exit.
+
+For repeatable large-model measurements, use the synthetic grid benchmark:
+
+```bash
+python tools/perf_bench.py --size large --profile
+python tools/perf_bench.py --size xlarge --solver --cprofile
+```
+
+See [`docs/performance-profiling.md`](docs/performance-profiling.md) for the
+stage names, the JSON format and how to read a report.
+
 ## Verification
 
 The [Verification Manual](docs/verification-manual.md) compares OpenSees Studio

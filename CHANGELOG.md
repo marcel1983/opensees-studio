@@ -9,6 +9,25 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Added
+
+- **Opt-in performance diagnostics for large models.** Start with `--profile`,
+  `OPENSEES_STUDIO_PERF=1` or **Help → Performance monitor**. The monitor times
+  the SAP2000 importer (`s2k.*`), project I/O (`persistence.*`), analysis build
+  and case (`analysis.*`), scene construction (`render.*`), undoable commands
+  and UI imports, and reports count/last/total/p95/max per stage together with
+  model gauges, process memory and Qt event-loop stalls. **Profile next action**
+  runs the next operation under `cProfile`; **Save JSON** / **Copy JSON** export
+  the report for an issue. `--perf-json PATH` writes it on exit. The monitor is
+  off by default, so normal work pays only a boolean check per boundary.
+- **`tools/perf_bench.py`** measures synthetic grid models from 32 to 4 000
+  nodes end to end: project build, renderer build, save/load and an optional
+  static solve, with `--profile`, `--cprofile` and `--json`. It complements the
+  renderer-only budget in `tools/render_bench.py`.
+- **`docs/performance-profiling.md`** explains the stage names, the JSON report,
+  the benchmark and how to interpret a profile. The Help menu has a matching
+  page.
+
 ## [0.0.25] - 2026-10-24
 
 ### Added
