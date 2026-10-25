@@ -9,6 +9,8 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.28] - 2026-10-25
+
 ### Fixed
 
 - **Stability check no longer rejects a valid PythonSparse CSR matrix.** Some
