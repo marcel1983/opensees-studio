@@ -20,6 +20,7 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 import traceback
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,7 @@ from PySide6.QtCore import QObject, QProcess, QProcessEnvironment, QThread, QTim
 
 from opensees_studio.child_cli import analysis_cli_command, is_frozen
 from opensees_studio.core import Project
+from opensees_studio.diagnostics.performance import perf
 from opensees_studio.services import engines, write_run_snapshot
 from opensees_studio.services.qt_workers import AnalysisWorker
 from opensees_studio.services.result_store import load_results
@@ -101,6 +103,7 @@ class AnalysisRunner(QObject):
         self._last_error: dict[str, str] | None = None
         self._finished_entries: list[dict[str, Any]] = []
         self._out_dir: Path | None = None
+        self._run_started_at: float | None = None
         #: True when ``_out_dir`` is a throwaway directory this runner created
         #: (no caller-supplied ``results_dir``), so it must remove it again.
         self._out_dir_is_temp = False
@@ -153,7 +156,9 @@ class AnalysisRunner(QObject):
 
         self._last_results = None
         self._out_dir_is_temp = False
-        snapshot = write_run_snapshot(project, project_path)
+        self._run_started_at = time.perf_counter()
+        with perf.span("analysis.snapshot"):
+            snapshot = write_run_snapshot(project, project_path)
         self.log.emit(f"Snapshot written: {snapshot}")
 
         if in_process_mode():
@@ -323,6 +328,7 @@ class AnalysisRunner(QObject):
 
         if self._cancel_requested:
             self.log.emit("Analysis cancelled.")
+            self._record_run_wall()
             self.cancelled.emit()
             self._teardown()
             return
@@ -374,12 +380,21 @@ class AnalysisRunner(QObject):
         self.started.emit()
 
     def _on_finished(self, results: Any) -> None:
+        self._record_run_wall()
         self.finished.emit(results)
         self._teardown()
 
     def _on_failed(self, report: str) -> None:
+        self._record_run_wall()
         self.failed.emit(report)
         self._teardown()
+
+    def _record_run_wall(self) -> None:
+        """Record the parent-observed duration, including the child process."""
+        started = self._run_started_at
+        self._run_started_at = None
+        if started is not None:
+            perf.record("analysis.run_wall", (time.perf_counter() - started) * 1000.0)
 
     def _set_running(self, running: bool) -> None:
         self._is_running = running

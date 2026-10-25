@@ -50,6 +50,7 @@ from opensees_studio.core.reactions import (
     largest_moment,
 )
 from opensees_studio.core.view_settings import ViewSettings
+from opensees_studio.diagnostics.performance import perf
 from opensees_studio.services.deformation import DeformationSource
 from opensees_studio.views.canvas3d.style import RenderStyle
 
@@ -178,40 +179,73 @@ class ModelRenderer:
     # ── public API ───────────────────────────────────────────────────
     def render(self, project: Project | None) -> None:
         """Full render: rebuild everything. Call when topology changes."""
+        if perf.enabled:
+            with perf.span("render.build"):
+                self._render(project)
+        else:
+            self._render(project)
+
+    def _timed_build(
+        self, label: str, builder: Callable[[Project], None], project: Project
+    ) -> None:
+        if perf.enabled:
+            with perf.span(f"render.{label}"):
+                builder(project)
+        else:
+            builder(project)
+
+    def _render(self, project: Project | None) -> None:
         self._source_project = project
         if project is not None and self._view_filter is not None:
             project = self._view_filter(project)
         self._project = project
         self._teardown_all()
         if project is None:
+            perf.gauge("render.nodes", 0)
+            perf.gauge("render.elements", 0)
             return
-        # Grid renders even when there are no nodes yet — so the user sees
+        perf.gauge("render.nodes", len(project.nodes))
+        perf.gauge("render.elements", len(project.elements))
+        # Grid renders even when there are no nodes yet - so the user sees
         # the grid before they place any geometry.
         if self._settings.show_grids:
-            self._build_grid(project)
-        self._build_origin_triad(project)
+            self._timed_build("grid", self._build_grid, project)
+        self._timed_build("origin_triad", self._build_origin_triad, project)
         if not project.nodes:
             return
         if self._settings.show_nodes:
-            self._build_node_polydata(project)
+            self._timed_build("nodes", self._build_node_polydata, project)
         if self._settings.show_frames:
-            self._build_frame_polydata(project)
+            self._timed_build("frames", self._build_frame_polydata, project)
         if self._settings.show_surfaces:
-            self._build_surface_polydata(project)
-        self._build_color_legend(project)
+            self._timed_build("surfaces", self._build_surface_polydata, project)
+        self._timed_build("color_legend", self._build_color_legend, project)
         if self._settings.show_supports:
-            self._build_supports(project)
+            self._timed_build("supports", self._build_supports, project)
         if self._settings.show_constraints:
-            self._build_constraints(project)
+            self._timed_build("constraints", self._build_constraints, project)
         if self._settings.show_frame_assignments:
-            self._build_frame_assignments(project)
+            self._timed_build("frame_assignments", self._build_frame_assignments, project)
         if self._settings.show_loads:
-            self._build_loads(project)
-            self._build_reactions(project)
+            self._timed_build("loads", self._build_loads, project)
+            self._timed_build("reactions", self._build_reactions, project)
         if self._settings.show_extruded:
-            self._build_section_extrusions(project)
-        self._apply_mode_to_points()
-        self._rebuild_labels()
+            self._timed_build("extrusions", self._build_section_extrusions, project)
+        if perf.enabled:
+            with perf.span("render.apply_mode"):
+                self._apply_mode_to_points()
+            with perf.span("render.labels"):
+                self._rebuild_labels()
+        else:
+            self._apply_mode_to_points()
+            self._rebuild_labels()
+        actors = getattr(self._plotter, "actors", None)
+        if actors is not None:
+            with contextlib.suppress(Exception):
+                perf.gauge("render.actors", len(actors))
+        mesh_calls = getattr(self._plotter, "meshes", None)
+        if isinstance(mesh_calls, int):
+            perf.gauge("render.mesh_calls", mesh_calls)
 
     def set_view_filter(self, view_filter: Callable[[Project], Project] | None) -> None:
         """Draw only what ``view_filter(project)`` keeps (None: everything); re-renders."""

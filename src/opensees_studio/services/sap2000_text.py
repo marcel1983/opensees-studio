@@ -106,6 +106,7 @@ from opensees_studio.core.sections import (
     WideFlangeShape,
 )
 from opensees_studio.core.units import UnitSystem, gravity, metres_per_unit, newtons_per_unit
+from opensees_studio.diagnostics.performance import perf
 from opensees_studio.services.nonprismatic import materialize_nonprismatic
 from opensees_studio.services.s3d_import import UnitScale
 
@@ -374,15 +375,16 @@ def read_s2k(path: str | Path) -> S2kFile:
         raw = source.read_bytes()
     except OSError as exc:
         raise Sap2000TextError(f"{source.name} cannot be read ({exc}).") from exc
-    try:
-        text = raw.decode("utf-8-sig")
-    except UnicodeDecodeError:
-        text = raw.decode("latin-1")
-    malformed: list[tuple[int, str]] = []
-    tables = parse_tables(text, malformed=malformed)
-    if not tables:
-        raise Sap2000TextError(f"{source.name} has no SAP2000 table (no 'TABLE:' line).")
-    return S2kFile(path=source, tables=tables, malformed=tuple(malformed))
+    with perf.span("s2k.read"):
+        try:
+            text = raw.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            text = raw.decode("latin-1")
+        malformed: list[tuple[int, str]] = []
+        tables = parse_tables(text, malformed=malformed)
+        if not tables:
+            raise Sap2000TextError(f"{source.name} has no SAP2000 table (no 'TABLE:' line).")
+        return S2kFile(path=source, tables=tables, malformed=tuple(malformed))
 
 
 # ──────────────────────────── local axes ────────────────────────────
@@ -2230,20 +2232,29 @@ def s2k_to_project(
             f"{len(s2k.malformed)} line(s) in the file are not Key=Value records and were "
             f"skipped (first at line {first_line}: {first_text[:60]!r})."
         )
-    translator.build_joints()
+    with perf.span("s2k.joints"):
+        translator.build_joints()
     if not translator.nodes:
         raise Sap2000TextError(
             f"{s2k.path.name} has no joints (JOINT COORDINATES is missing or empty): "
             "there is no model to import."
         )
-    translator.build_joint_assignments()
-    translator.build_materials()
-    translator.build_frames(translator.non_uniform_frames())
-    translator.build_areas()
-    translator.build_diaphragms()
-    patterns = translator.build_patterns()
-    extra, cases = translator.build_cases(patterns)
-    combinations = translator.build_combinations(cases)
+    with perf.span("s2k.joint_assignments"):
+        translator.build_joint_assignments()
+    with perf.span("s2k.materials"):
+        translator.build_materials()
+    with perf.span("s2k.frames"):
+        translator.build_frames(translator.non_uniform_frames())
+    with perf.span("s2k.areas"):
+        translator.build_areas()
+    with perf.span("s2k.diaphragms"):
+        translator.build_diaphragms()
+    with perf.span("s2k.patterns"):
+        patterns = translator.build_patterns()
+    with perf.span("s2k.cases"):
+        extra, cases = translator.build_cases(patterns)
+    with perf.span("s2k.combinations"):
+        combinations = translator.build_combinations(cases)
     if translator.oblique:
         translator.notes.append(
             f"{translator.oblique} frame(s) with an unsymmetric section have local axes turned by "
@@ -2276,7 +2287,10 @@ def s2k_to_project(
             analyses=[*cases],
             combinations=combinations,
         )
-        materialization = materialize_nonprismatic(project, subdivisions=nonprismatic_subdivisions)
+        with perf.span("s2k.nonprismatic"):
+            materialization = materialize_nonprismatic(
+                project, subdivisions=nonprismatic_subdivisions
+            )
         if materialization.members:
             pieces = sorted(set(materialization.subdivisions.values()))
             piece_text = "/".join(str(n) for n in pieces) or "12"
@@ -2286,10 +2300,16 @@ def s2k_to_project(
                 "member). The subdivision count can be edited in Define > Section Library; "
                 "members already subdivided keep the number of pieces they were built with."
             )
-        project.validate_references()
+        with perf.span("s2k.validate"):
+            project.validate_references()
     except (ValidationError, ValueError) as exc:
         detail = _first_error(exc) if isinstance(exc, ValidationError) else str(exc)
         raise Sap2000TextError(f"{s2k.path.name} does not make a valid project: {detail}") from exc
+    perf.gauge("s2k.nodes", len(project.nodes))
+    perf.gauge("s2k.elements", len(project.elements))
+    perf.gauge("s2k.sections", len(project.sections))
+    perf.gauge("s2k.load_patterns", len(project.load_patterns))
+    perf.gauge("s2k.analyses", len(project.analyses))
     return Sap2000Import(
         project=project,
         source_units=source,

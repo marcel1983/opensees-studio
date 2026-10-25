@@ -171,6 +171,25 @@ pytest tests/gui           # pruebas con el event loop de Qt (pytest-qt)
 pytest tests/integration   # corridas reales de OpenSeesPy
 ```
 
+## Rendimiento y modelos grandes
+
+El programa incluye un monitor de rendimiento opcional. Arranca con `--profile`
+(o `OPENSEES_STUDIO_PERF=1`) y abre **Help → Performance monitor** para ver
+los tiempos por etapa del importador S2K, la E/S de proyectos, el proceso de
+análisis, el renderizador y los comandos deshacibles, además de bloqueos de la
+interfaz y un `cProfile` de una acción. `--perf-json informe.json` guarda el
+mismo informe al salir.
+
+Para mediciones repetibles con modelos grandes sintéticos:
+
+```bash
+python tools/perf_bench.py --size large --profile
+python tools/perf_bench.py --size xlarge --solver --cprofile
+```
+
+Consulta [`docs/performance-profiling.md`](docs/performance-profiling.md) para
+los nombres de etapa, el formato JSON y cómo interpretar el informe.
+
 ## Licencia
 
 AGPL-3.0. Ver [LICENSE](LICENSE). OpenSeesPy es un programa aparte con su propia

@@ -19,8 +19,9 @@ import sys
 def main() -> int:
     """Launch the GUI, or the analysis CLI when the child flag is present."""
     from opensees_studio.child_cli import BATCH_FLAG, CLI_FLAG
+    from opensees_studio.diagnostics.performance import configure_from_argv
 
-    argv = sys.argv
+    argv = configure_from_argv(sys.argv)
     if len(argv) > 1 and argv[1] == CLI_FLAG:
         from opensees_studio.run import main as cli_main
 

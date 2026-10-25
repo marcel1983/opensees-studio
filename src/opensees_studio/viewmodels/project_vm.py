@@ -18,6 +18,7 @@ from PySide6.QtCore import QObject, Signal, Slot
 from PySide6.QtGui import QUndoStack
 
 from opensees_studio.core import Project, ensure_dead_load_case
+from opensees_studio.diagnostics.performance import perf
 from opensees_studio.services import (
     discard_run_snapshot,
     load_project,
@@ -190,7 +191,8 @@ class ProjectViewModel(QObject):
         """Push a :class:`ProjectCommand` to the undo stack and execute it."""
         if self._project is None:
             raise RuntimeError("Cannot apply a command without an active project.")
-        self._undo_stack.push(command)
+        with perf.span(f"command.{type(command).__name__}"):
+            self._undo_stack.push(command)
 
     def mark_dirty(self) -> None:
         self._set_dirty(True)
