@@ -460,6 +460,22 @@ class ModelRenderer:
         self._aux_actors.append(actor)
         self._screen_actors.append(actor)
 
+    def _screen_key_changed(self, key: tuple[float, ...]) -> bool:
+        """True when the camera moved enough to be worth rebuilding glyphs.
+
+        A 2 % change in the world-per-pixel value is below the visual threshold
+        for an arrow or support, and avoiding those rebuilds keeps a wheel zoom
+        responsive on models with thousands of loads. The height/settings tail
+        of the key is compared exactly.
+        """
+        old = self._screen_key
+        if old is None:
+            return True
+        if old[1:] != key[1:]:
+            return True
+        scale = max(abs(old[0]), abs(key[0]), 1e-12)
+        return abs(key[0] - old[0]) / scale > 0.02
+
     def refresh_screen_sizes(self) -> bool:
         """Rebuild only the overlays whose size depends on the camera.
 
@@ -472,7 +488,7 @@ class ModelRenderer:
             return False
         self._refresh_node_point_size()
         key = self._screen_size_key()
-        if key == self._screen_key:
+        if not self._screen_key_changed(key):
             return False
         self._screen_key = key
         for actor in self._screen_actors:
@@ -1142,6 +1158,7 @@ class ModelRenderer:
         n_arrows_per_elem = 5
 
         nodes = {node.id: node for node in project.nodes}
+        elements = {element.id: element for element in project.elements}
         nodal: list[tuple[np.ndarray, np.ndarray]] = []
         element: list[tuple[np.ndarray, np.ndarray, float]] = []
         point: list[tuple[np.ndarray, np.ndarray]] = []
@@ -1166,7 +1183,9 @@ class ModelRenderer:
             for eload in pattern.element_loads:
                 if not isinstance(eload, UniformElementLoad):
                     continue
-                frame = self._element_local_frame(project, eload.element_id)
+                frame = self._element_local_frame(
+                    project, eload.element_id, elements=elements, nodes=nodes
+                )
                 if frame is None:
                     continue
                 pi, axis, (x_local, y_local, z_local) = frame
@@ -1190,7 +1209,9 @@ class ModelRenderer:
             for dload in member_loads:
                 if not isinstance(dload, TrapezoidalElementLoad):
                     continue
-                frame = self._element_local_frame(project, dload.element_id)
+                frame = self._element_local_frame(
+                    project, dload.element_id, elements=elements, nodes=nodes
+                )
                 if frame is None:
                     continue
                 pi, axis, (x_local, y_local, z_local) = frame
@@ -1215,7 +1236,9 @@ class ModelRenderer:
             for pload in pattern.point_loads:
                 if not isinstance(pload, PointElementLoad):
                     continue
-                frame = self._element_local_frame(project, pload.element_id)
+                frame = self._element_local_frame(
+                    project, pload.element_id, elements=elements, nodes=nodes
+                )
                 if frame is None:
                     continue
                 pi, axis, (x_local, y_local, z_local) = frame
@@ -1267,7 +1290,13 @@ class ModelRenderer:
         cloud = pv.PolyData(np.asarray(points, dtype=float))
         cloud["vectors"] = np.asarray(directions, dtype=float)
         cloud["length"] = np.asarray(lengths, dtype=float)
-        template = pv.Arrow(start=(-1.0, 0.0, 0.0), direction=(1.0, 0.0, 0.0), scale=1.0)
+        template = pv.Arrow(
+            start=(-1.0, 0.0, 0.0),
+            direction=(1.0, 0.0, 0.0),
+            scale=1.0,
+            tip_resolution=8,
+            shaft_resolution=8,
+        )
         glyphs = cloud.glyph(orient="vectors", scale="length", geom=template)
         actor = self._plotter.add_mesh(
             glyphs, color=color, pickable=False, lighting=True, name=name
@@ -1276,14 +1305,29 @@ class ModelRenderer:
 
     @staticmethod
     def _element_local_frame(
-        project: Project, element_id: int
+        project: Project,
+        element_id: int,
+        *,
+        elements: dict[int, Any] | None = None,
+        nodes: dict[int, Any] | None = None,
     ) -> tuple[np.ndarray, np.ndarray, tuple[np.ndarray, np.ndarray, np.ndarray]] | None:
-        """``(p_i, p_j - p_i, (x, y, z))`` of a two-node element, None if it has none."""
-        elem = next((e for e in project.elements if e.id == element_id), None)
+        """``(p_i, p_j - p_i, (x, y, z))`` of a two-node element, None if it has none.
+
+        ``elements``/``nodes`` are optional id maps. ``_build_loads`` passes
+        them so a pattern with thousands of member loads does not scan the
+        whole project twice for every load.
+        """
+        elem = elements.get(element_id) if elements is not None else None
+        if elem is None and elements is None:
+            elem = next((e for e in project.elements if e.id == element_id), None)
         if elem is None or len(elem.nodes) != 2:
             return None
-        node_i = next((n for n in project.nodes if n.id == elem.nodes[0]), None)
-        node_j = next((n for n in project.nodes if n.id == elem.nodes[1]), None)
+        if nodes is not None:
+            node_i = nodes.get(elem.nodes[0])
+            node_j = nodes.get(elem.nodes[1])
+        else:
+            node_i = next((n for n in project.nodes if n.id == elem.nodes[0]), None)
+            node_j = next((n for n in project.nodes if n.id == elem.nodes[1]), None)
         if node_i is None or node_j is None:
             return None
         pi = np.asarray(node_i.coords, dtype=float)

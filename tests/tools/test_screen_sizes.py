@@ -113,3 +113,5 @@ def test_camera_settle_rebuilds_only_the_counted_overlays() -> None:
     assert renderer.refresh_screen_sizes() is True
     assert len(renderer._screen_actors) == before
     assert renderer.refresh_screen_sizes() is False
+    plotter.camera.scale = 10.1  # a 1 % change is below the rebuild threshold
+    assert renderer.refresh_screen_sizes() is False

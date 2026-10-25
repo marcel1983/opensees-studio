@@ -40,6 +40,13 @@ refused instead of silently downgraded).
   A camera-settled timer rebuilds only the support/load/reaction/mass overlays,
   not the whole scene. Joint masses are a new, off-by-default purple-diamond
   marker.
+- **Faster load rendering on large models.** Building load arrows no longer
+  scans the whole element and node lists for every member load (id maps are
+  built once per render), and the batched arrow template uses a lower-resolution
+  8-sided tip/shaft. On the benchmark's 1 568-node / 4 284-frame grid,
+  `render.loads` drops from ~2.0 s to ~0.6 s and the whole `--size large` run
+  from ~7.2 s to ~3.0 s. Camera refreshes also skip rebuilds below a 2 %
+  screen-size change, so a wheel zoom does not rebuild every glyph burst.
 
 ## [0.0.25] - 2026-10-24
 
