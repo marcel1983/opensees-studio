@@ -147,11 +147,11 @@ class ModelRenderer:
         self._deformation: DeformationSource | None = None
 
         self._node_pd: pv.PolyData | None = None
-        self._node_glyph: pv.PolyData | None = None
         self._node_actor: Any = None
         self._node_ids_ordered: list[int] = []
         self._node_id_to_row: dict[int, int] = {}
         self._node_original_points: np.ndarray | None = None
+        self._node_point_size: float = 0.0
 
         self._frame_pd: pv.PolyData | None = None
         self._frame_actor: Any = None
@@ -167,6 +167,11 @@ class ModelRenderer:
         self._element_label_actor: Any = None
 
         self._aux_actors: list[Any] = []
+        #: Overlays whose world size is derived from the camera (supports, loads,
+        #: reactions, masses). They are rebuilt, not the whole scene, when the
+        #: viewport settles after a zoom.
+        self._screen_actors: list[Any] = []
+        self._screen_key: tuple[float, ...] | None = None
         self._hover_actor: Any = None  # single yellow-ring snap marker
         # SAP2000-style working plane: when set, the grid renders ONLY
         # the lines / intersections lying on this plane so a user in
@@ -229,6 +234,8 @@ class ModelRenderer:
         if self._settings.show_loads:
             self._timed_build("loads", self._build_loads, project)
             self._timed_build("reactions", self._build_reactions, project)
+        if self._settings.show_masses:
+            self._timed_build("masses", self._build_masses, project)
         if self._settings.show_extruded:
             self._timed_build("extrusions", self._build_section_extrusions, project)
         if perf.enabled:
@@ -246,6 +253,7 @@ class ModelRenderer:
         mesh_calls = getattr(self._plotter, "meshes", None)
         if isinstance(mesh_calls, int):
             perf.gauge("render.mesh_calls", mesh_calls)
+        self._screen_key = self._screen_size_key()
 
     def set_view_filter(self, view_filter: Callable[[Project], Project] | None) -> None:
         """Draw only what ``view_filter(project)`` keeps (None: everything); re-renders."""
@@ -364,7 +372,7 @@ class ModelRenderer:
         if world_point is None:
             return
 
-        radius = self._scene_node_radius() * 1.6  # slightly bigger than nodes
+        radius = 0.5 * self._screen_size(self._settings.node_size_percent * 1.6, minimum=1e-9)
         sphere = pv.Sphere(
             center=tuple(float(v) for v in world_point),
             radius=radius,
@@ -380,6 +388,108 @@ class ModelRenderer:
         )
 
     # ── builders ────────────────────────────────────────────────────
+    def _viewport_height_px(self) -> float:
+        """Height of the render target in device pixels.
+
+        VTK point/glyph sizes and the camera conversion both use physical
+        pixels, so this is the height of the render window, not the Qt logical
+        widget (they differ at 125-200 % scaling).
+        """
+        try:
+            size = self._plotter.window_size
+            if isinstance(size, (tuple, list)) and len(size) == 2 and float(size[1]) > 0:
+                return float(size[1])
+        except Exception:
+            # Recording plotters have no render window; try the next source.
+            pass
+        try:
+            width_height = self._plotter.render_window.GetSize()
+            if len(width_height) == 2 and float(width_height[1]) > 0:
+                return float(width_height[1])
+        except Exception:
+            # A viewport can exist before VTK has created its render window.
+            pass
+        return 800.0
+
+    def _world_per_pixel(self) -> float:
+        """World units covered by one device pixel at the camera target.
+
+        Parallel projection is exact. Perspective uses the distance to the focal
+        point, which is the right approximation for a structural model: markers
+        behind or in front of it change by a few percent, not by the whole
+        zoom range.
+        """
+        height = max(self._viewport_height_px(), 1.0)
+        try:
+            camera = self._plotter.camera
+            if bool(camera.GetParallelProjection()):
+                return max(2.0 * float(camera.GetParallelScale()) / height, 1e-12)
+            position = np.asarray(camera.GetPosition(), dtype=float)
+            focal = np.asarray(camera.GetFocalPoint(), dtype=float)
+            distance = float(np.linalg.norm(position - focal))
+            angle = np.radians(float(camera.GetViewAngle()))
+            tangent = float(np.tan(angle / 2.0))
+            return max(2.0 * distance * tangent / height, 1e-12)
+        except Exception:
+            # Recording plotters and a viewport before its camera exists.
+            if self._node_original_points is not None and len(self._node_original_points):
+                diagonal = float(self._diag_of_points(self._node_original_points))
+                return max(diagonal / height, 1e-12)
+            return 1.0 / height
+
+    def _screen_size(self, percent: float, minimum: float = 1e-12) -> float:
+        """World size of ``percent`` of the viewport height."""
+        return max(percent / 100.0 * self._viewport_height_px() * self._world_per_pixel(), minimum)
+
+    def _screen_node_point_size(self) -> float:
+        """Node diameter in device pixels (a VTK point size is screen-space)."""
+        return max(2.0, self._settings.node_size_percent / 100.0 * self._viewport_height_px())
+
+    def _screen_size_key(self) -> tuple[float, ...]:
+        """Everything that changes the world size of a screen-relative overlay."""
+        return (
+            round(self._world_per_pixel(), 12),
+            round(self._viewport_height_px(), 3),
+            self._settings.support_size_percent,
+            self._settings.load_size_percent,
+            self._settings.reaction_size_percent,
+            self._settings.mass_size_percent,
+        )
+
+    def _add_screen_actor(self, actor: Any) -> None:
+        self._aux_actors.append(actor)
+        self._screen_actors.append(actor)
+
+    def refresh_screen_sizes(self) -> bool:
+        """Rebuild only the overlays whose size depends on the camera.
+
+        Called after the viewport settles from a zoom, pan or resize. The node
+        cloud is just one property write; supports, load arrows, reactions and
+        mass markers need their glyph geometry rebuilt, and only those actors
+        are touched. Returns True when the scene changed and needs a draw.
+        """
+        if self._project is None or self._node_pd is None:
+            return False
+        self._refresh_node_point_size()
+        key = self._screen_size_key()
+        if key == self._screen_key:
+            return False
+        self._screen_key = key
+        for actor in self._screen_actors:
+            with contextlib.suppress(Exception):
+                self._plotter.remove_actor(actor, render=False)
+            with contextlib.suppress(ValueError):
+                self._aux_actors.remove(actor)
+        self._screen_actors.clear()
+        if self._settings.show_supports:
+            self._build_supports(self._project)
+        if self._settings.show_loads:
+            self._build_loads(self._project)
+            self._build_reactions(self._project)
+        if self._settings.show_masses:
+            self._build_masses(self._project)
+        return True
+
     def _build_node_polydata(self, project: Project) -> None:
         visible = [n for n in project.nodes if n.id not in self._hidden_nodes]
         ids = [n.id for n in visible]
@@ -393,68 +503,38 @@ class ModelRenderer:
         pd["_oss_kind"] = np.array(["node"] * len(ids), dtype=object)
         pd["_oss_state"] = np.zeros(len(ids), dtype=np.int8)
         self._node_pd = pd
-        self._reglyph_nodes()
-
-    #: Sphere template reused across glyph rebuilds, keyed by its radius. Building
-    #: it on every re-render is pure waste: the source only changes when the model extent
-    #: does, and six-by-six is enough for a joint marker the size of a few pixels.
-    _sphere_cache: tuple[float, pv.PolyData] | None = None
-
-    #: Points of the node glyph per input node (0 when the glyph is not usable).
-    _node_state_stride: int = 0
-
-    def _node_sphere(self, radius: float) -> pv.PolyData:
-        """The joint marker template, built once per radius."""
-        cached = self._sphere_cache
-        if cached is not None and cached[0] == radius:
-            return cached[1]
-        sphere = pv.Sphere(radius=radius, theta_resolution=6, phi_resolution=6)
-        type(self)._sphere_cache = (radius, sphere)
-        return sphere
-
-    def _apply_node_states(self, states: np.ndarray) -> None:
-        """Recolour the existing node glyph instead of rebuilding it.
-
-        ``_node_pd.glyph()`` returns a materialised copy, so marking the input
-        modified does not refresh it. Each output point belongs to one input
-        point and a strategy keeps the order, so the state array is the input's
-        repeated by the glyph stride.
-        """
-        glyph = self._node_glyph
-        stride = self._node_state_stride
-        if glyph is None or stride <= 0:
-            # Unknown stride (template or count changed): fall back to a rebuild.
-            self._reglyph_nodes()
-            return
-        glyph["_oss_state"] = np.repeat(states, stride)
-        glyph.Modified()
-
-    def _reglyph_nodes(self) -> None:
-        """Rebuild the glyph polydata after points or state change."""
-        if self._node_pd is None or self._node_original_points is None:
-            return
-        radius = self._scene_node_radius()
-        glyph = self._node_pd.glyph(geom=self._node_sphere(radius), scale=False, orient=False)
-        if self._node_actor is not None:
-            with contextlib.suppress(Exception):
-                self._plotter.remove_actor(self._node_actor, render=False)
-        self._node_glyph = glyph
-        # The glyph duplicates each input point into a whole sphere, so the
-        # output's points are the input's in order, each repeated. Recording the
-        # stride is what lets update_selection recolour instead of rebuilding.
-        count = len(self._node_ids_ordered)
-        self._node_state_stride = (
-            glyph.n_points // count if count and glyph.n_points % count == 0 else 0
-        )
+        self._node_point_size = self._screen_node_point_size()
+        # One point per joint, drawn as a screen-space sphere. Unlike a glyph
+        # of a sphere template this costs no per-node geometry, and zooming only
+        # changes one actor property: the joint stays the same size on screen.
         self._node_actor = self._plotter.add_mesh(
-            glyph,
+            pd,
             scalars="_oss_state",
             cmap=self._settings.node_lut,
             clim=[0, 1],
             show_scalar_bar=False,
             pickable=True,
-            lighting=True,
+            lighting=False,
+            point_size=self._node_point_size,
+            render_points_as_spheres=True,
         )
+
+    def _apply_node_states(self, states: np.ndarray) -> None:
+        """Recolour the point cloud in place: selecting never rebuilds the actor."""
+        if self._node_pd is None:
+            return
+        self._node_pd["_oss_state"] = states
+        self._node_pd.Modified()
+
+    def _refresh_node_point_size(self) -> None:
+        """Keep the node marker at ``node_size_percent`` of the viewport height."""
+        self._node_point_size = self._screen_node_point_size()
+        actor = self._node_actor
+        if actor is not None:
+            with contextlib.suppress(Exception):
+                actor.GetProperty().SetPointSize(self._node_point_size)
+        if self._node_pd is not None:
+            self._node_pd.Modified()
 
     def _build_frame_polydata(self, project: Project) -> None:
         frames = [
@@ -606,7 +686,7 @@ class ModelRenderer:
             self._plotter.add_point_labels(
                 tips,
                 ["X", "Y", "Z"],
-                font_size=11,
+                font_size=self._settings.label_size_px,
                 text_color="black",
                 shape=None,
                 always_visible=True,
@@ -801,7 +881,7 @@ class ModelRenderer:
             return
         ndf = project.ndf
         dof_idx = _dof_indices(project.ndm, ndf)
-        size = max(self._diag_of_points(self._node_original_points) * 0.015, 1e-6)
+        size = self._screen_size(self._settings.support_size_percent, minimum=1e-9)
         support_color = (1.0, 0.5, 0.1)
         # One actor per support kind, not one per support: a glyph filter places
         # every copy in a single PolyData, which is what keeps the draw calls
@@ -818,14 +898,31 @@ class ModelRenderer:
             actor = self._plotter.add_mesh(
                 glyphs, color=support_color, pickable=False, lighting=True
             )
-            self._aux_actors.append(actor)
+            self._add_screen_actor(actor)
         sprung = [n for n in project.nodes if any(n.spring[i] > 0 for i in dof_idx)]
         if sprung:
             zigzags = pv.merge([self._spring_glyph(size).translate(n.coords) for n in sprung])
             actor = self._plotter.add_mesh(
                 zigzags, color=(0.1, 0.6, 0.2), line_width=2, pickable=False, name="support_springs"
             )
-            self._aux_actors.append(actor)
+            self._add_screen_actor(actor)
+
+    def _build_masses(self, project: Project) -> None:
+        """A small diamond at every joint with lumped mass (off by default)."""
+        masses = [n for n in project.nodes if any(abs(value) > 0.0 for value in n.mass)]
+        if not masses:
+            return
+        size = self._screen_size(self._settings.mass_size_percent, minimum=1e-9)
+        cloud = pv.PolyData(np.asarray([n.coords for n in masses], dtype=float))
+        glyphs = cloud.glyph(geom=pv.Octahedron(radius=size), scale=False, orient=False)
+        actor = self._plotter.add_mesh(
+            glyphs,
+            color=self._style.mass_color,
+            pickable=False,
+            lighting=True,
+            name="joint_masses",
+        )
+        self._add_screen_actor(actor)
 
     @staticmethod
     def _spring_glyph(size: float) -> pv.PolyData:
@@ -984,8 +1081,8 @@ class ModelRenderer:
         coords = {node.id: np.asarray(node.coords, dtype=float) for node in project.nodes}
         max_force = largest_force(self._reactions)
         max_moment = largest_moment(self._reactions)
-        arrow_max = 0.12 * diagonal
-        arc_max = 0.06 * diagonal
+        arrow_max = self._screen_size(self._settings.reaction_size_percent, minimum=1e-9)
+        arc_max = 0.5 * arrow_max
 
         f_points, f_dirs, f_lengths = [], [], []
         m_points, m_axes, m_radii = [], [], []
@@ -1026,7 +1123,7 @@ class ModelRenderer:
         actor = self._plotter.add_mesh(
             glyphs, color=color, line_width=2.0, pickable=False, lighting=False, name=name
         )
-        self._aux_actors.append(actor)
+        self._add_screen_actor(actor)
 
     def _build_loads(self, project: Project) -> None:
         """Load arrows, one actor per family instead of one per arrow.
@@ -1038,7 +1135,7 @@ class ModelRenderer:
         """
         if not project.load_patterns or self._node_original_points is None:
             return
-        scale = max(self._diag_of_points(self._node_original_points) * 0.05, 1e-6)
+        scale = self._screen_size(self._settings.load_size_percent, minimum=1e-9)
         load_color = (0.2, 0.85, 0.2)
         elem_load_color = (1.0, 0.55, 0.2)  # orange
         point_load_color = (0.85, 0.2, 0.75)  # magenta
@@ -1175,7 +1272,7 @@ class ModelRenderer:
         actor = self._plotter.add_mesh(
             glyphs, color=color, pickable=False, lighting=True, name=name
         )
-        self._aux_actors.append(actor)
+        self._add_screen_actor(actor)
 
     @staticmethod
     def _element_local_frame(
@@ -1218,7 +1315,7 @@ class ModelRenderer:
         else:
             new_pts = self._deformation.shifted(self._node_original_points, self._node_ids_ordered)
         self._node_pd.points = new_pts
-        self._reglyph_nodes()
+        self._node_pd.Modified()
         if self._frame_pd is not None:
             self._frame_pd.points = new_pts
             self._frame_pd.Modified()
@@ -1270,9 +1367,11 @@ class ModelRenderer:
         self._frame_actor = None
         self._surface_actor = None
         self._aux_actors.clear()
+        self._screen_actors.clear()
+        self._screen_key = None
         self._triad_actors.clear()
         self._node_pd = None
-        self._node_glyph = None
+        self._node_point_size = 0.0
         self._frame_pd = None
         self._node_ids_ordered = []
         self._node_id_to_row = {}
@@ -1312,7 +1411,7 @@ class ModelRenderer:
         return self._plotter.add_point_labels(
             pts,
             labels,
-            font_size=12,
+            font_size=self._settings.label_size_px,
             shape_opacity=0.15,
             text_color="black",
             point_color="white",
@@ -1342,7 +1441,7 @@ class ModelRenderer:
         return self._plotter.add_point_labels(
             np.asarray(centers),
             labels,
-            font_size=12,
+            font_size=self._settings.label_size_px,
             shape_opacity=0.15,
             text_color="black",
             point_color="white",
@@ -1359,37 +1458,6 @@ class ModelRenderer:
         mn, mx = pts.min(axis=0), pts.max(axis=0)
         d = float(np.linalg.norm(mx - mn))
         return d if d > 0 else 1.0
-
-    def _auto_node_radius(self, pts: np.ndarray) -> float:
-        return max(self._diag_of_points(pts) * 0.008, 1e-6)
-
-    def _scene_node_radius(self) -> float:
-        """Node sphere radius based on the full scene extent.
-
-        A single node has no bounding box of its own, which made the first
-        joint invisible (radius pinned to 0.008 units). We now include the
-        current project's visible grid bounds so the sphere scales with
-        the working area even before a second node exists.
-        """
-        node_pts = np.asarray(self._node_pd.points) if self._node_pd is not None else None
-        candidates: list[np.ndarray] = []
-        if node_pts is not None and len(node_pts):
-            candidates.append(node_pts)
-        # Add every visible grid's bounding corners.
-        if self._project is not None:
-            for cs in getattr(self._project, "coord_systems", []) or []:
-                grid = cs.grid
-                if not grid.shown:
-                    continue
-                points = grid.intersections()
-                if points:
-                    candidates.append(
-                        np.array([cs.coord.local_to_world(p) for p in points], dtype=float)
-                    )
-        if not candidates:
-            return 0.05
-        all_pts = np.vstack(candidates)
-        return max(self._diag_of_points(all_pts) * 0.008, 0.05)
 
     @staticmethod
     def _support_glyph(kind: str, size: float) -> pv.PolyData:

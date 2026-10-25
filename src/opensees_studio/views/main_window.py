@@ -4881,18 +4881,19 @@ class MainWindow(QMainWindow):
         dlg = DisplayOptionsDialog(
             show_node_labels=self._show_node_labels,
             show_element_labels=self._show_element_labels,
+            view_settings=self._canvas.view_settings,
             parent=self,
         )
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
         self._show_node_labels, self._show_element_labels = dlg.values()
-        self._apply_view_settings(
-            show_node_labels=self._show_node_labels,
-            show_element_labels=self._show_element_labels,
-        )
+        settings = dlg.view_settings()
+        self._canvas.set_view_settings(settings)
+        self._sync_visibility_actions()
         self._log(
             f"Display options updated: node labels={'on' if self._show_node_labels else 'off'}, "
-            f"element labels={'on' if self._show_element_labels else 'off'}."
+            f"element labels={'on' if self._show_element_labels else 'off'}, "
+            f"node size={settings.node_size_percent:g}% of the view height."
         )
 
     # ── slots: display (post-processing) ────────────────────────────

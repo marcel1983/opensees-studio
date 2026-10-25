@@ -97,6 +97,15 @@ class ModelCanvas(QtInteractor):
         self._settings = ViewSettings()
         self.selection = selection or SelectionState(self)
         self._renderer = ModelRenderer(self, self._style, self._settings)
+        # Camera-settled resize of screen-relative markers. The timer collapses
+        # a burst of ModifiedEvent callbacks (a wheel zoom emits many) into one
+        # cheap update: the node point size is a property write, and only the
+        # support/load/reaction glyphs are rebuilt.
+        self._screen_scale_timer = QTimer(self)
+        self._screen_scale_timer.setSingleShot(True)
+        self._screen_scale_timer.setInterval(120)
+        self._screen_scale_timer.timeout.connect(self._refresh_screen_sizes)
+        self.camera.AddObserver("ModifiedEvent", self._on_camera_modified)
         self._default_selection_enabled = True
         self._box_origin: QPointF | None = None
         self._rubber_band: _RubberBand | None = None
@@ -810,6 +819,19 @@ class ModelCanvas(QtInteractor):
         label = getattr(self, "_result_label", None)
         if label is not None:
             label.move(12, 12)
+        timer = getattr(self, "_screen_scale_timer", None)
+        if timer is not None:
+            timer.start()
+
+    def _on_camera_modified(self, *_args: Any) -> None:
+        """Debounce camera changes into one screen-scale refresh."""
+        timer = getattr(self, "_screen_scale_timer", None)
+        if timer is not None:
+            timer.start()
+
+    def _refresh_screen_sizes(self) -> None:
+        if self._renderer.refresh_screen_sizes():
+            self.render()
 
     def set_hidden(self, *, nodes: set[int], elements: set[int]) -> None:
         """Hide these ids in this viewport only (the project is untouched)."""

@@ -804,6 +804,15 @@ python tools/perf_bench.py --size xlarge --solver --cprofile
 See [`docs/performance-profiling.md`](docs/performance-profiling.md) for the
 stage names, the JSON format and how to read a report.
 
+## Screen-relative markers
+
+Node markers, supports, load arrows, reactions and mass markers are sized as a
+percentage of the viewport height, not as a fraction of the model. They keep the
+same on-screen size while you zoom, and **Display → Display Options** sets each
+percentage; label height is a separate pixel value. Joint masses are drawn as
+purple diamonds when that option is on. The sizes and toggles travel with the
+project.
+
 ## Verification
 
 The [Verification Manual](docs/verification-manual.md) compares OpenSees Studio

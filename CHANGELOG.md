@@ -28,6 +28,19 @@ refused instead of silently downgraded).
   the benchmark and how to interpret a profile. The Help menu has a matching
   page.
 
+- **Screen-relative model markers.** Node markers, supports, load arrows,
+  reactions and joint masses are sized as a percentage of the viewport height,
+  with the camera conversion applied so they keep the same on-screen size while
+  zooming. The main viewport stores the percentages (`node_size_percent`,
+  `support_size_percent`, `load_size_percent`, `reaction_size_percent`,
+  `mass_size_percent`) and a separate `label_size_px` in `ViewSettings`; **Display
+  → Display Options** edits them, and they travel with the project. Nodes are now
+  one point per joint drawn as screen-space spheres (no per-node glyph
+  geometry), so selection recolours the point cloud without rebuilding an actor.
+  A camera-settled timer rebuilds only the support/load/reaction/mass overlays,
+  not the whole scene. Joint masses are a new, off-by-default purple-diamond
+  marker.
+
 ## [0.0.25] - 2026-10-24
 
 ### Added

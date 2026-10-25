@@ -3983,12 +3983,18 @@ the case's rule.
         "display.options": _t(
             "Display → Display Options",
             "Display",
-            "Node labels, element labels and what the viewport draws.",
+            "Labels, masses and the on-screen size of model markers.",
             """
 Toggles the annotations and the heavy overlays:
 
 - **Node labels** and **element labels** — the name, or `N#`/`E#` when there is
-  none.
+  none. **Label height** sets their text size separately, in pixels.
+- **Joint masses** — a purple diamond at every joint with a non-zero lumped
+  mass. Off by default because most models carry mass on many joints.
+- **Nodes, Supports, Load arrows, Reactions, Masses** — each marker can be a
+  percentage of the viewport height. The renderer converts that percentage to
+  world units with the camera, so the marker keeps the same size on screen at
+  every zoom level. The values are per viewport and travel with the project.
 - **Section extrusions** (View → Show Extruded Sections) — each member's real
   cross section (I, channel, tee, tube, pipe, angle, fibre patches) swept along
   it, so the physical footprint and the local axes are visible.

@@ -29,7 +29,7 @@ _HEX_COLOUR = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 
 class ViewSettings(BaseModel):
-    """Visibility toggles and colours of one 3D viewport."""
+    """Visibility toggles, colours and screen-space sizes of one 3D viewport."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -43,6 +43,7 @@ class ViewSettings(BaseModel):
     show_constraints: bool = True
     show_frame_assignments: bool = True
     show_loads: bool = True
+    show_masses: bool = False
     show_node_labels: bool = False
     show_element_labels: bool = False
     show_extruded: bool = False
@@ -50,6 +51,18 @@ class ViewSettings(BaseModel):
         default="none",
         description="Paint frames and shells by section, material or group (core.color_by).",
     )
+
+    # ── screen-space sizes ─────────────────────────────────────────────
+    #: Percentages of the viewport height, independent of the model's units.
+    #: The renderer converts them to world units with the camera, so a marker
+    #: keeps the same on-screen size at every zoom level.
+    node_size_percent: float = Field(default=1.5, ge=0.05, le=25.0)
+    support_size_percent: float = Field(default=1.5, ge=0.05, le=25.0)
+    load_size_percent: float = Field(default=5.0, ge=0.05, le=25.0)
+    reaction_size_percent: float = Field(default=12.0, ge=0.05, le=25.0)
+    mass_size_percent: float = Field(default=1.5, ge=0.05, le=25.0)
+    #: Text is separate: pixel height, not a fraction of the model.
+    label_size_px: int = Field(default=12, ge=6, le=72)
 
     # ── colours ──────────────────────────────────────────────────────
     background_top: str = Field(default="#dbe2ef")
@@ -74,7 +87,16 @@ class ViewSettings(BaseModel):
             raise ValueError(f"expected a #rrggbb colour, got {value!r}")
         return value
 
-    serialize_without_defaults = omit_when_default("color_by")
+    serialize_without_defaults = omit_when_default(
+        "color_by",
+        "show_masses",
+        "node_size_percent",
+        "support_size_percent",
+        "load_size_percent",
+        "reaction_size_percent",
+        "mass_size_percent",
+        "label_size_px",
+    )
 
     def with_changes(self, **changes: object) -> ViewSettings:
         """Return a copy with ``changes`` applied (the instance is immutable)."""
