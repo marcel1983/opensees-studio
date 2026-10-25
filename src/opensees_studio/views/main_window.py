@@ -628,6 +628,9 @@ class MainWindow(QMainWindow):
         # Per-viewport hiding. These never touch the project: the ids stay in
         # the model, they are only not drawn in this one canvas.
         self._act_hide_selected = QAction("&Hide Selected", self, shortcut=QKeySequence("Ctrl+H"))
+        self._act_isolate_selected = QAction(
+            "&Isolate Selected", self, shortcut=QKeySequence("Ctrl+Shift+I")
+        )
         self._act_invert_visible = QAction("&Invert Visible", self)
         self._act_view_colors = QAction("&Colors…", self)
 
@@ -897,6 +900,7 @@ class MainWindow(QMainWindow):
         )
         m_view.addSeparator()
         m_view.addAction(self._act_hide_selected)
+        m_view.addAction(self._act_isolate_selected)
         m_view.addAction(self._act_invert_visible)
         m_view.addAction(self._act_show_all_objects)
         m_view.addSeparator()
@@ -1327,6 +1331,7 @@ class MainWindow(QMainWindow):
         self._act_zoom_in.triggered.connect(self._canvas.zoom_in)
         self._act_zoom_out.triggered.connect(self._canvas.zoom_out)
         self._act_hide_selected.triggered.connect(self._on_hide_selected)
+        self._act_isolate_selected.triggered.connect(self._on_isolate_selected)
         self._act_invert_visible.triggered.connect(self._on_invert_visible)
         self._act_view_colors.triggered.connect(self._on_view_colors)
         self._act_new_view.triggered.connect(self._on_new_view_window)
@@ -2866,6 +2871,41 @@ class MainWindow(QMainWindow):
         )
         self._refresh_action_enablement()
 
+    def _on_isolate_selected(self) -> None:
+        """Show only the selection (and the joints of selected elements)."""
+        project = self._vm.project
+        selection = self._canvas.selection
+        if project is None or selection.is_empty:
+            return
+        selected_elements = set(selection.elements)
+        visible_nodes = set(selection.nodes)
+        for element in project.elements:
+            if element.id in selected_elements:
+                visible_nodes.update(element.nodes)
+        all_nodes = {node.id for node in project.nodes}
+        all_elements = {element.id for element in project.elements}
+        self._canvas.set_hidden(
+            nodes=all_nodes - visible_nodes,
+            elements=all_elements - selected_elements,
+        )
+        self._refresh_action_enablement()
+        parts = []
+        if visible_nodes:
+            parts.append(f"{len(visible_nodes)} joint(s)")
+        if selected_elements:
+            parts.append(f"{len(selected_elements)} element(s)")
+        self.statusBar().showMessage(
+            f"Isolated {', '.join(parts)}. View > Show All Objects to restore.",
+            5000,
+        )
+
+    def _sync_show_all_action(self) -> None:
+        """Enable Show All when a viewport filter or a hidden set is active."""
+        hidden_nodes, hidden_elements = self._canvas.hidden
+        self._act_show_all_objects.setEnabled(
+            self._grid_view is not None or bool(hidden_nodes) or bool(hidden_elements)
+        )
+
     def _on_invert_visible(self) -> None:
         """Swap what this viewport shows: hidden becomes visible and vice versa."""
         project = self._vm.project
@@ -3051,7 +3091,10 @@ class MainWindow(QMainWindow):
         if elements:
             hide = menu.addAction("Hide Selected Elements")
             hide.triggered.connect(self._on_hide_selected)
-            menu.addSeparator()
+        menu.addAction(self._act_isolate_selected)
+        if self._act_show_all_objects.isEnabled():
+            menu.addAction(self._act_show_all_objects)
+        menu.addSeparator()
         menu.addAction(self._act_delete)
         menu.addAction(self._act_clear_selection)
         return menu
@@ -3091,7 +3134,7 @@ class MainWindow(QMainWindow):
                 self._log(f"Grid line view: '{state[0]}' no longer exists, showing everything.")
             self._grid_view = None
             self._canvas.set_view_filter(None)
-            self._act_show_all_objects.setEnabled(False)
+            self._sync_show_all_action()
             return
         window = state[1]
 
@@ -3100,7 +3143,7 @@ class MainWindow(QMainWindow):
             return filtered_project(full, nodes, elements)
 
         self._canvas.set_view_filter(keep)
-        self._act_show_all_objects.setEnabled(True)
+        self._sync_show_all_action()
         nodes, elements = objects_on_line(project, ref, window)  # type: ignore[arg-type]
         self.statusBar().showMessage(
             f"Grid line view {ref.label} ± {window:g}: {len(nodes)} joint(s), "
@@ -3135,8 +3178,10 @@ class MainWindow(QMainWindow):
 
     def _clear_grid_line_view(self) -> None:
         self._grid_view = None
-        self._apply_grid_line_view()
+        self._canvas.set_view_filter(None)
+        self._canvas.set_hidden(nodes=set(), elements=set())
         self._canvas.reframe()
+        self._refresh_action_enablement()
         self.statusBar().showMessage("Showing all objects.", 3000)
 
     def _on_add_node(self) -> None:
@@ -5617,6 +5662,9 @@ class MainWindow(QMainWindow):
         self._grid_view = None
         self._grid_view_window = None
         self._main_canvas.set_view_filter(None)
+        # Another project has its own ids; do not carry this viewport's hidden
+        # set into it.
+        self._main_canvas.set_hidden(nodes=set(), elements=set())
         self._act_show_all_objects.setEnabled(False)
         # Results of another project (or of the closed one) never feed a combination.
         self._case_results.clear()
@@ -5934,6 +5982,9 @@ class MainWindow(QMainWindow):
         ):
             action.setEnabled(has_project and has_selected_elements)
         self._act_delete.setEnabled(has_project and has_selection)
+        self._act_hide_selected.setEnabled(has_project and has_selection)
+        self._act_isolate_selected.setEnabled(has_project and has_selection)
+        self._act_invert_visible.setEnabled(has_project)
         self._act_move.setEnabled(has_project and has_selection)
         self._act_replicate.setEnabled(has_project and has_selection)
         self._act_mirror.setEnabled(has_project and has_selection)
@@ -5973,6 +6024,7 @@ class MainWindow(QMainWindow):
             if menu is not None:
                 menu.setEnabled(has_project)
         self._sync_visibility_actions()
+        self._sync_show_all_action()
 
     # ── busy cursor ─────────────────────────────────────────────────
     def _begin_busy(self, message: str = "") -> None:

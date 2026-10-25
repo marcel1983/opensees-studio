@@ -450,7 +450,7 @@ class ModelCanvas(QtInteractor):
         picked. The rectangle is in Qt logical pixels; the projection is in
         device pixels with the origin at the bottom-left.
         """
-        project = self._renderer._source_project
+        project = self._renderer._project
         if project is None or not project.nodes:
             return
         dpr = float(self.devicePixelRatioF()) if hasattr(self, "devicePixelRatioF") else 1.0
@@ -479,7 +479,14 @@ class ModelCanvas(QtInteractor):
             min(top, bottom),
             max(top, bottom),
         )
-        picked_nodes, picked_elements = box_selection(project, screen, box_rect, crossing=crossing)
+        picked_nodes, picked_elements = box_selection(
+            project,
+            screen,
+            box_rect,
+            crossing=crossing,
+            hidden_nodes=self.hidden[0],
+            hidden_elements=self.hidden[1],
+        )
         if self._is_additive_modifier():
             self.selection.set_selection(
                 set(self.selection.nodes) - picked_nodes,

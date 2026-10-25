@@ -267,8 +267,8 @@ tables (storeys, section cuts) and exports them to CSV.
 
 # View, Options, Help
 - Zoom Extents, Isometric / Top / Front / Right, Parallel Projection, Extruded
-Sections, Show Grids, Show Grid Labels, Grid Line View, Show All Objects; Set
-Display Units; Help Contents (F1), About.
+Sections, Show Grids, Show Grid Labels, Grid Line View, Hide Selected, Isolate
+Selected, Show All Objects; Set Display Units; Help Contents (F1), About.
 - **Right-click** on the model view (without dragging: a right drag zooms): with
 something selected, what can be assigned or edited on it (joint, frame or area
 options, group, move, replicate, mirror, delete); with nothing selected, the
@@ -1893,7 +1893,8 @@ Clicking a node or an element **adds** it to the selection, so building one is
 just clicking; Ctrl+click takes an item out, and clicking empty space clears the
 lot. Dragging with the left button draws a box: dragged **downwards** it takes
 only what is fully inside; dragged **upwards** it also takes what the box
-touches, so a member that crosses it is picked. The camera turns with a
+touches, so a member that crosses it is picked. A box never selects a node or an
+element that is hidden in that viewport. The camera turns with a
 middle-button drag, which the left button no longer does.
 
 With nothing else active this is also what unlocks the model for inspection:
@@ -4169,9 +4170,13 @@ from **Frame Assignments**, which draws the rigid end-offset bars.
 
 - **Hide Selected** (Ctrl+H) hides what is selected now, adding it to what is
   already hidden.
+- **Isolate Selected** (Ctrl+Shift+I) shows only the selection: selected
+  elements keep their joints visible, and every other object is hidden. It is
+  also in the right-click menu.
 - **Invert Visible** swaps the two sets: what is drawn disappears and what was
   hidden comes back.
-- **Show All Objects** restores everything.
+- **Show All Objects** restores everything. A box selection never picks what is
+  hidden in this viewport.
 
 Hiding is how to look inside a dense model (the framing under a slab, the inside
 of a wall of shells) without deleting or filtering anything.
@@ -4835,7 +4840,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_show_grids": "view.grids",
     "_act_show_grid_labels": "view.grids",
     "_act_grid_line_view": "view.grid_line_view",
-    "_act_show_all_objects": "view.grid_line_view",
+    "_act_show_all_objects": "view.visibility",
     "_act_add_node": "define.add_node",
     "_act_storeys": "define.storeys",
     "_act_groups": "define.groups",
@@ -4926,6 +4931,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_zoom_in": "view.zoom_extents",
     "_act_zoom_out": "view.zoom_extents",
     "_act_hide_selected": "view.visibility",
+    "_act_isolate_selected": "view.visibility",
     "_act_invert_visible": "view.visibility",
     "_act_view_colors": "view.colors",
     "_act_new_view": "view.new_window",
