@@ -52,11 +52,13 @@ class DisplayOptionsDialog(FittedDialog):
         self._load_size = self._percent_spin(self._base.load_size_percent)
         self._reaction_size = self._percent_spin(self._base.reaction_size_percent)
         self._mass_size = self._percent_spin(self._base.mass_size_percent)
+        self._release_size = self._percent_spin(self._base.release_size_percent)
         size_form.addRow("Nodes", self._node_size)
         size_form.addRow("Supports", self._support_size)
         size_form.addRow("Load arrows", self._load_size)
         size_form.addRow("Reactions", self._reaction_size)
         size_form.addRow("Masses", self._mass_size)
+        size_form.addRow("Releases", self._release_size)
         layout.addWidget(size_box)
 
         text_box = QGroupBox("Text")
@@ -101,5 +103,6 @@ class DisplayOptionsDialog(FittedDialog):
             load_size_percent=self._load_size.value(),
             reaction_size_percent=self._reaction_size.value(),
             mass_size_percent=self._mass_size.value(),
+            release_size_percent=self._release_size.value(),
             label_size_px=self._label_size.value(),
         )

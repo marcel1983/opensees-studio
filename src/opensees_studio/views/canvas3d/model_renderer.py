@@ -231,6 +231,8 @@ class ModelRenderer:
             self._timed_build("constraints", self._build_constraints, project)
         if self._settings.show_frame_assignments:
             self._timed_build("frame_assignments", self._build_frame_assignments, project)
+        if self._settings.show_releases:
+            self._timed_build("releases", self._build_releases, project)
         if self._settings.show_loads:
             self._timed_build("loads", self._build_loads, project)
             self._timed_build("reactions", self._build_reactions, project)
@@ -1015,23 +1017,80 @@ class ModelRenderer:
                 )
             )
 
-    def _build_frame_assignments(self, project: Project) -> None:
-        """SAP2000-style markers: a dot near each released member end, a bar per rigid offset.
+    #: Per-release colours. A full release is one dot per released action;
+    #: partial fixity keeps the SAP2000 yellow so it reads as a spring.
+    _RELEASE_COLORS: ClassVar[dict[str, str]] = {
+        "T": "#b05cff",
+        "M2": "#ff9d2e",
+        "M3": "#ff4d4d",
+    }
+    _PARTIAL_RELEASE_COLOR = "#ffd60a"
 
-        A full release is a teal dot, a partial-fixity spring a yellow one, drawn
-        a short way in from the joint so two members meeting there stay apart.
-        The rigid part of an end offset (or an insertion-point offset) is a
-        thick grey bar from the joint to where the flexible part starts.
+    def _build_releases(self, project: Project) -> None:
+        """Colored dots on the member ends that carry a release.
+
+        One dot per released action, staggered a little along the bar so a
+        torsion and a bending release at the same end do not hide each other.
+        Full releases use their action colour (T violet, M2 orange, M3 red);
+        partial fixity uses yellow, as SAP2000 does for the spring. The dots are
+        screen-space points, so their size is independent of the model scale.
         """
         if self._node_original_points is None:
             return
-        size = max(self._diag_of_points(self._node_original_points) * 0.006, 1e-6)
-        dots: dict[bool, list[np.ndarray]] = {False: [], True: []}
+        point_size = max(
+            3.0, self._settings.release_size_percent / 100.0 * self._viewport_height_px()
+        )
+        by_color: dict[str, list[np.ndarray]] = {}
+        for element in project.elements:
+            if not isinstance(element, FrameMember) or not element.releases.any:
+                continue
+            try:
+                layout = member_layout(project, element)
+            except (ValueError, KeyError):
+                continue
+            if layout is None:
+                continue
+            for end, face, inward in (
+                ("i", layout.face_i, layout.x),
+                ("j", layout.face_j, -layout.x),
+            ):
+                release = element.releases.end(end)
+                if not release.released:
+                    continue
+                step = 0.08 * layout.clear_length
+                stagger = 0.04 * layout.clear_length
+                for index, dof in enumerate(release.released):
+                    if release.spring(dof) > 0.0:
+                        color = self._PARTIAL_RELEASE_COLOR
+                    else:
+                        color = self._RELEASE_COLORS.get(dof, "#ffffff")
+                    by_color.setdefault(color, []).append(face + inward * (step + index * stagger))
+        for color, points in by_color.items():
+            cloud = pv.PolyData(np.asarray(points, dtype=float))
+            actor = self._plotter.add_mesh(
+                cloud,
+                color=color,
+                point_size=point_size,
+                render_points_as_spheres=True,
+                pickable=False,
+                lighting=False,
+                name=f"releases_{color.lstrip('#')}",
+            )
+            self._aux_actors.append(actor)
+
+    def _build_frame_assignments(self, project: Project) -> None:
+        """Grey bars for the rigid part of end offsets and insertion-point offsets.
+
+        Releases are a separate overlay (``_build_releases``), with their own
+        Visibility toggle; this method only draws the rigid zones.
+        """
+        if self._node_original_points is None:
+            return
         arms: list[tuple[np.ndarray, np.ndarray]] = []
         for element in project.elements:
             if not isinstance(element, FrameMember):
                 continue
-            if element.releases.is_default() and not (
+            if not (
                 element.end_offsets.rigid_i
                 or element.end_offsets.rigid_j
                 or not element.insertion.is_default()
@@ -1043,25 +1102,10 @@ class ModelRenderer:
                 continue
             if layout is None:
                 continue
-            for end, joint, face, inward in (
-                ("i", layout.joint_i, layout.face_i, layout.x),
-                ("j", layout.joint_j, layout.face_j, -layout.x),
-            ):
-                if layout.has_offset(end):
-                    arms.append((joint, face))
-                release = element.releases.end(end)
-                if release.released:
-                    step = min(0.08 * layout.clear_length, 6.0 * size)
-                    dots[bool(release.springs)].append(face + inward * step)
-        for partial, points in dots.items():
-            if not points:
-                continue
-            glyphs = pv.PolyData(np.asarray(points, dtype=float)).glyph(
-                geom=pv.Sphere(radius=size), scale=False, orient=False
-            )
-            color = (0.95, 0.85, 0.1) if partial else (0.0, 0.8, 0.8)
-            actor = self._plotter.add_mesh(glyphs, color=color, pickable=False, lighting=True)
-            self._aux_actors.append(actor)
+            if layout.has_offset("i"):
+                arms.append((layout.joint_i, layout.face_i))
+            if layout.has_offset("j"):
+                arms.append((layout.joint_j, layout.face_j))
         if arms:
             arm_points = np.asarray([p for arm in arms for p in arm], dtype=float)
             lines = np.hstack([[2, 2 * k, 2 * k + 1] for k in range(len(arms))])

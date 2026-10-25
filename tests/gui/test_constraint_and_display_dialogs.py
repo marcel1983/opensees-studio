@@ -49,9 +49,11 @@ def test_display_options_round_trip_screen_sizes(qtbot) -> None:  # type: ignore
     dlg._node_size.setValue(3.25)
     dlg._label_size.setValue(18)
     dlg._show_masses.setChecked(True)
+    dlg._release_size.setValue(1.8)
     updated = dlg.view_settings()
 
     assert updated.node_size_percent == 3.25
+    assert updated.release_size_percent == 1.8
     assert updated.label_size_px == 18
     assert updated.show_masses is True
     assert updated.background_top == base.background_top

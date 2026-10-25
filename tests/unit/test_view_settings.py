@@ -19,7 +19,9 @@ def test_defaults_match_the_historic_renderer_colours() -> None:
     assert settings.surface_color == "#a8b6c4"
     assert settings.selected_color == "#00ffff"
     assert settings.show_masses is False
+    assert settings.show_releases is True
     assert settings.node_size_percent > 0
+    assert settings.release_size_percent > 0
     assert settings.label_size_px == 12
 
 
@@ -33,12 +35,22 @@ def test_screen_sizes_are_validated_and_serialised_only_when_changed() -> None:
     assert "node_size_percent" not in default_payload
     assert "label_size_px" not in default_payload
     assert "show_masses" not in default_payload
+    assert "show_releases" not in default_payload
+    assert "release_size_percent" not in default_payload
 
-    custom = ViewSettings(node_size_percent=1.25, label_size_px=16, show_masses=True)
+    custom = ViewSettings(
+        node_size_percent=1.25,
+        label_size_px=16,
+        show_masses=True,
+        show_releases=False,
+        release_size_percent=2.0,
+    )
     payload = custom.model_dump(mode="json")
     assert payload["node_size_percent"] == 1.25
     assert payload["label_size_px"] == 16
     assert payload["show_masses"] is True
+    assert payload["show_releases"] is False
+    assert payload["release_size_percent"] == 2.0
 
 
 def test_is_immutable() -> None:

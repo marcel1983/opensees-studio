@@ -42,6 +42,7 @@ class ViewSettings(BaseModel):
     show_supports: bool = True
     show_constraints: bool = True
     show_frame_assignments: bool = True
+    show_releases: bool = True
     show_loads: bool = True
     show_masses: bool = False
     show_node_labels: bool = False
@@ -61,6 +62,7 @@ class ViewSettings(BaseModel):
     load_size_percent: float = Field(default=5.0, ge=0.05, le=25.0)
     reaction_size_percent: float = Field(default=12.0, ge=0.05, le=25.0)
     mass_size_percent: float = Field(default=1.5, ge=0.05, le=25.0)
+    release_size_percent: float = Field(default=1.0, ge=0.05, le=25.0)
     #: Text is separate: pixel height, not a fraction of the model.
     label_size_px: int = Field(default=12, ge=6, le=72)
 
@@ -90,11 +92,13 @@ class ViewSettings(BaseModel):
     serialize_without_defaults = omit_when_default(
         "color_by",
         "show_masses",
+        "show_releases",
         "node_size_percent",
         "support_size_percent",
         "load_size_percent",
         "reaction_size_percent",
         "mass_size_percent",
+        "release_size_percent",
         "label_size_px",
     )
 
