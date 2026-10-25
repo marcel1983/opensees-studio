@@ -9,6 +9,8 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.27] - 2026-10-25
+
 ### Added
 
 - **Stability check phases, cancellation and reproducible benchmarks.**
