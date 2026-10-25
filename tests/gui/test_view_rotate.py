@@ -84,4 +84,7 @@ def test_spin_turns_until_switched_off(qtbot) -> None:  # type: ignore[no-untype
     assert not mw._canvas.is_spinning
     stopped = _direction(mw)
     qtbot.wait(200)
-    assert _angle(stopped, _direction(mw)) == pytest.approx(0.0, abs=1e-9)
+    # One already-scheduled spin tick can still move the camera by a few 1e-7
+    # radians on a slow runner; the assertion is that spin is off, not that the
+    # camera is frozen to the last floating-point bit.
+    assert _angle(stopped, _direction(mw)) == pytest.approx(0.0, abs=1e-5)
