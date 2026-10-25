@@ -211,7 +211,11 @@ dispersa CSR mediante `PythonSparse` de OpenSees; un modelo pequeño usa una
 referencia densa y uno grande una búsqueda espectral dispersa desplazada tras
 escalado diagonal. El informe separa mecanismos de rigidez negativa y mal
 condicionamiento, indica cuándo la comprobación es parcial o no soportada y
-lista los nodos y DOF que se mueven. El proceso hijo informa las fases, el menú
+lista los nodos y DOF que se mueven. Las componentes conexas sin apoyo ni resorte al
+suelo se comprueban con una traslación de cuerpo rígido y se informan como mecanismos
+parciales sin esperar al eigensolver disperso. El último valor del puntero CSR define
+las entradas almacenadas aunque OpenSees informe un `nnz` mayor, y se aceptan buffers
+enteros de 32 o 64 bits. El proceso hijo informa las fases, el menú
 Analyze puede cancelarlo y la GUI aplica un límite blando de 300 s. Es un
 chequeo del estado inicial, no un factor de pandeo ni una garantía para una
 historia no lineal. Hay familias reproducibles con

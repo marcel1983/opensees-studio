@@ -110,6 +110,30 @@ def test_a_square_without_a_diagonal_sways() -> None:
     assert sorted(report.nodes) == [3, 4]
 
 
+def test_an_ungrounded_component_returns_a_verified_free_body_mechanism() -> None:
+    project = Project(
+        ndm=2,
+        ndf=2,
+        nodes=[
+            Node(id=1, coords=(0.0, 0.0, 0.0)),
+            Node(id=2, coords=(1.0, 0.0, 0.0)),
+        ],
+        elements=[TrussElement(id=1, nodes=(1, 2), area=0.01, material_id=1)],
+        materials=[ElasticUniaxial(id=1, E=2e8)],
+    )
+    report = check_stability(project)
+
+    assert not report.stable
+    assert report.completion == "partial"
+    assert report.classification == "mechanism"
+    assert report.count_kind == "lower_bound"
+    assert report.n_mechanisms == 1
+    mechanism = report.mechanisms[0]
+    assert mechanism.kind == "free_body"
+    assert mechanism.residual is not None and mechanism.residual < 1e-7
+    assert {(m.node, m.dof) for m in mechanism.movers} == {(1, "Ux"), (2, "Ux")}
+
+
 def test_a_fixed_base_portal_is_stable() -> None:
     fixed_2d = (True, False, True, False, True, False)
     assert check_stability(_portal(base=fixed_2d)).stable

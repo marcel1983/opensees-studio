@@ -285,12 +285,8 @@ def _free_dof_upper_bound(project: Project) -> int:
     return max(0, len(project.nodes) * project.ndf)
 
 
-def _connectivity_warnings(project: Project) -> list[str]:
-    """Warn about components with no support/grounded spring, without judging stability.
-
-    The graph is only a precheck: two disconnected structures can each be stable,
-    and a coincident-node isolator is a deliberate connection (not a merged node).
-    """
+def _connectivity_components(project: Project) -> list[tuple[list[int], bool]]:
+    """Connected node groups and whether each has a restraint or grounded spring."""
     node_ids = {node.id for node in project.nodes}
     if not node_ids:
         return []
@@ -332,11 +328,20 @@ def _connectivity_warnings(project: Project) -> list[str]:
     components: dict[int, list[int]] = {}
     for nid in node_ids:
         components.setdefault(find(nid), []).append(nid)
+    return [(sorted(nodes), any(nid in grounded for nid in nodes)) for nodes in components.values()]
+
+
+def _connectivity_warnings(project: Project) -> list[str]:
+    """Warn about components with no support/grounded spring, without judging stability.
+
+    The graph is only a precheck: two disconnected structures can each be stable,
+    and a coincident-node isolator is a deliberate connection (not a merged node).
+    """
     warnings: list[str] = []
-    for nodes in components.values():
-        if any(nid in grounded for nid in nodes):
+    for nodes, has_ground in _connectivity_components(project):
+        if has_ground:
             continue
-        shown = ", ".join(f"N{nid}" for nid in sorted(nodes)[:6])
+        shown = ", ".join(f"N{nid}" for nid in nodes[:6])
         if len(nodes) > 6:
             shown += f", … ({len(nodes)} nodes)"
         warnings.append(
@@ -364,6 +369,19 @@ def _equation_map(ops: Any, runner: Any, project: Project) -> dict[int, tuple[in
     return equation
 
 
+def _csr_index_buffer(buffer: Any, count: int, label: str) -> np.ndarray:
+    """Copy an OpenSees CSR integer buffer, accepting int32 or int64 storage."""
+    raw = np.frombuffer(buffer, dtype=np.uint8)
+    if raw.size == count * 4:
+        return np.frombuffer(buffer, dtype=np.int32, count=count).copy()
+    if raw.size == count * 8:
+        return np.frombuffer(buffer, dtype=np.int64, count=count).copy()
+    raise ValueError(
+        f"{label} buffer has {raw.size} bytes for {count} entries; "
+        "expected 32-bit or 64-bit integers"
+    )
+
+
 class _Capture:
     """PythonSparse solver callback: copy CSR buffers, then refuse the solve."""
 
@@ -372,6 +390,7 @@ class _Capture:
         self.error: str | None = None
         self.num_eqn = 0
         self.nnz = 0
+        self.reported_nnz = 0
         self.values: np.ndarray | None = None
         self.index_ptr: np.ndarray | None = None
         self.indices: np.ndarray | None = None
@@ -384,28 +403,41 @@ class _Capture:
         self.called = True
         try:
             self.num_eqn = int(kwargs["num_eqn"])
-            self.nnz = int(kwargs["nnz"])
+            self.reported_nnz = int(kwargs["nnz"])
             self.matrix_status = str(kwargs.get("matrix_status", ""))
             self.storage_scheme = str(kwargs.get("storage_scheme", ""))
             if self.storage_scheme != "CSR":
                 raise ValueError(f"unexpected storage scheme {self.storage_scheme!r}")
-            if self.num_eqn < 0 or self.nnz < 0:
+            if self.num_eqn < 0 or self.reported_nnz < 0:
                 raise ValueError("negative equation/nonzero count")
-            self.values = np.frombuffer(kwargs["values"], dtype=np.float64, count=self.nnz).copy()
-            self.index_ptr = np.frombuffer(
-                kwargs["index_ptr"], dtype=np.int32, count=self.num_eqn + 1
+            self.values = np.frombuffer(
+                kwargs["values"], dtype=np.float64, count=self.reported_nnz
             ).copy()
-            self.indices = np.frombuffer(kwargs["indices"], dtype=np.int32, count=self.nnz).copy()
-            if self.index_ptr[0] != 0 or self.index_ptr[-1] != self.nnz:
-                raise ValueError("invalid CSR index pointer")
+            self.index_ptr = _csr_index_buffer(
+                kwargs["index_ptr"], self.num_eqn + 1, "CSR index pointer"
+            )
+            self.indices = _csr_index_buffer(
+                kwargs["indices"], self.reported_nnz, "CSR column indices"
+            )
+            if self.index_ptr[0] != 0:
+                raise ValueError("CSR index pointer does not start at zero")
+            if self.index_ptr[-1] < 0 or self.index_ptr[-1] > self.reported_nnz:
+                raise ValueError(
+                    "CSR index pointer ends outside the nnz buffer "
+                    f"({self.index_ptr[-1]} vs {self.reported_nnz})"
+                )
             if np.any(np.diff(self.index_ptr) < 0):
                 raise ValueError("CSR index pointer is not monotone")
-            if self.nnz and (
-                int(self.indices.min()) < 0 or int(self.indices.max()) >= self.num_eqn
-            ):
-                raise ValueError("CSR column index outside the matrix")
-            if not np.all(np.isfinite(self.values)):
-                raise ValueError("non-finite stiffness coefficient")
+            # Some OpenSees builds report the allocated nnz while the pointer
+            # ends at the stored entries. The pointer is authoritative; use
+            # only the corresponding prefix of indices/values.
+            self.nnz = int(self.index_ptr[-1])
+            if self.nnz:
+                active_indices = self.indices[: self.nnz]
+                if int(active_indices.min()) < 0 or int(active_indices.max()) >= self.num_eqn:
+                    raise ValueError("CSR column index outside the matrix")
+                if not np.all(np.isfinite(self.values[: self.nnz])):
+                    raise ValueError("non-finite stiffness coefficient")
         except Exception as exc:  # buffer/shape/format problem: no matrix
             self.error = f"PythonSparse callback rejected the matrix: {exc}"
         # Refuse the solve deliberately. The matrix has already been copied.
@@ -463,6 +495,11 @@ def _capture_sparse(
     except Exception as exc:
         return None, equation, capture.num_eqn, capture.nnz, f"scipy CSR failed: {exc}", []
     warnings = []
+    if capture.reported_nnz != capture.nnz:
+        warnings.append(
+            f"PythonSparse reported nnz={capture.reported_nnz}, but the CSR pointer ends at "
+            f"{capture.nnz}; the stored entries were used."
+        )
     if capture.matrix_status not in {"STRUCTURE_CHANGED", "COEFFICIENTS_CHANGED", "UNCHANGED"}:
         warnings.append(f"PythonSparse reported matrix_status={capture.matrix_status!r}.")
     return matrix, equation, capture.num_eqn, int(matrix.nnz), None, warnings
@@ -686,6 +723,73 @@ class _MotionExpander:
             "Constrained DOFs could not be expanded for "
             f"{shown}; the mechanism selection may omit those nodes."
         )
+
+
+def _free_body_mechanisms(
+    project: Project,
+    matrix: Any,
+    equation: dict[int, tuple[int, str]],
+    expander: _MotionExpander | None,
+) -> tuple[list[Mechanism], int]:
+    """Numerically verify free-body translations of ungrounded components.
+
+    A graph component with no restraint or grounded spring has at least a
+    rigid-body translation. This is a precheck, but each candidate is accepted
+    only after ``K v`` has a small relative residual; it is not a claim about
+    the rest of the model.
+    """
+    if expander is None:
+        return [], 0
+    if hasattr(matrix, "nnz"):
+        data_scale = float(np.max(np.abs(matrix.data))) if matrix.nnz else 0.0
+    else:
+        data_scale = float(np.max(np.abs(matrix))) if getattr(matrix, "size", 0) else 0.0
+    if data_scale <= 0.0:
+        return [], 0
+    mechanisms: list[Mechanism] = []
+    count = 0
+    for nodes, has_ground in _connectivity_components(project):
+        if has_ground:
+            continue
+        vector = np.zeros(int(matrix.shape[0]), dtype=float)
+        chosen: int | None = None
+        for slot in (0, 1, 2):
+            if slot >= project.ndf:
+                continue
+            found = False
+            for node_id in nodes:
+                dofs = expander.node_dofs.get(node_id, ())
+                if slot < len(dofs):
+                    eq = dofs[slot]
+                    if 0 <= eq < vector.size:
+                        vector[eq] = 1.0
+                        found = True
+            if found:
+                chosen = slot
+                break
+        if chosen is None:
+            continue
+        norm = float(np.linalg.norm(vector))
+        if norm == 0.0:
+            continue
+        residual = float(np.linalg.norm(matrix @ vector)) / (data_scale * norm)
+        if residual > 1e-7:
+            continue
+        movers = expander.movers(vector)
+        if not movers:
+            movers = _movers(vector, np.ones(vector.size), equation)
+        count += 1
+        if len(mechanisms) < MAX_MECHANISMS:
+            mechanisms.append(
+                Mechanism(
+                    movers=movers,
+                    singular_value=0.0,
+                    eigenvalue=0.0,
+                    residual=residual,
+                    kind="free_body",
+                )
+            )
+    return mechanisms, count
 
 
 def _movers(
@@ -1322,6 +1426,43 @@ def check_stability(
             "diagnose",
             "Searching for mechanisms, negative stiffness and ill-conditioning.",
         )
+        free_mechanisms, free_count = _free_body_mechanisms(project, matrix, equation, expander)
+        if free_count:
+            free_done = time.perf_counter()
+            warnings.append(
+                "Ungrounded connected components were verified by their rigid-body "
+                "translation; the remaining stiffness was not searched in this run."
+            )
+            return StabilityReport(
+                n_equations=n,
+                rank=None,
+                mechanisms=free_mechanisms,
+                n_mechanisms=free_count,
+                uncovered=uncovered,
+                condition=None,
+                completion="partial",
+                classification="mechanism",
+                analysis_state="initial",
+                nnz=nnz,
+                method=f"{extraction_method}+free_body_precheck",
+                backend=backend,
+                versions=_versions(),
+                scaling={"kind": "none", "applied": False},
+                tolerances={"relative": 1e-7, "residual": 1e-7},
+                count_kind="lower_bound",
+                warnings=warnings,
+                failure_reason=None,
+                timings={
+                    "build_ms": (build_done - started) * 1000.0,
+                    "extract_ms": (extraction_done - extraction_started) * 1000.0,
+                    "diagnose_ms": (free_done - extraction_done) * 1000.0,
+                },
+                memory={
+                    "csr_bytes": int(12 * nnz + 4 * (n + 1)),
+                    "estimated": True,
+                },
+                model_fingerprint=fingerprint,
+            )
         if n > DENSE_MAX_EQUATIONS:
             try:
                 import scipy  # noqa: F401

@@ -9,7 +9,7 @@ pytest.importorskip("scipy")
 
 import scipy.sparse as sp
 
-from opensees_studio.services.stability import _diagnose_sparse
+from opensees_studio.services.stability import _Capture, _diagnose_sparse
 
 
 def _equation_map(n: int) -> dict[int, tuple[int, str]]:
@@ -72,3 +72,45 @@ def test_sparse_route_rejects_a_non_symmetric_matrix() -> None:
     assert result["completion"] == "unsupported"
     assert result["classification"] == "indeterminate"
     assert "not symmetric" in result["warnings"][-1]
+
+
+@pytest.mark.parametrize("dtype", [np.int32, np.int64])
+def test_capture_accepts_both_csr_integer_widths(dtype: type[np.signedinteger]) -> None:
+    index_ptr = np.array([0, 2, 3], dtype=dtype)
+    indices = np.array([0, 1, 1, 0], dtype=dtype)  # one allocated but unused entry
+    values = np.array([2.0, 0.5, 3.0, 0.0], dtype=np.float64)
+    capture = _Capture()
+
+    returned = capture.solve(
+        num_eqn=2,
+        nnz=4,
+        index_ptr=memoryview(index_ptr),
+        indices=memoryview(indices),
+        values=memoryview(values),
+        storage_scheme="CSR",
+        matrix_status="STRUCTURE_CHANGED",
+    )
+
+    assert returned == -1
+    assert capture.error is None
+    assert capture.reported_nnz == 4
+    assert capture.nnz == 3
+    assert capture.index_ptr is not None and capture.index_ptr.dtype == dtype
+    assert capture.indices is not None and capture.indices.dtype == dtype
+
+
+def test_capture_rejects_a_pointer_past_the_allocated_nonzeros() -> None:
+    capture = _Capture()
+    returned = capture.solve(
+        num_eqn=2,
+        nnz=4,
+        index_ptr=memoryview(np.array([0, 2, 5], dtype=np.int32)),
+        indices=memoryview(np.zeros(4, dtype=np.int32)),
+        values=memoryview(np.ones(4, dtype=np.float64)),
+        storage_scheme="CSR",
+        matrix_status="STRUCTURE_CHANGED",
+    )
+
+    assert returned == -1
+    assert capture.error is not None
+    assert "ends outside the nnz buffer" in capture.error

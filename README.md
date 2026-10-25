@@ -824,10 +824,14 @@ CSR matrix through OpenSees' `PythonSparse`; a small model uses a dense
 reference, while a large one uses a shifted sparse eigenvalue search after
 diagonal scaling. The report separates mechanisms from negative stiffness and
 ill-conditioning, says when a check is partial or unsupported, and lists the
-joints and DOFs that move. The child reports phases, the Analyze menu can cancel
-it, and the GUI applies a soft 300 s limit. It is an initial-state check, not a
-buckling factor or a guarantee for a nonlinear history. Reproducible families
-are available with `python tools/stability_bench.py --family frame --size 12`
+joints and DOFs that move. A connected component with no restraint or grounded
+spring is checked with a verified rigid-body translation and reported as a
+partial mechanism without waiting for the sparse eigensolver. The CSR pointer's
+last entry defines the stored entries even when OpenSees reports a larger
+allocated `nnz`, and 32-bit or 64-bit integer buffers are accepted. The child
+reports phases, the Analyze menu can cancel it, and the GUI applies a soft 300 s
+limit. It is an initial-state check, not a buckling factor or a guarantee for a
+nonlinear history. Reproducible families are available with `python tools/stability_bench.py --family frame --size 12`
 (or `--family truss --mechanism`).
 
 ## Verification
