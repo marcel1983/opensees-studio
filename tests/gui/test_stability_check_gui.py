@@ -55,6 +55,8 @@ def test_the_action_lives_in_the_analyze_menu_and_needs_a_project(qtbot) -> None
     assert mw._act_check_stability.text() == "Check Model &Stability…"
     menus = {a.text(): a.menu() for a in mw.menuBar().actions()}
     assert mw._act_check_stability in menus["&Analyze"].actions()
+    assert mw._act_cancel_stability in menus["&Analyze"].actions()
+    assert not mw._act_cancel_stability.isEnabled()
 
 
 @pytest.mark.gui

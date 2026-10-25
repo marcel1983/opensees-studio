@@ -9,6 +9,20 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Added
+
+- **Stability check phases, cancellation and reproducible benchmarks.**
+  `Analyze → Check Model Stability` streams `precheck`, `build`, `capture`,
+  `diagnose` and `reconstruct` phases to the console, and **Analyze → Cancel
+  Stability Check** stops the child. The GUI applies a soft 300 s limit and a
+  hard parent deadline; the service also accepts a timeout and cancellation
+  callback between phases and returns a `completion="cancelled"` report instead
+  of calling the model unstable. Mechanism vectors are expanded from the
+  independent DOFs back to constrained nodes for equalDOF, rigid links and
+  diaphragms, so the selected joints include slave nodes. `tools/stability_bench.py`
+  builds reproducible frame and truss grids (stable and mechanism variants) and
+  reports equations, `nnz`, timings, method and memory.
+
 ## [0.0.26] - 2026-10-25
 
 ### Added

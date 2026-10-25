@@ -211,8 +211,12 @@ dispersa CSR mediante `PythonSparse` de OpenSees; un modelo pequeño usa una
 referencia densa y uno grande una búsqueda espectral dispersa desplazada tras
 escalado diagonal. El informe separa mecanismos de rigidez negativa y mal
 condicionamiento, indica cuándo la comprobación es parcial o no soportada y
-lista los nodos y DOF que se mueven. Es un chequeo del estado inicial, no un
-factor de pandeo ni una garantía para una historia no lineal.
+lista los nodos y DOF que se mueven. El proceso hijo informa las fases, el menú
+Analyze puede cancelarlo y la GUI aplica un límite blando de 300 s. Es un
+chequeo del estado inicial, no un factor de pandeo ni una garantía para una
+historia no lineal. Hay familias reproducibles con
+`python tools/stability_bench.py --family frame --size 12` (o
+`--family truss --mechanism`).
 
 ## Licencia
 

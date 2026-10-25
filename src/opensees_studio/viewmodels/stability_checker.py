@@ -16,24 +16,30 @@ import json
 import os
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QProcess, QProcessEnvironment, Signal
+from PySide6.QtCore import QObject, QProcess, QProcessEnvironment, QTimer, Signal
 
 from opensees_studio.child_cli import analysis_cli_command, is_frozen
 from opensees_studio.core import Project
+from opensees_studio.core.combinations import model_fingerprint
 from opensees_studio.services import engines, write_run_snapshot
 from opensees_studio.services.stability import StabilityReport, check_stability
 from opensees_studio.viewmodels.analysis_runner import (
+    KILL_AFTER_TERMINATE_MS,
     STDERR_TAIL_LINES,
     _hide_child_console,
     in_process_mode,
     is_solver_banner,
 )
 
+DEFAULT_STABILITY_TIMEOUT_S = 300.0
+"""Soft limit for a check; a native eigenvalue call is never cooperatively interrupted."""
+
 
 class StabilityChecker(QObject):
     """Check a project for mechanisms in a child process."""
 
     log = Signal(str)
+    progress = Signal(str, str)  # phase, message
     finished = Signal(object)  # StabilityReport
     failed = Signal(str)
     runningChanged = Signal(bool)
@@ -45,19 +51,37 @@ class StabilityChecker(QObject):
         self._stderr = ""
         self._report: StabilityReport | None = None
         self._error: str | None = None
+        self._cancel_requested = False
+        self._timed_out = False
+        self._timeout_timer: QTimer | None = None
+        self._fingerprint = ""
 
     @property
     def is_running(self) -> bool:
         return self._process is not None
 
-    def check(self, project: Project, project_path: Path | None = None) -> None:
+    def check(
+        self,
+        project: Project,
+        project_path: Path | None = None,
+        *,
+        timeout_s: float | None = DEFAULT_STABILITY_TIMEOUT_S,
+    ) -> None:
         """Start the check; ``finished`` or ``failed`` follows."""
         if self._process is not None:
             return
+        self._cancel_requested = False
+        self._timed_out = False
+        self._fingerprint = model_fingerprint(project)
         snapshot = write_run_snapshot(project, project_path)
         if in_process_mode():
             try:
-                report = check_stability(project)
+                report = check_stability(
+                    project,
+                    timeout_s=timeout_s,
+                    progress=lambda phase, message: self.progress.emit(phase, message),
+                    should_cancel=lambda: self._cancel_requested,
+                )
             except Exception as exc:  # the report is the user's answer either way
                 self.failed.emit(f"The stability check failed: {exc}")
                 return
@@ -76,7 +100,10 @@ class StabilityChecker(QObject):
         for key, value in engines.child_environment().items():
             env.insert(key, value)
         process.setProcessEnvironment(env)
-        process.setArguments([*command[1:], "--project", str(snapshot), "--check-stability"])
+        arguments = [*command[1:], "--project", str(snapshot), "--check-stability"]
+        if timeout_s is not None and timeout_s > 0:
+            arguments += ["--stability-timeout", f"{timeout_s:g}"]
+        process.setArguments(arguments)
         if is_frozen() and os.name == "nt":
             _hide_child_console(process)
         process.readyReadStandardOutput.connect(self._on_stdout)
@@ -84,9 +111,54 @@ class StabilityChecker(QObject):
         process.finished.connect(self._on_finished)
         process.errorOccurred.connect(self._on_error)
         self._process = process
+        if timeout_s is not None and timeout_s > 0:
+            self._timeout_timer = QTimer(self)
+            self._timeout_timer.setSingleShot(True)
+            self._timeout_timer.setInterval(int((timeout_s + 10.0) * 1000))
+            self._timeout_timer.timeout.connect(self._on_timeout)
+            self._timeout_timer.start()
         self.runningChanged.emit(True)
         self.log.emit("Checking the model's stability ...")
         process.start()
+
+    def cancel(self) -> None:
+        """Stop the child process; the UI receives a cancelled report."""
+        if self._process is None or self._cancel_requested:
+            return
+        self._cancel_requested = True
+        self.log.emit("Cancelling the stability check ...")
+        self._process.terminate()
+        QTimer.singleShot(KILL_AFTER_TERMINATE_MS, self._kill_if_alive)
+
+    def _kill_if_alive(self) -> None:
+        if self._process is not None:
+            self._process.kill()
+
+    def _on_timeout(self) -> None:
+        if self._process is None:
+            return
+        self._cancel_requested = True
+        self._timed_out = True
+        self.log.emit("The stability check exceeded its time limit; stopping it.")
+        self._process.terminate()
+        QTimer.singleShot(KILL_AFTER_TERMINATE_MS, self._kill_if_alive)
+
+    def _cancelled_report(self) -> StabilityReport:
+        return StabilityReport(
+            n_equations=0,
+            rank=None,
+            completion="cancelled",
+            classification="indeterminate",
+            method="cancelled",
+            backend="opensees",
+            count_kind="estimate",
+            failure_reason=(
+                "the stability check exceeded its time limit"
+                if self._timed_out
+                else "cancelled by the user"
+            ),
+            model_fingerprint=self._fingerprint,
+        )
 
     # ── the child ────────────────────────────────────────────────────
     def _on_stdout(self) -> None:
@@ -115,6 +187,8 @@ class StabilityChecker(QObject):
         kind = message.get("type")
         if kind == "stability":
             self._report = StabilityReport.from_dict(message.get("report", {}))
+        elif kind == "stability_progress":
+            self.progress.emit(str(message.get("phase", "")), str(message.get("message", "")))
         elif kind == "log" and not is_solver_banner(str(message.get("message", ""))):
             self.log.emit(str(message.get("message", "")))
         elif kind == "error":
@@ -126,6 +200,9 @@ class StabilityChecker(QObject):
 
     def _on_finished(self, exit_code: int, exit_status: QProcess.ExitStatus) -> None:
         self._on_stdout()
+        if self._cancel_requested:
+            self._finish(self._cancelled_report(), None)
+            return
         if self._report is not None and exit_code == 0:
             self._finish(self._report, None)
             return
@@ -142,6 +219,9 @@ class StabilityChecker(QObject):
         self._finish(None, text)
 
     def _finish(self, report: StabilityReport | None, error: str | None) -> None:
+        if self._timeout_timer is not None:
+            self._timeout_timer.stop()
+            self._timeout_timer = None
         process, self._process = self._process, None
         if process is not None:
             process.deleteLater()

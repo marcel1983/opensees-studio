@@ -27,6 +27,7 @@ from __future__ import annotations
 import contextlib
 import math
 import time
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from typing import Any, Literal
 
@@ -34,8 +35,8 @@ import numpy as np
 
 from opensees_studio.core import Project
 from opensees_studio.core.combinations import model_fingerprint
-from opensees_studio.core.diaphragms import constrained_node_ids
-from opensees_studio.core.plane import dof_labels
+from opensees_studio.core.diaphragms import IN_PLANE_SLOTS, constrained_node_ids
+from opensees_studio.core.plane import dof_labels, dof_signs, to_solver_coords
 
 Completion = Literal["complete", "partial", "cancelled", "unsupported", "error"]
 Classification = Literal[
@@ -539,12 +540,166 @@ def _scale_sparse(matrix: Any) -> tuple[Any, np.ndarray, dict[str, Any]]:
     )
 
 
+class _MotionExpander:
+    """Expand an independent-DOF mechanism to the physical node DOFs.
+
+    OpenSees' Transformation handler removes constrained DOFs from the matrix,
+    so the eigenvector only contains retained variables. The common constraint
+    types are reconstructed here for display and selection: equalDOF copies the
+    retained value, a rigid link adds the lever-arm term, and a diaphragm adds
+    the in-plane rotation term. The expansion runs after the matrix is captured
+    and before ``ops.wipe()``; it never changes the model or the diagnosis.
+    """
+
+    def __init__(self, project: Project, ops: Any) -> None:
+        self.ndm = project.ndm
+        self.ndf = project.ndf
+        self.labels = dof_labels(project.ndm, project.ndf)
+        self.signs = dof_signs(project.ndm, project.ndf)
+        self.coords = {
+            node.id: np.asarray(to_solver_coords(node.coords, project.ndm), dtype=float)
+            for node in project.nodes
+        }
+        self.node_dofs: dict[int, tuple[int, ...]] = {}
+        for node in project.nodes:
+            try:
+                self.node_dofs[node.id] = tuple(int(eq) for eq in ops.nodeDOFs(node.id))
+            except Exception:
+                self.node_dofs[node.id] = (-1,) * project.ndf
+        self.equal_dofs = list(project.mp_constraints)
+        self.rigid_links = list(project.rigid_links)
+        self.diaphragms = [
+            (diaphragm, constrained_node_ids(project, diaphragm))
+            for diaphragm in project.diaphragms
+        ]
+        self.unresolved: list[int] = []
+
+    def _base(self, vector: np.ndarray) -> tuple[dict[int, np.ndarray], set[int]]:
+        motion = {nid: np.zeros(self.ndf, dtype=float) for nid in self.coords}
+        known: set[int] = set()
+        for nid, dofs in self.node_dofs.items():
+            any_independent = False
+            for k, eq in enumerate(dofs):
+                if 0 <= eq < vector.size and k < self.ndf:
+                    motion[nid][k] = float(vector[eq])
+                    any_independent = True
+            if any_independent:
+                known.add(nid)
+        return motion, known
+
+    def _apply_constraints(self, motion: dict[int, np.ndarray], known: set[int]) -> None:
+        targets: set[int] = set()
+        for mp in self.equal_dofs:
+            targets.add(mp.constrained_node)
+        for link in self.rigid_links:
+            targets.add(link.constrained_node)
+        for _diaphragm, nodes in self.diaphragms:
+            targets.update(nodes)
+
+        for _ in range(6):
+            changed = False
+            for mp in self.equal_dofs:
+                retained, constrained = mp.retained_node, mp.constrained_node
+                if retained not in known or constrained not in motion:
+                    continue
+                for dof in mp.dofs:
+                    slot = dof - 1
+                    if 0 <= slot < self.ndf:
+                        motion[constrained][slot] = motion[retained][slot]
+                if constrained not in known:
+                    known.add(constrained)
+                    changed = True
+            for link in self.rigid_links:
+                retained, constrained = link.retained_node, link.constrained_node
+                if retained not in known or constrained not in motion:
+                    continue
+                delta = self.coords[constrained] - self.coords[retained]
+                if self.ndm == 2:
+                    rotation = float(motion[retained][2]) if self.ndf >= 3 else 0.0
+                    motion[constrained][0] = motion[retained][0] - rotation * delta[1]
+                    motion[constrained][1] = motion[retained][1] + rotation * delta[0]
+                    if link.kind == "beam" and self.ndf >= 3:
+                        motion[constrained][2] = rotation
+                else:
+                    theta = motion[retained][3:6]
+                    motion[constrained][0:3] = motion[retained][0:3] + np.cross(theta, delta)
+                    if link.kind == "beam":
+                        motion[constrained][3:6] = theta
+                if constrained not in known:
+                    known.add(constrained)
+                    changed = True
+            for diaphragm, nodes in self.diaphragms:
+                retained = diaphragm.retained_node
+                if retained not in known or self.ndm != 3 or self.ndf != 6:
+                    continue
+                slots = IN_PLANE_SLOTS.get(diaphragm.perp_dirn)
+                if slots is None:
+                    continue
+                rotation_slot = slots[2]
+                omega = np.zeros(3, dtype=float)
+                omega[rotation_slot - 3] = motion[retained][rotation_slot]
+                for constrained in nodes:
+                    if constrained not in motion:
+                        continue
+                    delta = self.coords[constrained] - self.coords[retained]
+                    displacement = np.cross(omega, delta)
+                    for slot in slots[:2]:
+                        motion[constrained][slot] = displacement[slot]
+                    motion[constrained][rotation_slot] = motion[retained][rotation_slot]
+                    if constrained not in known:
+                        known.add(constrained)
+                        changed = True
+            if not changed:
+                break
+        self.unresolved = sorted(targets - known)
+
+    def movers(self, vector: np.ndarray) -> list[Mover]:
+        """The largest physical node-DOF components of ``vector`` (independent DOFs)."""
+        motion, known = self._base(np.asarray(vector, dtype=float))
+        self._apply_constraints(motion, known)
+        values: list[tuple[float, int, str, float]] = []
+        for nid, components in motion.items():
+            for slot, value in enumerate(components):
+                if slot >= len(self.labels):
+                    continue
+                global_value = float(value) * self.signs[slot]
+                if global_value != 0.0:
+                    values.append((abs(global_value), nid, self.labels[slot], global_value))
+        if not values:
+            return []
+        peak = max(item[0] for item in values)
+        values.sort(reverse=True)
+        movers: list[Mover] = []
+        for magnitude, nid, label, value in values:
+            if magnitude / peak < SHOWN_FRACTION or len(movers) >= MAX_MOVERS:
+                break
+            movers.append(Mover(node=nid, dof=label, amplitude=round(value / peak, 4)))
+        return movers
+
+    def warning(self) -> str | None:
+        if not self.unresolved:
+            return None
+        shown = ", ".join(f"N{nid}" for nid in self.unresolved[:8])
+        if len(self.unresolved) > 8:
+            shown += f", … ({len(self.unresolved)} nodes)"
+        return (
+            "Constrained DOFs could not be expanded for "
+            f"{shown}; the mechanism selection may omit those nodes."
+        )
+
+
 def _movers(
     vector: np.ndarray,
     scale: np.ndarray,
     equation: dict[int, tuple[int, str]],
+    *,
+    expander: _MotionExpander | None = None,
 ) -> list[Mover]:
     physical = np.asarray(vector, dtype=float) * scale
+    if expander is not None:
+        expanded = expander.movers(physical)
+        if expanded:
+            return expanded
     peak = float(np.max(np.abs(physical))) if physical.size else 0.0
     if peak == 0.0:
         return []
@@ -581,6 +736,7 @@ def _diagnose_dense(
     equation: dict[int, tuple[int, str]],
     *,
     warnings: list[str],
+    expander: _MotionExpander | None = None,
 ) -> dict[str, Any]:
     n = int(matrix.shape[0])
     if not np.all(np.isfinite(matrix)):
@@ -644,7 +800,7 @@ def _diagnose_dense(
     for i in zero_indices[:MAX_MECHANISMS]:
         mechanisms.append(
             Mechanism(
-                movers=_movers(eigenvectors[:, i], scale, equation),
+                movers=_movers(eigenvectors[:, i], scale, equation, expander=expander),
                 singular_value=0.0,
                 eigenvalue=float(eigenvalues[i]),
                 residual=_residual_dense(scaled, eigenvectors[:, i], float(eigenvalues[i])),
@@ -719,6 +875,7 @@ def _diagnose_sparse(
     equation: dict[int, tuple[int, str]],
     *,
     warnings: list[str],
+    expander: _MotionExpander | None = None,
 ) -> dict[str, Any]:
     n = int(matrix.shape[0])
     if matrix.nnz and not np.all(np.isfinite(matrix.data)):
@@ -870,7 +1027,7 @@ def _diagnose_sparse(
             if len(mechanisms) < MAX_MECHANISMS:
                 mechanisms.append(
                     Mechanism(
-                        movers=_movers(eigenvectors[:, i], scale, equation),
+                        movers=_movers(eigenvectors[:, i], scale, equation, expander=expander),
                         singular_value=0.0,
                         eigenvalue=float(eigenvalues[i]),
                         residual=residual,
@@ -959,8 +1116,55 @@ def _diagnose_sparse(
     }
 
 
-def check_stability(project: Project, ops_module: Any | None = None) -> StabilityReport:
-    """Build ``project`` in OpenSees and look for mechanisms in its stiffness."""
+def _notify(progress: Callable[[str, str], None] | None, phase: str, message: str) -> None:
+    if progress is None:
+        return
+    with contextlib.suppress(Exception):
+        progress(phase, message)
+
+
+def _cancelled_report(
+    *,
+    reason: str,
+    n_equations: int,
+    nnz: int,
+    timestamp: float,
+    started: float,
+    method: str = "cancelled",
+    backend: str = "opensees",
+    fingerprint: str = "",
+) -> StabilityReport:
+    return StabilityReport(
+        n_equations=n_equations,
+        rank=None,
+        completion="cancelled",
+        classification="indeterminate",
+        nnz=nnz,
+        method=method,
+        backend=backend,
+        count_kind="estimate",
+        warnings=[],
+        failure_reason=reason,
+        timings={"elapsed_ms": (timestamp - started) * 1000.0},
+        model_fingerprint=fingerprint,
+    )
+
+
+def check_stability(
+    project: Project,
+    ops_module: Any | None = None,
+    *,
+    timeout_s: float | None = None,
+    progress: Callable[[str, str], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
+) -> StabilityReport:
+    """Build ``project`` in OpenSees and look for mechanisms in its stiffness.
+
+    ``timeout_s`` and ``should_cancel`` are checked between phases; a native
+    eigenvalue call cannot be interrupted cooperatively, so the GUI also kills
+    its child process at its own hard deadline. The return report then has
+    ``completion='cancelled'`` when the service observes it.
+    """
     from opensees_studio.services.opensees_runner import OpenSeesRunner
 
     if ops_module is None:
@@ -968,12 +1172,49 @@ def check_stability(project: Project, ops_module: Any | None = None) -> Stabilit
 
         ops_module = default_ops
     started = time.perf_counter()
-    runner = OpenSeesRunner(project, ops_module=ops_module)
-    runner.build()
-    build_done = time.perf_counter()
+    deadline = None if timeout_s is None or timeout_s <= 0 else started + timeout_s
+    fingerprint = model_fingerprint(project)
     ops = ops_module
     warnings = _connectivity_warnings(project)
+    n = 0
+    nnz = 0
+    extraction_method = "none"
+    backend = "opensees"
+
+    def stop_reason() -> str | None:
+        if should_cancel is not None:
+            with contextlib.suppress(Exception):
+                if should_cancel():
+                    return "cancelled by user"
+        if deadline is not None and time.perf_counter() >= deadline:
+            return f"stability time limit of {timeout_s:g} s exceeded"
+        return None
+
+    def cancelled() -> StabilityReport:
+        return _cancelled_report(
+            reason=stop_reason() or "cancelled",
+            n_equations=n,
+            nnz=nnz,
+            timestamp=time.perf_counter(),
+            started=started,
+            method=extraction_method,
+            backend=backend,
+            fingerprint=fingerprint,
+        )
+
     try:
+        reason = stop_reason()
+        if reason:
+            return cancelled()
+        _notify(progress, "precheck", "Checking connectivity and constrained DOFs.")
+        _notify(progress, "build", "Building the OpenSees model.")
+        runner = OpenSeesRunner(project, ops_module=ops_module)
+        runner.build()
+        build_done = time.perf_counter()
+        reason = stop_reason()
+        if reason:
+            return cancelled()
+        _notify(progress, "capture", "Capturing the initial stiffness matrix.")
         uncovered = _uncovered_dofs(runner)
         extraction_started = time.perf_counter()
         matrix, equation, n, nnz, extraction_error, capture_warnings = _capture_sparse(
@@ -982,6 +1223,9 @@ def check_stability(project: Project, ops_module: Any | None = None) -> Stabilit
         warnings += capture_warnings
         backend = "PythonSparse"
         extraction_method = "python_sparse_csr"
+        reason = stop_reason()
+        if reason:
+            return cancelled()
         if matrix is None and extraction_error is None and n == 0 and not equation:
             report = StabilityReport(
                 n_equations=0,
@@ -1044,6 +1288,9 @@ def check_stability(project: Project, ops_module: Any | None = None) -> Stabilit
         if matrix is None:
             raise RuntimeError("No stiffness matrix was captured.")
         extraction_done = time.perf_counter()
+        reason = stop_reason()
+        if reason:
+            return cancelled()
         if n == 0:
             return StabilityReport(
                 n_equations=0,
@@ -1061,6 +1308,20 @@ def check_stability(project: Project, ops_module: Any | None = None) -> Stabilit
                     "extract_ms": (extraction_done - extraction_started) * 1000.0,
                 },
             )
+        try:
+            _notify(progress, "reconstruct", "Expanding constrained DOFs for the report.")
+            expander = _MotionExpander(project, ops)
+        except Exception as exc:
+            expander = None
+            warnings.append(f"Constrained-DOF expansion was unavailable: {exc}")
+        reason = stop_reason()
+        if reason:
+            return cancelled()
+        _notify(
+            progress,
+            "diagnose",
+            "Searching for mechanisms, negative stiffness and ill-conditioning.",
+        )
         if n > DENSE_MAX_EQUATIONS:
             try:
                 import scipy  # noqa: F401
@@ -1086,18 +1347,19 @@ def check_stability(project: Project, ops_module: Any | None = None) -> Stabilit
                         "extract_ms": (extraction_done - extraction_started) * 1000.0,
                     },
                 )
-            diagnosis = _diagnose_sparse(matrix, equation, warnings=warnings)
+            diagnosis = _diagnose_sparse(matrix, equation, warnings=warnings, expander=expander)
         else:
             dense = matrix.toarray() if hasattr(matrix, "toarray") else np.asarray(matrix)
-            diagnosis = _diagnose_dense(dense, equation, warnings=warnings)
+            diagnosis = _diagnose_dense(dense, equation, warnings=warnings, expander=expander)
         diagnosis_done = time.perf_counter()
-        if diagnosis["mechanisms"] and (
-            project.mp_constraints or project.diaphragms or project.rigid_links
-        ):
-            diagnosis["warnings"].append(
-                "Mechanism vectors are in the independent DOFs; DOFs of nodes tied by "
-                "equalDOF, rigid links or diaphragms are not expanded in this report."
-            )
+        reason = stop_reason()
+        if reason:
+            return cancelled()
+        _notify(progress, "reconstruct", "Preparing the physical mechanism description.")
+        if diagnosis["mechanisms"] and expander is not None:
+            expansion_warning = expander.warning()
+            if expansion_warning:
+                diagnosis["warnings"].append(expansion_warning)
         report = StabilityReport(
             n_equations=int(diagnosis["n_equations"]),
             rank=diagnosis["rank"],
@@ -1125,6 +1387,7 @@ def check_stability(project: Project, ops_module: Any | None = None) -> Stabilit
             memory=diagnosis.get("memory", {}),
             model_fingerprint=model_fingerprint(project),
         )
+        _notify(progress, "done", "Stability check complete.")
         return report
     finally:
         ops.wipe()

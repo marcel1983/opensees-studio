@@ -57,7 +57,10 @@ The Qt main thread owns all widgets. OpenSees never runs in it:
   the sparse initial stiffness through `PythonSparse` (`services.stability`),
   diagnoses it with a dense reference up to 1 200 equations or a shifted sparse
   eigenvalue search above that, and prints one `stability` line whose report
-  `viewmodels.StabilityChecker` turns back into a `StabilityReport`.
+  `viewmodels.StabilityChecker` turns back into a `StabilityReport`. It also
+  streams `stability_progress` phases; the checker can terminate the child and
+  the GUI disables the check while it runs. `tools/stability_bench.py` builds
+  the reproducible frame/truss families.
 - **Batch runs** (File → Run Batch…, `python -m opensees_studio.batch`) start
   the same CLI on each project file itself (no snapshot: the file is not open),
   with `--out <stem>_batch_results --record-db <stem>_results.sqlite`, so the
