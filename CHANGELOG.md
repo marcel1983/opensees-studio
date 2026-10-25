@@ -9,6 +9,8 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.26] - 2026-10-25
+
 ### Added
 
 - **Scalable stability check.** `Analyze → Check Model Stability` now captures
