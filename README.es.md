@@ -204,6 +204,16 @@ para torsión, naranja para M2, rojo para M3 y amarillo para fijación parcial.
 **View → Visibility → Releases** los muestra u oculta independientemente de las
 barras de offset rígido de **Frame Assignments**.
 
+## Chequeo de estabilidad
+
+**Analyze → Check Model Stability** captura la rigidez inicial como una matriz
+dispersa CSR mediante `PythonSparse` de OpenSees; un modelo pequeño usa una
+referencia densa y uno grande una búsqueda espectral dispersa desplazada tras
+escalado diagonal. El informe separa mecanismos de rigidez negativa y mal
+condicionamiento, indica cuándo la comprobación es parcial o no soportada y
+lista los nodos y DOF que se mueven. Es un chequeo del estado inicial, no un
+factor de pandeo ni una garantía para una historia no lineal.
+
 ## Licencia
 
 AGPL-3.0. Ver [LICENSE](LICENSE). OpenSeesPy es un programa aparte con su propia

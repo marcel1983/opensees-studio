@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QMessageBox
 
 from opensees_studio.commands import AddElementsCommand, AddMaterialsCommand, AddNodesCommand
 from opensees_studio.core import ElasticUniaxial, Node, TrussElement
+from opensees_studio.services.stability import StabilityReport
 
 
 def _window(qtbot, *, diagonal: bool):  # type: ignore[no-untyped-def]
@@ -79,4 +80,24 @@ def test_a_braced_truss_is_reported_stable(qtbot) -> None:  # type: ignore[no-un
         mw._act_check_stability.trigger()
     assert blocker.args[0].stable
     assert "statically stable" in mw._stability_box.text()
+    mw._stability_box.close()
+
+
+@pytest.mark.gui
+def test_an_incomplete_check_is_not_called_unstable(qtbot) -> None:  # type: ignore[no-untyped-def]
+    from opensees_studio.views.main_window import MainWindow
+
+    mw = MainWindow()
+    qtbot.addWidget(mw)
+    mw._on_stability_report(
+        StabilityReport(
+            n_equations=5,
+            rank=None,
+            completion="partial",
+            classification="no_mechanisms",
+            failure_reason="the sparse search only checked the lowest modes",
+        )
+    )
+    assert "incomplete" in mw._stability_box.text()
+    assert "not statically stable" not in mw._stability_box.text()
     mw._stability_box.close()

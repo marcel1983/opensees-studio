@@ -817,6 +817,16 @@ Member end releases are colored dots on the bars: violet torsion, orange M2, red
 M3, and yellow partial fixity. **View → Visibility → Releases** shows or hides
 them independently of the rigid end-offset bars under **Frame Assignments**.
 
+## Stability check
+
+**Analyze → Check Model Stability** captures the initial stiffness as a sparse
+CSR matrix through OpenSees' `PythonSparse`; a small model uses a dense
+reference, while a large one uses a shifted sparse eigenvalue search after
+diagonal scaling. The report separates mechanisms from negative stiffness and
+ill-conditioning, says when a check is partial or unsupported, and lists the
+joints and DOFs that move. It is an initial-state check, not a buckling factor
+or a guarantee for a nonlinear history.
+
 ## Verification
 
 The [Verification Manual](docs/verification-manual.md) compares OpenSees Studio

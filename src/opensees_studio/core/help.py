@@ -3535,11 +3535,10 @@ gravity state. The case list applies the patterns in the order given.
             "Analyze",
             "Find the mechanisms of the model before running anything.",
             """
-Builds the model exactly as an analysis would, assembles its stiffness matrix
-once and looks for **mechanisms**: motions of the free joints that no member,
-spring or support resists. A statically stable model has none, and its
-stiffness matrix has full rank; a model with a mechanism cannot be solved, or
-solves into nonsense.
+Builds the model exactly as an analysis would, captures its initial stiffness
+matrix once and looks for **mechanisms**: motions of the free joints that no
+member, spring or support resists. A clearly stable model has none; a model
+with a mechanism cannot be solved, or solves into nonsense.
 
 The check runs in the same child process as an analysis, so a model OpenSees
 cannot even build does not take the window with it.
@@ -3552,16 +3551,25 @@ cannot even build does not take the window with it.
   with their share of the motion (+1.00 is the largest). A frame without
   bracing or base fixity sways; a beam on two rollers slides; a chain of hinges
   folds. In a 2D model the DOFs are Ux, Uz and Ry (the X-Z plane).
+- **Negative stiffness** and **ill-conditioning** are reported separately from a
+  mechanism. A small positive stiffness is not silently called a mechanism.
+- **Incomplete** checks say so: an unavailable sparse backend, a non-converged
+  eigenvalue search or a lower-bound mechanism count is not presented as a
+  stable model.
 
 The joints that move are selected in the view, so you can see where to add a
 support, a brace or a member, or which DOF to restrain.
 
 # How it decides
-The stiffness matrix is decomposed into singular values. A singular value
-below 1e-11 of the largest is a zero: its vector is a mechanism. Constraints
-(equalDOF, rigid links, diaphragms) are applied first, so a DOF a constraint
-ties is not counted twice. The check reads the initial stiffness: a model that
-only becomes unstable as it yields or buckles needs a nonlinear analysis.
+The matrix is captured through OpenSees' **PythonSparse** system as CSR when
+the engine provides it, without a dense `n × n` array for a large model. A
+small model (up to 1 200 equations) uses a dense symmetric eigenvalue reference;
+larger models use a sparse shifted eigenvalue search near zero after a diagonal
+scaling. A zero is reported below 1e-10 of the largest eigenvalue, with a
+normalized eigenpair residual check. Constraints (equalDOF, rigid links,
+diaphragms) are applied first, so a DOF a constraint ties is not counted twice.
+The check reads the **initial** stiffness: a model that only becomes unstable as
+it yields or buckles needs a nonlinear analysis; this is not a buckling factor.
 """,
             "analyze.run",
             "assign.support",
