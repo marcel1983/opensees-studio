@@ -245,6 +245,8 @@ def box_selection(
     rect: tuple[float, float, float, float],
     *,
     crossing: bool,
+    hidden_nodes: Iterable[int] = (),
+    hidden_elements: Iterable[int] = (),
 ) -> tuple[set[int], set[int]]:
     """Select what a rubber-band rectangle encloses.
 
@@ -253,8 +255,15 @@ def box_selection(
     falls inside. An element is selected when every one of its joints is inside,
     and — when ``crossing`` is true — also when one of its edges merely crosses
     the rectangle, which is what the "select what it touches" drag does.
+
+    ``hidden_nodes`` and ``hidden_elements`` are the viewport's hidden ids. They
+    are never returned, so a box cannot select something that is not drawn.
+    Hidden nodes still contribute their projected geometry to a visible member,
+    which is what the renderer draws for that member.
     """
     xmin, xmax, ymin, ymax = rect
+    hidden_node_ids = set(hidden_nodes)
+    hidden_element_ids = set(hidden_elements)
 
     def inside(node_id: int) -> bool:
         point = display.get(node_id)
@@ -262,9 +271,11 @@ def box_selection(
             return False
         return xmin <= point[0] <= xmax and ymin <= point[1] <= ymax
 
-    nodes = {node_id for node_id in display if inside(node_id)}
+    nodes = {node_id for node_id in display if node_id not in hidden_node_ids and inside(node_id)}
     elements: set[int] = set()
     for element in project.elements:
+        if element.id in hidden_element_ids:
+            continue
         joints = [node_id for node_id in element.nodes if node_id in display]
         if not joints:
             continue

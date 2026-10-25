@@ -204,6 +204,15 @@ para torsión, naranja para M2, rojo para M3 y amarillo para fijación parcial.
 **View → Visibility → Releases** los muestra u oculta independientemente de las
 barras de offset rígido de **Frame Assignments**.
 
+## Mostrar, ocultar y aislar
+
+**View > Hide Selected** (Ctrl+H) oculta la selección actual en el viewport
+activo. **View > Isolate Selected** (Ctrl+Shift+I) muestra solo los elementos
+seleccionados y sus nudos, o solo los nudos seleccionados; también está en el
+menú contextual. **View > Show All Objects** restaura todo lo oculto y quita la
+vista de línea de grilla. El cuadro de selección nunca toma objetos ocultos en
+ese viewport: solo selecciona lo que realmente se dibuja.
+
 ## Chequeo de estabilidad
 
 **Analyze → Check Model Stability** captura la rigidez inicial como una matriz

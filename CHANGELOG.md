@@ -9,6 +9,19 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Added
+
+- **Isolate Selected** in the View menu and the model's right-click menu. It
+  shows only the selected elements and their joints, or the selected joints
+  when no element is selected. **Show All Objects** restores the viewport and
+  is also offered in the selection menu while a filter is active.
+
+### Fixed
+
+- **A selection box no longer picks hidden objects.** Hidden nodes and elements
+  are excluded from box selection, so a drag selects only what is actually
+  drawn in that viewport.
+
 ## [0.0.28] - 2026-10-25
 
 ### Fixed

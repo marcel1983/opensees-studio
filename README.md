@@ -817,6 +817,15 @@ Member end releases are colored dots on the bars: violet torsion, orange M2, red
 M3, and yellow partial fixity. **View → Visibility → Releases** shows or hides
 them independently of the rigid end-offset bars under **Frame Assignments**.
 
+## Show, hide and isolate
+
+**View > Hide Selected** (Ctrl+H) hides the current selection in the active
+viewport. **View > Isolate Selected** (Ctrl+Shift+I) shows only the selected
+elements and their joints, or only the selected joints; it is also in the
+right-click menu. **View > Show All Objects** restores every hidden object and
+clears a grid-line view. A box selection never picks objects hidden in that
+viewport, so a drag selects only what is actually drawn.
+
 ## Stability check
 
 **Analyze → Check Model Stability** captures the initial stiffness as a sparse

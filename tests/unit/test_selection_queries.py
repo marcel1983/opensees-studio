@@ -202,3 +202,20 @@ def test_the_two_drag_directions_differ_only_in_what_they_touch() -> None:
     assert down_nodes == up_nodes == set()
     assert down_elements == set()
     assert up_elements == {1}
+
+
+def test_a_box_skips_nodes_and_elements_hidden_in_the_viewport() -> None:
+    project = _line_project()
+    display = {1: (0.0, 0.0), 2: (10.0, 0.0), 3: (50.0, 0.0), 4: (60.0, 0.0)}
+
+    nodes, elements = q.box_selection(
+        project,
+        display,
+        (-5.0, 65.0, -5.0, 5.0),
+        crossing=False,
+        hidden_nodes={1, 3},
+        hidden_elements={2},
+    )
+
+    assert nodes == {2, 4}
+    assert elements == {1}, "the visible member stays eligible; the hidden one does not"
