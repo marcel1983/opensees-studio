@@ -649,6 +649,7 @@ class MainWindow(QMainWindow):
         self._act_vis_frame_assignments = QAction(
             "Frame Assignments", self, checkable=True, checked=True
         )
+        self._act_vis_releases = QAction("Releases", self, checkable=True, checked=True)
         self._act_vis_loads = QAction("Loads", self, checkable=True, checked=True)
         # Labels are off by default, matching ViewSettings.
         self._act_vis_node_labels = QAction("Node Labels", self, checkable=True)
@@ -885,6 +886,7 @@ class MainWindow(QMainWindow):
                 self._act_vis_supports,
                 self._act_vis_constraints,
                 self._act_vis_frame_assignments,
+                self._act_vis_releases,
                 self._act_vis_loads,
                 self._act_vis_node_labels,
                 self._act_vis_element_labels,
@@ -1340,6 +1342,7 @@ class MainWindow(QMainWindow):
             (self._act_vis_supports, "show_supports"),
             (self._act_vis_constraints, "show_constraints"),
             (self._act_vis_frame_assignments, "show_frame_assignments"),
+            (self._act_vis_releases, "show_releases"),
             (self._act_vis_loads, "show_loads"),
         ):
             action.toggled.connect(partial(self._on_visibility_toggle, field))
@@ -2810,6 +2813,7 @@ class MainWindow(QMainWindow):
             (self._act_vis_supports, settings.show_supports),
             (self._act_vis_constraints, settings.show_constraints),
             (self._act_vis_frame_assignments, settings.show_frame_assignments),
+            (self._act_vis_releases, settings.show_releases),
             (self._act_vis_loads, settings.show_loads),
             (self._act_vis_node_labels, settings.show_node_labels),
             (self._act_vis_element_labels, settings.show_element_labels),

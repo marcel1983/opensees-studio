@@ -813,6 +813,10 @@ percentage; label height is a separate pixel value. Joint masses are drawn as
 purple diamonds when that option is on. The sizes and toggles travel with the
 project.
 
+Member end releases are colored dots on the bars: violet torsion, orange M2, red
+M3, and yellow partial fixity. **View → Visibility → Releases** shows or hides
+them independently of the rigid end-offset bars under **Frame Assignments**.
+
 ## Verification
 
 The [Verification Manual](docs/verification-manual.md) compares OpenSees Studio

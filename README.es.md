@@ -199,6 +199,11 @@ permite ajustar cada porcentaje; el tamaño del texto es un valor separado en
 píxeles. Las masas nodales se dibujan como rombos morados cuando esa opción está
 activa. Los tamaños y las visibilidades viajan con el proyecto.
 
+Los releases de extremo se dibujan como puntos de color sobre las barras: violeta
+para torsión, naranja para M2, rojo para M3 y amarillo para fijación parcial.
+**View → Visibility → Releases** los muestra u oculta independientemente de las
+barras de offset rígido de **Frame Assignments**.
+
 ## Licencia
 
 AGPL-3.0. Ver [LICENSE](LICENSE). OpenSeesPy es un programa aparte con su propia

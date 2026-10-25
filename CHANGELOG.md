@@ -47,6 +47,12 @@ refused instead of silently downgraded).
   `render.loads` drops from ~2.0 s to ~0.6 s and the whole `--size large` run
   from ~7.2 s to ~3.0 s. Camera refreshes also skip rebuilds below a 2 %
   screen-size change, so a wheel zoom does not rebuild every glyph burst.
+- **Independent frame-release markers.** End releases are drawn as screen-space
+  colored dots on the bar ends: violet for torsion, orange for M2, red for M3,
+  and yellow for partial fixity. Multiple releases at one end are staggered
+  along the member so each color is visible. **View → Visibility → Releases**
+  toggles them without hiding the rigid offset bars, which stay under **Frame
+  Assignments**. The dots are cheap points, not sphere glyphs.
 
 ## [0.0.25] - 2026-10-24
 

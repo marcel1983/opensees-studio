@@ -3991,10 +3991,11 @@ Toggles the annotations and the heavy overlays:
   none. **Label height** sets their text size separately, in pixels.
 - **Joint masses** — a purple diamond at every joint with a non-zero lumped
   mass. Off by default because most models carry mass on many joints.
-- **Nodes, Supports, Load arrows, Reactions, Masses** — each marker can be a
-  percentage of the viewport height. The renderer converts that percentage to
-  world units with the camera, so the marker keeps the same size on screen at
-  every zoom level. The values are per viewport and travel with the project.
+- **Nodes, Supports, Load arrows, Reactions, Masses, Releases** — each marker
+  can be a percentage of the viewport height. The renderer converts that
+  percentage to world units with the camera, so the marker keeps the same size
+  on screen at every zoom level. Release dots are screen-space points like the
+  nodes. The values are per viewport and travel with the project.
 - **Section extrusions** (View → Show Extruded Sections) — each member's real
   cross section (I, channel, tee, tube, pipe, angle, fibre patches) swept along
   it, so the physical footprint and the local axes are visible.
@@ -4134,9 +4135,14 @@ visible that are hard to see otherwise:
             "Show or hide model categories in this viewport.",
             """
 One checkbox per category: grids, nodes, frames, shells, restraints, constraints,
-frame assignments, loads, node and element labels, and extruded sections. A
-change is **per viewport** — the model keeps every entity, so the tree, the
-analysis and the other views are unaffected.
+frame assignments, releases, loads, node and element labels, and extruded
+sections. A change is **per viewport** - the model keeps every entity, so the
+tree, the analysis and the other views are unaffected.
+
+**Releases** draws a colored dot on each released member end: violet for
+torsion, orange for M2, red for M3, and yellow for partial fixity. A release
+with more than one action shows one staggered dot per action. It is separate
+from **Frame Assignments**, which draws the rigid end-offset bars.
 
 - **Hide Selected** (Ctrl+H) hides what is selected now, adding it to what is
   already hidden.
@@ -4908,6 +4914,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_vis_supports": "view.visibility",
     "_act_vis_constraints": "view.visibility",
     "_act_vis_frame_assignments": "view.visibility",
+    "_act_vis_releases": "view.visibility",
     "_act_vis_loads": "view.visibility",
     "_act_vis_node_labels": "view.visibility",
     "_act_vis_element_labels": "view.visibility",
