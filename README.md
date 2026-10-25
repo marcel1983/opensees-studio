@@ -824,8 +824,11 @@ CSR matrix through OpenSees' `PythonSparse`; a small model uses a dense
 reference, while a large one uses a shifted sparse eigenvalue search after
 diagonal scaling. The report separates mechanisms from negative stiffness and
 ill-conditioning, says when a check is partial or unsupported, and lists the
-joints and DOFs that move. It is an initial-state check, not a buckling factor
-or a guarantee for a nonlinear history.
+joints and DOFs that move. The child reports phases, the Analyze menu can cancel
+it, and the GUI applies a soft 300 s limit. It is an initial-state check, not a
+buckling factor or a guarantee for a nonlinear history. Reproducible families
+are available with `python tools/stability_bench.py --family frame --size 12`
+(or `--family truss --mechanism`).
 
 ## Verification
 

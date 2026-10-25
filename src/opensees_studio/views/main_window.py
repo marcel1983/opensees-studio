@@ -572,6 +572,7 @@ class MainWindow(QMainWindow):
         self._act_drift_check = QAction("Storey &Drift Check…", self)
         self._act_steel_ratios = QAction("Display Steel &Ratios on Model", self)
         self._act_check_stability = QAction("Check Model &Stability…", self)
+        self._act_cancel_stability = QAction("&Cancel Stability Check", self)
 
         # View
         self._act_zoom_extents = QAction("Zoom &Extents", self, shortcut="Ctrl+E")
@@ -812,6 +813,7 @@ class MainWindow(QMainWindow):
         m_analyze.addAction(self._act_case_manager)
         m_analyze.addSeparator()
         m_analyze.addAction(self._act_check_stability)
+        m_analyze.addAction(self._act_cancel_stability)
         m_analyze.addAction(self._act_run)
         m_analyze.addSeparator()
         m_analyze.addAction(self._act_run_all)
@@ -1274,7 +1276,9 @@ class MainWindow(QMainWindow):
         self._act_drift_check.triggered.connect(self._on_drift_check)
         self._act_steel_ratios.triggered.connect(self._on_steel_ratios)
         self._act_check_stability.triggered.connect(self._on_check_stability)
+        self._act_cancel_stability.triggered.connect(self._stability.cancel)
         self._stability.log.connect(self._log)
+        self._stability.progress.connect(self._on_stability_progress)
         self._stability.finished.connect(self._on_stability_report)
         self._stability.failed.connect(self._on_stability_failed)
         self._stability.runningChanged.connect(self._on_stability_running_changed)
@@ -4505,6 +4509,10 @@ class MainWindow(QMainWindow):
             return
         self._stability.check(project, self._vm.path)
 
+    def _on_stability_progress(self, phase: str, message: str) -> None:
+        """Show the coarse stability phase in the status bar and console."""
+        self._log(f"Stability [{phase}]: {message}")
+
     def _on_stability_report(self, report: StabilityReport) -> None:
         summary = report.summary()
         self._log(summary)
@@ -5877,6 +5885,7 @@ class MainWindow(QMainWindow):
             and not self._stability.is_running
             and not self._runner.is_running
         )
+        self._act_cancel_stability.setEnabled(self._stability.is_running)
         self._act_mesh.setEnabled(has_project)
         self._act_delete_loads.setEnabled(has_project)
         self._act_merge_joints.setEnabled(has_project)

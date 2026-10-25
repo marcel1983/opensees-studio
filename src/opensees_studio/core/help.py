@@ -3565,11 +3565,19 @@ The matrix is captured through OpenSees' **PythonSparse** system as CSR when
 the engine provides it, without a dense `n × n` array for a large model. A
 small model (up to 1 200 equations) uses a dense symmetric eigenvalue reference;
 larger models use a sparse shifted eigenvalue search near zero after a diagonal
-scaling. A zero is reported below 1e-10 of the largest eigenvalue, with a
-normalized eigenpair residual check. Constraints (equalDOF, rigid links,
-diaphragms) are applied first, so a DOF a constraint ties is not counted twice.
+scaling. A zero is reported below 1e-10 of the matrix scale, with a normalized
+eigenpair residual check. Constraints (equalDOF, rigid links, diaphragms) are
+applied first, so a DOF a constraint ties is not counted twice. Mechanism
+vectors are expanded to the constrained nodes for the report and selection.
 The check reads the **initial** stiffness: a model that only becomes unstable as
 it yields or buckles needs a nonlinear analysis; this is not a buckling factor.
+
+The child reports phases (precheck, build, capture, diagnose, reconstruct) to
+the console. **Analyze → Cancel Stability Check** stops it, and the GUI also
+imposes a soft 300 s limit; a long native eigenvalue call cannot be interrupted
+cooperatively, so the parent terminates the child at its hard deadline. For
+reproducible families use `python tools/stability_bench.py --family frame
+--size 12` (or `--family truss --mechanism`).
 """,
             "analyze.run",
             "assign.support",
@@ -4883,6 +4891,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_run_selected": "analyze.run_selected",
     "_act_clear_results": "analyze.clear_results",
     "_act_check_stability": "analyze.stability",
+    "_act_cancel_stability": "analyze.stability",
     # ── Display ─────────────────────────────────────────────────────
     "_act_select_results": "display.select_results",
     "_act_show_deformed": "display.deformed",

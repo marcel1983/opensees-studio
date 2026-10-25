@@ -121,6 +121,13 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         help="build the model and report its mechanisms (one 'stability' line) instead of running cases",
     )
     parser.add_argument(
+        "--stability-timeout",
+        type=float,
+        default=None,
+        metavar="SECONDS",
+        help="soft time limit for the stability check (the parent may still kill it)",
+    )
+    parser.add_argument(
         "--cases",
         required=False,
         type=int,
@@ -147,7 +154,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     return args
 
 
-def _check_stability(protocol: _Protocol, project_path: str) -> int:
+def _check_stability(protocol: _Protocol, project_path: str, timeout_s: float | None = None) -> int:
     """``--check-stability``: one ``stability`` line with the report, exit 0."""
     from opensees_studio.services.persistence import load_project
 
@@ -163,7 +170,13 @@ def _check_stability(protocol: _Protocol, project_path: str) -> int:
         f"Checking stability: {len(project.nodes)} nodes, {len(project.elements)} elements."
     )
     try:
-        report = check_stability(project)
+        report = check_stability(
+            project,
+            timeout_s=timeout_s,
+            progress=lambda phase, message: protocol.emit(
+                type="stability_progress", phase=phase, message=message
+            ),
+        )
     except Exception as exc:
         protocol.emit(type="error", message=str(exc), traceback=traceback.format_exc())
         return EXIT_ANALYSIS_ERROR
@@ -333,7 +346,7 @@ def main(argv: list[str] | None = None) -> int:
     if engine is None:
         return EXIT_ANALYSIS_ERROR
     if args.check_stability:
-        return _check_stability(protocol, str(args.project))
+        return _check_stability(protocol, str(args.project), args.stability_timeout)
 
     from opensees_studio.core import Project
     from opensees_studio.services.persistence import load_project

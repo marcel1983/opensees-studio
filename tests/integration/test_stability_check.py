@@ -138,6 +138,29 @@ def test_a_fully_restrained_model_is_reported_as_such() -> None:
     assert "fully restrained" in report.summary()
 
 
+def test_a_time_limit_or_cancel_returns_cancelled_not_stable() -> None:
+    timed = check_stability(_truss(diagonal=True), timeout_s=1e-9)
+    assert timed.completion == "cancelled"
+    assert timed.classification == "indeterminate"
+    assert not timed.stable
+    assert "time limit" in (timed.failure_reason or "")
+
+    cancelled = check_stability(_truss(diagonal=True), should_cancel=lambda: True)
+    assert cancelled.completion == "cancelled"
+    assert not cancelled.stable
+
+
+def test_phase_progress_is_reported() -> None:
+    phases: list[str] = []
+    report = check_stability(
+        _truss(diagonal=True),
+        progress=lambda phase, _message: phases.append(phase),
+    )
+    assert report.completion == "complete"
+    assert phases[:4] == ["precheck", "build", "capture", "reconstruct"]
+    assert phases[-1] == "done"
+
+
 def test_a_node_nothing_connects_to_is_reported() -> None:
     project = _truss(diagonal=True)
     project.nodes.append(Node(id=9, coords=(8.0, 0.0, 0.0)))
@@ -184,6 +207,33 @@ def test_the_cli_prints_one_stability_line(tmp_path: Path) -> None:
     lines = [json.loads(line) for line in done.stdout.splitlines() if line.strip()]
     (stability,) = [line for line in lines if line["type"] == "stability"]
     assert stability["report"]["n_mechanisms"] == 1
+    assert any(line.get("type") == "stability_progress" for line in lines)
+
+
+def test_the_cli_stability_timeout_reports_cancelled(tmp_path: Path) -> None:
+    path = tmp_path / "truss.osmodel"
+    save_project(_truss(diagonal=True), path)
+    done = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "opensees_studio.run",
+            "--project",
+            str(path),
+            "--check-stability",
+            "--stability-timeout",
+            "1e-9",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert done.returncode == 0, done.stderr
+    lines = [json.loads(line) for line in done.stdout.splitlines() if line.strip()]
+    (stability,) = [line for line in lines if line["type"] == "stability"]
+    assert stability["report"]["completion"] == "cancelled"
+    assert stability["report"]["classification"] == "indeterminate"
 
 
 def test_the_cli_still_wants_cases_without_the_flag(tmp_path: Path) -> None:
