@@ -126,14 +126,32 @@ therefore reduced to self-contained units:
 
 - [x] [#16 `feat(loads): point loads inside frame elements`](https://github.com/ogunc/opensees-studio/pull/16)
   - 22 files; includes the two force-based frame load fixes.
-  - All required checks green.
+  - All required checks green; merged into `upstream/main`.
 - [x] [#17 `fix(runner): a 2D ndf-3 truss run does not inherit the previous 3D truss state`](https://github.com/ogunc/opensees-studio/pull/17)
   - 4 files; process-state regression with a fake solver, no OpenSees needed.
-  - All required checks green.
+  - All required checks green; merged into `upstream/main`.
 
-These are open for the maintainer's review; they were not self-merged.
-The viewer/grid units should be prepared after their base features are
-upstreamed or as part of their base PR, not as isolated first-wave patches.
+### Second wave status (2026-10-26)
+
+- [#18 `feat(transient): modal damping over the first N modes`](https://github.com/ogunc/opensees-studio/pull/18)
+  - 9 files, +232/−3; all required checks green.
+  - This is the first reviewable second-wave unit.
+
+The original second-wave candidates need a prerequisite that is not yet on
+`upstream/main`:
+
+- **Multi-edit Properties** uses `FrameMember`, `FrameEndOffsets` and
+  `CARDINAL_POINT_NAMES` from the later frame-options work.
+- **Box selection + move/replicate/mirror** uses the `core/selection.py` base
+  introduced with the Select menu/self-weight work.
+- **Groups** uses storeys, diaphragms, mass source, area loads and load
+  combinations.
+- **Support springs** uses the frame-member plan and IFC export.
+
+Those units should be sent only after their base feature, or together with it
+in a deliberately larger PR. They are not independent first/second-wave
+patches.
+
 
 
 ## Do not upstream
