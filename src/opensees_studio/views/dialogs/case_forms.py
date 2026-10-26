@@ -380,6 +380,8 @@ class TransientCaseForm(CaseFormBase):
         self._alpha_m = _spin(0.0, minimum=0.0, maximum=1e12, step=1e-4)
         self._beta_k = _spin(0.0, minimum=0.0, maximum=1e12, step=1e-6)
         self._mode1_damping = _spin(0.0, minimum=0.0, maximum=1.0, step=0.01)
+        self._modal_damping = _spin(0.0, minimum=0.0, maximum=0.99, step=0.01)
+        self._modal_damping_modes = _int_spin(10)
 
         self._layout.addRow(QLabel("<b>Patterns to apply (multi-select):</b>"))
         self._layout.addRow(self._patterns_picker)
@@ -420,6 +422,14 @@ class TransientCaseForm(CaseFormBase):
                 "after preload and uses it instead of the manual βK value.</i>"
             )
         )
+        self._layout.addRow("Modal damping ratio ζ:", self._modal_damping)
+        self._layout.addRow("Modal damping modes:", self._modal_damping_modes)
+        self._layout.addRow(
+            _note(
+                "<i>Modal damping (OpenSees modalDamping): every one of the first N modes "
+                "gets the ratio ζ, on top of any Rayleigh damping. 0 = none.</i>"
+            )
+        )
 
     def _populate_specific(self, c: TransientCase) -> None:
         _select_pattern_ids(self._patterns_picker, c.pattern_ids)
@@ -440,6 +450,8 @@ class TransientCaseForm(CaseFormBase):
         self._alpha_m.setValue(c.rayleigh_alpha_m)
         self._beta_k.setValue(c.rayleigh_beta_k)
         self._mode1_damping.setValue(c.rayleigh_mode1_damping or 0.0)
+        self._modal_damping.setValue(c.modal_damping or 0.0)
+        self._modal_damping_modes.setValue(c.modal_damping_modes)
 
     def _read_specific(self, cid: int) -> TransientCase:
         mode1_damping = self._mode1_damping.value()
@@ -463,6 +475,8 @@ class TransientCaseForm(CaseFormBase):
             rayleigh_alpha_m=self._alpha_m.value(),
             rayleigh_beta_k=self._beta_k.value(),
             rayleigh_mode1_damping=mode1_damping if mode1_damping > 0.0 else None,
+            modal_damping=self._modal_damping.value() or None,
+            modal_damping_modes=self._modal_damping_modes.value(),
         )
 
 

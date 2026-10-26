@@ -156,3 +156,23 @@ def test_response_spectrum_form_defaults_to_cqc_and_enables_damping_for_cqc_only
     assert form._read_specific(5).damping_ratio == pytest.approx(0.02)
     form._damping.setValue(0.0)
     assert form._read_specific(5).damping_ratio is None
+
+
+@pytest.mark.gui
+def test_transient_case_form_round_trips_modal_damping(qtbot) -> None:  # type: ignore[no-untyped-def]
+    form = TransientCaseForm(_patterns(), [])
+    qtbot.addWidget(form)
+    case = TransientCase(
+        id=4,
+        name="EQ",
+        pattern_ids=[2],
+        dt=0.01,
+        n_steps=10,
+        modal_damping=0.03,
+        modal_damping_modes=6,
+    )
+    form.populate(case)
+    rebuilt = form.read()
+    assert (rebuilt.modal_damping, rebuilt.modal_damping_modes) == (0.03, 6)
+    form.populate(case.model_copy(update={"modal_damping": None}))
+    assert form.read().modal_damping is None
