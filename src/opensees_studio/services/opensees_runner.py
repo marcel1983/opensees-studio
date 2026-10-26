@@ -741,6 +741,17 @@ class OpenSeesRunner:
                         ops.eleLoad(
                             "-ele", el.element_id, "-type", "-beamUniform", el.wy, el.wz, el.wx
                         )
+                for pl in pat.point_loads:
+                    # eleLoad -ele N -type -beamPoint Py <Pz> xL Px
+                    # 2D: (Py, xL, Px); 3D: (Py, Pz, xL, Px).
+                    if self.project.ndm == 2:
+                        ops.eleLoad(
+                            "-ele", pl.element_id, "-type", "-beamPoint", pl.py, pl.x, pl.px
+                        )
+                    else:
+                        ops.eleLoad(
+                            "-ele", pl.element_id, "-type", "-beamPoint", pl.py, pl.pz, pl.x, pl.px
+                        )
             case UniformExcitationPattern():
                 args: list[Any] = [pat.direction, "-accel", pat.accel_series_id]
                 if pat.vel_series_id is not None:
@@ -861,6 +872,8 @@ class OpenSeesRunner:
         ops = self._ops
         if not preload_ids:
             return
+        # Every preload pattern keeps ramping through the later preload cases.
+        applied_ids: list[int] = []
         for preload_id in preload_ids:
             preload_case = next(
                 (c for c in self.project.analyses if c.id == preload_id),
@@ -878,15 +891,93 @@ class OpenSeesRunner:
                     f"{type(preload_case).__name__}."
                 )
             self._emit_patterns_for_case(preload_case.pattern_ids)
+            applied_ids.extend(preload_case.pattern_ids)
             self._setup_analysis(preload_case)
+            correct = self._needs_correction_solve(preload_case, applied_ids)
             for step in range(preload_case.n_steps):
-                if ops.analyze(1) != 0:
+                if self._analyze_static_step(preload_case, correct) != 0:
                     raise RuntimeError(
                         f"Preload StaticCase {preload_case.id} failed at "
                         f"step {step + 1}/{preload_case.n_steps}."
                     )
         ops.loadConst("-time", 0.0)
         ops.wipeAnalysis()
+
+    #: Convergence tests that measure the force unbalance: an iterating
+    #: algorithm with one of these already sees a hidden element load.
+    _FORCE_TESTS = frozenset({"NormUnbalance"})
+    #: Tests relative to the first iteration, which is zero in such a step.
+    _RELATIVE_TESTS = frozenset({"RelativeNormDispIncr", "RelativeEnergyIncr"})
+
+    def _needs_correction_solve(self, case: StaticCase, pattern_ids: list[int]) -> bool:
+        """Whether each step must be followed by a zero-increment correction solve.
+
+        A force-based frame (``forceBeamColumn``, ``beamWithHinges``) only takes
+        an element load (``-beamUniform``, ``-beamPoint``) into its resisting
+        force at its next state determination, which comes after the solve.
+        The first solve of a step therefore sees no unbalance from it and moves
+        nothing: Linear stops there, and an iterating algorithm whose test
+        measures the displacement or energy increment (NormDispIncr, EnergyIncr)
+        takes that zero increment as convergence. Either way the step lags one
+        load increment: a simply supported beam reports the fixed-end reactions
+        and no rotation after the first step. A force test (NormUnbalance) sees
+        the unbalance after the update and iterates on it, so Newton with
+        NormUnbalance is already right. The elastic and displacement-based
+        frames put the load straight into their resisting force.
+
+        Raises ``ValueError`` for a test relative to the first iteration with
+        more than one step: from the second step on that first increment is
+        exactly zero, so the relative reduction can never be met.
+        """
+        if case.integrator != "LoadControl":
+            return False
+        if case.algorithm != "Linear" and case.test in self._FORCE_TESTS:
+            return False
+        force_based = {
+            el.id
+            for el in self.project.elements
+            if isinstance(el, (ForceBeamColumn, BeamWithHingesElement))
+        }
+        if not force_based:
+            return False
+        ids = set(pattern_ids)
+        for pat in self.project.load_patterns:
+            if pat.id not in ids:
+                continue
+            loads = [*getattr(pat, "element_loads", ()), *getattr(pat, "point_loads", ())]
+            if any(load.element_id in force_based for load in loads):
+                break
+        else:
+            return False
+        if case.algorithm != "Linear" and case.test in self._RELATIVE_TESTS and case.n_steps > 1:
+            raise ValueError(
+                f"StaticCase {case.id}: the {case.test} test cannot converge over "
+                f"{case.n_steps} steps here: a force-based frame carries an element "
+                "load, so the first iteration of every step after the first moves "
+                "nothing. Use NormDispIncr, EnergyIncr or NormUnbalance."
+            )
+        return True
+
+    def _analyze_static_step(self, case: StaticCase, correct: bool) -> int:
+        """One static step; with ``correct``, a second solve at the same load.
+
+        The second solve runs the case's own algorithm and test with a zero
+        load increment, so it moves neither the load factor nor pseudo-time and
+        only removes the unbalance the force-based elements report once updated
+        (see :meth:`_needs_correction_solve`). For Linear and linear sections
+        that is the exact answer, with no convergence tolerance involved; an
+        iterating algorithm converges on it from the state the first solve
+        committed (the previous displacements, with the new load inside the
+        elements).
+        """
+        ops = self._ops
+        status = int(ops.analyze(1))
+        if status != 0 or not correct:
+            return status
+        ops.integrator(case.integrator, 0.0)
+        status = int(ops.analyze(1))
+        ops.integrator(case.integrator, case.load_factor_increment)
+        return status
 
     def _setup_analysis(self, case: Any) -> None:
         ops = self._ops
@@ -1028,8 +1119,9 @@ class OpenSeesRunner:
         element_forces: dict[int, np.ndarray] = {}
         element_stresses: dict[int, np.ndarray] = {}
 
+        correct = self._needs_correction_solve(case, case.pattern_ids)
         for step in range(case.n_steps):
-            status = ops.analyze(1)
+            status = self._analyze_static_step(case, correct)
             if status != 0:
                 raise RuntimeError(
                     f"Static analysis failed at step {step + 1}/{case.n_steps} "
