@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
     QFormLayout,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -96,6 +97,8 @@ def _make_analysis_picker(cases: list[AnalysisCase], *, only_static: bool = Fals
     lst = QListWidget()
     lst.setSelectionMode(QAbstractItemView.SelectionMode.MultiSelection)
     lst.setMaximumHeight(120)
+    lst.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+    lst.setToolTip("Select Static cases. Drag rows to set their execution order.")
     for case in cases:
         if only_static and not isinstance(case, StaticCase):
             continue
@@ -111,10 +114,15 @@ def _selected_pattern_ids(picker: QListWidget) -> list[int]:
 
 def _select_pattern_ids(picker: QListWidget, ids: list[int]) -> None:
     wanted = set(ids)
+    present = {picker.item(i).data(Qt.ItemDataRole.UserRole) for i in range(picker.count())}
+    for pid in ids:
+        if pid not in present:
+            item = QListWidgetItem(f"#{pid} [Missing pattern]")
+            item.setData(Qt.ItemDataRole.UserRole, pid)
+            picker.addItem(item)
     for i in range(picker.count()):
         item = picker.item(i)
-        if item.data(Qt.ItemDataRole.UserRole) in wanted:
-            item.setSelected(True)
+        item.setSelected(item.data(Qt.ItemDataRole.UserRole) in wanted)
 
 
 def _selected_case_ids(picker: QListWidget) -> list[int]:
@@ -122,16 +130,32 @@ def _selected_case_ids(picker: QListWidget) -> list[int]:
 
 
 def _select_case_ids(picker: QListWidget, ids: list[int]) -> None:
-    wanted = set(ids)
-    for i in range(picker.count()):
-        item = picker.item(i)
-        if item.data(Qt.ItemDataRole.UserRole) in wanted:
-            item.setSelected(True)
+    # Keep saved execution order, including missing IDs so Apply cannot silently drop them.
+    for position, cid in enumerate(ids):
+        row = next(
+            (
+                i
+                for i in range(picker.count())
+                if picker.item(i).data(Qt.ItemDataRole.UserRole) == cid
+            ),
+            None,
+        )
+        if row is None:
+            item = QListWidgetItem(f"#{cid} [Missing or non-Static case]")
+            item.setData(Qt.ItemDataRole.UserRole, cid)
+        else:
+            item = picker.takeItem(row)
+        picker.insertItem(position, item)
+        item.setSelected(True)
 
 
 # ─────────────────────────── base ───────────────────────────
 class CaseFormBase(QWidget):
     type_label: str = "Analysis case"
+    # Created by the stepped forms (Static, Transient, Pushover); Modal and
+    # Response Spectrum never call _update_algorithm_args.
+    _algorithm: QComboBox
+    _algorithm_args: QComboBox
 
     def __init__(
         self,
@@ -151,6 +175,12 @@ class CaseFormBase(QWidget):
         self._case_id = case.id
         self._name_edit.setText(case.name)
         self._populate_specific(case)
+
+    def _update_algorithm_args(self) -> None:
+        offered = self._algorithm.currentText() in ("Newton", "ModifiedNewton")
+        self._algorithm_args.setEnabled(offered)
+        if not offered:
+            self._algorithm_args.setCurrentIndex(0)
 
     def _populate_specific(self, case: AnalysisCase) -> None: ...
 
@@ -228,7 +258,14 @@ class StaticCaseForm(CaseFormBase):
         self._solver = _SolverRows(self._layout)
         self._layout.addRow("Constraints:", self._constraints)
         self._layout.addRow("Integrator:", self._integrator)
-        self._layout.addRow("Algorithm:", self._algorithm)
+        self._algorithm_args = QComboBox()
+        self._algorithm_args.addItems(["Current tangent", "Initial tangent (-initial)"])
+        self._algorithm.currentTextChanged.connect(self._update_algorithm_args)
+        self._update_algorithm_args()
+        algorithm_row = QHBoxLayout()
+        algorithm_row.addWidget(self._algorithm)
+        algorithm_row.addWidget(self._algorithm_args)
+        self._layout.addRow("Algorithm:", algorithm_row)
         self._layout.addRow("Test:", self._test)
         self._layout.addRow("Tolerance:", self._tol)
         self._layout.addRow("Max iterations:", self._max_iter)
@@ -248,6 +285,7 @@ class StaticCaseForm(CaseFormBase):
         self._constraints.setCurrentText(c.constraints)
         self._integrator.setCurrentText(c.integrator)
         self._algorithm.setCurrentText(c.algorithm)
+        self._algorithm_args.setCurrentIndex(1 if c.algorithm_args else 0)
         self._test.setCurrentText(c.test)
         self._tol.setValue(c.tolerance)
         self._max_iter.setValue(c.max_iter)
@@ -263,6 +301,7 @@ class StaticCaseForm(CaseFormBase):
             constraints=self._constraints.currentText(),
             integrator=self._integrator.currentText(),
             algorithm=self._algorithm.currentText(),
+            algorithm_args=("-initial",) if self._algorithm_args.currentIndex() == 1 else (),
             test=self._test.currentText(),
             tolerance=self._tol.value(),
             max_iter=self._max_iter.value(),
@@ -374,7 +413,14 @@ class TransientCaseForm(CaseFormBase):
         self._layout.addRow("Newmark β:", self._beta)
         self._populating = False
         self._integrator.currentTextChanged.connect(self._on_integrator)
-        self._layout.addRow("Algorithm:", self._algorithm)
+        self._algorithm_args = QComboBox()
+        self._algorithm_args.addItems(["Current tangent", "Initial tangent (-initial)"])
+        self._algorithm.currentTextChanged.connect(self._update_algorithm_args)
+        self._update_algorithm_args()
+        algorithm_row = QHBoxLayout()
+        algorithm_row.addWidget(self._algorithm)
+        algorithm_row.addWidget(self._algorithm_args)
+        self._layout.addRow("Algorithm:", algorithm_row)
         self._layout.addRow("Test:", self._test)
         self._layout.addRow("Tolerance:", self._tol)
         self._layout.addRow("Max iterations:", self._max_iter)
@@ -430,6 +476,7 @@ class TransientCaseForm(CaseFormBase):
         self._gamma.setValue(c.integrator_params[0])
         self._beta.setValue(c.integrator_params[1])
         self._algorithm.setCurrentText(c.algorithm)
+        self._algorithm_args.setCurrentIndex(1 if c.algorithm_args else 0)
         self._test.setCurrentText(c.test)
         self._tol.setValue(c.tolerance)
         self._max_iter.setValue(c.max_iter)
@@ -454,6 +501,7 @@ class TransientCaseForm(CaseFormBase):
             integrator=self._integrator.currentText(),
             integrator_params=(self._gamma.value(), self._beta.value()),
             algorithm=self._algorithm.currentText(),
+            algorithm_args=("-initial",) if self._algorithm_args.currentIndex() == 1 else (),
             test=self._test.currentText(),
             tolerance=self._tol.value(),
             max_iter=self._max_iter.value(),
@@ -476,6 +524,7 @@ class PushoverCaseForm(CaseFormBase):
     ) -> None:
         super().__init__(patterns, analyses, parent)
         self._patterns_picker = _make_pattern_picker(patterns)
+        self._preload_picker = _make_analysis_picker(analyses, only_static=True)
         self._control_node = _int_spin(1, minimum=1)
         self._control_dof = _int_spin(1, minimum=1, maximum=6)
         self._target = _spin(0.1, minimum=-1e6, maximum=1e6, step=0.001)
@@ -496,6 +545,7 @@ class PushoverCaseForm(CaseFormBase):
 
         self._layout.addRow(QLabel("<b>Patterns (applied as reference):</b>"))
         self._layout.addRow(self._patterns_picker)
+        self._layout.addRow("Static preloads (drag to order):", self._preload_picker)
         self._layout.addRow("Control node:", self._control_node)
         self._layout.addRow("Control DOF:", self._control_dof)
         self._layout.addRow("Target displacement:", self._target)
@@ -503,13 +553,21 @@ class PushoverCaseForm(CaseFormBase):
         self._layout.addRow("Base nodes:", self._base_nodes)
         self._solver = _SolverRows(self._layout)
         self._layout.addRow("Constraints:", self._constraints)
-        self._layout.addRow("Algorithm:", self._algorithm)
+        self._algorithm_args = QComboBox()
+        self._algorithm_args.addItems(["Current tangent", "Initial tangent (-initial)"])
+        self._algorithm.currentTextChanged.connect(self._update_algorithm_args)
+        self._update_algorithm_args()
+        algorithm_row = QHBoxLayout()
+        algorithm_row.addWidget(self._algorithm)
+        algorithm_row.addWidget(self._algorithm_args)
+        self._layout.addRow("Algorithm:", algorithm_row)
         self._layout.addRow("Test:", self._test)
         self._layout.addRow("Tolerance:", self._tol)
         self._layout.addRow("Max iterations:", self._max_iter)
 
     def _populate_specific(self, c: PushoverCase) -> None:
         _select_pattern_ids(self._patterns_picker, c.pattern_ids)
+        _select_case_ids(self._preload_picker, c.preload_case_ids)
         self._control_node.setValue(c.control_node)
         self._control_dof.setValue(c.control_dof)
         self._target.setValue(c.target_disp)
@@ -518,6 +576,7 @@ class PushoverCaseForm(CaseFormBase):
         self._solver.populate(c)
         self._constraints.setCurrentText(c.constraints)
         self._algorithm.setCurrentText(c.algorithm)
+        self._algorithm_args.setCurrentIndex(1 if c.algorithm_args else 0)
         self._test.setCurrentText(c.test)
         self._tol.setValue(c.tolerance)
         self._max_iter.setValue(c.max_iter)
@@ -529,6 +588,7 @@ class PushoverCaseForm(CaseFormBase):
             id=cid,
             name=self._name_edit.text(),
             pattern_ids=_selected_pattern_ids(self._patterns_picker) or [1],
+            preload_case_ids=_selected_case_ids(self._preload_picker),
             control_node=self._control_node.value(),
             control_dof=self._control_dof.value(),
             target_disp=self._target.value(),
@@ -537,6 +597,7 @@ class PushoverCaseForm(CaseFormBase):
             **self._solver.values(),  # type: ignore[arg-type]
             constraints=self._constraints.currentText(),
             algorithm=self._algorithm.currentText(),
+            algorithm_args=("-initial",) if self._algorithm_args.currentIndex() == 1 else (),
             test=self._test.currentText(),
             tolerance=self._tol.value(),
             max_iter=self._max_iter.value(),

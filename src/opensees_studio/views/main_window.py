@@ -107,6 +107,7 @@ from opensees_studio.core.geometry.ordering import QuadOrderError, order_quad_no
 from opensees_studio.core.groups import Group, colour_for, group_members
 from opensees_studio.core.help import ACTION_TOPICS, TOPIC_PROPERTY
 from opensees_studio.core.materials.library import is_uniaxial
+from opensees_studio.core.model_check import check_model
 from opensees_studio.core.reactions import ReactionRow, reaction_rows
 from opensees_studio.core.sections import SHELL_SECTION_CLASSES
 from opensees_studio.core.self_weight import section_weight_per_length
@@ -188,6 +189,7 @@ from opensees_studio.views.dialogs import (
     MaterialTesterDialog,
     MeshDialog,
     MirrorDialog,
+    ModelCheckDialog,
     MoveDialog,
     PathTimeSeriesDialog,
     PerformanceDialog,
@@ -563,6 +565,8 @@ class MainWindow(QMainWindow):
 
         # Analyze
         self._act_case_manager = QAction("&Cases…", self, shortcut="Ctrl+Shift+A")
+        self._act_check_model = QAction("Check &Model…", self)
+        self._act_check_model.setShortcut("F6")
         self._act_run = QAction("&Run…", self, shortcut="F5")
         # Batch doors: the whole model in one child process, or a ticked subset.
         self._act_run_all = QAction("Run &All Cases", self, shortcut=QKeySequence("Shift+F5"))
@@ -754,9 +758,11 @@ class MainWindow(QMainWindow):
             ]
         )
         m_define.addSeparator()
-        m_define.addAction(self._act_add_linear_ts)
-        m_define.addAction(self._act_add_path_ts)
-        m_define.addAction(self._act_add_function_ts)
+        time_series_menu = m_define.addMenu("&Time Series")
+        time_series_menu.addAction(self._act_add_linear_ts)
+        time_series_menu.addAction(self._act_add_path_ts)
+        time_series_menu.addAction(self._act_add_function_ts)
+        self._act_constant_ts = time_series_menu.addAction("Constant...", self._on_constant_ts)
         m_define.addAction(self._act_add_plain_pattern)
         m_define.addAction(self._act_add_uniform_excitation)
         m_define.addAction(self._act_add_multi_support)
@@ -815,6 +821,7 @@ class MainWindow(QMainWindow):
         m_analyze = mb.addMenu("&Analyze")
         m_analyze.addAction(self._act_case_manager)
         m_analyze.addSeparator()
+        m_analyze.addAction(self._act_check_model)
         m_analyze.addAction(self._act_check_stability)
         m_analyze.addAction(self._act_cancel_stability)
         m_analyze.addAction(self._act_run)
@@ -1272,6 +1279,7 @@ class MainWindow(QMainWindow):
 
         # Analyze
         self._act_case_manager.triggered.connect(self._on_case_manager)
+        self._act_check_model.triggered.connect(self._on_check_model)
         self._act_run.triggered.connect(self._on_run_analysis)
         self._act_run_all.triggered.connect(self._on_run_all_cases)
         self._act_run_selected.triggered.connect(self._on_run_selected_cases)
@@ -1611,6 +1619,7 @@ class MainWindow(QMainWindow):
             return self._on_save_as()
         try:
             self._store_view_settings_in_project()
+            self._warn_case_references()
             self._vm.save()
             self._log(f"Saved: {self._vm.path}")
         except Exception as exc:
@@ -1629,6 +1638,7 @@ class MainWindow(QMainWindow):
             return False
         try:
             self._store_view_settings_in_project()
+            self._warn_case_references()
             out = self._vm.save(path)
             self._log(f"Saved: {out}")
         except Exception as exc:
@@ -1779,6 +1789,16 @@ class MainWindow(QMainWindow):
         return True, analyses[labels.index(choice) - 1]
 
     # ── slots: edit ──────────────────────────────────────────────────
+    def _warn_case_references(self) -> None:
+        project = self._vm.project
+        if project is None:
+            return
+        errors = [
+            error for case in project.analyses for error in project.case_reference_errors(case)
+        ]
+        if errors:
+            QMessageBox.warning(self, "Saving with invalid case references", "\n".join(errors))
+
     def _on_delete(self) -> None:
         if self._vm.project is None:
             return
@@ -3213,6 +3233,13 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, "Add Node failed", str(exc))
 
+    def _on_constant_ts(self) -> None:
+        if self._vm.project is None:
+            return
+        from opensees_studio.views.dialogs.constant_time_series import ConstantTimeSeriesDialog
+
+        ConstantTimeSeriesDialog(self._vm, self).exec()
+
     def _on_add_linear_ts(self) -> None:
         """Define → Add Linear TimeSeries…"""
         from opensees_studio.commands import AddTimeSeriesCommand
@@ -3923,7 +3950,9 @@ class MainWindow(QMainWindow):
                 "Select one or more nodes first.",
             )
             return
-        dlg = AssignMassesDialog(len(sel_nodes), ndf=self._vm.project.ndf, parent=self)
+        dlg = AssignMassesDialog(
+            len(sel_nodes), ndf=self._vm.project.ndf, ndm=self._vm.project.ndm, parent=self
+        )
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
         try:
@@ -4641,6 +4670,57 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             self._log(f"Could not start: {exc}")
 
+    def _on_check_model(self) -> None:
+        """Analyze → Check Model: loose nodes, unconnected elements, mechanisms."""
+        project = self._vm.project
+        if project is None:
+            QMessageBox.information(self, "Check Model", "Open or create a project first.")
+            return
+        report = check_model(project)
+        dlg = ModelCheckDialog(
+            project, report=report, on_select=self._select_report_row, parent=self
+        )
+        try:
+            dlg.exec()
+        finally:
+            dlg.deleteLater()
+        self._log(report.summary())
+
+    def _review_model_before_run(self) -> bool:
+        """Check the model on the way into Run; ``False`` means the run was called off.
+
+        Errors stop at a dialog that offers *Run anyway* (the check is a linear,
+        small-displacement test, so the person may know better). Warnings are
+        written to the console and do not interrupt: a modeller who has seen
+        "two separate parts" once does not want to click through it on every run.
+        """
+        project = self._vm.project
+        if project is None:
+            return True
+        report = check_model(project)
+        if report.has_errors:
+            dlg = ModelCheckDialog(
+                project,
+                report=report,
+                pre_run=True,
+                on_select=self._select_report_row,
+                parent=self,
+            )
+            try:
+                proceed = dlg.exec() == QDialog.DialogCode.Accepted
+            finally:
+                dlg.deleteLater()
+            self._log(report.summary() + (" Running anyway." if proceed else " Run cancelled."))
+            return proceed
+        for finding in report.warnings:
+            self._log(finding.summary())
+        if not report.is_complete:
+            # A partial check is not a pass: say what was left out.
+            for finding in report.infos:
+                self._log(finding.summary())
+            self._log(report.summary())
+        return True
+
     def _on_run_analysis(self) -> None:
         if self._vm.project is None:
             QMessageBox.information(self, "Run Analysis", "Open or create a project first.")
@@ -4652,8 +4732,12 @@ class MainWindow(QMainWindow):
                 "No analysis cases defined. Open Analyze → Cases…",
             )
             return
+        if not self._review_model_before_run():
+            return
         dlg = RunAnalysisDialog(self._vm, self._runner, self, case_results=self._case_results)
-        dlg.combinationFinished.connect(self._on_analysis_finished)
+        combination_finished = getattr(dlg, "combinationFinished", None)
+        if combination_finished is not None:
+            combination_finished.connect(self._on_analysis_finished)
         self._run_dialog = dlg
         try:
             dlg.exec()
@@ -5934,6 +6018,7 @@ class MainWindow(QMainWindow):
             and not self._runner.is_running
         )
         self._act_cancel_stability.setEnabled(self._stability.is_running)
+        self._act_check_model.setEnabled(has_project)
         self._act_mesh.setEnabled(has_project)
         self._act_delete_loads.setEnabled(has_project)
         self._act_merge_joints.setEnabled(has_project)
