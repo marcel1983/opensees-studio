@@ -133,17 +133,20 @@ therefore reduced to self-contained units:
 
 ### Second wave status (2026-10-26)
 
-- [#18 `feat(transient): modal damping over the first N modes`](https://github.com/ogunc/opensees-studio/pull/18)
-  - 9 files, +232/−3; all required checks green.
-  - This is the first reviewable second-wave unit.
+- [x] [#18 `feat(transient): modal damping over the first N modes`](https://github.com/ogunc/opensees-studio/pull/18)
+  - 9 files, +232/−3; all required checks green; merged into `upstream/main`.
+- [#19 `feat(canvas): select with a left-drag box`](https://github.com/ogunc/opensees-studio/pull/19)
+  - 4 files, +153/−5; all required checks green.
+  - This is the selection base needed by move/replicate/mirror; leave the
+    transforms for a follow-up PR after this base is accepted.
 
-The original second-wave candidates need a prerequisite that is not yet on
+The original second-wave candidates still need a prerequisite that is not yet on
 `upstream/main`:
 
 - **Multi-edit Properties** uses `FrameMember`, `FrameEndOffsets` and
   `CARDINAL_POINT_NAMES` from the later frame-options work.
-- **Box selection + move/replicate/mirror** uses the `core/selection.py` base
-  introduced with the Select menu/self-weight work.
+- **Move/replicate/mirror** should follow #19 rather than duplicate its
+  `core/selection.py` base.
 - **Groups** uses storeys, diaphragms, mass source, area loads and load
   combinations.
 - **Support springs** uses the frame-member plan and IFC export.
