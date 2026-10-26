@@ -971,11 +971,11 @@ class OpenSeesRunner:
         elements).
         """
         ops = self._ops
-        status = ops.analyze(1)
+        status = int(ops.analyze(1))
         if status != 0 or not correct:
             return status
         ops.integrator(case.integrator, 0.0)
-        status = ops.analyze(1)
+        status = int(ops.analyze(1))
         ops.integrator(case.integrator, case.load_factor_increment)
         return status
 

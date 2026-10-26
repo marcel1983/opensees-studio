@@ -767,10 +767,10 @@ class ModelRenderer:
 
                 # Load vector in global = wx·x_local + wy·y_local + wz·z_local.
                 load_vec = eload.wx * x_local + eload.wy * y_local + eload.wz * z_local
-                mag = float(np.linalg.norm(load_vec))
-                if mag < 1e-12:
+                magnitude = float(np.linalg.norm(load_vec))
+                if magnitude < 1e-12:
                     continue
-                direction = load_vec / mag
+                direction = load_vec / magnitude
 
                 # Arrow length fixed (a fraction of element length).
                 arrow_len = max(0.4 * scale, L / (n_arrows_per_elem * 4))
@@ -802,10 +802,10 @@ class ModelRenderer:
                     continue
                 pi, axis, (x_local, y_local, z_local) = frame
                 load_vec = pload.px * x_local + pload.py * y_local + pload.pz * z_local
-                mag = float(np.linalg.norm(load_vec))
-                if mag < 1e-12:
+                magnitude = float(np.linalg.norm(load_vec))
+                if magnitude < 1e-12:
                     continue
-                direction = load_vec / mag
+                direction = load_vec / magnitude
                 pt = pi + pload.x * axis
                 arrow = pv.Arrow(
                     start=tuple(pt - direction * scale),
