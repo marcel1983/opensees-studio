@@ -9,6 +9,19 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Fixed
+
+- **A 2D frame model (three DOFs per node) with `truss` members no longer
+  inherits forces from a 3D truss model solved earlier in the same process.**
+  OpenSees' `truss` shares its force vector and stiffness matrix between 3D
+  models with three DOFs and 2D models with three, and in 2D leaves their
+  rotation rows untouched, so the earlier model's last bar force came back as
+  moment reactions at truss joints and, where a frame joint is free to rotate,
+  as a spurious moment and stiffness that changed the displacements. The
+  runner now clears them before building such a model. A normal analysis runs
+  one project per process, so it showed up mainly in scripts, tests, the
+  in-process mode (`OPENSEES_STUDIO_IN_PROCESS=1`) and Check Stability.
+
 ### Added
 
 - **Analyze → Check Model (F6): review the model before it runs.** OpenSees does
