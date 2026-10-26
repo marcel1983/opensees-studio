@@ -117,6 +117,25 @@ Leave **AXIS-1**, **S2K-*** and **STABILITY-1** for an explicit design
 conversation. They change conventions, schema or analysis behavior, and a
 large surprise PR in those areas is likely to stall.
 
+### Execution status (2026-10-26)
+
+The upstream `main` does not yet contain the viewer, grid or visibility base
+that VIEW-1/VIEW-4/GRID-1 depend on. Opening those as "first wave" branches
+would have pulled unrelated features into the same PR. The first wave was
+therefore reduced to self-contained units:
+
+- [x] [#16 `feat(loads): point loads inside frame elements`](https://github.com/ogunc/opensees-studio/pull/16)
+  - 22 files; includes the two force-based frame load fixes.
+  - All required checks green.
+- [x] [#17 `fix(runner): a 2D ndf-3 truss run does not inherit the previous 3D truss state`](https://github.com/ogunc/opensees-studio/pull/17)
+  - 4 files; process-state regression with a fake solver, no OpenSees needed.
+  - All required checks green.
+
+These are open for the maintainer's review; they were not self-merged.
+The viewer/grid units should be prepared after their base features are
+upstreamed or as part of their base PR, not as isolated first-wave patches.
+
+
 ## Do not upstream
 
 - `chore(release)` commits, version bumps, tags and generated bundles.
