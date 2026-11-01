@@ -99,8 +99,10 @@ script o un notebook de Jupyter: la interfaz es una forma de usarlo, no la únic
   sentidos e incluidos los modificadores de propiedades por barra y los
   diafragmas rígidos, escritos desde el formato de tablas sin software de CSI;
   SAP2000 es
-  marca de Computers and Structures, Inc.), scripts de OpenSeesPy, IFC y un
-  reporte de cálculo HTML/PDF.
+  marca de Computers and Structures, Inc.), scripts de OpenSeesPy, archivos
+  Tcl de OpenSees (`.tcl`, incluidos los ejemplos del repositorio oficial;
+  se interpretan variables, `expr`, `foreach`, `if`, `proc`, `source` y `for`,
+  nunca se ejecutan), IFC y un reporte de cálculo HTML/PDF.
 
 **La importación de S2K está en proceso:** las tablas que lee, las
 aproximaciones y lo que no soporta están en

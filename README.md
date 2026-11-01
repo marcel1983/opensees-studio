@@ -283,6 +283,12 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   progress:** the tables it reads, the approximations and the unsupported
   objects are listed in
   [docs/sap2000-import-status.md](docs/sap2000-import-status.md).
+  File → Import → OpenSees Tcl Script (.tcl) reads the model-building part of
+  an OpenSees Tcl file (the archived examples included): model dimensions,
+  nodes, supports, materials, sections, elements, constraints, plain load
+  patterns and their time series. Variables, `expr`, `foreach`, `if`, `proc`,
+  `source` and `for` are interpreted, never executed; analysis commands and
+  unsupported items are counted in the log.
 - **Design** — Design → Steel Frame Check (AISC 360-16, LRFD or ASD): every
   frame member whose section is a W, M, S or HP shape gets its tension (D2),
   compression (E3, E4, E7), flexure (F2, F3, F6), shear (G2, G6) and H1
