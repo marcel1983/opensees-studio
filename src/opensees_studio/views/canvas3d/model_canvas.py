@@ -937,9 +937,13 @@ class ModelCanvas(QtInteractor):
         if points.size == 0:
             return None
         try:
-            import vtk
+            # The frozen desktop bundle deliberately excludes the flat ``vtk``
+            # shim (packaging/opensees-studio.spec); the modules namespace is
+            # what ships. Importing ``vtk`` here made every single-click pick
+            # fail silently in the bundle while box selection still worked.
+            from vtkmodules.vtkRenderingCore import vtkCoordinate
 
-            coord = vtk.vtkCoordinate()
+            coord = vtkCoordinate()
             coord.SetCoordinateSystemToWorld()
             out = np.empty((points.shape[0], 2), dtype=float)
             for i, p in enumerate(points):
@@ -963,9 +967,9 @@ class ModelCanvas(QtInteractor):
         edge-on), because then the click has no well-defined point on it.
         """
         try:
-            import vtk
+            from vtkmodules.vtkRenderingCore import vtkCoordinate
 
-            coord = vtk.vtkCoordinate()
+            coord = vtkCoordinate()
             coord.SetCoordinateSystemToDisplay()
             coord.SetValue(float(cx), float(cy), 0.0)
             near = np.asarray(coord.GetComputedWorldValue(self.renderer)[:3], dtype=float)
