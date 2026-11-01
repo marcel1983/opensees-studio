@@ -9,6 +9,21 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.31] - 2026-11-01
+
+### Added
+
+- **File → Import → OpenSees Tcl Script (.tcl).** Reads the model-building part
+  of an OpenSees Tcl script as a new project: `model`, nodes, restraints,
+  masses, `equalDOF`/`rigidLink`/`rigidDiaphragm`, uniaxial and isotropic
+  materials, elastic and fibre sections, plate sections, truss/elastic/frame
+  elements, zero-length elements, quads, `ShellMITC4`, `block2D` meshes, plain
+  patterns with nodal/uniform/point loads, and the time series they reference.
+  Variables, `expr`, `foreach`, `if`, `proc`, `source` and `for` are interpreted
+  (never executed) so the archived OpenSees examples import without a Tcl
+  installation. Analysis commands and unsupported items are counted in the log;
+  a script is never able to run a shell or file command.
+
 ## [0.0.30] - 2026-10-31
 
 The integration release: the fork absorbs `upstream/main` (PRs #16-#18) and
