@@ -9,6 +9,8 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.31] - 2026-11-01
+
 ### Added
 
 - **File → Import → OpenSees Tcl Script (.tcl).** Reads the model-building part
