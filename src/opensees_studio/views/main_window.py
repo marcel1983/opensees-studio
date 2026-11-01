@@ -1601,6 +1601,9 @@ class MainWindow(QMainWindow):
             active = getattr(self, "_active_canvas", None)
             if main is not None and active is not None and active is not main:
                 self._active_canvas = main
+                controller = getattr(self, "_tool_controller", None)
+                if controller is not None:
+                    controller.set_canvas(main)
                 self._act_close_view.setEnabled(False)
                 self._sync_visibility_actions()
                 self._refresh_action_enablement()
@@ -2155,7 +2158,7 @@ class MainWindow(QMainWindow):
         if self._vm.project is None:
             self._abort_tool_activation()
             return
-        if self._draw_frame_tool is None:
+        if self._draw_frame_tool is None or self._draw_frame_tool.canvas is not self._canvas:
             self._draw_frame_tool = DrawFrameTool(self._canvas, self._vm, self)
             self._draw_frame_tool.statusChanged.connect(
                 lambda msg: self.statusBar().showMessage(msg)
@@ -2166,7 +2169,7 @@ class MainWindow(QMainWindow):
         if self._vm.project is None:
             self._abort_tool_activation()
             return
-        if self._draw_node_tool is None:
+        if self._draw_node_tool is None or self._draw_node_tool.canvas is not self._canvas:
             self._draw_node_tool = DrawNodeTool(self._canvas, self._vm, self)
             self._draw_node_tool.statusChanged.connect(
                 lambda msg: self.statusBar().showMessage(msg)
@@ -2177,7 +2180,7 @@ class MainWindow(QMainWindow):
         if self._vm.project is None:
             self._abort_tool_activation()
             return
-        if self._draw_truss_tool is None:
+        if self._draw_truss_tool is None or self._draw_truss_tool.canvas is not self._canvas:
             self._draw_truss_tool = DrawTrussTool(self._canvas, self._vm, self)
             self._draw_truss_tool.statusChanged.connect(
                 lambda msg: self.statusBar().showMessage(msg)
@@ -2188,13 +2191,14 @@ class MainWindow(QMainWindow):
         if self._vm.project is None:
             self._abort_tool_activation()
             return
-        if self._measure_tool is None:
+        if self._measure_tool is None or self._measure_tool.canvas is not self._canvas:
             self._measure_tool = MeasureDistanceTool(self._canvas, self._vm, self)
             self._measure_tool.statusChanged.connect(lambda msg: self.statusBar().showMessage(msg))
         self._tool_controller.set_active(self._measure_tool)
 
     def _on_tool_changed(self, tool) -> None:  # type: ignore[no-untyped-def]
         if tool is None:
+            self._act_tool_select.setChecked(True)
             self.statusBar().showMessage("Select tool active.", 3000)
         else:
             self.statusBar().showMessage(tool.prompt())
@@ -3033,6 +3037,7 @@ class MainWindow(QMainWindow):
         if not isinstance(window, ViewWindow):
             return
         self._active_canvas = window.canvas
+        self._tool_controller.set_canvas(window.canvas)
         self._act_close_view.setEnabled(True)
         self._sync_visibility_actions()
         self._refresh_action_enablement()
@@ -3045,6 +3050,7 @@ class MainWindow(QMainWindow):
             self._view_windows.remove(window)
         if self._active_canvas is window.canvas:
             self._active_canvas = self._main_canvas
+            self._tool_controller.set_canvas(self._main_canvas)
         self._act_close_view.setEnabled(False)
         self._sync_visibility_actions()
 

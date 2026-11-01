@@ -155,6 +155,11 @@ class ModelCanvas(QtInteractor):
         The base ``super().mousePressEvent`` MUST still be called so VTK
         rotate/pan/zoom keep working.
         """
+        if event.button() == Qt.MouseButton.LeftButton:
+            # Every left gesture must record its modifiers: the box path returns
+            # below, and a stale Ctrl/Shift would otherwise turn the next plain
+            # click (or box) into a removal.
+            self._press_modifiers = event.modifiers()
         if event.button() == Qt.MouseButton.LeftButton and self._default_selection_enabled:
             # Left drag draws the selection box, so it must not reach VTK: the
             # camera turns with the middle button instead (see below).
@@ -179,7 +184,6 @@ class ModelCanvas(QtInteractor):
             # pointer travels (see CLICK_MAX_DRIFT_PX), and an accepted click
             # restores the camera VTK turned during the drift.
             self._press_pos = event.position()
-            self._press_modifiers = event.modifiers()
             self._press_camera = self._camera_state()
         elif event.button() == Qt.MouseButton.RightButton:
             self._right_press_pos = event.position()
