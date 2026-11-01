@@ -1094,7 +1094,6 @@ class _Interpreter:
         for param, default in params:
             if param == "args":
                 scope[param] = " ".join(values[index:])
-                index = len(values)
                 break
             if index < len(values):
                 scope[param] = values[index]
