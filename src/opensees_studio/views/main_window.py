@@ -253,6 +253,7 @@ from opensees_studio.views.tools import (
     DrawFrameTool,
     DrawNodeTool,
     DrawTrussTool,
+    MeasureDistanceTool,
     SelectTool,
     ToolController,
 )
@@ -321,6 +322,7 @@ class MainWindow(QMainWindow):
         self._draw_frame_tool: DrawFrameTool | None = None  # lazy-created on activation
         self._draw_node_tool: DrawNodeTool | None = None
         self._draw_truss_tool: DrawTrussTool | None = None
+        self._measure_tool: MeasureDistanceTool | None = None
         self._material_tester_dlg: MaterialTesterDialog | None = None  # non-modal, reused
         self._ground_motions_dlg: GroundMotionsDialog | None = None  # non-modal, reused
 
@@ -477,10 +479,14 @@ class MainWindow(QMainWindow):
         self._act_tool_draw_node = QAction("Draw &Node", self, checkable=True, shortcut="F4")
         self._act_tool_draw_frame = QAction("&Draw Frame", self, checkable=True, shortcut="F2")
         self._act_tool_draw_truss = QAction("Draw &Truss", self, checkable=True, shortcut="F3")
+        self._act_tool_measure = QAction(
+            "&Measure Distance", self, checkable=True, shortcut=QKeySequence("F7")
+        )
         self._tool_group.addAction(self._act_tool_select)
         self._tool_group.addAction(self._act_tool_draw_node)
         self._tool_group.addAction(self._act_tool_draw_frame)
         self._tool_group.addAction(self._act_tool_draw_truss)
+        self._tool_group.addAction(self._act_tool_measure)
 
         # Define
         self._act_grid = QAction("&Coordinate System/Grids…", self, shortcut="Ctrl+G")
@@ -920,6 +926,17 @@ class MainWindow(QMainWindow):
         m_view.addAction(self._act_new_view)
         m_view.addAction(self._act_close_view)
 
+        m_tools = mb.addMenu("&Tools")
+        m_tools.addActions(
+            [
+                self._act_tool_select,
+                self._act_tool_draw_node,
+                self._act_tool_draw_frame,
+                self._act_tool_draw_truss,
+                self._act_tool_measure,
+            ]
+        )
+
         m_options = mb.addMenu("&Options")
         m_options.addAction(self._act_set_units)
         m_options.addAction(self._act_solver_settings)
@@ -1013,6 +1030,7 @@ class MainWindow(QMainWindow):
         tb.addAction(self._act_tool_draw_node)
         tb.addAction(self._act_tool_draw_frame)
         tb.addAction(self._act_tool_draw_truss)
+        tb.addAction(self._act_tool_measure)
 
     def _build_status_bar(self) -> None:
         self._status_label = QLabel("No project")
@@ -1211,6 +1229,7 @@ class MainWindow(QMainWindow):
         self._act_tool_draw_node.triggered.connect(self._on_draw_node_tool)
         self._act_tool_draw_frame.triggered.connect(self._on_draw_frame_tool)
         self._act_tool_draw_truss.triggered.connect(self._on_draw_truss_tool)
+        self._act_tool_measure.triggered.connect(self._on_measure_tool)
         self._tool_controller.toolChanged.connect(self._on_tool_changed)
 
         # Define
@@ -2164,6 +2183,15 @@ class MainWindow(QMainWindow):
                 lambda msg: self.statusBar().showMessage(msg)
             )
         self._tool_controller.set_active(self._draw_truss_tool)
+
+    def _on_measure_tool(self) -> None:
+        if self._vm.project is None:
+            self._abort_tool_activation()
+            return
+        if self._measure_tool is None:
+            self._measure_tool = MeasureDistanceTool(self._canvas, self._vm, self)
+            self._measure_tool.statusChanged.connect(lambda msg: self.statusBar().showMessage(msg))
+        self._tool_controller.set_active(self._measure_tool)
 
     def _on_tool_changed(self, tool) -> None:  # type: ignore[no-untyped-def]
         if tool is None:
@@ -6108,6 +6136,7 @@ class MainWindow(QMainWindow):
         self._act_tool_draw_frame.setEnabled(has_project)
         self._act_tool_draw_node.setEnabled(has_project)
         self._act_tool_draw_truss.setEnabled(has_project)
+        self._act_tool_measure.setEnabled(has_project)
         self._act_select_results.setEnabled(has_project)
         self._act_load_combinations.setEnabled(True)
         self._act_show_deformed.setEnabled(has_static)
