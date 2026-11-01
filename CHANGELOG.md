@@ -9,6 +9,21 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.33] - 2026-11-01
+
+### Fixed
+
+- **Select keeps the modifiers of the current click.** Every left press now
+  records Ctrl/Shift, including the press that starts a selection box. A
+  Ctrl+click made while a tool was armed no longer leaves Ctrl stuck, so the
+  next plain click in Select adds the node again instead of behaving as a
+  removal; Ctrl+click in Select now removes the picked item.
+- **A tool follows the viewport you are working in.** Measure Distance and the
+  draw tools now receive picks in a secondary View → New View window: the tool
+  controller reconnects to the focused canvas, the cached tool is rebuilt for
+  it, and switching views returns to Select. Measure Distance copies the
+  distance in that window as it does in the main one.
+
 ## [0.0.32] - 2026-11-01
 
 ### Added
