@@ -2022,6 +2022,26 @@ connection. Use it for bracing and for genuinely pin-jointed members.
             "tools.draw_frame",
             "concepts.model",
         ),
+        "tools.measure_distance": _t(
+            "Tools → Measure Distance (F7)",
+            "Edit and tools",
+            "Click two nodes to copy the distance between them.",
+            """
+Pick the first node, then the second. The straight-line distance is taken
+from the nodes' stored coordinates (the X-Z plane in a 2D model), formatted
+without trailing zeros, copied to the **clipboard** and shown in the status
+bar with the project's length unit. The two nodes stay selected, and the tool
+stays armed for another measurement.
+
+- Clicking an element or empty space does not measure anything; the status bar
+  says to click a node.
+- The measurement changes nothing in the model, so it is **not** an undo step.
+- Esc cancels the first pick; Select (or another tool) leaves the measurement
+  mode.
+""",
+            "tools.select",
+            "tools.draw_node",
+        ),
         # ──────────────────────────── Define ────────────────────────────
         "define.grid": _t(
             "Define → Coordinate System/Grids",
@@ -4965,6 +4985,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_tool_draw_node": "tools.draw_node",
     "_act_tool_draw_frame": "tools.draw_frame",
     "_act_tool_draw_truss": "tools.draw_truss",
+    "_act_tool_measure": "tools.measure_distance",
     # ── Define ──────────────────────────────────────────────────────
     "_act_grid": "define.grid",
     "_act_grid_wizard": "define.grid_wizard",
