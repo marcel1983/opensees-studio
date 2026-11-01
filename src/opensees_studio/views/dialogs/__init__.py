@@ -47,6 +47,7 @@ from opensees_studio.views.dialogs.material_library import MaterialLibraryDialog
 from opensees_studio.views.dialogs.material_tester import MaterialTesterDialog
 from opensees_studio.views.dialogs.mesh import MeshDialog
 from opensees_studio.views.dialogs.mirror import MirrorDialog
+from opensees_studio.views.dialogs.model_check import ModelCheckDialog
 from opensees_studio.views.dialogs.move import MoveDialog
 from opensees_studio.views.dialogs.path_time_series import PathTimeSeriesDialog
 from opensees_studio.views.dialogs.performance import PerformanceDialog
@@ -104,6 +105,7 @@ __all__ = [
     "MaterialTesterDialog",
     "MeshDialog",
     "MirrorDialog",
+    "ModelCheckDialog",
     "MoveDialog",
     "PathTimeSeriesDialog",
     "PerformanceDialog",

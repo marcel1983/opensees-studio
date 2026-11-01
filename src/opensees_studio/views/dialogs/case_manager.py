@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from pydantic import ValidationError
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -24,6 +26,7 @@ from opensees_studio.commands import (
     UpdateAnalysisCaseCommand,
 )
 from opensees_studio.core import (
+    AnalysisCase,
     InfluenceLineCase,
     ModalCase,
     PushoverCase,
@@ -36,7 +39,7 @@ from opensees_studio.viewmodels import ProjectViewModel
 from opensees_studio.views.dialogs.case_forms import form_for
 from opensees_studio.views.screen_fit import FittedDialog, MessageArea, scroll_area
 
-_DEFAULTS = {
+_DEFAULTS: dict[str, Callable[[int], AnalysisCase]] = {
     "Static": lambda cid: StaticCase(id=cid, name="Static", pattern_ids=[1]),
     "Modal": lambda cid: ModalCase(id=cid, name="Modal", n_modes=3),
     "Transient": lambda cid: TransientCase(
@@ -74,6 +77,7 @@ class AnalysisCaseManagerDialog(FittedDialog):
         self.setWindowTitle("Analysis Cases")
         self.resize(820, 580)
         self._vm = vm
+        self._draft_case: AnalysisCase | None = None
         self._build_ui()
         self._refresh_list()
         self._vm.modelMutated.connect(self._refresh_list)
@@ -126,9 +130,17 @@ class AnalysisCaseManagerDialog(FittedDialog):
         if self._list.currentItem() is not None:
             selected_id = self._list.currentItem().data(Qt.ItemDataRole.UserRole)
         self._list.clear()
-        for c in self._vm.project.analyses if self._vm.project else []:
+        project = self._vm.project
+        cases = list(project.analyses) if project else []
+        if self._draft_case is not None:
+            cases.append(self._draft_case)
+        for c in cases:
             label = f"#{c.id}  {c.name or '(unnamed)'}  [{c.type}]"
+            errors = project.case_reference_errors(c) if project else []
+            if errors:
+                label += " [Invalid references]"
             item = QListWidgetItem(label)
+            item.setToolTip("\n".join(errors))
             item.setData(Qt.ItemDataRole.UserRole, c.id)
             self._list.addItem(item)
         if selected_id is not None:
@@ -144,6 +156,8 @@ class AnalysisCaseManagerDialog(FittedDialog):
         if item is None or self._vm.project is None:
             return None
         cid = item.data(Qt.ItemDataRole.UserRole)
+        if self._draft_case is not None and self._draft_case.id == cid:
+            return self._draft_case
         return next((c for c in self._vm.project.analyses if c.id == cid), None)
 
     def _on_row_changed(self, _row: int) -> None:
@@ -161,12 +175,18 @@ class AnalysisCaseManagerDialog(FittedDialog):
         self._message.clear_message()
 
     def _on_apply(self) -> None:
-        if self._stack.count() == 0:
+        project = self._vm.project
+        if self._stack.count() == 0 or project is None:
             return
         form = self._stack.currentWidget()
         try:
             new_case = form.read()
-            self._vm.apply_command(UpdateAnalysisCaseCommand(self._vm, new_case))
+            project.validate_case_references(new_case)
+            if self._draft_case is not None and self._draft_case.id == new_case.id:
+                self._draft_case = None
+                self._vm.apply_command(AddAnalysisCasesCommand(self._vm, [new_case]))
+            else:
+                self._vm.apply_command(UpdateAnalysisCaseCommand(self._vm, new_case))
         except (ValidationError, ValueError) as exc:
             self._message.show_message(f"Case rejected: {exc}", "error")
             return
@@ -200,7 +220,14 @@ class AnalysisCaseManagerDialog(FittedDialog):
         try:
             new_case = _DEFAULTS[kind](new_id)
         except (ValidationError, ValueError) as exc:
-            QMessageBox.critical(self, "Could not create case", str(exc))
+            self._message.show_message(f"Case rejected: {exc}", "error")
+            return
+        errors = self._vm.project.case_reference_errors(new_case)
+        if errors:
+            self._draft_case = new_case
+            self._refresh_list()
+            self._select_by_id(new_id)
+            self._message.show_message("New case not yet committed: " + "\n".join(errors), "error")
             return
         self._vm.apply_command(AddAnalysisCasesCommand(self._vm, [new_case]))
         # _refresh_list ran via modelMutated and restored the previous row.
@@ -230,5 +257,9 @@ class AnalysisCaseManagerDialog(FittedDialog):
             self, "Delete case", f"Delete analysis case #{case.id} ({case.type})?"
         )
         if reply != QMessageBox.StandardButton.Yes:
+            return
+        if self._draft_case is not None and self._draft_case.id == case.id:
+            self._draft_case = None
+            self._refresh_list()
             return
         self._vm.apply_command(DeleteAnalysisCasesCommand(self._vm, {case.id}))

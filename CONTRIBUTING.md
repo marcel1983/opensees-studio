@@ -4,6 +4,26 @@ Thanks for your interest. This project is in an early phase; the bar for
 incoming changes is on architecture cleanliness rather than feature
 breadth.
 
+## Branches and pull request target
+
+- `main` is the integration branch. Ordinary feature and fix pull requests
+  target `main`; start every change from an up-to-date `main`.
+- `develop` is the maintainer's personal, experimental branch. It is not
+  the general integration target: do not base work on it or open pull
+  requests against it. Changes from it reach `main` through selected,
+  reviewed pull requests.
+
+In a fork, with this repository added as the `upstream` remote:
+
+```bash
+git fetch upstream
+git switch -c fix/short-name upstream/main
+```
+
+Before you ask for review, bring in the latest `main` (merge it, or rebase
+your own branch on it) so the pull request shows only your change. One pull
+request does one thing; say in the description when one depends on another.
+
 ## Dev setup
 
 ```bash

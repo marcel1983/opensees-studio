@@ -45,6 +45,13 @@ def main() -> int:
     output = proc.stdout + proc.stderr
     errors = [line for line in output.splitlines() if ": error:" in line]
     count = len(errors)
+    # mypy exits 0 when clean and 1 when it found errors. Any other code, or a 1
+    # without a single error line (mypy not installed, a crash, a config error),
+    # means the code was not checked: that is a failure, never "0 errors".
+    if proc.returncode not in (0, 1) or (proc.returncode == 1) != bool(errors):
+        print(f"mypy did not complete (exit code {proc.returncode}); nothing was checked.")
+        print(output.strip()[-2000:] or "(no output)")
+        return 2
     print(f"mypy: {count} error(s), budget {allowed}")
 
     if count > allowed:
