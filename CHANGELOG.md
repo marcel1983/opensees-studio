@@ -9,6 +9,16 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.32] - 2026-11-01
+
+### Added
+
+- **Tools → Measure Distance (F7).** Click the first node, then the second;
+  the straight-line distance between them, in the project's length unit, is
+  copied to the clipboard and shown in the status bar. The measurement changes
+  nothing in the model, so it is not an undo step; both nodes stay selected and
+  the tool stays armed for another measurement.
+
 ## [0.0.31] - 2026-11-01
 
 ### Added

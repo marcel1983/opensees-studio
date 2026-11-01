@@ -33,6 +33,8 @@ sísmica, pero su interfaz nativa son scripts de Tcl/Python. OpenSees Studio le
 agrega una interfaz visual para:
 
 - Dibujar nodos, marcos, apoyos y cargas con clics sobre una grilla con snap.
+- Medir la distancia entre dos nudos (Tools → Measure Distance, F7); el valor
+  se copia al portapapeles.
 - Asignar materiales, secciones y patrones de carga desde diálogos.
 - Correr análisis estáticos, modales, pushover, de espectro de respuesta y
   tiempo-historia, con progreso y cancelación (cada corrida va en un proceso
