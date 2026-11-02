@@ -5819,7 +5819,13 @@ class MainWindow(QMainWindow):
         # Results of another project (or of the closed one) never feed a combination.
         self._case_results.clear()
         self._report_extra.clear()
-        self._set_result_caption(None)
+        # Results belong to the previous project: drop the shown case, its
+        # charts/tables and every overlay (deformed shape, diagrams, contours,
+        # ratios). The new project's stored results are offered afterwards.
+        self._latest_results = None
+        self._on_back_to_model()
+        self._results_panel.show_results(None, project)
+        self._refresh_reactions()
         self._main_canvas.show_project(project)
         self._refresh_view_windows(project)
         if project is not None and project.ndm == 2:
