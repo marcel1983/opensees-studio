@@ -9,6 +9,18 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.34] - 2026-11-02
+
+### Fixed
+
+- **Opening another project clears the previous results.** The new model was
+  rendered, but the last results, the result tabs and charts, and the
+  post-processing overlays (deformed shape, force diagrams, shell contours,
+  design ratios) stayed from the old project. They are now dropped before the
+  new file is shown; results stored for the new model are still offered
+  afterwards. **Analyze → Delete All Results** also clears the panel title
+  instead of showing "(unsupported result type)".
+
 ## [0.0.33] - 2026-11-01
 
 ### Fixed
