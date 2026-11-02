@@ -713,17 +713,47 @@ class ModelCanvas(QtInteractor):
         """Render (or clear) the given project. Frames the camera afterward."""
         self._renderer.render(project)
         if project is not None and project.nodes:
-            self.reset_camera()
-        self.render()
+            self.reframe()
+        else:
+            self.render()
 
     def set_view_filter(self, view_filter: Callable[[Project], Project] | None) -> None:
         """Show only what ``view_filter`` keeps of the project (None: all of it)."""
         self._renderer.set_view_filter(view_filter)
         self.render()
 
+    def _model_bounds(self) -> tuple[float, float, float, float, float, float] | None:
+        """Bounds of the model's joints, with a little breathing room.
+
+        ``reset_camera()`` fits every visible actor, including furniture such
+        as the origin triad. When a small 3D model follows a long 2D one, the
+        triad built for the old model is still in the scene and the camera
+        fits that instead of the new model. Reframing against the joints keeps
+        the view on the model.
+        """
+        project = self._renderer._project
+        if project is None or not project.nodes:
+            return None
+        points = np.asarray([node.coords for node in project.nodes], dtype=float)
+        low = points.min(axis=0)
+        high = points.max(axis=0)
+        pad = 0.05 * max(float(np.max(high - low)), 1e-9)
+        return (
+            float(low[0] - pad),
+            float(high[0] + pad),
+            float(low[1] - pad),
+            float(high[1] + pad),
+            float(low[2] - pad),
+            float(high[2] + pad),
+        )
+
     def reframe(self) -> None:
-        """Fit the camera to what is drawn now."""
-        self.renderer.reset_camera()
+        """Fit the camera to the model (not to old scene furniture)."""
+        bounds = self._model_bounds()
+        if bounds is None:
+            self.renderer.reset_camera()
+        else:
+            self.reset_camera(bounds=bounds)
         self.render()
 
     def set_reactions(self, rows: list[ReactionRow], *, show: bool) -> None:

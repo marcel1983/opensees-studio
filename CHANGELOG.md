@@ -9,6 +9,23 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.34] - 2026-11-02
+
+### Fixed
+
+- **Opening another project clears the previous results.** The new model was
+  rendered, but the last results, the result tabs and charts, and the
+  post-processing overlays (deformed shape, force diagrams, shell contours,
+  design ratios) stayed from the old project. They are now dropped before the
+  new file is shown; results stored for the new model are still offered
+  afterwards. **Analyze → Delete All Results** also clears the panel title
+  instead of showing "(unsupported result type)".
+- **A new file is framed on its own model.** The camera kept the previous
+  direction and distance: after a 2D file, a 3D file opened as a long, flat
+  elevation, and the fit included the origin triad sized for the old model.
+  A 3D file now opens isometric and a 2D one face-on, both fitted to the new
+  model's joints.
+
 ## [0.0.33] - 2026-11-01
 
 ### Fixed

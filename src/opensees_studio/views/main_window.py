@@ -3066,6 +3066,11 @@ class MainWindow(QMainWindow):
         stored = project.view if project is not None else None
         self._main_canvas.set_view_settings(stored if stored is not None else ViewSettings())
         self._sync_visibility_actions()
+        # Re-rendering for the new settings may fit the camera to every actor
+        # again (including furniture left from the previous file); keep it on
+        # the new model.
+        if project is not None and project.nodes:
+            self._main_canvas.reframe()
 
     def _store_view_settings_in_project(self) -> None:
         """Write the primary viewport's settings into the model before saving.
@@ -5819,12 +5824,29 @@ class MainWindow(QMainWindow):
         # Results of another project (or of the closed one) never feed a combination.
         self._case_results.clear()
         self._report_extra.clear()
-        self._set_result_caption(None)
+        # Results belong to the previous project: drop the shown case, its
+        # charts/tables and every overlay (deformed shape, diagrams, contours,
+        # ratios). The new project's stored results are offered afterwards.
+        self._latest_results = None
+        self._on_back_to_model()
+        self._results_panel.show_results(None, project)
+        self._refresh_reactions()
         self._main_canvas.show_project(project)
         self._refresh_view_windows(project)
-        if project is not None and project.ndm == 2:
-            # A 2D model lives in the X-Z plane (core.plane): face on, drawing at y = 0.
-            self._on_view_front()
+        if project is not None:
+            if project.ndm == 2:
+                # A 2D model lives in the X-Z plane (core.plane): face on,
+                # drawing at y = 0.
+                self._on_view_front()
+            else:
+                # `reset_camera()` only re-fits the bounds: it preserves the
+                # previous direction. A 2D file left the camera face-on, and
+                # the next 3D model would then open as a long, flat elevation.
+                self._on_view_iso()
+            if project.nodes:
+                # `view_isometric`/`view_xz` change the direction but keep the
+                # previous distance; fit the new model after choosing the view.
+                self._canvas.reframe()
         self._props.set_project(project)
         self._refresh_tree(project)
         self._refresh_status()
