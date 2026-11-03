@@ -9,6 +9,16 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.35] - 2026-11-02
+
+### Fixed
+
+- **Clicking a shell or quad face selects the element.** Only nodes and frame
+  lines had a picking path; a click in the middle of a face fell through to
+  empty space and selected nothing. Faces now use a point-in-polygon test
+  (with a small edge tolerance), and overlapping faces take the one nearest the
+  camera.
+
 ## [0.0.34] - 2026-11-02
 
 ### Fixed

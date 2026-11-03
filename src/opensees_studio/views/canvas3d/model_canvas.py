@@ -40,6 +40,32 @@ _PICK_DEBUG = os.environ.get("OSS_PICK_DEBUG") == "1"
 #: where it was whenever a click is accepted, so drift leaves no trace.
 CLICK_MAX_DRIFT_PX = 20.0
 
+
+def _point_in_polygon(point: np.ndarray, polygon: np.ndarray) -> bool:
+    """Even-odd test for a click inside a projected face."""
+    x, y = float(point[0]), float(point[1])
+    inside = False
+    count = len(polygon)
+    previous = count - 1
+    for index in range(count):
+        xi, yi = float(polygon[index][0]), float(polygon[index][1])
+        xj, yj = float(polygon[previous][0]), float(polygon[previous][1])
+        if (yi > y) != (yj > y) and x < (xj - xi) * (y - yi) / (yj - yi) + xi:
+            inside = not inside
+        previous = index
+    return inside
+
+
+def _point_segment_distance(point: np.ndarray, start: np.ndarray, end: np.ndarray) -> float:
+    """Distance from ``point`` to segment ``start-end``, all in screen pixels."""
+    axis = end - start
+    length_sq = float(axis @ axis)
+    if length_sq <= 1e-12:
+        return float(np.linalg.norm(point - start))
+    t = float(np.clip((point - start) @ axis / length_sq, 0.0, 1.0))
+    return float(np.linalg.norm(point - (start + t * axis)))
+
+
 #: How much the *view* must turn before a gesture is called an orbit. Pixels are
 #: a proxy — a trembling hand or a tap-and-move on a trackpad drifts tens of
 #: pixels while barely turning the camera, and rejecting those made drawing feel
@@ -502,6 +528,52 @@ class ModelCanvas(QtInteractor):
                 set(self.selection.elements) | picked_elements,
             )
 
+    def _surface_under(
+        self, cx: float, cy: float, renderer: Any, *, tolerance: float
+    ) -> int | None:
+        """Id of the shell/quad face under ``(cx, cy)``, or None.
+
+        Faces overlap in a 3D view, so among the polygons containing the click
+        the one whose centroid is nearest the camera wins. A click just outside
+        a face edge is accepted within ``tolerance`` screen pixels.
+        """
+        surface_pd = self._renderer._surface_pd
+        surface_ids = self._renderer._surface_ids_ordered
+        if surface_pd is None or not surface_ids:
+            return None
+        points = np.asarray(surface_pd.points)
+        faces = np.asarray(surface_pd.faces)
+        if faces.size == 0 or faces.size % 5:
+            return None
+        screen = self._project_world_to_screen(points, renderer)
+        if screen is None:
+            return None
+        camera = self.renderer.camera
+        if camera is None:
+            return None
+        camera_position = np.asarray(camera.position, dtype=float)
+        click = np.array([cx, cy], dtype=float)
+        best: int | None = None
+        best_depth = float("inf")
+        for row, cell in enumerate(faces.reshape(-1, 5)):
+            corners = screen[cell[1:5]]
+            if len(corners) != 4:
+                continue
+            inside = _point_in_polygon(click, corners)
+            if not inside:
+                distance = min(
+                    _point_segment_distance(click, corners[i], corners[(i + 1) % 4])
+                    for i in range(4)
+                )
+                if distance > tolerance:
+                    continue
+            centroid = points[cell[1:5]].mean(axis=0)
+            depth = float(np.linalg.norm(centroid - camera_position))
+            if depth < best_depth:
+                best_depth = depth
+                best = int(surface_ids[row])
+        return best
+
     def _handle_click(self, qt_x: float, qt_y: float) -> None:
         """Run our screen-space picking from Qt-coordinate (top-left origin).
 
@@ -584,6 +656,16 @@ class ModelCanvas(QtInteractor):
                 if d2[idx] <= frame_tol_px**2:
                     self._dispatch_pick("element", int(frame_ids[idx]))
                     return
+
+        # ── Otherwise try shell/quad faces (inside the projected polygon). ──
+        # Frames keep priority: a line at a face's edge is a smaller target.
+        if self._default_selection_enabled:
+            surface = self._surface_under(cx, cy, renderer, tolerance=6.0 * dpr)
+            if surface is not None:
+                if _PICK_DEBUG:
+                    print(f"[pick] surface id={surface}")
+                self._dispatch_pick("element", surface)
+                return
 
         if _PICK_DEBUG:
             print("[pick] no hit within tolerance")
