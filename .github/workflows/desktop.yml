@@ -48,10 +48,8 @@ jobs:
           event = os.environ["GITHUB_EVENT_NAME"]
           if event == "workflow_dispatch":
               build_macos = os.environ.get("BUILD_MACOS_INPUT", "true").lower() == "true"
-          elif event == "push":
-              build_macos = os.environ.get("BUILD_MACOS_VAR", "true").lower() != "false"
           else:
-              build_macos = True
+              build_macos = os.environ.get("BUILD_MACOS_VAR", "true").lower() != "false"
           if build_macos:
               include.append({"os": "macos-latest", "artifact": "OpenSeesStudio-macos"})
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
