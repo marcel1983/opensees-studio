@@ -170,6 +170,7 @@ from opensees_studio.views.dialogs import (
     AssignSectionDialog,
     AssignSupportDialog,
     AssignTemperatureLoadDialog,
+    AssignZeroLengthDialog,
     AssignZeroLengthSectionDialog,
     CoordinateGridSystemsDialog,
     DisplayOptionsDialog,
@@ -534,6 +535,7 @@ class MainWindow(QMainWindow):
         self._act_assign_imposed_displacement = QAction("Imposed &Displacement…", self)
         self._act_assign_surface_load = QAction("&Surface Load on Shells…", self)
         self._act_assign_floor_load = QAction("&Floor Load to Frames…", self)
+        self._act_assign_zero_length = QAction("Zero-&Length Element.", self)
         self._act_assign_zls = QAction("&Zero-Length Section…", self)
         self._act_assign_bearing = QAction("&Bearing…", self)
         self._act_assign_link = QAction("&Link (twoNodeLink / TFP)…", self)
@@ -793,6 +795,7 @@ class MainWindow(QMainWindow):
             self._act_remove_constraints,
             self._act_assign_load,
             self._act_assign_imposed_displacement,
+            self._act_assign_zero_length,
             self._act_assign_zls,
             self._act_assign_bearing,
             self._act_assign_link,
@@ -1282,6 +1285,7 @@ class MainWindow(QMainWindow):
         )
         self._act_assign_surface_load.triggered.connect(self._on_assign_surface_load)
         self._act_assign_floor_load.triggered.connect(self._on_assign_floor_load)
+        self._act_assign_zero_length.triggered.connect(self._on_assign_zero_length)
         self._act_assign_zls.triggered.connect(self._on_assign_zls)
         self._act_assign_bearing.triggered.connect(self._on_assign_bearing)
         self._act_assign_link.triggered.connect(self._on_assign_link)
@@ -3911,6 +3915,49 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, "Assign Zero-Length Section failed", str(exc))
 
+    def _on_assign_zero_length(self) -> None:
+        """Assign > Joint > Zero-Length Element: one material per global DOF."""
+        from opensees_studio.commands import AddElementsCommand
+
+        sel = sorted(self._canvas.selection.nodes)
+        project = self._vm.project
+        if len(sel) != 2 or project is None:
+            QMessageBox.information(
+                self,
+                "Assign Zero-Length Element",
+                "Select exactly two coincident joints first.",
+            )
+            return
+        n1, n2 = (project.node(node_id) for node_id in sel)
+        if any(abs(n1.coords[k] - n2.coords[k]) > 1e-6 for k in range(3)):
+            QMessageBox.warning(
+                self,
+                "Assign Zero-Length Element",
+                f"Joints {sel[0]} and {sel[1]} are not coincident. "
+                "Move one onto the other before creating the element.",
+            )
+            return
+        if not any(is_uniaxial(material) for material in project.materials):
+            QMessageBox.warning(
+                self,
+                "Assign Zero-Length Element",
+                "Define a uniaxial material first (Material Library).",
+            )
+            return
+        dlg = AssignZeroLengthDialog(project, (sel[0], sel[1]), parent=self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        try:
+            element = dlg.build_element(project.next_element_id())
+            self._vm.apply_command(AddElementsCommand(self._vm, [element]))
+            dofs = ", ".join(str(dof) for dof in element.dofs)
+            self._log(
+                f"Created {element.type} {element.id} between joints "
+                f"{element.nodes[0]}-{element.nodes[1]} (DOFs {dofs})."
+            )
+        except Exception as exc:
+            QMessageBox.critical(self, "Assign Zero-Length Element failed", str(exc))
+
     def _on_assign_bearing(self) -> None:
         """Assign > Joint > Bearing: elastomeric or sliding isolator between two joints."""
 
@@ -6135,7 +6182,8 @@ class MainWindow(QMainWindow):
             and self._vm.project is not None
             and self._vm.project.ndm == 3
         )
-        # Zero-length section needs exactly two selected joints.
+        # Zero-length elements and sections need exactly two selected joints.
+        self._act_assign_zero_length.setEnabled(has_project and n_sel == 2)
         self._act_assign_zls.setEnabled(has_project and n_sel == 2)
         self._act_assign_bearing.setEnabled(has_project and n_sel == 2)
         self._act_assign_link.setEnabled(has_project and n_sel == 2)

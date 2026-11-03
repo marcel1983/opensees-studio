@@ -13,6 +13,7 @@ from opensees_studio.views.dialogs.assign_property import (
     AssignSectionDialog,
 )
 from opensees_studio.views.dialogs.assign_support import PRESETS, AssignSupportDialog
+from opensees_studio.views.dialogs.assign_zero_length import AssignZeroLengthDialog
 from opensees_studio.views.dialogs.assign_zls import AssignZeroLengthSectionDialog
 from opensees_studio.views.dialogs.case_manager import AnalysisCaseManagerDialog
 from opensees_studio.views.dialogs.coord_grid_systems import (
@@ -82,6 +83,7 @@ __all__ = [
     "AssignSectionDialog",
     "AssignSupportDialog",
     "AssignTemperatureLoadDialog",
+    "AssignZeroLengthDialog",
     "AssignZeroLengthSectionDialog",
     "CoordSystemDataDialog",
     "CoordSystemLocationOrientationDialog",

@@ -9,6 +9,22 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.36] - 2026-11-03
+
+### Added
+
+- **Assign → Joint → Zero-Length Element.** A `zeroLength` element can now be
+  created from the GUI: tick the global DOFs that carry a material and pick one
+  uniaxial material per DOF, with the optional `-doRayleigh` flag. The dialog
+  checks that the two selected joints are coincident and lists the model's own
+  DOF names (Ux, Uz, Ry in 2D; the six DOFs in 3D). It is the general
+  one-material-per-DOF element; Assign → Joint → Zero-Length Section remains the
+  full-section variant.
+- **Help page for the analysis constraint handlers.** Analyze → Cases now has a
+  page explaining Plain, Lagrange, Penalty and Transformation, when the
+  application switches Plain to Transformation, and what each handler does to
+  the system. The bearing page now names the four OpenSees elements explicitly.
+
 ## [0.0.35] - 2026-11-02
 
 ### Fixed
