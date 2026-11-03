@@ -9,6 +9,52 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Added
+
+- **File → Import → IFC.** An IFC file (IFC2x3 or IFC4, `.ifc` or `.ifczip`)
+  becomes a new project, from its structural analysis model or, when it has
+  none, from its physical model; the dialog says what the file holds before
+  anything is imported and lets you pick the model and the unit system.
+  - *Analytical model* (Tekla, Revit's analytical model, SAP2000, ETABS, our own
+    export): point connections with their supports (fixed, free or a spring
+    stiffness), curve members as elastic beam-columns (pin-jointed ones as
+    trusses) with their end releases and partial fixity, four-cornered surface
+    members as shells, and load cases — nodal forces and moments, imposed
+    displacements, uniform and piecewise-linear member loads in global or local
+    coordinates and true or projected length, point loads on members, surface
+    pressures, self weight — each with a static case, and factored combinations.
+  - *Physical model* (IfcColumn, IfcBeam, IfcMember, IfcSlab, IfcWall,
+    IfcPlate): the members' axes, taken from their extrusions, are joined where
+    they meet at faces — a beam end onto the column it stops at, a secondary beam
+    onto its girder, which is split there, crossing members split at the
+    crossing — and each slab or wall becomes one shell whose corners attach to
+    the nearest member nodes (subdivide it with Edit → Mesh). The column bases
+    at the lowest level can be fixed; a physical model has no loads.
+  - Sections: a profile named after an AISC v16 shape (also as a Revit type name)
+    takes the library's properties, any other profile its own (I, channel, tee,
+    angle, rectangle, round and rectangular hollow, any closed polygon), or
+    Pset_ProfileMechanical. A profile turned 90° from this application's local
+    axes gets Iy and Iz exchanged. Materials: E, G and ν from
+    Pset_MaterialMechanical, density from Pset_MaterialCommon, yield stress and
+    concrete strength (added as Steel01 and Concrete01); a material that says
+    nothing gets the defaults of its kind, and the log says so.
+  - Units come from the file's unit assignment and are converted by dimension.
+    A derived unit the file does not declare is derived from its length and
+    force units, a modulus without one is read in the file's pressure unit
+    (what "MPa" means in a kN-mm file), and a density without one in kg/m³.
+  - The import runs Analyze → Check Model and logs what it finds, with what the
+    file has and could not be carried.
+
+### Changed
+
+- **File → Export → IFC** writes each section's exact values (E, G, A, Iz, Iy,
+  J, unit weight; E, ν, thickness for a shell) on its material in an
+  `OpenSeesStudio_Section` property set, and a member's geometric
+  transformation (P-Delta, corotational) in `OpenSeesStudio_Member`, so the file
+  imports back to the model it came from. Checked on every exportable example:
+  the same nodes, supports, members, section values, releases and loads, and the
+  same displacements and reactions from OpenSees.
+
 ## [0.0.36] - 2026-11-03
 
 ### Added
