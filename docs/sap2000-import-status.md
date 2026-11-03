@@ -26,6 +26,13 @@ inside SAP2000 itself.
   distributed frame loads (uniform, trapezoidal or over part of the member),
   point frame loads, temperature changes on frames, ground displacements on
   restrained DOFs and frame added mass.
+- Joint patterns (`JOINT PATTERN DEFINITIONS`, `JOINT PATTERN ASSIGNMENTS`) and
+  area loads on the shells: `AREA LOADS - UNIFORM` along a global axis, gravity
+  or local 3, and `AREA LOADS - SURFACE PRESSURE` on the `Top` or `Bottom` face,
+  by element or by joint pattern (`JtPattern`: the pressure at each joint is
+  `Pressure` times the pattern's value). A pressure pushes into the area, so on
+  `Top` (the +3 side) it acts along -3. Pattern values are unitless and kept as
+  they are; the pressure's unit goes on the multiplier.
 - Linear static cases (including the static case a case names as its initial
   condition), eigen modal cases, CQC/SRSS response-spectrum cases with their
   tabulated spectra, and load combinations.
@@ -105,6 +112,9 @@ not read and every approximation that was made. The main gaps are:
 - A ground displacement on a free or spring-supported DOF is reported: this
   program's support spring has a fixed ground end.
 - Self-weight uses the section's unit weight and the frame weight modifier.
+- An area uniform load along local 1 or 2 (in the area's plane), a surface
+  pressure on an edge face, and `AREA SPRING ASSIGNMENTS` (area springs, such as
+  a slab on soil) are reported and not imported.
 
 ### Results and export
 
@@ -114,8 +124,12 @@ not read and every approximation that was made. The main gaps are:
   diaphragms, load patterns with joint/frame loads, static/modal/spectrum cases
   and combinations. It does not write a SAP2000 `NONPRISMATIC` table (the
   subdivided elastic pieces are written instead), end offsets, insertion points,
-  rigid links/equalDOFs, the mass source, shell/floor loads, imposed
+  rigid links/equalDOFs, the mass source, floor loads, imposed
   displacements, temperature loads, nonlinear/history/buckling cases or groups.
+  Shell loads are written: uniform ones in `AREA LOADS - UNIFORM`, pressures by
+  joint pattern in `AREA LOADS - SURFACE PRESSURE` (face `Bottom`) with the joint
+  pattern tables; a pressure by joint pattern along a global axis has no SAP2000
+  equivalent and is reported.
   The export report lists what it left out.
 
 ### Validation

@@ -170,6 +170,7 @@ from opensees_studio.core.ground_motion_metadata import (
     total_duration,
 )
 from opensees_studio.core.groups import Group
+from opensees_studio.core.joint_patterns import JointPattern
 from opensees_studio.core.loads import (
     ConstantTimeSeries,
     FloorLoad,
@@ -509,6 +510,7 @@ __all__ = [  # noqa: RUF022 - grouped by domain under section comments, not alph
     "SurfaceLoad",
     "TemperatureLoad",
     "FloorLoad",
+    "JointPattern",
     "ImposedDisplacement",
     "BEAM_INTEGRATION_RULES",
     "GEOM_TRANSF_TYPES",

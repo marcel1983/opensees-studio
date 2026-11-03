@@ -53,6 +53,7 @@ from opensees_studio.commands.groups import (
     SetGroupsCommand,
     SetSectionCutsCommand,
 )
+from opensees_studio.commands.joint_patterns import SetJointPatternsCommand
 from opensees_studio.commands.loads import (
     AddElementLoadsCommand,
     AddNodalLoadsCommand,
@@ -145,6 +146,7 @@ __all__ = [
     "SetDesignSettingsCommand",
     "SetGridSystemCommand",
     "SetGroupsCommand",
+    "SetJointPatternsCommand",
     "SetMassCommand",
     "SetMassSourceCommand",
     "SetPatternNodalLoadsCommand",

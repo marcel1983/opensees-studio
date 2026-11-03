@@ -80,6 +80,7 @@ from opensees_studio.commands.groups import (
     SetGroupsCommand,
     SetSectionCutsCommand,
 )
+from opensees_studio.commands.joint_patterns import SetJointPatternsCommand
 from opensees_studio.commands.tables import ApplyModelTablesCommand
 from opensees_studio.core import (
     SUPPORTED_NDF,
@@ -226,6 +227,10 @@ from opensees_studio.views.dialogs.groups import (
     AssignGroupDialog,
     GroupsDialog,
     SectionCutsDialog,
+)
+from opensees_studio.views.dialogs.joint_patterns import (
+    AssignJointPatternDialog,
+    JointPatternsDialog,
 )
 from opensees_studio.views.dialogs.load_combinations import LoadCombinationsDialog
 from opensees_studio.views.dialogs.model_tables import ModelTablesDialog
@@ -534,6 +539,8 @@ class MainWindow(QMainWindow):
         self._act_remove_constraints = QAction("Remove &Constraints", self)
         self._act_assign_load = QAction("&Point Loads…", self, shortcut="Ctrl+L")
         self._act_assign_imposed_displacement = QAction("Imposed &Displacement…", self)
+        self._act_assign_joint_pattern = QAction("Joint &Pattern Values…", self)
+        self._act_joint_patterns = QAction("&Joint Patterns…", self)
         self._act_assign_surface_load = QAction("&Surface Load on Shells…", self)
         self._act_assign_floor_load = QAction("&Floor Load to Frames…", self)
         self._act_assign_zero_length = QAction("Zero-&Length Element.", self)
@@ -751,6 +758,7 @@ class MainWindow(QMainWindow):
         m_define.addAction(self._act_grid_wizard)
         m_define.addAction(self._act_storeys)
         m_define.addAction(self._act_groups)
+        m_define.addAction(self._act_joint_patterns)
         m_define.addAction(self._act_section_cuts)
         m_define.addAction(self._act_mass_source)
         m_define.addAction(self._act_seismic_loads)
@@ -798,6 +806,7 @@ class MainWindow(QMainWindow):
             self._act_assign_load,
             self._act_assign_imposed_displacement,
             self._act_assign_zero_length,
+            self._act_assign_joint_pattern,
             self._act_assign_zls,
             self._act_assign_bearing,
             self._act_assign_link,
@@ -1287,6 +1296,8 @@ class MainWindow(QMainWindow):
             self._on_assign_imposed_displacement
         )
         self._act_assign_surface_load.triggered.connect(self._on_assign_surface_load)
+        self._act_joint_patterns.triggered.connect(self._on_define_joint_patterns)
+        self._act_assign_joint_pattern.triggered.connect(self._on_assign_joint_pattern)
         self._act_assign_floor_load.triggered.connect(self._on_assign_floor_load)
         self._act_assign_zero_length.triggered.connect(self._on_assign_zero_length)
         self._act_assign_zls.triggered.connect(self._on_assign_zls)
@@ -4600,9 +4611,60 @@ class MainWindow(QMainWindow):
         values = dlg.values()
         loads = [SurfaceLoad(element_id=eid, **values) for eid in shells]
         self._apply_pattern_loads("surface_loads", loads, dlg.pattern_id(), "Surface Load")
+        by = ""
+        if "joint_pattern_id" in values:
+            pattern = next(p for p in project.joint_patterns if p.id == values["joint_pattern_id"])
+            by = f" × joint pattern {pattern.name or pattern.id}"
         self._log(
-            f"Surface load {values['value']:g} ({values['direction']}) on {len(shells)} shell(s)."
+            f"Surface load {values['value']:g}{by} ({values['direction']}) on "
+            f"{len(shells)} shell(s)."
         )
+
+    def _on_define_joint_patterns(self) -> None:
+        """Define → Joint Patterns: add, rename, delete patterns and edit their values."""
+        project = self._vm.project
+        if project is None:
+            return
+        dlg = JointPatternsDialog(project, self)
+        try:
+            if dlg.exec() != QDialog.DialogCode.Accepted:
+                return
+            patterns = dlg.patterns()
+        finally:
+            dlg.deleteLater()
+        try:
+            self._vm.apply_command(SetJointPatternsCommand(self._vm, patterns))
+        except ValueError as exc:
+            QMessageBox.critical(self, "Joint Patterns", str(exc))
+            return
+        self._canvas.render()
+        self._log(f"Joint patterns: {len(patterns)}.")
+
+    def _on_assign_joint_pattern(self) -> None:
+        """Assign → Joint → Joint Pattern Values: the selected joints' values, as SAP2000 does."""
+        project = self._vm.project
+        if project is None:
+            return
+        nodes = sorted(self._canvas.selection.nodes)
+        if not nodes:
+            QMessageBox.information(
+                self, "Joint Pattern Values", "Select one or more joints first."
+            )
+            return
+        dlg = AssignJointPatternDialog(project, nodes, self)
+        try:
+            if dlg.exec() != QDialog.DialogCode.Accepted:
+                return
+            patterns, name = dlg.patterns(), dlg.pattern_name()
+        finally:
+            dlg.deleteLater()
+        self._vm.apply_command(
+            SetJointPatternsCommand(
+                self._vm, patterns, f"Joint pattern {name}: {len(nodes)} joint(s)"
+            )
+        )
+        self._canvas.render()
+        self._log(f"Joint pattern {name}: values on {len(nodes)} joint(s).")
 
     def _on_assign_floor_load(self) -> None:
         """Assign > Area > Floor Load to Frames: every bay the selected joints frame."""
@@ -6217,6 +6279,8 @@ class MainWindow(QMainWindow):
         self._act_remove_constraints.setEnabled(has_project and has_selected_nodes)
         self._act_storeys.setEnabled(has_project)
         self._act_groups.setEnabled(has_project)
+        self._act_joint_patterns.setEnabled(has_project)
+        self._act_assign_joint_pattern.setEnabled(has_project and has_selected_nodes)
         self._act_section_cuts.setEnabled(has_project)
         self._act_custom_commands.setEnabled(has_project)
         self._act_assign_group.setEnabled(has_project and has_selection)
