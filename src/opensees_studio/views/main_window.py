@@ -81,6 +81,7 @@ from opensees_studio.commands.groups import (
     SetSectionCutsCommand,
 )
 from opensees_studio.commands.joint_patterns import SetJointPatternsCommand
+from opensees_studio.commands.support_springs import SetSupportSpringsCommand
 from opensees_studio.commands.tables import ApplyModelTablesCommand
 from opensees_studio.core import (
     SUPPORTED_NDF,
@@ -238,6 +239,7 @@ from opensees_studio.views.dialogs.reactions import ReactionsDialog
 from opensees_studio.views.dialogs.run_cases import RunCasesDialog
 from opensees_studio.views.dialogs.seismic_loads import SeismicLoadsDialog
 from opensees_studio.views.dialogs.solver_settings import SolverSettingsDialog
+from opensees_studio.views.dialogs.support_springs import SupportSpringDialog
 from opensees_studio.views.dialogs.view_colors import ViewColorsDialog
 from opensees_studio.views.docks import (
     DeformedShapeView,
@@ -542,6 +544,9 @@ class MainWindow(QMainWindow):
         self._act_assign_joint_pattern = QAction("Joint &Pattern Values…", self)
         self._act_joint_patterns = QAction("&Joint Patterns…", self)
         self._act_assign_surface_load = QAction("&Surface Load on Shells…", self)
+        self._act_assign_area_springs = QAction("&Area Springs…", self)
+        self._act_assign_edge_springs = QAction("&Edge Springs…", self)
+        self._act_assign_line_springs = QAction("&Line Springs…", self)
         self._act_assign_floor_load = QAction("&Floor Load to Frames…", self)
         self._act_assign_zero_length = QAction("Zero-&Length Element.", self)
         self._act_assign_zls = QAction("&Zero-Length Section…", self)
@@ -828,10 +833,15 @@ class MainWindow(QMainWindow):
             self._act_assign_temperature_load,
             self._act_assign_hinge,
             self._act_assign_wall,
+            None,
+            self._act_assign_line_springs,
         ]
         self._area_actions: list[QAction | None] = [
             self._act_assign_surface_load,
             self._act_assign_floor_load,
+            None,
+            self._act_assign_area_springs,
+            self._act_assign_edge_springs,
         ]
         # Joint submenu — operates on selected nodes.
         _add_actions(m_assign.addMenu("&Joint"), self._joint_actions)
@@ -1296,6 +1306,9 @@ class MainWindow(QMainWindow):
             self._on_assign_imposed_displacement
         )
         self._act_assign_surface_load.triggered.connect(self._on_assign_surface_load)
+        self._act_assign_area_springs.triggered.connect(lambda: self._on_assign_springs_of("area"))
+        self._act_assign_edge_springs.triggered.connect(lambda: self._on_assign_springs_of("edge"))
+        self._act_assign_line_springs.triggered.connect(lambda: self._on_assign_springs_of("line"))
         self._act_joint_patterns.triggered.connect(self._on_define_joint_patterns)
         self._act_assign_joint_pattern.triggered.connect(self._on_assign_joint_pattern)
         self._act_assign_floor_load.triggered.connect(self._on_assign_floor_load)
@@ -4620,6 +4633,91 @@ class MainWindow(QMainWindow):
             f"{len(shells)} shell(s)."
         )
 
+    def _on_assign_springs_of(self, kind: str) -> None:
+        """Assign → Area → Area/Edge Springs, Assign → Frame → Line Springs."""
+        from opensees_studio.core.support_springs import AreaSpring, EdgeSpring, LineSpring
+        from opensees_studio.core.units import labels_for
+
+        project = self._vm.project
+        if project is None:
+            return
+        selected = set(self._canvas.selection.elements)
+        joints = set(self._canvas.selection.nodes)
+        targets: list[Any]
+        if kind == "line":
+            targets = [e for e in project.elements if e.id in selected and len(e.nodes) == 2]
+            what = "frame members"
+        else:
+            targets = [
+                e for e in project.elements if e.id in selected and isinstance(e, ShellMITC4Element)
+            ]
+            what = "shells"
+        if not targets:
+            QMessageBox.information(self, "Springs", f"Select one or more {what} first.")
+            return
+        edges: list[tuple[int, int]] = []
+        if kind == "edge":
+            edges = [
+                (e.id, k + 1)
+                for e in targets
+                for k in range(4)
+                if e.nodes[k] in joints and e.nodes[(k + 1) % 4] in joints
+            ]
+            if not edges:
+                QMessageBox.information(
+                    self,
+                    "Edge Springs",
+                    "Select the shells and the joints along the supported edge: an edge whose "
+                    "two joints are selected takes the spring.",
+                )
+                return
+        labels = labels_for(project.meta.units)
+        dlg = SupportSpringDialog(
+            kind,  # type: ignore[arg-type]
+            len(edges) if kind == "edge" else len(targets),
+            length_unit=labels.length,
+            force_unit=labels.force,
+            parent=self,
+        )
+        try:
+            if dlg.exec() != QDialog.DialogCode.Accepted:
+                return
+            values, mode = dlg.values(), dlg.mode()
+        finally:
+            dlg.deleteLater()
+        area, line, edge = (
+            list(project.area_springs),
+            list(project.line_springs),
+            list(project.edge_springs),
+        )
+        ids = {e.id for e in targets}
+        if kind == "area":
+            if mode != "add":
+                area = [s for s in area if s.element_id not in ids]
+            if mode != "delete":
+                area += [AreaSpring(element_id=i, **values) for i in sorted(ids)]  # type: ignore[arg-type]
+        elif kind == "line":
+            if mode != "add":
+                line = [s for s in line if s.element_id not in ids]
+            if mode != "delete":
+                line += [LineSpring(element_id=i, **values) for i in sorted(ids)]  # type: ignore[arg-type]
+        else:
+            chosen = set(edges)
+            if mode != "add":
+                edge = [s for s in edge if (s.element_id, s.edge) not in chosen]
+            if mode != "delete":
+                edge += [EdgeSpring(element_id=i, edge=k, **values) for i, k in edges]  # type: ignore[arg-type]
+        count = len(edges) if kind == "edge" else len(ids)
+        self._vm.apply_command(
+            SetSupportSpringsCommand(
+                self._vm, area, line, edge, f"{mode.capitalize()} {kind} springs on {count}"
+            )
+        )
+        self._canvas.render()
+        self._log(
+            f"{kind.capitalize()} springs: {mode} on {count} {'edge' if kind == 'edge' else 'element'}(s)."
+        )
+
     def _on_define_joint_patterns(self) -> None:
         """Define → Joint Patterns: add, rename, delete patterns and edit their values."""
         project = self._vm.project
@@ -6289,6 +6387,12 @@ class MainWindow(QMainWindow):
         self._act_assign_load.setEnabled(has_project and has_selected_nodes)
         self._act_assign_imposed_displacement.setEnabled(has_project and has_selected_nodes)
         self._act_assign_surface_load.setEnabled(has_project)
+        for action in (
+            self._act_assign_area_springs,
+            self._act_assign_edge_springs,
+            self._act_assign_line_springs,
+        ):
+            action.setEnabled(has_project and has_selected_elements)
         self._act_assign_floor_load.setEnabled(
             has_project
             and has_selected_nodes

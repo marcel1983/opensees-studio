@@ -11,6 +11,27 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **Line, edge and area springs.** Assign → Frame → Line Springs (a beam on an
+  elastic foundation), Assign → Area → Edge Springs (per unit length along the
+  shell edges whose two joints are selected) and Assign → Area → Area Springs (a
+  Winkler bed under shells, per unit area). Each acts along a global axis, the
+  shell normal or a member's local axis, with the supporting medium on a chosen
+  side, and is linear, compression only or tension only; the stiffness reaches
+  the nodes by tributary length or area. One-sided springs are an `Elastic`
+  material with `Eneg = 0`, oriented so that each starts engaged: a case with
+  the Linear algorithm is solved by Newton, and the log says which springs let go
+  — or, when the load lifts the structure off its only support, why the case
+  could not converge. Springs follow mesh (an edge spring to the edges on the
+  original edge), replicate and delete, and draw as brown zigzags toward the
+  medium. Checked with OpenSees: Hetényi's `P β / 2k` under a point load on a long
+  beam, a raft's `q / k` settlement, partial lift-off on compression-only springs
+  (no spring pulls) and a tension-only tie.
+- **SAP2000 text: area and frame springs.** `AREA SPRING ASSIGNMENTS` (simple
+  springs normal to the Top or Bottom face) and `FRAME SPRING ASSIGNMENTS` (simple
+  springs along an object axis) are read and written, tension and compression,
+  compression only or tension only; springs on an edge face and link-property
+  springs are reported.
+
 - **Surface loads by joint pattern (hydrostatic and earth pressure).** Define →
   Joint Patterns names a value per joint; Assign → Joint → Joint Pattern Values
   computes the selected joints' values the way SAP2000 does — `A·x + B·y + C·z +
@@ -34,6 +55,12 @@ refused instead of silently downgraded).
   out and back with the same nodal forces.
 - **IFC export** writes a pressure by joint pattern as a `DISCRETE` planar action
   with its four corner values.
+
+### Fixed
+
+- **Analyze → Check Model ignored joint springs.** A model held only by support
+  springs was called floating or unstable; joint, line, edge and area springs
+  now count as supports, and the stability test includes them.
 
 ## [0.0.37] - 2026-11-03
 

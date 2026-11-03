@@ -30,9 +30,10 @@ import numpy as np
 
 from opensees_studio.core.geometry.elements import FRAME_ELEMENT_CLASSES
 from opensees_studio.core.geometry.local_axes import frame_local_axes
+from opensees_studio.core.geometry.quadrature import quad_tributary_areas
 from opensees_studio.core.loads import FloorLoad, SurfaceLoad, TrapezoidalElementLoad
 from opensees_studio.core.plane import VERTICAL_AXIS
-from opensees_studio.core.self_weight import gravity_direction, quad_tributary_areas
+from opensees_studio.core.self_weight import gravity_direction
 
 if TYPE_CHECKING:
     from opensees_studio.core.project import Project
