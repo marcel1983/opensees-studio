@@ -32,12 +32,6 @@ refused instead of silently downgraded).
   compression only or tension only; springs on an edge face and link-property
   springs are reported.
 
-### Fixed
-
-- **Analyze → Check Model ignored joint springs.** A model held only by support
-  springs was called floating or unstable; joint, line, edge and area springs
-  now count as supports, and the stability test includes them.
-
 - **Surface loads by joint pattern (hydrostatic and earth pressure).** Define →
   Joint Patterns names a value per joint; Assign → Joint → Joint Pattern Values
   computes the selected joints' values the way SAP2000 does — `A·x + B·y + C·z +
@@ -61,6 +55,12 @@ refused instead of silently downgraded).
   out and back with the same nodal forces.
 - **IFC export** writes a pressure by joint pattern as a `DISCRETE` planar action
   with its four corner values.
+
+### Fixed
+
+- **Analyze → Check Model ignored joint springs.** A model held only by support
+  springs was called floating or unstable; joint, line, edge and area springs
+  now count as supports, and the stability test includes them.
 
 ## [0.0.37] - 2026-11-03
 
