@@ -82,6 +82,7 @@ from opensees_studio.core.geometry.grid import (
 )
 from opensees_studio.core.geometry.local_axes import frame_local_axes
 from opensees_studio.core.geometry.node import Node
+from opensees_studio.core.joint_patterns import JointPattern
 from opensees_studio.core.loads import (
     ImposedDisplacement,
     LinearTimeSeries,
@@ -89,6 +90,7 @@ from opensees_studio.core.loads import (
     PlainLoadPattern,
     PointElementLoad,
     ResponseSpectrum,
+    SurfaceLoad,
     TemperatureLoad,
     TrapezoidalElementLoad,
     UniformElementLoad,
@@ -179,7 +181,10 @@ READ_TABLES: frozenset[str] = frozenset(
         "LOAD PATTERN DEFINITIONS",
         "JOINT LOADS - FORCE",
         "JOINT LOADS - GROUND DISPLACEMENT",
+        "JOINT PATTERN DEFINITIONS",
         "JOINT PATTERN ASSIGNMENTS",
+        "AREA LOADS - UNIFORM",
+        "AREA LOADS - SURFACE PRESSURE",
         "FRAME LOADS - DISTRIBUTED",
         "FRAME LOADS - POINT",
         "FRAME LOADS - TEMPERATURE",
@@ -643,6 +648,10 @@ class _Translator:
         #: ``(pattern, joint) -> value`` of the joint patterns a temperature load varies with.
         self._joint_patterns: dict[tuple[str, str], float] = {}
         self.shells: list[ShellMITC4Element] = []
+        #: Area name -> shell element id, for the area loads.
+        self.area_elements: dict[str, int] = {}
+        #: Joint patterns by name, with their values per node id.
+        self.joint_patterns: dict[str, JointPattern] = {}
         self.diaphragms: list[RigidDiaphragm] = []
         self._diaphragm_defs = {
             row.get("Name", ""): row
@@ -1414,6 +1423,7 @@ class _Translator:
             if not mat_name or mat_name.lower() == "default":
                 mat_name = prop.get("Material", "")
             section_id = self._shell_section(prop, self._material(mat_name, where))
+            self.area_elements[name] = offset + ids[name]
             self.shells.append(
                 ShellMITC4Element(
                     id=offset + ids[name],
@@ -1845,7 +1855,91 @@ class _Translator:
                         gradient_z=gradient_z,
                     )
                 )
+        self._area_loads(pattern_of)
         return patterns
+
+    def _joint_pattern(self, name: str) -> JointPattern:
+        """The project's joint pattern for a SAP2000 one, its values per node."""
+        if name not in self.joint_patterns:
+            values = {
+                self.node_ids[joint]: value
+                for (pattern, joint), value in self._joint_patterns.items()
+                if pattern == name and joint in self.node_ids and value != 0.0
+            }
+            self.joint_patterns[name] = JointPattern(
+                id=len(self.joint_patterns) + 1, name=name, values=values
+            )
+        return self.joint_patterns[name]
+
+    def _area_loads(self, pattern_of: Any) -> None:
+        """``AREA LOADS - UNIFORM`` and ``AREA LOADS - SURFACE PRESSURE`` on the shells.
+
+        A surface pressure acts toward the inside of the area: on face ``Top`` (its
+        +3 side) along -3, on ``Bottom`` along +3, so it becomes a pressure along
+        the shell normal of ``-P`` or ``+P``. With a ``JtPattern`` the pressure is
+        ``P`` times the pattern's value at each joint; the values are unitless
+        and stay as they are, the multiplier carries the unit.
+        """
+        stress = self.scale.force / self.scale.length**2
+        for row in self.s2k.rows("AREA LOADS - UNIFORM"):
+            pattern = pattern_of(row, "area load")
+            if pattern is None:
+                continue
+            element_id = self.area_elements.get(row.get("Area", ""))
+            if element_id is None:
+                self.dropped["area load on an area that was not imported"] += 1
+                continue
+            where = f"Area {row.get('Area')} ({_at('AREA LOADS - UNIFORM', row)}): "
+            value = _number(row, "UnifLoad", where=where) * stress
+            system = row.get("CoordSys", "GLOBAL").strip().upper()
+            direction = row.get("Dir", "Gravity").strip().upper()
+            if system == "GLOBAL" and direction in ("X", "Y", "Z"):
+                load = SurfaceLoad(element_id=element_id, value=value, direction=direction)  # type: ignore[arg-type]
+            elif system == "GLOBAL" and direction == "GRAVITY":
+                load = SurfaceLoad(element_id=element_id, value=-value, direction="Z")
+            elif system == "LOCAL" and direction == "3":
+                load = SurfaceLoad(element_id=element_id, value=value, direction="normal")
+            else:
+                self.dropped[
+                    f"area uniform load along {row.get('Dir')} ({row.get('CoordSys')})"
+                ] += 1
+                continue
+            pattern.surface_loads.append(load)
+        for row in self.s2k.rows("AREA LOADS - SURFACE PRESSURE"):
+            pattern = pattern_of(row, "surface pressure")
+            if pattern is None:
+                continue
+            element_id = self.area_elements.get(row.get("Area", ""))
+            if element_id is None:
+                self.dropped["surface pressure on an area that was not imported"] += 1
+                continue
+            face = row.get("Face", "Bottom").strip().lower()
+            if face not in ("top", "bottom"):
+                self.dropped["surface pressure on an area edge"] += 1
+                continue
+            where = f"Area {row.get('Area')} ({_at('AREA LOADS - SURFACE PRESSURE', row)}): "
+            pressure = _number(row, "Pressure", where=where) * stress
+            value = -pressure if face == "top" else pressure
+            joint_pattern = row.get("JtPattern", "None").strip()
+            pattern_id = None
+            if joint_pattern and joint_pattern.lower() != "none":
+                pattern_id = self._joint_pattern(joint_pattern).id
+            pattern.surface_loads.append(
+                SurfaceLoad(
+                    element_id=element_id,
+                    value=value,
+                    direction="normal",
+                    joint_pattern_id=pattern_id,
+                )
+            )
+        # A pattern no load uses still comes across when it has values.
+        for name in dict.fromkeys(pattern for pattern, _ in self._joint_patterns):
+            if name not in self.joint_patterns and any(
+                value != 0.0
+                for (pattern, joint), value in self._joint_patterns.items()
+                if pattern == name and joint in self.node_ids
+            ):
+                self._joint_pattern(name)
 
     def _span(self, name: str) -> np.ndarray:
         ends = self.frame_ends[name]
@@ -2282,6 +2376,7 @@ def s2k_to_project(
             elements=elements,
             diaphragms=[*translator.diaphragms],
             time_series=[LinearTimeSeries(id=1, name="Linear")],
+            joint_patterns=list(translator.joint_patterns.values()),
             load_patterns=[*patterns.values(), *extra],
             spectra=[*translator.spectra],
             analyses=[*cases],
@@ -2803,6 +2898,33 @@ class _Writer:
                     out.append((str(k), value))
             return out
 
+        # Joint patterns: their names, and each node's (unitless) value.
+        joint_pattern_names = _Names()
+        joint_pattern_of = {
+            jp.id: joint_pattern_names.take(jp.name, f"JP{jp.id}") for jp in p.joint_patterns
+        }
+        present = {node.id for node in p.nodes}
+        self.table(
+            "JOINT PATTERN DEFINITIONS",
+            [[("Pattern", _quote(joint_pattern_of[jp.id]))] for jp in p.joint_patterns],
+        )
+        self.table(
+            "JOINT PATTERN ASSIGNMENTS",
+            [
+                [
+                    ("Joint", str(node_id)),
+                    ("Pattern", _quote(joint_pattern_of[jp.id])),
+                    ("Value", _fmt(value)),
+                ]
+                for jp in p.joint_patterns
+                for node_id, value in sorted(jp.values.items())
+                if node_id in present
+            ],
+        )
+        if p.joint_patterns:
+            self.report.written["joint pattern(s)"] = len(p.joint_patterns)
+        area_uniform: list[list[tuple[str, str]]] = []
+        area_pressure: list[list[tuple[str, str]]] = []
         for pattern in p.load_patterns:
             if not isinstance(pattern, PlainLoadPattern):
                 self.report.skipped[f"{pattern.type} load pattern"] += 1
@@ -2873,8 +2995,36 @@ class _Writer:
                             ("Force", _fmt(value)),
                         ]
                     )
+            for surface in pattern.surface_loads:
+                if surface.joint_pattern_id is None:
+                    # Uniform: global X/Y/Z as itself, the normal as local 3.
+                    local = surface.direction == "normal"
+                    area_uniform.append(
+                        [
+                            ("Area", str(surface.element_id)),
+                            ("LoadPat", _quote(name)),
+                            ("CoordSys", "Local" if local else "GLOBAL"),
+                            ("Dir", "3" if local else surface.direction),
+                            ("UnifLoad", _fmt(surface.value)),
+                        ]
+                    )
+                elif surface.direction == "normal" and surface.joint_pattern_id in joint_pattern_of:
+                    # A pressure pushes into the area: +3 is a pressure on its Bottom face.
+                    area_pressure.append(
+                        [
+                            ("Area", str(surface.element_id)),
+                            ("LoadPat", _quote(name)),
+                            ("Face", "Bottom"),
+                            ("Pressure", _fmt(surface.value)),
+                            ("JtPattern", _quote(joint_pattern_of[surface.joint_pattern_id])),
+                        ]
+                    )
+                else:
+                    self.report.skipped[
+                        "surface load by joint pattern along a global axis (SAP2000 pressures "
+                        "are normal to the area)"
+                    ] += 1
             for what, items in (
-                ("surface load", pattern.surface_loads),
                 ("floor load", pattern.floor_loads),
                 ("imposed displacement", pattern.imposed_displacements),
                 ("temperature load", pattern.temperature_loads),
@@ -2885,7 +3035,11 @@ class _Writer:
         self.table("JOINT LOADS - FORCE", joint_loads)
         self.table("FRAME LOADS - DISTRIBUTED", distributed)
         self.table("FRAME LOADS - POINT", point)
+        self.table("AREA LOADS - UNIFORM", area_uniform)
+        self.table("AREA LOADS - SURFACE PRESSURE", area_pressure)
         self.report.written["load pattern(s)"] = len(definitions)
+        if area_uniform or area_pressure:
+            self.report.written["area load(s)"] = len(area_uniform) + len(area_pressure)
 
         spectrum_names = _Names()
         spectrum_of = {

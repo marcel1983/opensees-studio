@@ -3430,23 +3430,97 @@ to the joint.
         "assign.surface_load": _t(
             "Assign → Area → Surface Load on Shells",
             "Assign — areas",
-            "A uniform pressure on the selected shells, as consistent nodal forces.",
+            "A pressure on the selected shells, uniform or by joint pattern, as consistent nodal forces.",
             """
-Puts a uniform load per area on every selected shell (`ShellMITC4`), in the load
-pattern you pick. The solver receives it as consistent nodal forces: each corner
-takes the value times the integral of its shape function over the shell, so the
-four add up to value × area also on a warped quad. Beams and other elements in
-the selection are skipped. A shell that is meshed later passes the load to every
-piece, and Edit → Replicate copies it with the shell.
+Puts a load per area on every selected shell (`ShellMITC4`), in the load
+pattern you pick. Beams and other elements in the selection are skipped. A shell
+that is meshed later passes the load to every piece, and Edit → Replicate copies
+it with the shell. The load is drawn on the shell as arrows as long as the
+pressure under them.
+
+# Distribution
+- **Uniform (by element)** — the same pressure everywhere. Each corner takes the
+  value times the integral of its shape function, so the four add up to value ×
+  area also on a warped quad.
+- **By joint pattern** — the pressure varies over the shell: at each corner it is
+  the **multiplier** times the pattern's value at that node (Define → Joint
+  Patterns), and in between it follows the shell's bilinear shape functions.
+  Each corner takes `Σ ∫N_i N_j dA · p_j`, so the resultant and its point of
+  application are exact for a linearly varying pressure — a hydrostatic load on a
+  wall puts its resultant at a third of the depth. A node without a value in the
+  pattern counts as zero.
 
 # Values
-- **Value** — force per area, signed along the direction.
+- **Value / Multiplier** — force per area (uniform), or the factor on the
+  pattern's values. For a pattern made with *Z at zero pressure and weight per
+  unit volume* the values already are a pressure: use a multiplier of 1.
 - **Direction** — **Global Z** (a floor's weight is a negative value), **Global
   X / Y**, or the **shell normal** (local 3: the right-hand turn of its nodes
-  1-2-3-4, so a pressure on a wall or a sloped roof).
+  1-2-3-4, so a pressure on a wall, a tank or a sloped roof). A pressure that
+  should push *outward* from a tank needs the shells' normals to point outward:
+  check them with the local axes display.
 """,
+            "define.joint_patterns",
+            "assign.joint_pattern",
             "assign.floor_load",
             "define.create_shell",
+        ),
+        "define.joint_patterns": _t(
+            "Define → Joint Patterns",
+            "Define",
+            "Named values per node that surface loads vary by (hydrostatic, earth pressure).",
+            """
+A joint pattern is a number at each node, as in SAP2000. On its own it does
+nothing: a surface load *by joint pattern* applies, at each corner of a shell,
+its multiplier times the pattern's value there.
+
+# The dialog
+- **Add / Delete** — a pattern a surface load uses cannot be deleted until the
+  load is removed. Double-click a name to rename it.
+- **The table** lists the nodes that have a value; edit a value in place. Every
+  node not listed counts as zero.
+
+Values are assigned with Assign → Joint → Joint Pattern Values. They follow the
+model: meshing a shell gives its new nodes the values interpolated from its
+corners, Edit → Replicate copies them with the joints, merging duplicates keeps
+the remaining node's value, and deleting a joint deletes its values.
+
+Joint patterns travel with File → Import/Export → SAP2000 Text (`JOINT PATTERN
+DEFINITIONS`, `JOINT PATTERN ASSIGNMENTS`), and a pressure by pattern is written
+to IFC as a discrete planar action with its corner values.
+""",
+            "assign.joint_pattern",
+            "assign.surface_load",
+        ),
+        "assign.joint_pattern": _t(
+            "Assign → Joint → Joint Pattern Values",
+            "Assign — joints",
+            "Give the selected joints a joint pattern's values: a linear formula or hydrostatic.",
+            """
+Computes a value for every selected joint and merges it into a joint pattern
+(an existing one, or a new one named here). The range of the values is shown
+before OK.
+
+# How the values are computed
+- **X, Y, Z multipliers** — `A·x + B·y + C·z + D` at each joint, with A, B, C per
+  length and D unitless.
+- **Z coordinate at zero pressure and weight per unit volume** — `w·(Z₀ - z) + q`:
+  zero at the free surface `Z₀`, growing with depth at the unit weight `w`, plus
+  an optional uniform `q`. With `w` the fluid's weight per volume (9810 N/m³ for
+  water) the values are the hydrostatic pressure itself: apply them with a
+  surface load by this pattern and a multiplier of 1.
+
+# Restriction and existing values
+- **Zero negative values** (the default) keeps a hydrostatic pressure from pulling
+  on the joints above the free surface; **zero positive values** does the
+  opposite; **use all values** keeps them as computed.
+- **Replace**, **add to** or **delete** the values the pattern already holds for
+  the selected joints. Delete ignores the formula.
+
+One undo step takes the whole assignment back.
+""",
+            "define.joint_patterns",
+            "assign.surface_load",
         ),
         "assign.floor_load": _t(
             "Assign → Area → Floor Load to Frames",
@@ -4996,6 +5070,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_add_node": "define.add_node",
     "_act_storeys": "define.storeys",
     "_act_groups": "define.groups",
+    "_act_joint_patterns": "define.joint_patterns",
     "_act_section_cuts": "define.section_cuts",
     "_act_assign_group": "assign.group",
     "_act_mass_source": "define.mass_source",
@@ -5030,6 +5105,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_remove_constraints": "assign.remove_constraints",
     "_act_assign_load": "assign.load",
     "_act_assign_imposed_displacement": "assign.imposed_displacement",
+    "_act_assign_joint_pattern": "assign.joint_pattern",
     "_act_assign_surface_load": "assign.surface_load",
     "_act_assign_floor_load": "assign.floor_load",
     "_act_assign_zls": "assign.zero_length_section",

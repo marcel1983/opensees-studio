@@ -49,7 +49,7 @@ from opensees_studio.core import (
     ShellMITC4Element,
     TrussElement,
 )
-from opensees_studio.core.area_loads import pattern_distributed_loads
+from opensees_studio.core.area_loads import pattern_distributed_loads, surface_corner_pressures
 from opensees_studio.core.combinations import guess_load_role
 from opensees_studio.core.frame_members import section_extents
 from opensees_studio.core.geometry.elements import FRAME_ELEMENT_CLASSES
@@ -741,17 +741,42 @@ class _Writer:
             member = self.members.get(surface.element_id)
             if member is None:
                 continue
-            vector = [0.0, 0.0, 0.0]
             local = surface.direction == "normal"
-            vector["XYZ".index(surface.direction) if not local else 2] = float(surface.value)
-            load = f.createIfcStructuralLoadPlanarForce(None, *vector)
+            axis = 2 if local else "XYZ".index(surface.direction)
+
+            def planar(value: float, axis: int = axis) -> Any:
+                vector = [0.0, 0.0, 0.0]
+                vector[axis] = float(value)
+                return f.createIfcStructuralLoadPlanarForce(None, *vector)
+
+            if surface.joint_pattern_id is None:
+                load, kind = planar(surface.value), "CONST"
+            else:
+                # By joint pattern: the pressure at each corner, placed in the
+                # surface member's own plane (origin at corner 1, x along 1→2).
+                element = next(e for e in self.project.elements if e.id == surface.element_id)
+                corners = np.array([self.coords[n] for n in element.nodes])
+                pressures = surface_corner_pressures(self.project, surface)
+                x_axis = corners[1] - corners[0]
+                x_axis = x_axis / float(np.linalg.norm(x_axis))
+                normal = np.cross(corners[2] - corners[0], corners[3] - corners[1])
+                y_axis = np.cross(normal / float(np.linalg.norm(normal)), x_axis)
+                load = f.createIfcStructuralLoadConfiguration(
+                    None,
+                    [planar(value) for value in pressures],
+                    [
+                        [float((c - corners[0]) @ x_axis), float((c - corners[0]) @ y_axis)]
+                        for c in corners
+                    ],
+                )
+                kind = "DISCRETE"
             actions.append(
                 api.structural.add_structural_activity(
                     f,
                     applied_load=load,
                     structural_member=member,
                     ifc_class="IfcStructuralPlanarAction",
-                    predefined_type="CONST",
+                    predefined_type=kind,
                     global_or_local="LOCAL_COORDS" if local else "GLOBAL_COORDS",
                 )
             )

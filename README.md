@@ -64,8 +64,12 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   selected joints/frames/shells, or the grid and view options when nothing is
   selected.
 - **Area loads and settlements** — Assign → Area → Surface Load on Shells (a
-  uniform pressure along X, Y, Z or the shell normal, as consistent nodal
-  forces), Assign → Area → Floor Load to Frames (select a floor's joints: every
+  pressure along X, Y, Z or the shell normal, as consistent nodal forces:
+  uniform, or varying by a **joint pattern** — Define → Joint Patterns and
+  Assign → Joint → Joint Pattern Values give each joint a value from
+  `A·x + B·y + C·z + D` or from a free surface and a unit weight, so a
+  hydrostatic or earth pressure on a wall or a tank is exact in resultant and
+  lever arm; drawn on the shells as arrows as long as the pressure), Assign → Area → Floor Load to Frames (select a floor's joints: every
   rectangular bay framed by beams takes the load, two-way by 45° yield lines or
   one-way along X or Y, as trapezoidal loads on its beams) and Assign → Joint →
   Imposed Displacement (a static support settlement, `sp`, checked against

@@ -38,7 +38,12 @@ from opensees_studio.core import (
     UniformElementLoad,
     ZeroLengthElement,
 )
-from opensees_studio.core.area_loads import AreaLoadError, pattern_distributed_loads
+from opensees_studio.core.area_loads import (
+    AreaLoadError,
+    pattern_distributed_loads,
+    shell_normal,
+    surface_corner_pressures,
+)
 from opensees_studio.core.color_by import Categories, element_categories
 from opensees_studio.core.diaphragms import constrained_node_ids
 from opensees_studio.core.frame_members import member_layout
@@ -1313,6 +1318,67 @@ class ModelRenderer:
             point_load_color,
             "loads_point",
         )
+        surface = self._surface_load_arrows(project, nodes, elements, scale)
+        self._add_arrow_batch(
+            [p for p, _, _ in surface],
+            [d for _, d, _ in surface],
+            [length for _, _, length in surface],
+            (0.25, 0.75, 0.95),  # sky blue
+            "loads_surface",
+        )
+
+    #: Natural coordinates of the arrows drawn on a loaded shell (3 x 3).
+    _SURFACE_STATIONS = (-2.0 / 3.0, 0.0, 2.0 / 3.0)
+
+    def _surface_load_arrows(
+        self,
+        project: Project,
+        nodes: dict[int, Any],
+        elements: dict[int, Any],
+        scale: float,
+    ) -> list[tuple[np.ndarray, np.ndarray, float]]:
+        """Arrows on the loaded shells: ``(tip, direction, length)``, nine per shell.
+
+        Each arrow ends on the shell and is as long as the pressure there relative
+        to the largest pressure drawn, so a pressure by joint pattern shows its
+        variation (a hydrostatic load is a triangle of arrows) and a uniform one a
+        field of equal arrows. A sign change flips the arrow.
+        """
+        loads: list[tuple[np.ndarray, np.ndarray, np.ndarray]] = []
+        for pattern in project.load_patterns:
+            if not isinstance(pattern, PlainLoadPattern):
+                continue
+            for load in pattern.surface_loads:
+                element = elements.get(load.element_id)
+                if element is None or len(element.nodes) != 4:
+                    continue
+                try:
+                    pressures = surface_corner_pressures(project, load)
+                    points = np.array([nodes[n].coords for n in element.nodes], dtype=float)
+                    if load.direction == "normal":
+                        axis = shell_normal(points)
+                    else:
+                        axis = np.zeros(3)
+                        axis["XYZ".index(load.direction)] = 1.0
+                except (AreaLoadError, KeyError):
+                    continue
+                loads.append((points, pressures, axis))
+        peak = max((float(np.max(np.abs(p))) for _, p, _ in loads), default=0.0)
+        if peak <= 0.0:
+            return []
+        full = 2.0 * scale
+        arrows: list[tuple[np.ndarray, np.ndarray, float]] = []
+        corners = ((-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0))
+        for points, pressures, axis in loads:
+            for xi in self._SURFACE_STATIONS:
+                for eta in self._SURFACE_STATIONS:
+                    n = np.array([0.25 * (1 + a * xi) * (1 + b * eta) for a, b in corners])
+                    value = float(n @ pressures)
+                    if abs(value) < 1e-9 * peak:
+                        continue
+                    direction = axis if value > 0 else -axis
+                    arrows.append((n @ points, direction, full * abs(value) / peak))
+        return arrows
 
     def _add_arrow_batch(
         self,

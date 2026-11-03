@@ -43,6 +43,7 @@ from opensees_studio.core.geometry import (
 )
 from opensees_studio.core.ground_motion import GroundMotionRecord
 from opensees_studio.core.groups import Group, group_problems
+from opensees_studio.core.joint_patterns import JointPattern
 from opensees_studio.core.loads import LoadPattern, PathTimeSeries, ResponseSpectrum, TimeSeries
 from opensees_studio.core.mass_source import MassSource
 from opensees_studio.core.materials import Material
@@ -95,6 +96,7 @@ class Project(BaseModel):
         "groups",
         "section_cuts",
         "custom_commands",
+        "joint_patterns",
         "view",
         "design",
     )
@@ -221,6 +223,10 @@ class Project(BaseModel):
         default_factory=list,
         description="Resultant forces through a group (Define → Section Cuts; additive).",
     )
+    joint_patterns: list[JointPattern] = Field(
+        default_factory=list,
+        description="A value per node that surface loads vary by (Define → Joint Patterns; additive).",
+    )
     design: DesignSettings | None = Field(
         default=None,
         description="Steel frame and storey drift check settings (Design menu); None = unused.",
@@ -256,6 +262,7 @@ class Project(BaseModel):
             ("group", self.groups),
             ("section cut", self.section_cuts),
             ("custom command block", self.custom_commands),
+            ("joint pattern", self.joint_patterns),
         ):
             ids = [it.id for it in items]
             if len(ids) != len(set(ids)):
@@ -299,6 +306,9 @@ class Project(BaseModel):
 
     def next_target_spectrum_id(self) -> int:
         return self._next_id(self.target_spectra)
+
+    def next_joint_pattern_id(self) -> int:
+        return self._next_id(self.joint_patterns)
 
     def next_analysis_id(self) -> int:
         return self._next_id(self.analyses)
@@ -410,6 +420,7 @@ class Project(BaseModel):
         node_ids = {n.id for n in self.nodes}
         element_ids = {e.id for e in self.elements}
         elements_by_id = {e.id: e for e in self.elements}
+        joint_pattern_ids = {jp.id for jp in self.joint_patterns}
         material_ids = {m.id for m in self.materials}
         section_ids = {s.id for s in self.sections}
         ts_ids = {ts.id for ts in self.time_series}
@@ -574,6 +585,11 @@ class Project(BaseModel):
                     problems.append(
                         f"Pattern {pat.id} has a surface load on element {sl.element_id}, "
                         "which is not a shell."
+                    )
+                if sl.joint_pattern_id is not None and sl.joint_pattern_id not in joint_pattern_ids:
+                    problems.append(
+                        f"Pattern {pat.id} has a surface load on element {sl.element_id} that "
+                        f"varies by missing joint pattern {sl.joint_pattern_id}."
                     )
             for fl in getattr(pat, "floor_loads", []):
                 missing = [n for n in fl.nodes if n not in node_ids]

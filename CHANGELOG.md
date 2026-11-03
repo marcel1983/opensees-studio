@@ -9,6 +9,32 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Added
+
+- **Surface loads by joint pattern (hydrostatic and earth pressure).** Define →
+  Joint Patterns names a value per joint; Assign → Joint → Joint Pattern Values
+  computes the selected joints' values the way SAP2000 does — `A·x + B·y + C·z +
+  D`, or `w·(Z₀ - z) + q` from a free surface and a unit weight — with *zero
+  negative values*, *zero positive values* or all values, adding to, replacing or
+  deleting what the pattern held. Assign → Area → Surface Load on Shells gains a
+  *By joint pattern* distribution: the pressure at each corner is the multiplier
+  times the pattern's value there, bilinear over the shell, and reaches the
+  solver as consistent nodal forces `Σ ∫N_i N_j dA · p_j`, so the resultant and
+  its point of application are exact (checked with OpenSees: a meshed wall's
+  base carries `½ γ H² B` and its moment at `H / 3`). The values follow the
+  model: meshing a shell interpolates them on the new nodes, Replicate copies
+  them, merging duplicates keeps them on the remaining node, deleting a joint
+  deletes them, and every step undoes.
+- **Shell loads are drawn** on the canvas, uniform or by joint pattern: nine
+  arrows per shell, as long as the pressure under them.
+- **SAP2000 text: joint patterns and area loads.** The import reads `JOINT
+  PATTERN DEFINITIONS`, `AREA LOADS - UNIFORM` (global axis, gravity, local 3) and
+  `AREA LOADS - SURFACE PRESSURE` (`Top`/`Bottom` face, by element or by
+  `JtPattern`), which it used to skip; the export writes them, and a model goes
+  out and back with the same nodal forces.
+- **IFC export** writes a pressure by joint pattern as a `DISCRETE` planar action
+  with its four corner values.
+
 ## [0.0.35] - 2026-11-02
 
 ### Fixed
