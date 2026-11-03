@@ -31,15 +31,13 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal, Protocol
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt
 
 from opensees_studio.core.geometry.local_axes import frame_local_axes
-
-if TYPE_CHECKING:
-    from opensees_studio.core.project import Project
+from opensees_studio.core.geometry.quadrature import quad_tributary_areas
 
 SpringBehaviour = Literal["both", "compression", "tension"]
 Side = Literal["negative", "positive"]
@@ -51,6 +49,17 @@ BEHAVIOURS: tuple[tuple[str, SpringBehaviour], ...] = (
 )
 
 _GLOBAL = {"X": (1.0, 0.0, 0.0), "Y": (0.0, 1.0, 0.0), "Z": (0.0, 0.0, 1.0)}
+
+
+class _ProjectLike(Protocol):
+    """What the spring helpers need of a Project, without importing it back."""
+
+    ndm: Any
+    nodes: Any
+    elements: Any
+    area_springs: list[Any]
+    line_springs: list[Any]
+    edge_springs: list[Any]
 
 
 class _Spring(BaseModel):
@@ -127,10 +136,8 @@ def _shell_normal(points: np.ndarray) -> np.ndarray:
     return _unit(np.cross(points[2] - points[0], points[3] - points[1]))
 
 
-def _shares(project: Project) -> Iterable[tuple[int, np.ndarray, float, SpringBehaviour]]:
+def _shares(project: _ProjectLike) -> Iterable[tuple[int, np.ndarray, float, SpringBehaviour]]:
     """``(node, direction, stiffness)`` contributions of every distributed spring."""
-    from opensees_studio.core.self_weight import quad_tributary_areas
-
     coords = {n.id: np.asarray(n.coords, dtype=float) for n in project.nodes}
     elements = {e.id: e for e in project.elements}
 
@@ -180,7 +187,7 @@ def _shares(project: Project) -> Iterable[tuple[int, np.ndarray, float, SpringBe
             yield el.nodes[k], d, edge.stiffness * half, edge.behaviour  # type: ignore[attr-defined]
 
 
-def nodal_springs(project: Project) -> list[NodalSpring]:
+def nodal_springs(project: _ProjectLike) -> list[NodalSpring]:
     """Every distributed spring as springs at the nodes, one per node, direction, behaviour.
 
     Contributions along the same direction (to 1e-9) with the same behaviour add
@@ -203,7 +210,7 @@ def nodal_springs(project: Project) -> list[NodalSpring]:
     ]
 
 
-def has_one_sided_springs(project: Project) -> bool:
+def has_one_sided_springs(project: _ProjectLike) -> bool:
     """True when a compression-only or tension-only spring makes the model nonlinear."""
     return any(
         s.behaviour != "both"
@@ -211,17 +218,17 @@ def has_one_sided_springs(project: Project) -> bool:
     )
 
 
-def total_spring_count(project: Project) -> int:
+def total_spring_count(project: _ProjectLike) -> int:
     return len(project.area_springs) + len(project.line_springs) + len(project.edge_springs)
 
 
 # ──────────────────────────── keeping springs in step with the elements ────────────────────────────
-def _spring_lists(project: Project) -> tuple[list[Any], list[Any], list[Any]]:
+def _spring_lists(project: _ProjectLike) -> tuple[list[Any], list[Any], list[Any]]:
     """The three spring lists, typed loosely so one loop can walk them all."""
     return project.area_springs, project.line_springs, project.edge_springs
 
 
-def prune_support_springs(project: Project) -> bool:
+def prune_support_springs(project: _ProjectLike) -> bool:
     """Drop the springs of elements the model no longer has; ``True`` when one went."""
     present = {e.id for e in project.elements}
     changed = False
@@ -233,7 +240,7 @@ def prune_support_springs(project: Project) -> bool:
     return changed
 
 
-def copy_support_springs(project: Project, element_mapping: dict[int, int]) -> None:
+def copy_support_springs(project: _ProjectLike, element_mapping: dict[int, int]) -> None:
     """Give each copied element (source id → copy id) its source's springs."""
     for springs in _spring_lists(project):
         springs.extend(
@@ -244,7 +251,7 @@ def copy_support_springs(project: Project, element_mapping: dict[int, int]) -> N
 
 
 def springs_follow_pieces(
-    project: Project,
+    project: _ProjectLike,
     replacements: dict[int, list[int]],
     original_corners: dict[int, np.ndarray],
     tolerance: float,
