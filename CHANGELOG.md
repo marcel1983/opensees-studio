@@ -9,6 +9,8 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.37] - 2026-11-03
+
 ### Added
 
 - **File → Import → IFC.** An IFC file (IFC2x3 or IFC4, `.ifc` or `.ifczip`)
