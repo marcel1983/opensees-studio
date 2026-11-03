@@ -9,6 +9,8 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.38] - 2026-11-03
+
 ### Added
 
 - **Line, edge and area springs.** Assign → Frame → Line Springs (a beam on an
