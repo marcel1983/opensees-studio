@@ -29,15 +29,12 @@ This module is part of ``core``: no Qt, no OpenSees.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from typing import TYPE_CHECKING, Literal
+from typing import Any, Literal, Protocol
 
 import numpy as np
 from pydantic import Field, PositiveInt
 
 from opensees_studio.core._base import Entity
-
-if TYPE_CHECKING:
-    from opensees_studio.core.project import Project
 
 Restriction = Literal["all", "zero_negative", "zero_positive"]
 Action = Literal["add", "replace", "delete"]
@@ -65,6 +62,13 @@ class JointPattern(Entity):
     def value(self, node_id: int) -> float:
         """The pattern's value at ``node_id`` (zero when unassigned)."""
         return float(self.values.get(node_id, 0.0))
+
+
+class _ProjectLike(Protocol):
+    """What the pattern helpers need of a Project, without importing it back."""
+
+    nodes: Any
+    joint_patterns: list[JointPattern]
 
 
 def plane_values(
@@ -154,7 +158,7 @@ def interpolate_on_quad(
 
 
 # ──────────────────────────── keeping patterns in step with the nodes ────────────────────────────
-def prune_joint_patterns(project: Project) -> bool:
+def prune_joint_patterns(project: _ProjectLike) -> bool:
     """Drop the values of nodes the model no longer has; ``True`` when one went.
 
     A stale value would otherwise be inherited by the next node given the same id.
@@ -169,7 +173,7 @@ def prune_joint_patterns(project: Project) -> bool:
     return changed
 
 
-def follow_merged_nodes(project: Project, mapping: Mapping[int, int]) -> None:
+def follow_merged_nodes(project: _ProjectLike, mapping: Mapping[int, int]) -> None:
     """After a merge (removed id → keeper id): a keeper without a value takes its duplicate's."""
     for k, pattern in enumerate(project.joint_patterns):
         values = dict(pattern.values)
@@ -180,7 +184,7 @@ def follow_merged_nodes(project: Project, mapping: Mapping[int, int]) -> None:
         project.joint_patterns[k] = pattern.model_copy(update={"values": values})
 
 
-def copy_to_new_nodes(project: Project, mapping: Mapping[int, int]) -> None:
+def copy_to_new_nodes(project: _ProjectLike, mapping: Mapping[int, int]) -> None:
     """Give each copied node (source id → copy id) its source's value in every pattern."""
     for k, pattern in enumerate(project.joint_patterns):
         added = {new: pattern.values[old] for old, new in mapping.items() if old in pattern.values}
@@ -191,7 +195,7 @@ def copy_to_new_nodes(project: Project, mapping: Mapping[int, int]) -> None:
 
 
 def interpolate_new_nodes(
-    project: Project,
+    project: _ProjectLike,
     parents: Mapping[int, tuple[np.ndarray, tuple[int, int, int, int]]],
     new_nodes: Mapping[int, np.ndarray],
 ) -> int:
