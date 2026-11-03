@@ -247,8 +247,8 @@ Uniform Excitation, Add Multi-Support Excitation, Load Combinations.
 
 # Assign
 - Joint: Restraints, Masses, Springs, EqualDOF, Diaphragm, Rigid Link, Remove
-Constraints, Point Loads, Imposed Displacement, Zero-Length Section, Bearing,
-Link (twoNodeLink, Triple Friction Pendulum).
+Constraints, Point Loads, Imposed Displacement, Zero-Length Element and
+Section, Bearing, Link (twoNodeLink, Triple Friction Pendulum).
 - Frame: Section, Material, Geometric Transformation, Beam Integration,
 Releases/Partial Fixity, End Offsets, Insertion Point, Property Modifiers,
 Distributed, Trapezoidal and Point Loads, Plastic Hinge.
@@ -752,6 +752,7 @@ without a matching velocity loses part of the input.
         "assign.equal_dof",
         "assign.support",
         "assign.diaphragm",
+        "mechanics.constraint_handlers",
     ),
     "mechanics.numberer_system": _t(
         "Numberer, system and solver",
@@ -780,6 +781,46 @@ choice matters on large models and on models that struggle to converge.
 """,
         "analyze.cases",
         "mechanics.static",
+    ),
+    "mechanics.constraint_handlers": _t(
+        "Constraint handlers: Plain, Lagrange, Penalty and Transformation",
+        "Mechanics",
+        "How OpenSees enforces equalDOF, rigid links and diaphragms.",
+        """
+These are per-case settings in Analyze → Cases (and in the transient and
+pushover forms): the handler turns the model's multi-point constraints into
+equations.
+
+# The four handlers
+- **Plain** — the default. It enforces only an `equalDOF` whose constraint
+  matrix is the identity; it drops a rigid diaphragm or a `rigidLink` with a
+  warning and can then solve a singular system without reporting failure.
+- **Transformation** — the safe general choice. It transforms the constrained
+  DOFs away and handles chains, rigid links and diaphragms. The application
+  switches a case to Transformation when the model needs it, even if the case
+  says Plain.
+- **Lagrange** — adds the constraints as extra unknowns with Lagrange
+  multipliers. The result is exact, but the system grows and can be indefinite;
+  use it when Transformation cannot represent a constraint or when you need the
+  constraint forces.
+- **Penalty** — adds large penalty stiffness instead of extra unknowns. It keeps
+  the system size and stays positive definite, but the penalty value trades
+  accuracy against conditioning.
+
+# What the application does
+- A case left at **Plain** runs with **Transformation** when the model has a
+  diaphragm, a `rigidLink` (including a frame end offset hung off its joint), or
+  an imposed support displacement. The modal static solve follows the same rule.
+- **Lagrange** and **Penalty** are passed to OpenSees unchanged; they remain
+  available for models whose constraints are better handled that way.
+- The model check refuses the chaining and repeated-constraint cases that
+  Transformation cannot number correctly; see the diaphragm and rigid-link
+  pages for the exact rules.
+""",
+        "analyze.cases",
+        "mechanics.constraints",
+        "assign.diaphragm",
+        "assign.rigid_link",
     ),
 }
 
@@ -3030,6 +3071,48 @@ the solver.
             "define.plain_pattern",
             "assign.distributed_load",
         ),
+        "assign.zero_length": _t(
+            "Assign → Joint → Zero-Length Element",
+            "Assign — joints",
+            "A uniaxial material in each global DOF between two coincident joints.",
+            """
+A `zeroLength` element connects two joints at the same point with one
+**uniaxial material per chosen global DOF** (1..ndf). It is the general
+building block for a plastic hinge, a base isolator, a soil spring or a damper:
+the element's deformation is the relative displacement or rotation of the two
+nodes.
+
+# Values
+- **DOF** — tick each global direction that carries a material. In a 2D model
+  the DOFs are Ux, Uz and Ry; in a 3D model Ux, Uy, Uz, Rx, Ry and Rz. The
+  dialog shows the model's own DOF names.
+- **Material** — one uniaxial material per ticked DOF, in the same order as the
+  ticks. Any uniaxial material works (`Elastic`, `Steel02`, `ElasticPPGap`,
+  `ViscousDamper`, …).
+- **-doRayleigh** — include the element's initial stiffness in the
+  stiffness-proportional Rayleigh damping. OpenSees leaves zeroLength elements
+  out by default, so an isolator whose initial stiffness anchors
+  Kinit-proportional damping must set it.
+
+# Mechanics
+- The two joints must be **coincident**. They are a deliberate pair: Edit →
+  Check Model for Duplicates leaves them alone, because merging them would
+  delete the element.
+- A zeroLength is not a support: if both nodes are free the element carries no
+  load path. One node is normally restrained, or connected to the rest of the
+  model.
+- For a full section (P, Mz, My, T, Vy, Vz at once) use Assign → Joint →
+  Zero-Length Section instead.
+
+# Local axes
+`zeroLength` uses the global axes for its DOFs; unlike `twoNodeLink` it has no
+local orientation. Use `twoNodeLink` when the materials must act along a
+member's local axes.
+""",
+            "assign.zero_length_section",
+            "assign.link",
+            "mechanics.constraints",
+        ),
         "assign.zero_length_section": _t(
             "Assign → Joint → Zero-Length Section",
             "Assign — joints",
@@ -3050,6 +3133,7 @@ the relative displacement and rotation of the two nodes.
   axes (Y for the section's local x).
 """,
             "assign.bearing",
+            "assign.zero_length",
             "mechanics.fiber_sections",
         ),
         "assign.link": _t(
@@ -3087,13 +3171,20 @@ bearings of Assign → Joint → Bearing.
             "Assign — joints",
             "An elastomeric or sliding isolator between two coincident nodes.",
             """
-# Values — elastomeric (plasticity / Bouc-Wen)
+# Elements
+- **elastomericBearingPlasticity** — bilinear shear with return-mapping
+  plasticity.
+- **elastomericBearingBoucWen** — smooth Bouc-Wen shear.
+- **flatSliderBearing** — friction, no restoring stiffness.
+- **singleFPBearing** — single friction pendulum, with the radius R_eff.
+
+# Values — elastomericBearingPlasticity / elastomericBearingBoucWen
 - **Kinit** — initial shear stiffness.
 - **Qd** — characteristic strength (the loop's flat part).
 - **alpha1, alpha2** — post-yield stiffness ratios; **mu, eta, beta, gamma** for
   the Bouc-Wen shape.
 
-# Values — sliding (flat slider, single friction pendulum)
+# Values — flatSliderBearing / singleFPBearing
 - **Friction model** — a named model from Define → Friction Models, plus its
   coefficient.
 - **R_eff** — the pendulum radius (single FP), which sets the isolated period
@@ -3594,9 +3685,10 @@ case, a modal case and a pushover, for instance — each with its own settings.
 
 # Options that apply to most types
 - **Steps** and, for a transient, **dt**.
-- **Numberer, system, algorithm, convergence test** — see Numberer, system and
-  solver. The defaults are chosen to work; change them for size or for a case
-  that struggles. Every option of OpenSeesPy 3.8 that runs is offered:
+- **Numberer, system, constraints, algorithm, convergence test** — see Numberer,
+  system and solver and Constraint handlers. The defaults are chosen to work;
+  change them for size or for a case that struggles. Every option of OpenSeesPy
+  3.8 that runs is offered:
   - systems BandGeneral, BandSPD, ProfileSPD, SparseGeneral, SparseSYM, UmfPack,
     FullGeneral;
   - algorithms Linear, Newton, NewtonLineSearch, ModifiedNewton, KrylovNewton,
@@ -3622,6 +3714,7 @@ transient is the standard way to start a non-linear case from the deformed
 gravity state. The case list applies the patterns in the order given.
 """,
             "mechanics.static",
+            "mechanics.constraint_handlers",
             "analyze.run",
             "display.influence_line",
         ),
@@ -5032,6 +5125,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_assign_imposed_displacement": "assign.imposed_displacement",
     "_act_assign_surface_load": "assign.surface_load",
     "_act_assign_floor_load": "assign.floor_load",
+    "_act_assign_zero_length": "assign.zero_length",
     "_act_assign_zls": "assign.zero_length_section",
     "_act_assign_bearing": "assign.bearing",
     # ── Assign: frame ───────────────────────────────────────────────

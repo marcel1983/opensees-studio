@@ -52,7 +52,8 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
 - **Modeling** — grids, nodes, frames (elastic, force-based and
   displacement-based), trusses, corotational trusses, quads, `ShellMITC4`
   shells (Define → Create Shell from 4 Nodes derives the winding from the
-  coordinates), zero-length elements and zero-length sections, restraints,
+  coordinates), zero-length elements (Assign → Joint → Zero-Length Element) and
+  zero-length sections, restraints,
   equalDOF constraints, uniform, trapezoidal / partial-span and point loads on
   frames, imposed support motion.
 - **Grids** — Cartesian or radial (cylindrical: rings, radial lines, levels)
@@ -790,8 +791,8 @@ rectangular flat-slider loop at `mu W`, the sloped pendulum loop with
 stiffness `W / Reff`, the energy `4 mu W (u_max - u_y)` per cycle, the
 velocity dependence of `VelDependent`, and the pendulum period;
 `examples/isolated_portal2d_fp.py` is the isolated frame on single FP
-bearings under the same record. The triple friction pendulum is the next
-roadmap item (ISO-3).
+bearings under the same record. The triple friction pendulum is available from
+**Assign → Joint → Link** in a 3D model (ISO-3).
 
 ## Run the test suite
 
