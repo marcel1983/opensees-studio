@@ -87,6 +87,7 @@ from opensees_studio.commands.series_and_patterns import (
     ReplaceTimeSeriesCommand,
     SetPatternNodalLoadsCommand,
 )
+from opensees_studio.commands.support_springs import SetSupportSpringsCommand
 from opensees_studio.commands.tables import ApplyModelTablesCommand
 from opensees_studio.commands.transforms import (
     MirrorCommand,
@@ -154,6 +155,7 @@ __all__ = [
     "SetSectionCutsCommand",
     "SetSpringCommand",
     "SetStoreysCommand",
+    "SetSupportSpringsCommand",
     "UpdateAnalysisCaseCommand",
     "UpdateCombinationCommand",
     "UpdateElementFieldsCommand",

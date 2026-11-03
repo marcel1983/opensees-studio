@@ -64,6 +64,14 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   (± 50 mm by default). Right-click on the model view lists the options of the
   selected joints/frames/shells, or the grid and view options when nothing is
   selected.
+- **Spring supports** — Assign → Joint → Springs (to ground per DOF), Assign →
+  Frame → Line Springs and Assign → Area → Edge Springs (per unit length) and
+  Area Springs (per unit area: a Winkler bed under a raft or a tank), handed to
+  the nodes by tributary length or area. Each acts along a direction with the
+  supporting medium on one side, and is linear, **compression only** or
+  **tension only**; one-sided springs are solved by Newton iteration and the log
+  says which let go (lift-off). Checked against Hetényi's beam on an elastic
+  foundation and a raft's `q / k` settlement.
 - **Area loads and settlements** — Assign → Area → Surface Load on Shells (a
   pressure along X, Y, Z or the shell normal, as consistent nodal forces:
   uniform, or varying by a **joint pattern** — Define → Joint Patterns and

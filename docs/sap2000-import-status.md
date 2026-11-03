@@ -112,9 +112,20 @@ not read and every approximation that was made. The main gaps are:
 - A ground displacement on a free or spring-supported DOF is reported: this
   program's support spring has a fixed ground end.
 - Self-weight uses the section's unit weight and the frame weight modifier.
-- An area uniform load along local 1 or 2 (in the area's plane), a surface
-  pressure on an edge face, and `AREA SPRING ASSIGNMENTS` (area springs, such as
-  a slab on soil) are reported and not imported.
+- An area uniform load along local 1 or 2 (in the area's plane) and a surface
+  pressure on an edge face are reported and not imported.
+- `AREA SPRING ASSIGNMENTS` are imported when they are simple springs normal to
+  the Top or Bottom face (a slab on soil): the medium is on that face's side and
+  `Compression Only` / `Tension Only` keep their sense. Springs on an edge face
+  (1 to 4), link-property springs and springs not normal to the face are
+  reported. An `Outward` normal is read as the spring on the other face.
+- `FRAME SPRING ASSIGNMENTS` are imported when they are simple springs along an
+  object axis: `Dir` 1, 2 or 3 (negative for the opposite sense) becomes the
+  member's local axis or the global axis it lies on, with the supporting medium
+  on the side opposite that sense (`Dir=2` under a horizontal beam: soil below).
+  Link-property springs, other direction types and axes this model cannot name
+  are reported. Line springs are written back the same way; edge springs of
+  shells are not written (SAP2000 has no simple edge spring here) and are reported.
 
 ### Results and export
 
