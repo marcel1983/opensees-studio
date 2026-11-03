@@ -22,7 +22,7 @@ from opensees_studio.core import (
     Project,
     ShellMITC4Element,
 )
-from opensees_studio.views.main_window import MainWindow
+from opensees_studio.views.canvas3d.model_canvas import ModelCanvas
 
 
 def _project() -> Project:
@@ -42,35 +42,35 @@ def _project() -> Project:
 
 @pytest.mark.gui
 def test_click_inside_a_shell_selects_it(qtbot) -> None:  # type: ignore[no-untyped-def]
-    window = MainWindow()
-    qtbot.addWidget(window)
-    window.resize(1000, 700)
-    window.show()
-    qtbot.waitExposed(window)
     project = _project()
-    window._vm.adopt(project)
-    canvas = window._canvas
-    canvas.view_isometric()
-    canvas.render()
-    qtbot.wait(50)
+    canvas = ModelCanvas()
+    qtbot.addWidget(canvas)
+    canvas.resize(800, 600)
+    canvas.show()
+    qtbot.waitExposed(canvas)
+    try:
+        canvas.show_project(project)
+        canvas.view_isometric()
+        canvas.render()
+        qtbot.wait(50)
 
-    centre = np.mean([node.coords for node in project.nodes], axis=0)
-    display = canvas._project_to_display(np.asarray([centre], dtype=float))[0]
-    dpr = canvas.devicePixelRatioF()
-    point = QPoint(int(display[0] / dpr), int(canvas.height() - display[1] / dpr))
+        centre = np.mean([node.coords for node in project.nodes], axis=0)
+        display = canvas._project_to_display(np.asarray([centre], dtype=float))[0]
+        dpr = canvas.devicePixelRatioF()
+        point = QPoint(int(display[0] / dpr), int(canvas.height() - display[1] / dpr))
 
-    QTest.mouseClick(canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, point)
+        QTest.mouseClick(canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, point)
 
-    assert canvas.selection.elements == frozenset({7})
+        assert canvas.selection.elements == frozenset({7})
 
-    # A click away from the face must not select it. Keep this in the same
-    # window: a second MainWindow with its own VTK context crashed the Windows
-    # CI runner inside the Qt event loop.
-    canvas.selection.clear()
-    QTest.mouseClick(
-        canvas,
-        Qt.MouseButton.LeftButton,
-        Qt.KeyboardModifier.NoModifier,
-        QPoint(5, 5),
-    )
-    assert canvas.selection.elements == frozenset()
+        # A click away from the face must not select it.
+        canvas.selection.clear()
+        QTest.mouseClick(
+            canvas,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+            QPoint(5, 5),
+        )
+        assert canvas.selection.elements == frozenset()
+    finally:
+        canvas.close()
