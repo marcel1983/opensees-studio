@@ -20,9 +20,11 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from opensees_studio.commands.base import ProjectCommand, restore_project, snapshot_project
+from opensees_studio.core.duplicates import default_tolerance
 from opensees_studio.core.joint_patterns import interpolate_new_nodes
 from opensees_studio.core.loads import PlainLoadPattern, PointElementLoad, TrapezoidalElementLoad
 from opensees_studio.core.mesh import MeshPlan
+from opensees_studio.core.support_springs import springs_follow_pieces
 
 if TYPE_CHECKING:
     from opensees_studio.viewmodels import ProjectViewModel
@@ -99,9 +101,22 @@ class MeshCommand(ProjectCommand):
             ]
 
         parents = self._shell_parents(project, removed)
+        coords = {node.id: np.asarray(node.coords, dtype=float) for node in project.nodes}
+        corners = {
+            element.id: np.array([coords[n] for n in element.nodes])
+            for element in project.elements
+            if element.id in removed and len(element.nodes) == 4
+        }
         project.elements[:] = [element for element in project.elements if element.id not in removed]
         project.nodes.extend(self._plan.new_nodes)
         project.elements.extend(self._plan.new_elements)
+        if project.area_springs or project.line_springs or project.edge_springs:
+            springs_follow_pieces(
+                project,
+                {k: v for k, v in self._plan.replacements.items() if k in removed},
+                corners,
+                default_tolerance(project),
+            )
         if parents and project.joint_patterns:
             # A pressure that varies by a joint pattern needs a value at every new
             # corner: the one the parent shell's bilinear field has there.

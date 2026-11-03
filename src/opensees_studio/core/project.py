@@ -51,6 +51,7 @@ from opensees_studio.core.materials.library import material_reference_problems
 from opensees_studio.core.section_cuts import SectionCut, cut_problems
 from opensees_studio.core.sections import ElasticSection, NonprismaticSection, Section
 from opensees_studio.core.storeys import Storey
+from opensees_studio.core.support_springs import AreaSpring, EdgeSpring, LineSpring
 from opensees_studio.core.target_spectrum import TargetSpectrum
 from opensees_studio.core.units import UnitSystem
 from opensees_studio.core.view_settings import ViewSettings
@@ -97,6 +98,9 @@ class Project(BaseModel):
         "section_cuts",
         "custom_commands",
         "joint_patterns",
+        "area_springs",
+        "line_springs",
+        "edge_springs",
         "view",
         "design",
     )
@@ -222,6 +226,18 @@ class Project(BaseModel):
     section_cuts: list[SectionCut] = Field(
         default_factory=list,
         description="Resultant forces through a group (Define → Section Cuts; additive).",
+    )
+    area_springs: list[AreaSpring] = Field(
+        default_factory=list,
+        description="Spring beds under shells, per area (Assign → Area → Area Springs; additive).",
+    )
+    line_springs: list[LineSpring] = Field(
+        default_factory=list,
+        description="Spring beds along frames, per length (Assign → Frame → Line Springs; additive).",
+    )
+    edge_springs: list[EdgeSpring] = Field(
+        default_factory=list,
+        description="Spring beds along shell edges, per length (Assign → Area → Edge Springs; additive).",
     )
     joint_patterns: list[JointPattern] = Field(
         default_factory=list,
@@ -608,6 +624,18 @@ class Project(BaseModel):
                         f"but the model has {self.ndf} DOF per node."
                     )
 
+        for kind, springs, corners in (
+            ("area spring", self.area_springs, 4),
+            ("edge spring", self.edge_springs, 4),
+            ("line spring", self.line_springs, 2),
+        ):
+            for spring in springs:
+                target = elements_by_id.get(spring.element_id)
+                if target is None or len(target.nodes) != corners:
+                    what = "shell" if corners == 4 else "two-node frame member"
+                    problems.append(
+                        f"An {kind} is on element {spring.element_id}, which is not a {what}."
+                    )
         for mp in self.mp_constraints:
             if mp.retained_node not in node_ids:
                 problems.append(

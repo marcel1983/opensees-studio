@@ -107,6 +107,7 @@ from opensees_studio.core.sections import (
     TubeShape,
     WideFlangeShape,
 )
+from opensees_studio.core.support_springs import AreaSpring, LineSpring
 from opensees_studio.core.units import UnitSystem, gravity, metres_per_unit, newtons_per_unit
 from opensees_studio.diagnostics.performance import perf
 from opensees_studio.services.nonprismatic import materialize_nonprismatic
@@ -185,6 +186,8 @@ READ_TABLES: frozenset[str] = frozenset(
         "JOINT PATTERN ASSIGNMENTS",
         "AREA LOADS - UNIFORM",
         "AREA LOADS - SURFACE PRESSURE",
+        "AREA SPRING ASSIGNMENTS",
+        "FRAME SPRING ASSIGNMENTS",
         "FRAME LOADS - DISTRIBUTED",
         "FRAME LOADS - POINT",
         "FRAME LOADS - TEMPERATURE",
@@ -652,6 +655,8 @@ class _Translator:
         self.area_elements: dict[str, int] = {}
         #: Joint patterns by name, with their values per node id.
         self.joint_patterns: dict[str, JointPattern] = {}
+        self.area_springs: list[AreaSpring] = []
+        self.line_springs: list[LineSpring] = []
         self.diaphragms: list[RigidDiaphragm] = []
         self._diaphragm_defs = {
             row.get("Name", ""): row
@@ -1858,6 +1863,118 @@ class _Translator:
         self._area_loads(pattern_of)
         return patterns
 
+    def build_area_springs(self) -> None:
+        """``AREA SPRING ASSIGNMENTS``: simple springs normal to an area's Top or Bottom face.
+
+        The spring sits on the face it names: ``Top`` is the +3 side, so the
+        supporting medium is there and compression is the area moving into it.
+        ``Compression Only`` and ``Tension Only`` keep their sense; the stiffness
+        is per unit area. A spring on an edge face, a link-property spring and an
+        ``Outward`` normal are reported.
+        """
+        factor = self.scale.force / self.scale.length**3
+        behaviour_of = {"compression only": "compression", "tension only": "tension"}
+        for row in self.s2k.rows("AREA SPRING ASSIGNMENTS"):
+            element_id = self.area_elements.get(row.get("Area", ""))
+            if element_id is None:
+                self.dropped["area spring on an area that was not imported"] += 1
+                continue
+            if row.get("Type", "Simple").strip().lower() != "simple":
+                self.dropped["area spring from a link property"] += 1
+                continue
+            face = row.get("Face", "Bottom").strip().lower()
+            if face not in ("top", "bottom"):
+                self.dropped["area spring on an area edge face"] += 1
+                continue
+            if row.get("Dir1Type", "Normal To Face").strip().lower() != "normal to face":
+                self.dropped["area spring not normal to its face"] += 1
+                continue
+            side = "positive" if face == "top" else "negative"
+            if row.get("NormalDir", "Inward").strip().lower() == "outward":
+                side = "negative" if side == "positive" else "positive"
+                self.dropped["area spring with an Outward normal (read as the other face)"] += 1
+            where = f"Area {row.get('Area')} ({_at('AREA SPRING ASSIGNMENTS', row)}): "
+            stiffness = _number(row, "Stiffness", where=where) * factor
+            if stiffness <= 0.0:
+                self.dropped["area spring of zero stiffness"] += 1
+                continue
+            self.area_springs.append(
+                AreaSpring(
+                    element_id=element_id,
+                    stiffness=stiffness,
+                    direction="normal",
+                    side=side,  # type: ignore[arg-type]
+                    behaviour=behaviour_of.get(  # type: ignore[arg-type]
+                        row.get("SimpleType", "").strip().lower(), "both"
+                    ),
+                )
+            )
+
+    def build_line_springs(self) -> None:
+        """``FRAME SPRING ASSIGNMENTS``: simple springs along a member's object axis.
+
+        ``Dir`` names the local axis (1, 2 or 3, negative for the opposite sense);
+        the supporting medium is on the negative side of that sense, so a
+        ``Compression Only`` spring along +3 under a beam resists it moving down.
+        The axis becomes this model's local axis or the global axis it lies on;
+        any other axis, a link-property spring and other direction types are reported.
+        """
+        factor = self.scale.force / self.scale.length**2
+        behaviour_of = {"compression only": "compression", "tension only": "tension"}
+        for row in self.s2k.rows("FRAME SPRING ASSIGNMENTS"):
+            name = row.get("Frame", "")
+            if name not in self.frames:
+                self.dropped["frame spring on a frame that was not imported"] += 1
+                continue
+            if row.get("Type", "Simple").strip().lower() != "simple":
+                self.dropped["frame spring from a link property"] += 1
+                continue
+            if row.get("Dir1Type", "Object Axes").strip().lower() != "object axes":
+                self.dropped["frame spring not along an object axis"] += 1
+                continue
+            where = f"Frame {name} ({_at('FRAME SPRING ASSIGNMENTS', row)}): "
+            dir_value = round(_number(row, "Dir", 3.0, where=where))
+            if abs(dir_value) not in (1, 2, 3):
+                self.dropped["frame spring with an unknown direction"] += 1
+                continue
+            stiffness = _number(row, "Stiffness", where=where) * factor
+            if stiffness <= 0.0:
+                self.dropped["frame spring of zero stiffness"] += 1
+                continue
+            ends = self.frame_ends[name]
+            p_i, p_j = self.points[ends[0]], self.points[ends[1]]
+            vector = sap_local_axes(p_i, p_j, self.angles.get(name, 0.0))[abs(dir_value) - 1]
+            if dir_value < 0:
+                vector = -vector
+            ours = frame_local_axes(self.ndm, p_i.tolist(), p_j.tolist())
+            assert ours is not None
+            candidates = [(str(k + 1), ours[k]) for k in range(3)] + [
+                (axis, np.eye(3)[k]) for k, axis in enumerate("XYZ")
+            ]
+            match = next(
+                (
+                    (label, float(np.dot(vector, axis)))
+                    for label, axis in candidates
+                    if abs(float(np.dot(vector, axis))) >= _ALIGNED
+                ),
+                None,
+            )
+            if match is None:
+                self.dropped["frame spring on an axis this model cannot name"] += 1
+                continue
+            label, sense = match
+            self.line_springs.append(
+                LineSpring(
+                    element_id=self.frames[name].id,
+                    stiffness=stiffness,
+                    direction=label,
+                    side="negative" if sense > 0 else "positive",
+                    behaviour=behaviour_of.get(  # type: ignore[arg-type]
+                        row.get("SimpleType", "").strip().lower(), "both"
+                    ),
+                )
+            )
+
     def _joint_pattern(self, name: str) -> JointPattern:
         """The project's joint pattern for a SAP2000 one, its values per node."""
         if name not in self.joint_patterns:
@@ -2341,6 +2458,8 @@ def s2k_to_project(
         translator.build_frames(translator.non_uniform_frames())
     with perf.span("s2k.areas"):
         translator.build_areas()
+        translator.build_area_springs()
+        translator.build_line_springs()
     with perf.span("s2k.diaphragms"):
         translator.build_diaphragms()
     with perf.span("s2k.patterns"):
@@ -2377,6 +2496,8 @@ def s2k_to_project(
             diaphragms=[*translator.diaphragms],
             time_series=[LinearTimeSeries(id=1, name="Linear")],
             joint_patterns=list(translator.joint_patterns.values()),
+            area_springs=list(translator.area_springs),
+            line_springs=list(translator.line_springs),
             load_patterns=[*patterns.values(), *extra],
             spectra=[*translator.spectra],
             analyses=[*cases],
@@ -2877,6 +2998,76 @@ class _Writer:
             ("WeightMod", _fmt(mods.weight)),
         ]
 
+    def _area_springs(self) -> None:
+        """``AREA SPRING ASSIGNMENTS`` for the springs normal to a shell (the others are reported)."""
+        p = self.project
+        simple = {
+            "both": '"Tension and Compression"',
+            "compression": '"Compression Only"',
+            "tension": '"Tension Only"',
+        }
+        rows: list[list[tuple[str, str]]] = []
+        for spring in p.area_springs:
+            if spring.direction != "normal":
+                self.report.skipped["area spring along a global axis"] += 1
+                continue
+            rows.append(
+                [
+                    ("Area", str(spring.element_id)),
+                    ("Type", "Simple"),
+                    ("Stiffness", _fmt(spring.stiffness)),
+                    ("SimpleType", simple[spring.behaviour]),
+                    ("Face", "Top" if spring.side == "positive" else "Bottom"),
+                    ("Dir1Type", '"Normal To Face"'),
+                    ("NormalDir", "Inward"),
+                ]
+            )
+        self.table("AREA SPRING ASSIGNMENTS", rows)
+        if rows:
+            self.report.written["area spring(s)"] = len(rows)
+        if p.edge_springs:
+            self.report.skipped["edge spring"] += len(p.edge_springs)
+        self._line_springs(simple)
+
+    def _line_springs(self, simple: dict[str, str]) -> None:
+        """``FRAME SPRING ASSIGNMENTS`` along the SAP2000 object axis each spring lies on."""
+        p = self.project
+        coords = {n.id: np.asarray(n.coords, dtype=float) for n in p.nodes}
+        elements = {e.id: e for e in p.elements}
+        rows: list[list[tuple[str, str]]] = []
+        for spring in p.line_springs:
+            el = elements.get(spring.element_id)
+            if el is None or len(el.nodes) != 2:
+                continue
+            p_i, p_j = coords[el.nodes[0]], coords[el.nodes[1]]
+            if spring.direction in ("X", "Y", "Z"):
+                vector = np.eye(3)["XYZ".index(spring.direction)]
+            else:
+                ours = frame_local_axes(p.ndm, p_i.tolist(), p_j.tolist())
+                assert ours is not None
+                vector = ours[int(spring.direction) - 1]
+            if spring.side == "positive":
+                vector = -vector
+            sap = sap_local_axes(p_i, p_j, writer_angle(p.ndm, p_i, p_j))
+            dots = [float(np.dot(vector, axis)) for axis in sap]
+            k = int(np.argmax(np.abs(dots)))
+            if abs(dots[k]) < _ALIGNED:
+                self.report.skipped["line spring off the member's local axes"] += 1
+                continue
+            rows.append(
+                [
+                    ("Frame", str(el.id)),
+                    ("Type", "Simple"),
+                    ("Stiffness", _fmt(spring.stiffness)),
+                    ("SimpleType", simple[spring.behaviour]),
+                    ("Dir1Type", '"Object Axes"'),
+                    ("Dir", str((k + 1) if dots[k] > 0 else -(k + 1))),
+                ]
+            )
+        self.table("FRAME SPRING ASSIGNMENTS", rows)
+        if rows:
+            self.report.written["line spring(s)"] = len(rows)
+
     def _loads(
         self,
         frames: set[int],
@@ -3037,6 +3228,7 @@ class _Writer:
         self.table("FRAME LOADS - POINT", point)
         self.table("AREA LOADS - UNIFORM", area_uniform)
         self.table("AREA LOADS - SURFACE PRESSURE", area_pressure)
+        self._area_springs()
         self.report.written["load pattern(s)"] = len(definitions)
         if area_uniform or area_pressure:
             self.report.written["area load(s)"] = len(area_uniform) + len(area_pressure)

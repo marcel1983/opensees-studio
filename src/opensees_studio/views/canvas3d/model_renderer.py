@@ -54,6 +54,7 @@ from opensees_studio.core.reactions import (
     largest_force,
     largest_moment,
 )
+from opensees_studio.core.support_springs import SpringError, nodal_springs
 from opensees_studio.core.view_settings import ViewSettings
 from opensees_studio.diagnostics.performance import perf
 from opensees_studio.services.deformation import DeformationSource
@@ -929,6 +930,38 @@ class ModelRenderer:
                 zigzags, color=(0.1, 0.6, 0.2), line_width=2, pickable=False, name="support_springs"
             )
             self._add_screen_actor(actor)
+        bed = self._distributed_spring_glyphs(project, size)
+        if bed is not None:
+            actor = self._plotter.add_mesh(
+                bed, color=(0.55, 0.35, 0.15), line_width=2, pickable=False, name="bed_springs"
+            )
+            self._add_screen_actor(actor)
+
+    def _distributed_spring_glyphs(self, project: Project, size: float) -> pv.PolyData | None:
+        """A zigzag at every node of a line, edge or area spring, toward the medium.
+
+        The glyph hangs along -Z from its joint; it is turned so that it hangs on
+        the side of the supporting medium (``-d``, ``d`` pointing to the structure).
+        """
+        try:
+            springs = nodal_springs(project)
+        except SpringError:
+            return None
+        if not springs:
+            return None
+        coords = {n.id: np.asarray(n.coords, dtype=float) for n in project.nodes}
+        glyphs = []
+        seen: set[tuple[int, tuple[float, float, float]]] = set()
+        for spring in springs:
+            key = (spring.node_id, spring.direction)
+            if spring.node_id not in coords or key in seen:
+                continue
+            seen.add(key)
+            d = np.asarray(spring.direction, dtype=float)
+            glyph = self._spring_glyph(0.7 * size)
+            glyph.transform(_rotation_to(d), inplace=True)
+            glyphs.append(glyph.translate(coords[spring.node_id]))
+        return pv.merge(glyphs) if glyphs else None
 
     def _build_masses(self, project: Project) -> None:
         """A small diamond at every joint with lumped mass (off by default)."""
@@ -1622,3 +1655,19 @@ class ModelRenderer:
         if kind == "roller":
             return pv.Cylinder(direction=(1, 0, 0), height=size, radius=size * 0.5, resolution=8)
         return pv.Cube(x_length=size, y_length=size, z_length=size)
+
+
+def _rotation_to(d: np.ndarray) -> np.ndarray:
+    """4 x 4 rotation taking +Z onto the unit vector ``d`` (Rodrigues)."""
+    z = np.array([0.0, 0.0, 1.0])
+    d = d / float(np.linalg.norm(d))
+    v = np.cross(z, d)
+    c = float(z @ d)
+    matrix = np.eye(4)
+    if float(np.linalg.norm(v)) < 1e-12:
+        if c < 0:
+            matrix[:3, :3] = np.diag([1.0, -1.0, -1.0])  # half a turn about X
+        return matrix
+    k = np.array([[0.0, -v[2], v[1]], [v[2], 0.0, -v[0]], [-v[1], v[0], 0.0]])
+    matrix[:3, :3] = np.eye(3) + k + k @ k / (1.0 + c)
+    return matrix

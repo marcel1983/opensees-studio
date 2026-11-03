@@ -66,6 +66,35 @@ def _t(
     return HelpTopic(title=title, group=group, summary=summary, body=body, see_also=see_also)
 
 
+#: What the three distributed-spring pages share.
+_SPRINGS_COMMON = """
+# Direction and side
+Every spring acts along one **direction** and the **supporting medium** sits on
+one **side** of it: on the *negative* side for soil under a spring along +Z, on
+the *positive* side for soil above. For the shell normal, positive is the local 3
+side (SAP2000's *Top* face). The side is what gives *compression* its meaning:
+the structure moving into the medium.
+
+# Behaviour
+- **Linear** — resists both ways.
+- **Compression only** — lets go when the structure lifts off (soil, a pad).
+- **Tension only** — a tie that slackens when pushed.
+
+The one-sided springs are nonlinear: a case they take part in with the *Linear*
+algorithm is solved by **Newton** instead, every spring starting engaged, and the
+log says how many let go and where. If the load lifts the structure off every
+spring that holds it in a direction, there is no equilibrium and the case stops
+with that explanation. Modal and spectrum cases take the springs as engaged.
+
+# How the stiffness reaches the model
+It is lumped at the nodes by tributary length or area (as SAP2000 does), so the
+support is only as smooth as the mesh: mesh the shells and divide the frames
+finely. Meshing carries the springs to the pieces (an edge spring to the edges
+that lie on the original edge), Replicate copies them, deleting the element
+deletes them, and the model check counts them as supports.
+"""
+
+
 #: Groups in the order they appear in the help window's contents tree.
 GROUP_ORDER: tuple[str, ...] = (
     "Getting started",
@@ -3465,6 +3494,61 @@ pressure under them.
             "assign.floor_load",
             "define.create_shell",
         ),
+        "assign.area_springs": _t(
+            "Assign → Area → Area Springs",
+            "Assign — areas",
+            "A spring bed under the selected shells (Winkler), per unit area.",
+            """
+Rests the selected shells on springs to ground: a **stiffness per unit area**
+(force / length³ — the modulus of subgrade reaction), along the shell normal or a
+global axis. Each corner takes the stiffness times its tributary area
+(`∫N_i dA`), so a shell of area A on a stiffness k is supported by k·A in all.
+Choose whether OK replaces, adds to or deletes the springs of the selection.
+"""
+            + _SPRINGS_COMMON
+            + """
+SAP2000 text: `AREA SPRING ASSIGNMENTS` (simple springs normal to the Top or
+Bottom face, both directions, compression or tension only) are read and written.
+""",
+            "assign.edge_springs",
+            "assign.line_springs",
+            "assign.springs",
+        ),
+        "assign.edge_springs": _t(
+            "Assign → Area → Edge Springs",
+            "Assign — areas",
+            "A spring bed along the edges of shells, per unit length.",
+            """
+Supports **edges** of shells on springs: select the shells and the joints along
+the edge — an edge whose two joints are selected takes the spring. The stiffness
+is per unit length (force / length²), along a global axis or the shell normal;
+each end of the edge takes half of stiffness × length.
+"""
+            + _SPRINGS_COMMON,
+            "assign.area_springs",
+            "assign.line_springs",
+        ),
+        "assign.line_springs": _t(
+            "Assign → Frame → Line Springs",
+            "Assign — frame",
+            "A spring bed along the selected frames (beam on elastic foundation), per unit length.",
+            """
+Rests the selected frame members on springs to ground: a **stiffness per unit
+length** (force / length²) along the member's local 1, 2 or 3 or a global axis.
+Each end takes half of stiffness × length — a grade beam on soil, a rail on its
+bed, a pile's lateral support.
+"""
+            + _SPRINGS_COMMON
+            + """
+SAP2000 text: `FRAME SPRING ASSIGNMENTS` (simple springs along an object axis,
+`Dir` 1, 2 or 3, negative for the opposite sense, with the medium on the side
+opposite that sense) are read and written. A spring along a global axis is
+written on the SAP2000 local axis it lies on; one on no local axis is reported.
+""",
+            "assign.area_springs",
+            "assign.edge_springs",
+            "assign.springs",
+        ),
         "define.joint_patterns": _t(
             "Define → Joint Patterns",
             "Define",
@@ -5107,6 +5191,9 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_assign_imposed_displacement": "assign.imposed_displacement",
     "_act_assign_joint_pattern": "assign.joint_pattern",
     "_act_assign_surface_load": "assign.surface_load",
+    "_act_assign_area_springs": "assign.area_springs",
+    "_act_assign_edge_springs": "assign.edge_springs",
+    "_act_assign_line_springs": "assign.line_springs",
     "_act_assign_floor_load": "assign.floor_load",
     "_act_assign_zls": "assign.zero_length_section",
     "_act_assign_bearing": "assign.bearing",
