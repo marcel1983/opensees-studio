@@ -427,6 +427,7 @@ class MainWindow(QMainWindow):
         self._act_import_dxf = QAction("&DXF Drawing…", self)
         self._act_import_s3d = QAction("&PORTICO Model (.s3d)…", self)
         self._act_import_s2k = QAction("SAP2000 &Text (.s2k / .$2k)…", self)
+        self._act_import_ifc = QAction("&IFC (.ifc)…", self)
         self._act_import_tcl = QAction("OpenSees &Tcl Script (.tcl)…", self)
         self._act_export_script = QAction("OpenSees &script (.py)…", self)
         self._act_export_ifc = QAction("&IFC (.ifc)…", self)
@@ -713,6 +714,7 @@ class MainWindow(QMainWindow):
         m_import.addAction(self._act_import_dxf)
         m_import.addAction(self._act_import_s3d)
         m_import.addAction(self._act_import_s2k)
+        m_import.addAction(self._act_import_ifc)
         m_import.addAction(self._act_import_tcl)
         m_export = m_file.addMenu("&Export")
         m_export.addAction(self._act_export_script)
@@ -1169,6 +1171,7 @@ class MainWindow(QMainWindow):
         self._act_import_dxf.triggered.connect(self._on_import_dxf)
         self._act_import_s3d.triggered.connect(self._on_import_s3d)
         self._act_import_s2k.triggered.connect(self._on_import_s2k)
+        self._act_import_ifc.triggered.connect(self._on_import_ifc)
         self._act_import_tcl.triggered.connect(self._on_import_tcl)
         self._act_export_script.triggered.connect(self._on_export_script)
         self._act_export_ifc.triggered.connect(self._on_export_ifc)
@@ -2445,6 +2448,52 @@ class MainWindow(QMainWindow):
         )
         for note in imported.notes:
             self._log(note)
+
+    def _on_import_ifc(self) -> None:
+        """File → Import → IFC: the analytical or the physical model as a new, unsaved project.
+
+        The file is read once to say what it holds; the dialog chooses which model
+        to build from. The whole model is replaced, so this asks about unsaved
+        changes like Open does, and what the file has that the import cannot carry
+        is written to the log.
+        """
+        from opensees_studio.services.ifc_import import IfcImportError, import_ifc, inspect_ifc
+        from opensees_studio.views.dialogs.ifc_import import IfcImportDialog
+
+        if not self._confirm_discard_changes("Importing an IFC file"):
+            return
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Import IFC", "", "IFC (*.ifc *.IFC *.ifczip *.ifcZIP);;All files (*)"
+        )
+        if not path:
+            return
+        try:
+            with perf.span("ui.inspect_ifc"):
+                inventory = inspect_ifc(path)
+        except IfcImportError as exc:
+            QMessageBox.critical(self, "Import IFC failed", str(exc))
+            return
+        dialog = IfcImportDialog(inventory, parent=self)
+        try:
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return
+            options = dialog.options()
+        finally:
+            dialog.deleteLater()
+        try:
+            with perf.span("ui.import_ifc"):
+                imported = import_ifc(path, options)
+        except IfcImportError as exc:
+            QMessageBox.critical(self, "Import IFC failed", str(exc))
+            return
+        self._vm.adopt(imported.project)
+        self._apply_project_view_settings()
+        self._log(f"Imported {Path(path).name}: {imported.summary()}")
+        for note in imported.notes:
+            self._log(note)
+        report = check_model(imported.project)
+        if not report.is_clean:
+            self._log(f"{report.summary()} See Analyze → Check Model.")
 
     def _on_import_tcl(self) -> None:
         """File → Import → OpenSees Tcl Script: a ``.tcl`` file as a new project.

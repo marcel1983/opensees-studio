@@ -291,6 +291,20 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   patterns and their time series. Variables, `expr`, `foreach`, `if`, `proc`,
   `source` and `for` are interpreted, never executed; analysis commands and
   unsupported items are counted in the log.
+  File → Import → IFC (.ifc / .ifczip, IFC2x3 or IFC4) builds the project from
+  the file's **structural analysis model** (point connections with their
+  supports and springs, curve members with their end releases, four-cornered
+  surface members as shells, load cases with nodal, point, line and surface
+  loads and self weight, factored combinations), or, when the file has none,
+  from its **physical model**: the axes of IfcColumn, IfcBeam and IfcMember
+  solids are joined where members meet at faces (a beam end onto the column it
+  stops at, a secondary beam onto its girder, which is split there), slabs and
+  walls become one shell each attached to the nearest member nodes, and the
+  column bases at the lowest level can be fixed. A profile named after an AISC
+  shape takes the library's properties, any other from its dimensions; E, G,
+  density and yield stress come from the material property sets, and every
+  value is converted from the file's declared units. A file written by File →
+  Export → IFC imports back to the same model.
 - **Design** — Design → Steel Frame Check (AISC 360-16, LRFD or ASD): every
   frame member whose section is a W, M, S or HP shape gets its tension (D2),
   compression (E3, E4, E7), flexure (F2, F3, F6), shear (G2, G6) and H1
@@ -308,8 +322,9 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   Export → IFC): the physical BIM model (IfcColumn, IfcBeam, IfcMember, IfcSlab
   with their profiles and materials, in their storeys) and the structural
   analysis model (nodes, supports, members with releases, load cases with their
-  loads, combinations), linked element by element. Uses `ifcopenshell`, which
-  the desktop install brings.
+  loads, combinations), linked element by element, with each section's exact
+  values in an `OpenSeesStudio_Section` property set so the file imports back
+  unchanged. Uses `ifcopenshell`, which the desktop install brings.
   File → Export → SAP2000 Text writes the frame model back as SAP2000 text
   tables (what the import reads, so the file imports back to the same model)
   and reports what it leaves out.
