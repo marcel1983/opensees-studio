@@ -63,25 +63,14 @@ def test_click_inside_a_shell_selects_it(qtbot) -> None:  # type: ignore[no-unty
 
     assert canvas.selection.elements == frozenset({7})
 
-
-@pytest.mark.gui
-def test_a_click_far_from_the_shell_selects_nothing(qtbot) -> None:  # type: ignore[no-untyped-def]
-    window = MainWindow()
-    qtbot.addWidget(window)
-    window.resize(1000, 700)
-    window.show()
-    qtbot.waitExposed(window)
-    window._vm.adopt(_project())
-    canvas = window._canvas
-    canvas.view_isometric()
-    canvas.render()
-    qtbot.wait(50)
-
+    # A click away from the face must not select it. Keep this in the same
+    # window: a second MainWindow with its own VTK context crashed the Windows
+    # CI runner inside the Qt event loop.
+    canvas.selection.clear()
     QTest.mouseClick(
         canvas,
         Qt.MouseButton.LeftButton,
         Qt.KeyboardModifier.NoModifier,
         QPoint(5, 5),
     )
-
     assert canvas.selection.elements == frozenset()
