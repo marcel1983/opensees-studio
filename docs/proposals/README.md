@@ -35,3 +35,4 @@ Items pendientes del [roadmap](../roadmap.md) convertidos en propuestas accionab
 | 17 | [TBDY 2018: confirmar regla de combinación modal y espectro reducido Ra / SaR](17-tbdy-2018-confirmar-regla-de-combinacin-modal-y-es.md) |
 | 18 | [Importador SAP2000: siguientes oleadas](18-importador-sap2000-siguientes-oleadas.md) |
 | 19 | [Skills: cerrar bloques VERIFICAR pendientes (opstool 1.0.26, gidopensees)](19-skills-cerrar-bloques-verificar-pendientes-opstool.md) |
+| 20 | [README modular y mantenible](20-readme-modular.md) |
