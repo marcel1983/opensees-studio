@@ -906,6 +906,7 @@ it), and CI fails when a case leaves its tolerance or the file is stale.
 ## Roadmap
 
 See [`docs/roadmap.md`](docs/roadmap.md) for the phase-by-phase plan.
+Actionable proposals for the pending items live in [`docs/proposals/`](docs/proposals/README.md).
 Phases 0–7 (modeling, analysis, post-processing) are largely done.
 Phase 8 (earthquake-engineering primitives — isolators, ground-motion
 library, IDA, fiber-section editor polish) is the active edge.
