@@ -42,6 +42,8 @@ class SteelMemberDesign(BaseModel):
         "length_minor",
         "length_ltb",
         "cb",
+        "net_area",
+        "shear_lag",
     )
 
     element_id: PositiveInt
@@ -64,6 +66,16 @@ class SteelMemberDesign(BaseModel):
     cb: PositiveFloat | None = Field(
         default=None, description="Moment gradient factor; None = from the moment diagram (F1-1)."
     )
+    net_area: PositiveFloat | None = Field(
+        default=None,
+        description="Net area for D2-2 tension rupture; None leaves rupture unchecked.",
+    )
+    shear_lag: float = Field(
+        default=1.0,
+        gt=0.0,
+        le=1.0,
+        description="Shear-lag factor U for D2-2 (1.0 for a fully effective connection).",
+    )
 
 
 class DesignLoadSet(BaseModel):
@@ -82,6 +94,7 @@ class DesignSettings(BaseModel):
     serialize_without_defaults = omit_when_default(
         "method",
         "fy",
+        "fu",
         "ratio_limit",
         "load_sets",
         "members",
@@ -94,6 +107,10 @@ class DesignSettings(BaseModel):
     fy: PositiveFloat | None = Field(
         default=None,
         description="Yield stress in project units; None = 50 ksi (345 MPa) in those units.",
+    )
+    fu: PositiveFloat | None = Field(
+        default=None,
+        description="Ultimate stress in project units; None = 65 ksi (450 MPa) in those units.",
     )
     ratio_limit: PositiveFloat = Field(
         default=1.0, description="Demand/capacity ratio above which a member fails."

@@ -202,6 +202,14 @@ def test_axial_sign_tension_and_compression() -> None:
     assert tension.ratios["Tension"] == pytest.approx(100.0 / (0.9 * 50.0 * 26.5), rel=1e-9)
     assert compression.ratios["Compression"] > tension.ratios["Tension"]
 
+    with_net = DesignSettings(
+        fu=65.0,
+        members=[SteelMemberDesign(element_id=1, net_area=20.0)],
+    )
+    rupture = steel_frame_check(pulled, _results(pulled), with_net).members[0]
+    assert rupture.equation == "D2-2 rupture"
+    assert rupture.ratios["Tension"] == pytest.approx(100.0 / (0.75 * 65.0 * 20.0))
+
 
 def test_drift_check_needs_storeys() -> None:
     project = _beam()
