@@ -82,6 +82,7 @@ _COMPONENTS = (
     ForceComponent.M3,
 )
 _FY_KSI = 50.0
+_FU_KSI = 65.0
 
 #: localForce index of (component, end) for the response spectrum peaks.
 _PEAK_INDEX_3D = {"N": (0, 6), "V2": (1, 7), "V3": (2, 8), "M2": (4, 10), "M3": (5, 11)}
@@ -374,6 +375,11 @@ def default_fy(units: Any) -> float:
     return _FY_KSI * stress_scale(SOURCE_UNITS, units)
 
 
+def default_fu(units: Any) -> float:
+    """65 ksi in the project's stress unit."""
+    return _FU_KSI * stress_scale(SOURCE_UNITS, units)
+
+
 # ──────────────────────────── the check ────────────────────────────
 @dataclass
 class MemberResult:
@@ -445,6 +451,7 @@ def steel_frame_check(
     report = DesignReport()
     units = project.meta.units
     fy = settings.fy if settings.fy is not None else default_fy(units)
+    fu = settings.fu if settings.fu is not None else default_fu(units)
 
     # Station fields of every case a load set needs, read once.
     fields: dict[int, Field] = {}
@@ -498,7 +505,7 @@ def steel_frame_check(
             )
         e = float(getattr(section, "E", 0.0) or 0.0) or 29000.0 * stress_scale(SOURCE_UNITS, units)
         g = float(getattr(section, "G", 0.0) or 0.0) or e / 2.6
-        steel = Steel(Fy=fy, E=e, G=g)
+        steel = Steel(Fy=fy, E=e, G=g, Fu=fu)
         length = _length(project, element)
         m_major, v_major, m_minor, v_minor, about_major = _axes(project, section, shape)
         if not about_major:
@@ -550,6 +557,8 @@ def steel_frame_check(
                 length_ltb=overrides.length_ltb or length,
                 k_x=overrides.k_major,
                 k_y=overrides.k_minor,
+                net_area=overrides.net_area,
+                shear_lag=overrides.shear_lag,
             )
             ratio = check.governing[1]
             if worst is None or ratio > worst[0]:

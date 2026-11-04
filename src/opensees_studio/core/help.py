@@ -1425,12 +1425,13 @@ square HSS**, **round HSS** and **pipes**. The section's **name** says which sha
 in the overrides to check a member with it.
 
 # What is checked
-- **Tension** D2-1 (yielding of the gross section). Rupture needs the net area
-  and is left to you.
+- **Tension** D2-1 yielding of the gross section and, when you give a net area,
+  D2-2 rupture of the effective net section `Ae = U An`.
 - **Compression** E3 flexural buckling about both axes, E4 torsional buckling,
   and the E7 effective area when the flange or the web is slender.
 - **Major-axis flexure** F2 yielding and lateral-torsional buckling (with Lp, Lr
-  and Cb), F3 flange local buckling. A noncompact web is noted, not checked (F4).
+  and Cb) and F3 flange local buckling for a compact web; F4 for a noncompact
+  web; F5 for a slender web.
 - **Minor-axis flexure** F6, **shear** G2.1 along the web and G6 along the flanges.
 - **Interaction** H1-1a / H1-1b of the axial force and both moments.
 
@@ -1450,9 +1451,10 @@ The other families use their own sections of the Specification:
   of a deep tube, G4. **Round HSS and pipes**: E7-6, F8, G5 with Lv half the
   member length.
 
-HSS walls use the design thickness 0.93 tnom. The default Fy is 50 ksi: set it
-for the material (A500 Grade C round HSS 46 ksi, A53 pipe 35 ksi). Torsion is
-not checked.
+HSS walls use the design thickness 0.93 tnom. The default Fy is 50 ksi and Fu
+65 ksi: set them for the material (A500 Grade C round HSS 46 ksi, A53 pipe 35
+ksi). Torsion is not checked. The seismic provisions of AISC 341 and the
+connection provisions of Chapter J are not part of this check.
 
 The clear web height is taken as `d - 2 tf` (the table has no `k`), which is
 slightly conservative.
@@ -1471,11 +1473,14 @@ interaction), and Cb comes from the major-axis moment diagram (F1-1) unless you
 set it. **Set Cb = 1.0 for a cantilever**: F1-1 assumes both ends braced.
 
 # The values the dialog asks for
-- **Method** LRFD (φ) or ASD (Ω); **Fy** (50 ksi by default, in the project's
-  stress unit); **ratio limit** above which a member is reported **NG**.
+- **Method** LRFD (φ) or ASD (Ω); **Fy** and **Fu** (50 and 65 ksi by default,
+  in the project's stress unit); **ratio limit** above which a member is
+  reported **NG**.
 - **Overrides for the selected members**: the AISC shape, K about each axis, the
-  unbraced length of the compression flange Lb (0 = the member length) and Cb
-  (0 = from the diagram). The buckling lengths are the member length times K.
+  unbraced length of the compression flange Lb (0 = the member length), Cb
+  (0 = from the diagram), the net area An (0 = D2-2 rupture unchecked) and the
+  shear-lag factor U in `Ae = U An`. The buckling lengths are the member length
+  times K.
 
 Results: one row per member with its governing ratio, the check and equation
 that govern and the load set that produced them; **Select failing members**
@@ -1557,7 +1562,7 @@ browser and pastes into Word).
   pushover curve, the periods, the storey table and the section cuts. Values
   are in the display units, with the Results panel's signs.
 - **Steel frame check** — when the project has design settings (saved by
-  Design → Steel Frame Check): the method, Fy, ratio limit and load sets, every
+  Design → Steel Frame Check): the method, Fy, Fu, ratio limit and load sets, every
   checked member with its governing ratio, check, equation and load set, and the
   amplified storey drifts against the limit. Its values are in the project's units.
 

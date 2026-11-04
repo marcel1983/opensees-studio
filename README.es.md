@@ -89,8 +89,9 @@ script o un notebook de Jupyter: la interfaz es una forma de usarlo, no la únic
   sentidos).
 - **Diseño**: Design → Steel Frame Check verifica según **AISC 360-16** (LRFD o
   ASD) los miembros de perfiles W, M, S y HP —y canales, tees, ángulos de alas
-  iguales, HSS rectangulares y circulares y tubos—: tracción, compresión (E3, E4,
-  E7), flexión con pandeo lateral-torsional (F2, F3, F6, F7, F8, F9, F10), corte
+  iguales, HSS rectangulares y circulares y tubos—: tracción (D2-1 y D2-2 con
+  área neta y factor de retraso), compresión (E3, E4, E7), flexión con pandeo
+  lateral-torsional (F2, F3, F4, F5, F6, F7, F8, F9, F10), corte
   (G2 a G6) e interacción H1, sobre las combinaciones ya corridas; Design → Display Steel Ratios on Model
   pinta cada miembro según su razón D/C, y el reporte de cálculo imprime la
   verificación. Design → Storey Drift Check compara las

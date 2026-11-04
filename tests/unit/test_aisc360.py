@@ -27,7 +27,7 @@ from opensees_studio.core.design.aisc360 import (
     tension,
 )
 
-A992 = Steel(Fy=50.0, E=29000.0, G=11200.0)
+A992 = Steel(Fy=50.0, E=29000.0, G=11200.0, Fu=65.0)
 FT = 12.0  # in
 
 
@@ -181,3 +181,96 @@ def test_check_member_picks_the_governing_ratio() -> None:
         "Minor shear",
         "P-M interaction",
     }
+
+
+def test_d2_2_tension_rupture_governs_when_ae_is_small() -> None:
+    """D2-2: Fy 50 ksi, Fu 65 ksi, An 20 in2, U 0.9 -> 0.75 * 65 * 18 = 877.5 kip."""
+    shape = _shape("W14X99")
+    strength = tension(shape, A992, "LRFD", net_area=20.0, shear_lag=0.9)
+    assert strength.equation == "D2-2 rupture"
+    assert strength.nominal == pytest.approx(65.0 * 18.0)
+    assert strength.available == pytest.approx(0.75 * 65.0 * 18.0)
+    assert tension(shape, A992, "ASD", net_area=20.0, shear_lag=0.9).available == pytest.approx(
+        65.0 * 18.0 / 2.0
+    )
+
+
+def test_d2_1_yielding_governs_when_the_net_area_is_large() -> None:
+    shape = _shape("W14X99")
+    strength = tension(shape, A992, "LRFD", net_area=30.0, shear_lag=0.9)
+    assert strength.equation == "D2-1 yielding"
+    assert strength.available == pytest.approx(0.9 * 50.0 * shape.A)
+
+
+def test_check_member_uses_the_net_area_for_d2_2() -> None:
+    shape = _shape("W14X99")
+    check = check_member(
+        shape,
+        A992,
+        "LRFD",
+        Demand(
+            axial=1000.0,
+            moment_major=0.0,
+            moment_minor=0.0,
+            shear_major=0.0,
+            shear_minor=0.0,
+        ),
+        length_x=14 * FT,
+        length_y=14 * FT,
+        length_ltb=14 * FT,
+        net_area=20.0,
+        shear_lag=0.9,
+    )
+    assert check.equations["Tension"] == "D2-2 rupture"
+    assert check.ratios["Tension"] == pytest.approx(1000.0 / (0.75 * 65.0 * 18.0))
+
+
+def test_f4_noncompact_web_and_flange() -> None:
+    """W10X12 at Fy = 200 ksi: h/tw 49.7 is noncompact, the flange is noncompact."""
+    shape = _shape("W10X12")
+    steel = Steel(Fy=200.0, E=29000.0, G=11200.0)
+    classes = slenderness(shape, steel)
+    assert classes.web_class == "noncompact"
+    strength = flexure_major(shape, steel, "LRFD", unbraced=0.0)
+    assert strength.equation.startswith("F4")
+    # The compression-flange local buckling equation governs here.
+    my = 200.0 * shape.Sx
+    mp = min(200.0 * shape.Zx, 1.6 * my)
+    fl = 0.7 * 200.0
+    mp_my = mp / my
+    rpc = min(
+        mp_my
+        - (mp_my - 1.0)
+        * (classes.web - classes.web_compact)
+        / (classes.web_noncompact - classes.web_compact),
+        mp_my,
+    )
+    cflb = rpc * my - (rpc * my - fl * shape.Sx) * (
+        (classes.flange - classes.flange_compact)
+        / (classes.flange_noncompact - classes.flange_compact)
+    )
+    assert strength.nominal == pytest.approx(cflb)
+    assert flexure_major(shape, steel, "ASD", unbraced=0.0).available == pytest.approx(
+        strength.nominal / 1.67
+    )
+
+
+def test_f5_slender_web() -> None:
+    """W10X12 at Fy = 500 ksi: h/tw 49.7 is slender."""
+    shape = _shape("W10X12")
+    steel = Steel(Fy=500.0, E=29000.0, G=11200.0)
+    assert slenderness(shape, steel).web_class == "slender"
+    strength = flexure_major(shape, steel, "LRFD", unbraced=0.0)
+    assert strength.equation.startswith("F5")
+    assert strength.nominal > 0.0
+    assert flexure_major(shape, steel, "ASD", unbraced=0.0).available == pytest.approx(
+        strength.nominal / 1.67
+    )
+
+
+def test_f4_and_f5_switch_to_elastic_ltb_beyond_lr() -> None:
+    shape = _shape("W10X12")
+    f4 = flexure_major(shape, Steel(Fy=200.0, E=29000.0, G=11200.0), "LRFD", unbraced=5 * FT)
+    assert f4.equation == "F4-3 elastic lateral-torsional buckling"
+    f5 = flexure_major(shape, Steel(Fy=500.0, E=29000.0, G=11200.0), "LRFD", unbraced=5 * FT)
+    assert f5.equation == "F5-2 lateral-torsional buckling"

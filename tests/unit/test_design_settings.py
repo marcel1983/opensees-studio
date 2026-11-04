@@ -45,6 +45,25 @@ def test_member_lookup_falls_back_to_defaults() -> None:
     assert settings.member(9) == SteelMemberDesign(element_id=9)
 
 
+def test_fu_net_area_and_shear_lag_round_trip(tmp_path: Path) -> None:
+    project = Project()
+    project.design = DesignSettings(
+        fu=60.0,
+        members=[
+            SteelMemberDesign(element_id=4, net_area=12.0, shear_lag=0.85),
+        ],
+    )
+    path = save_project(project, tmp_path / "rupture.osmodel")
+    design = json.loads(path.read_text(encoding="utf-8"))["design"]
+    assert design["fu"] == 60.0
+    assert design["members"][0] == {
+        "element_id": 4,
+        "net_area": 12.0,
+        "shear_lag": 0.85,
+    }
+    assert load_project(path).design == project.design
+
+
 def test_design_settings_do_not_change_the_model_fingerprint() -> None:
     project = Project()
     before = model_fingerprint(project)

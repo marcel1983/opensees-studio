@@ -9,6 +9,15 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Added
+
+- **AISC 360-16 steel check: tension rupture and F4/F5 flexure.** The frame
+  check now evaluates D2-2 tension rupture when a net area and shear-lag factor
+  are given on a member (`Ae = U An`, with `Fu` in the design settings), and
+  major-axis flexure follows F4 for a noncompact web and F5 for a slender web
+  instead of falling back to F2. Both methods keep their LRFD and ASD factors,
+  and the result still names the governing equation.
+
 ## [0.0.38] - 2026-11-03
 
 ### Added

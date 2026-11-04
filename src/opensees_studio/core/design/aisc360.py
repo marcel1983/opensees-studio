@@ -7,15 +7,16 @@ effective width, interaction) and :func:`check_member`, which works on any
 shape following :class:`SteelShape`; channels, tees, angles and HSS are in
 :mod:`core.design.aisc360_shapes`. For the I-shapes:
 
-* **D2** tension, yielding of the gross section (rupture needs the net area,
-  which a model does not know, and is left to the engineer);
+* **D2** tension, yielding of the gross section and, when the caller supplies
+  a net area and shear-lag factor, rupture of the effective net section;
 * **E3 / E4 / E7** compression: flexural buckling about both axes, torsional
   buckling (E4, doubly symmetric), with the effective area of slender
   elements (E7);
-* **F2 / F3** major-axis flexure: yielding, lateral-torsional buckling with
-  ``Cb``, and flange local buckling of a noncompact or slender flange (a
-  compact web is assumed, as for every rolled shape at ``Fy`` up to 65 ksi;
-  a noncompact web is reported as not covered);
+* **F2 / F3** major-axis flexure of a compact web: yielding,
+  lateral-torsional buckling with ``Cb``, and flange local buckling;
+* **F4 / F5** major-axis flexure of a noncompact or slender web: the four
+  limit states of F4 or F5, including the web plastification and bending
+  strength reduction factors;
 * **F6** minor-axis flexure;
 * **G2.1 / G6** shear along the web and the flanges;
 * **H1-1** interaction of axial force and biaxial flexure.
@@ -42,6 +43,7 @@ I_SHAPE_FAMILIES = frozenset({"W", "M", "S", "HP"})
 #: Resistance factor φ and safety factor Ω per limit state (AISC 360-16).
 FACTORS: dict[str, tuple[float, float]] = {
     "tension": (0.90, 1.67),
+    "tension_rupture": (0.75, 2.00),
     "compression": (0.90, 1.67),
     "flexure": (0.90, 1.67),
     "shear": (0.90, 1.67),
@@ -135,11 +137,12 @@ class IShape:
 
 @dataclass(frozen=True)
 class Steel:
-    """Material of the check: yield stress, Young's and shear moduli."""
+    """Material of the check: yield stress, ultimate stress, Young's and shear moduli."""
 
     Fy: float
     E: float
     G: float
+    Fu: float | None = None
 
 
 @dataclass(frozen=True)
@@ -204,14 +207,42 @@ def slenderness(shape: IShape, steel: Steel) -> Slenderness:
 
 
 # ──────────────────────────── tension and compression ────────────────────────────
-def tension(shape: IShape, steel: Steel, method: Method) -> Strength:
-    """D2(a): yielding in the gross section, ``Pn = Fy Ag``."""
-    nominal = steel.Fy * shape.A
+def tension(
+    shape: IShape,
+    steel: Steel,
+    method: Method,
+    *,
+    net_area: float | None = None,
+    shear_lag: float = 1.0,
+) -> Strength:
+    """D2: yielding in the gross section, and rupture when a net area is given.
+
+    D2-1 is ``Pn = Fy Ag``. D2-2 is ``Pn = Fu Ae`` with ``Ae = U An``; the
+    caller supplies the net area and the shear-lag factor, because neither is
+    known to a line model. Without them the result is D2-1 only and says so.
+    """
+    candidates: list[tuple[float, str]] = [(steel.Fy * shape.A, "D2-1 yielding")]
+    notes: list[str] = []
+    if net_area is None:
+        notes.append("Tensile rupture (D2-2) needs the net area and is not checked.")
+    elif steel.Fu is None:
+        notes.append("Tensile rupture (D2-2) needs Fu and is not checked.")
+    else:
+        if net_area <= 0.0:
+            raise ValueError("net_area must be positive")
+        if not 0.0 < shear_lag <= 1.0:
+            raise ValueError("shear_lag must be in (0, 1]")
+        effective = shear_lag * net_area
+        candidates.append((steel.Fu * effective, "D2-2 rupture"))
+        notes.append(f"D2-2 with Ae = U An = {effective:.6g}.")
+    nominal, equation = min(candidates)
     return Strength(
         nominal,
-        _available(nominal, "tension", method),
-        "D2-1",
-        ("Tensile rupture (D2-2) needs the net area and is not checked.",),
+        _available(
+            nominal, "tension" if equation == "D2-1 yielding" else "tension_rupture", method
+        ),
+        equation,
+        tuple(notes),
     )
 
 
@@ -312,18 +343,162 @@ def lp_lr(shape: IShape, steel: Steel) -> tuple[float, float]:
     return lp, lr
 
 
+def _flexure_major_f4(
+    shape: IShape,
+    steel: Steel,
+    method: Method,
+    *,
+    unbraced: float,
+    cb: float,
+    classes: Slenderness,
+) -> Strength:
+    """F4: a doubly symmetric I-shape with a noncompact web.
+
+    The shape is doubly symmetric, so the compression and tension flanges have
+    the same section modulus and ``F_L = 0.7 Fy``. The four limit states of F4
+    are compression-flange yielding, lateral-torsional buckling, compression
+    flange local buckling and tension-flange yielding.
+    """
+    e, fy = steel.E, steel.Fy
+    sx = shape.Sx
+    h = shape.h
+    aw = h * shape.tw / (shape.bf * shape.tf)
+    rt = shape.bf / math.sqrt(12.0 * (1.0 + aw / 6.0))
+    my = fy * sx
+    mp = min(fy * shape.Zx, 1.6 * my)
+    fl = 0.7 * fy
+    jc = shape.J / (sx * shape.ho)
+    lp = 1.1 * rt * math.sqrt(e / fy)
+    lr = 1.95 * rt * e / fl * math.sqrt(jc + math.sqrt(jc**2 + 6.76 * (fl / e) ** 2))
+    ratio = unbraced / rt
+    fcr = (
+        cb * math.pi**2 * e / ratio**2 * math.sqrt(1.0 + 0.078 * jc * ratio**2)
+        if ratio > 0.0
+        else 0.0
+    )
+    mp_my = mp / my
+    if classes.web <= classes.web_compact:
+        rpc = mp_my
+    else:
+        rpc = min(
+            mp_my
+            - (mp_my - 1.0)
+            * (classes.web - classes.web_compact)
+            / (classes.web_noncompact - classes.web_compact),
+            mp_my,
+        )
+    candidates: list[tuple[float, str]] = [
+        (rpc * my, "F4-1 compression flange yielding"),
+    ]
+    if unbraced <= lp:
+        candidates.append((mp, "F4-2 lateral-torsional buckling (Lb <= Lp)"))
+    elif unbraced <= lr:
+        candidates.append(
+            (
+                min(
+                    cb * (rpc * my - (rpc * my - fl * sx) * (unbraced - lp) / (lr - lp)),
+                    mp,
+                ),
+                "F4-2 inelastic lateral-torsional buckling",
+            )
+        )
+    else:
+        candidates.append((min(fcr * sx, mp), "F4-3 elastic lateral-torsional buckling"))
+    kc = min(max(4.0 / math.sqrt(h / shape.tw), 0.35), 0.76)
+    if classes.flange_class == "compact":
+        cflb = mp
+    elif classes.flange_class == "noncompact":
+        cflb = rpc * my - (rpc * my - fl * sx) * (
+            (classes.flange - classes.flange_compact)
+            / (classes.flange_noncompact - classes.flange_compact)
+        )
+    else:
+        cflb = 0.9 * e * kc * sx / classes.flange**2
+    candidates.append((min(cflb, mp), "F4-13/14 compression flange local buckling"))
+    candidates.append((mp, "F4-15 tension flange yielding"))
+    nominal, equation = min(candidates)
+    return Strength(
+        nominal,
+        _available(nominal, "flexure", method),
+        equation,
+        ("F4: noncompact web.",),
+    )
+
+
+def _flexure_major_f5(
+    shape: IShape,
+    steel: Steel,
+    method: Method,
+    *,
+    unbraced: float,
+    cb: float,
+    classes: Slenderness,
+) -> Strength:
+    """F5: a doubly symmetric I-shape with a slender web.
+
+    ``Rpg`` reduces the bending strength for the slender web; the four limit
+    states are compression-flange yielding, lateral-torsional buckling,
+    compression-flange local buckling and tension-flange yielding.
+    """
+    e, fy = steel.E, steel.Fy
+    sx = shape.Sx
+    h = shape.h
+    aw = min(h * shape.tw / (shape.bf * shape.tf), 10.0)
+    rt = shape.bf / math.sqrt(12.0 * (1.0 + aw / 6.0))
+    rpg = max(
+        0.0,
+        min(
+            1.0,
+            1.0 - aw / (1200.0 + 300.0 * aw) * (h / shape.tw - 5.7 * math.sqrt(e / fy)),
+        ),
+    )
+    mp = rpg * fy * sx
+    lp = 1.1 * rt * math.sqrt(e / fy)
+    lr = math.pi * rt * math.sqrt(e / (0.7 * fy))
+    if unbraced <= lp:
+        fcr_ltb = fy
+    elif unbraced <= lr:
+        fcr_ltb = cb * (fy - 0.3 * fy * (unbraced - lp) / (lr - lp))
+    else:
+        fcr_ltb = cb * math.pi**2 * e / (unbraced / rt) ** 2
+    fcr_ltb = min(fcr_ltb, fy)
+    kc = min(max(4.0 / math.sqrt(h / shape.tw), 0.35), 0.76)
+    if classes.flange_class == "compact":
+        fcr_cflb = fy
+    elif classes.flange_class == "noncompact":
+        fcr_cflb = fy - 0.3 * fy * (
+            (classes.flange - classes.flange_compact)
+            / (classes.flange_noncompact - classes.flange_compact)
+        )
+    else:
+        fcr_cflb = 0.9 * e * kc / (shape.bf / (2.0 * shape.tf)) ** 2
+    candidates: list[tuple[float, str]] = [
+        (mp, "F5-1 compression flange yielding"),
+        (rpg * fcr_ltb * sx, "F5-2 lateral-torsional buckling"),
+        (rpg * fcr_cflb * sx, "F5-7 compression flange local buckling"),
+        (fy * sx, "F5-10 tension flange yielding"),
+    ]
+    nominal, equation = min(candidates)
+    return Strength(
+        nominal,
+        _available(nominal, "flexure", method),
+        equation,
+        ("F5: slender web.",),
+    )
+
+
 def flexure_major(
     shape: IShape, steel: Steel, method: Method, *, unbraced: float, cb: float = 1.0
 ) -> Strength:
-    """F2 (yielding, lateral-torsional buckling) and F3 (flange local buckling)."""
+    """F2/F3, F4 or F5, by the web classification of the shape."""
     e, fy = steel.E, steel.Fy
-    mp = fy * shape.Zx
     classes = slenderness(shape, steel)
+    if classes.web_class == "noncompact":
+        return _flexure_major_f4(shape, steel, method, unbraced=unbraced, cb=cb, classes=classes)
+    if classes.web_class == "slender":
+        return _flexure_major_f5(shape, steel, method, unbraced=unbraced, cb=cb, classes=classes)
+    mp = fy * shape.Zx
     notes: list[str] = []
-    if classes.web_class != "compact":
-        notes.append(
-            f"Noncompact or slender web (h/tw = {classes.web:.1f}): F4/F5 not covered, F2 used."
-        )
     candidates: list[tuple[float, str]] = [(mp, "F2-1 yielding")]
     lp, lr = lp_lr(shape, steel)
     if unbraced > lp:
@@ -517,11 +692,46 @@ def check_member(
     length_ltb: float,
     k_x: float = 1.0,
     k_y: float = 1.0,
+    net_area: float | None = None,
+    shear_lag: float = 1.0,
 ) -> MemberCheck:
     """Ratios of axial, flexure, shear and H1 interaction for one demand."""
     check = MemberCheck()
     if demand.axial >= 0.0:
         axial = shape.tension(steel, method)
+        if net_area is not None:
+            base_notes = tuple(note for note in axial.notes if "Tensile rupture" not in note)
+            if steel.Fu is None:
+                axial = Strength(
+                    axial.nominal,
+                    axial.available,
+                    axial.equation,
+                    (*base_notes, "Tensile rupture (D2-2) needs Fu and is not checked."),
+                )
+            else:
+                if net_area <= 0.0:
+                    raise ValueError("net_area must be positive")
+                if not 0.0 < shear_lag <= 1.0:
+                    raise ValueError("shear_lag must be in (0, 1]")
+                effective = shear_lag * net_area
+                rupture = Strength(
+                    steel.Fu * effective,
+                    _available(steel.Fu * effective, "tension_rupture", method),
+                    "D2-2 rupture",
+                    (f"D2-2 with Ae = U An = {effective:.6g}.",),
+                )
+                if rupture.available < axial.available:
+                    axial = rupture
+                else:
+                    axial = Strength(
+                        axial.nominal,
+                        axial.available,
+                        axial.equation,
+                        (
+                            *base_notes,
+                            f"D2-2 with Ae = U An = {effective:.6g} does not govern.",
+                        ),
+                    )
         label = "Tension"
     else:
         axial = shape.compression(

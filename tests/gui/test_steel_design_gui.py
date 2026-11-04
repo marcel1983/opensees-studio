@@ -72,6 +72,22 @@ def test_overrides_apply_to_the_selection(qtbot) -> None:  # type: ignore[no-unt
 
 
 @pytest.mark.gui
+def test_fu_and_the_net_area_round_trip(qtbot) -> None:  # type: ignore[no-untyped-def]
+    project = _beam_project()
+    dialog = SteelDesignDialog(project, _results(project), selected_elements=frozenset({2}))
+    qtbot.addWidget(dialog)
+    dialog._fu.setValue(60.0)
+    dialog._net_area.setValue(12.0)
+    dialog._shear_lag.setValue(0.85)
+    dialog._apply_overrides()
+    settings = dialog.settings()
+    assert settings.fu == pytest.approx(60.0)
+    member = next(m for m in settings.members if m.element_id == 2)
+    assert member.net_area == pytest.approx(12.0)
+    assert member.shear_lag == pytest.approx(0.85)
+
+
+@pytest.mark.gui
 def test_cases_without_results_are_marked(qtbot) -> None:  # type: ignore[no-untyped-def]
     project = _beam_project()
     dialog = SteelDesignDialog(project, {})
