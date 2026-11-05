@@ -2576,7 +2576,7 @@ class MainWindow(QMainWindow):
         project = self._vm.project
         if project is None:
             return
-        method = project.design.method if project.design is not None else "LRFD"
+        method: str = project.design.method if project.design is not None else "LRFD"
         dialog = NotionalLoadsDialog(project, self, method=method)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
