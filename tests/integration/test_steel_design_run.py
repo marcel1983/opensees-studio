@@ -392,3 +392,9 @@ def test_the_member_result_carries_the_limit_state_records() -> None:
     names = {check.name for check in member.checks}
     assert "Major flexure" in names and "P-M interaction" in names
     assert all(check.capacity >= 0.0 for check in member.checks)
+
+
+def test_the_seismic_checks_reach_the_member_records() -> None:
+    project = _beam()
+    report = steel_frame_check(project, _results(project), DesignSettings(seismic_system="SMF"))
+    assert any(check.name.startswith("AISC 341") for check in report.members[0].checks)

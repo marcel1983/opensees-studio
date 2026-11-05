@@ -1616,6 +1616,29 @@ step, and are used by the report and by any future calculation-memory export.
 """,
             "file.export_report",
         ),
+        "file.calc_memory": _t(
+            "File → Export → Calculation Memory",
+            "File",
+            "Member-by-member calculation memory with formulas and numbers.",
+            """
+Exports the AISC 360-16 member checks as a document:
+
+- **Cover**: project, author, company, date, program version and revisions
+  (File → Project Information).
+- **Index** of every member with its shape, ratio and status.
+- **One sheet per member**: governing check, load set and station; the
+  geometric properties of its shape; every limit state with demand, capacity
+  and ratio; and the calculation steps (formula, substitution, value).
+- **Language**: English or Spanish, chosen in the dialog.
+- **Formats**: HTML, Markdown, LaTeX, OpenDocument text (ODT) and PDF.
+- **Members**: all designed, the current selection, or only the NG members.
+
+The memory reproduces the checks run in this session; run the load sets first.
+The seismic joint checks and connections join the document in a later version.
+""",
+            "file.export_report",
+            "design.steel_check",
+        ),
         "file.export_report": _t(
             "File → Export → Report (HTML / PDF)",
             "File",
@@ -5374,6 +5397,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_import_ifc": "file.import_ifc",
     "_act_export_s2k": "file.export_s2k",
     "_act_export_report": "file.export_report",
+    "_act_calc_memory": "file.calc_memory",
     "_act_project_info": "file.project_info",
     "_act_run_batch": "file.run_batch",
     "_act_quit": "file.quit",

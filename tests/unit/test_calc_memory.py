@@ -7,7 +7,7 @@ import pytest
 from opensees_studio.core import Project
 from opensees_studio.core.design.calc import CalcStep, LimitStateCheck
 from opensees_studio.core.project import ProjectMeta, Revision
-from opensees_studio.services.calc_memory import build_member_memory
+from opensees_studio.services.calc_memory import build_member_memory, odt_bytes
 from opensees_studio.services.steel_design import DesignReport, MemberResult
 
 
@@ -75,3 +75,41 @@ def test_unknown_language_or_format_is_refused() -> None:
         build_member_memory(_project(), _report(), language="fr")  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="format"):
         build_member_memory(_project(), _report(), fmt="pdf")  # type: ignore[arg-type]
+
+
+def test_latex_and_odt_are_generated() -> None:
+    latex = build_member_memory(_project(), _report(), language="en", fmt="latex")
+    assert r"\documentclass" in latex
+    assert r"\section*{Steel tower}" in latex
+    assert "F2-2 inelastic LTB" in latex
+    odt = odt_bytes(_project(), _report(), language="es")
+    assert odt.startswith(b"PK")
+    import io
+    import zipfile
+
+    with zipfile.ZipFile(io.BytesIO(odt)) as package:
+        names = set(package.namelist())
+        assert {"mimetype", "content.xml", "styles.xml", "META-INF/manifest.xml"} <= names
+        assert package.read("mimetype").decode() == "application/vnd.oasis.opendocument.text"
+        assert "Memoria de cálculo" in package.read("content.xml").decode()
+
+
+def test_the_memory_carries_the_joint_checks() -> None:
+    from opensees_studio.services.steel_design import JointResult
+
+    report = _report()
+    report.joints = [
+        JointResult(
+            node_id=3,
+            ratio=1.25,
+            status="OK",
+            panel_ratio=0.8,
+            panel_status="OK",
+            load_set="Combination 1.2D+1.0E",
+        )
+    ]
+    english = build_member_memory(_project(), report, language="en", fmt="html")
+    assert "Joints (AISC 341-22)" in english
+    assert "1.25" in english and "0.8" in english
+    spanish = build_member_memory(_project(), report, language="es", fmt="markdown")
+    assert "Juntas (AISC 341-22)" in spanish

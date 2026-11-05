@@ -10,6 +10,8 @@ project units, shapes and the report, and writes HTML or Markdown. No Qt.
 from __future__ import annotations
 
 import html
+import io
+import zipfile
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -17,7 +19,7 @@ from opensees_studio import __version__
 from opensees_studio.services.steel_design import shape_in_units
 
 Language = Literal["en", "es"]
-Format = Literal["html", "markdown"]
+Format = Literal["html", "markdown", "latex"]
 
 _LABELS: dict[Language, dict[str, str]] = {
     "en": {
@@ -33,6 +35,11 @@ _LABELS: dict[Language, dict[str, str]] = {
         "by": "By",
         "description": "Description",
         "index": "Index",
+        "joints": "Joints (AISC 341-22)",
+        "joint": "Joint",
+        "scwb": "Sum M*pc / Sum M*be",
+        "panel": "Vr / phi Rn",
+        "panel_status": "Panel",
         "element": "Element",
         "shape": "Shape",
         "ratio": "Ratio",
@@ -72,6 +79,11 @@ _LABELS: dict[Language, dict[str, str]] = {
         "by": "Por",
         "description": "Descripción",
         "index": "Índice",
+        "joints": "Juntas (AISC 341-22)",
+        "joint": "Junta",
+        "scwb": "Sum M*pc / Sum M*be",
+        "panel": "Vr / phi Rn",
+        "panel_status": "Panel",
         "element": "Elemento",
         "shape": "Perfil",
         "ratio": "Razón",
@@ -177,6 +189,20 @@ def _index_rows(report: Any) -> list[list[str]]:
     ]
 
 
+def _joint_rows(report: Any) -> list[list[str]]:
+    return [
+        [
+            str(j.node_id),
+            _fmt(j.ratio),
+            j.status,
+            _fmt(j.panel_ratio),
+            j.panel_status,
+            j.load_set,
+        ]
+        for j in sorted(report.joints, key=lambda item: item.node_id)
+    ]
+
+
 def _member_html(project: Any, member: Any, labels: dict[str, str]) -> list[str]:
     shape = _member_shape(project, member.shape)
     out = [
@@ -255,6 +281,19 @@ def _html(project: Any, report: Any, labels: dict[str, str]) -> str:
         f"<td>{_e(row[2])}</td><td>{_e(row[3])}</td></tr>"
         for row in _index_rows(report)
     )
+    joints = ""
+    if report.joints:
+        joints = (
+            f"<h2>{labels['joints']}</h2><table><tr>"
+            f"<th>{labels['joint']}</th><th>{labels['scwb']}</th>"
+            f"<th>{labels['status']}</th><th>{labels['panel']}</th>"
+            f"<th>{labels['panel_status']}</th><th>{labels['load_set']}</th></tr>"
+            + "".join(
+                "<tr>" + "".join(f"<td>{_e(cell)}</td>" for cell in row) + "</tr>"
+                for row in _joint_rows(report)
+            )
+            + "</table>"
+        )
     members = []
     for member in sorted(report.members, key=lambda item: item.element_id):
         members.extend(_member_html(project, member, labels))
@@ -273,6 +312,7 @@ def _html(project: Any, report: Any, labels: dict[str, str]) -> str:
         f"<h2>{labels['index']}</h2><table><tr>"
         f"<th>{labels['element']}</th><th>{labels['shape']}</th>"
         f"<th>{labels['ratio']}</th><th>{labels['status']}</th></tr>{index}</table>"
+        + joints
         + "".join(members)
         + f"<p class='note'>{_e(labels['disclaimer'])}</p></body></html>"
     )
@@ -301,6 +341,16 @@ def _markdown(project: Any, report: Any, labels: dict[str, str]) -> str:
         "|---|---|---|---|",
     ]
     lines += ["| " + " | ".join(row) + " |" for row in _index_rows(report)]
+    if report.joints:
+        lines += [
+            "",
+            f"## {labels['joints']}",
+            "",
+            f"| {labels['joint']} | {labels['scwb']} | {labels['status']} | "
+            f"{labels['panel']} | {labels['panel_status']} | {labels['load_set']} |",
+            "|---|---|---|---|---|---|",
+        ]
+        lines += ["| " + " | ".join(row) + " |" for row in _joint_rows(report)]
     for member in sorted(report.members, key=lambda item: item.element_id):
         lines += [
             "",
@@ -355,7 +405,7 @@ def build_member_memory(
     language: Language = "en",
     fmt: Format = "html",
 ) -> str:
-    """The member calculation memory as HTML or Markdown."""
+    """The member calculation memory as HTML, Markdown or LaTeX."""
     labels = _LABELS.get(language)
     if labels is None:
         raise ValueError(f"Unknown language {language!r}: use 'en' or 'es'.")
@@ -363,4 +413,302 @@ def build_member_memory(
         return _html(project, report, labels)
     if fmt == "markdown":
         return _markdown(project, report, labels)
-    raise ValueError(f"Unknown format {fmt!r}: use 'html' or 'markdown'.")
+    if fmt == "latex":
+        return _latex(project, report, labels)
+    raise ValueError(f"Unknown format {fmt!r}: use 'html', 'markdown' or 'latex'.")
+
+
+def _tex_escape(value: object) -> str:
+    text = str(value)
+    for old, new in (
+        ("\\", r"\textbackslash{}"),
+        ("&", r"\&"),
+        ("%", r"\%"),
+        ("$", r"\$"),
+        ("#", r"\#"),
+        ("_", r"\_"),
+        ("{", r"\{"),
+        ("}", r"\}"),
+        ("~", r"\textasciitilde{}"),
+        ("^", r"\textasciicircum{}"),
+    ):
+        text = text.replace(old, new)
+    return text
+
+
+def _latex(project: Any, report: Any, labels: dict[str, str]) -> str:
+    lines = [
+        r"\documentclass[10pt]{article}",
+        r"\usepackage[margin=20mm]{geometry}",
+        r"\usepackage{longtable,booktabs}",
+        r"\usepackage[T1]{fontenc}",
+        r"\usepackage[utf8]{inputenc}",
+        r"\begin{document}",
+        rf"\section*{{{_tex_escape(project.meta.name)}}}",
+        rf"\subsection*{{{_tex_escape(labels['title'])}}}",
+        _tex_escape(labels["subtitle"]),
+        "",
+    ]
+    for key, value in _cover(project, labels):
+        lines.append(rf"\textbf{{{_tex_escape(key)}:}} {_tex_escape(value)}\\")
+    if project.meta.revisions:
+        lines += [
+            "",
+            rf"\subsection*{{{_tex_escape(labels['revisions'])}}}",
+            r"\begin{longtable}{llll}",
+        ]
+        lines.append(
+            rf"{_tex_escape(labels['rev'])} & {_tex_escape(labels['date'])} & "
+            rf"{_tex_escape(labels['by'])} & {_tex_escape(labels['description'])} \\ \toprule"
+        )
+        lines += [
+            rf"{_tex_escape(r.code)} & {_tex_escape(r.date)} & "
+            rf"{_tex_escape(r.by)} & {_tex_escape(r.description)} \\"
+            for r in project.meta.revisions
+        ]
+        lines.append(r"\end{longtable}")
+    lines += ["", rf"\subsection*{{{_tex_escape(labels['index'])}}}", r"\begin{longtable}{llll}"]
+    lines.append(
+        rf"{_tex_escape(labels['element'])} & {_tex_escape(labels['shape'])} & "
+        rf"{_tex_escape(labels['ratio'])} & {_tex_escape(labels['status'])} \\ \toprule"
+    )
+    lines += [" & ".join(_tex_escape(cell) for cell in row) + r" \\" for row in _index_rows(report)]
+    lines.append(r"\end{longtable}")
+    if report.joints:
+        lines += [rf"\subsection*{{{_tex_escape(labels['joints'])}}}", r"\begin{longtable}{llllll}"]
+        lines.append(
+            rf"{_tex_escape(labels['joint'])} & {_tex_escape(labels['scwb'])} & "
+            rf"{_tex_escape(labels['status'])} & {_tex_escape(labels['panel'])} & "
+            rf"{_tex_escape(labels['panel_status'])} & {_tex_escape(labels['load_set'])} \\ \toprule"
+        )
+        lines += [
+            " & ".join(_tex_escape(cell) for cell in row) + r" \\" for row in _joint_rows(report)
+        ]
+        lines.append(r"\end{longtable}")
+    for member in sorted(report.members, key=lambda item: item.element_id):
+        lines += [
+            "",
+            rf"\subsection*{{{_tex_escape(labels['element'])} {member.element_id} - {_tex_escape(member.shape)}}}",
+            rf"\textbf{{{_tex_escape(labels['governing'])}:}} {_tex_escape(member.check)} "
+            rf"({_tex_escape(member.equation)}), {_tex_escape(labels['ratio'])} {_fmt(member.ratio)}; "
+            rf"{_tex_escape(labels['load_set'])} {_tex_escape(member.load_set)}; "
+            rf"{_tex_escape(labels['station'])} {member.station:.2f}.",
+            "",
+        ]
+        shape = _member_shape(project, member.shape)
+        if shape is not None and (props := _properties(shape)):
+            lines += [rf"\textbf{{{_tex_escape(labels['properties'])}}}", r"\begin{longtable}{ll}"]
+            lines += [rf"{_tex_escape(k)} & {_tex_escape(v)} \\" for k, v in props]
+            lines.append(r"\end{longtable}")
+        for check in member.checks:
+            lines += [
+                rf"\textbf{{{_tex_escape(check.name)}}} ({_tex_escape(check.equation)}): "
+                rf"{_tex_escape(labels['demand'])} {_fmt(check.demand)}, "
+                rf"{_tex_escape(labels['capacity'])} {_fmt(check.capacity)}, "
+                rf"{_tex_escape(labels['ratio'])} {_fmt(check.ratio)}.",
+            ]
+            if check.steps:
+                lines += [r"\begin{longtable}{llll}"]
+                lines.append(
+                    rf"{_tex_escape(labels['label'])} & {_tex_escape(labels['formula'])} & "
+                    rf"{_tex_escape(labels['substitution'])} & {_tex_escape(labels['value'])} \\ \toprule"
+                )
+                lines += [
+                    rf"{_tex_escape(s.label)} & {_tex_escape(s.formula)} & "
+                    rf"{_tex_escape(s.substitution)} & "
+                    rf"{_fmt(s.value) if s.value is not None else ''} \\"
+                    for s in check.steps
+                ]
+                lines.append(r"\end{longtable}")
+    lines += ["", r"\emph{" + _tex_escape(labels["disclaimer"]) + "}", r"\end{document}", ""]
+    return "\n".join(lines)
+
+
+def _odt_text(value: object) -> str:
+    import xml.sax.saxutils as saxutils
+
+    return saxutils.escape(str(value))
+
+
+def odt_bytes(project: Any, report: Any, *, language: Language = "en") -> bytes:
+    """The member memory as an OpenDocument text package (a zip)."""
+    labels = _LABELS.get(language)
+    if labels is None:
+        raise ValueError(f"Unknown language {language!r}: use 'en' or 'es'.")
+    body: list[str] = [
+        f"<text:h text:outline-level='1'>{_odt_text(project.meta.name)}</text:h>",
+        f"<text:h text:outline-level='2'>{_odt_text(labels['title'])}</text:h>",
+        f"<text:p>{_odt_text(labels['subtitle'])}</text:p>",
+    ]
+    for key, value in _cover(project, labels):
+        body.append(
+            f"<text:p><text:span text:style-name='Bold'>{_odt_text(key)}:</text:span> {_odt_text(value)}</text:p>"
+        )
+    if project.meta.revisions:
+        body.append(f"<text:h text:outline-level='3'>{_odt_text(labels['revisions'])}</text:h>")
+        body.append("<table:table table:name='Revisions'>")
+        for row in [[labels["rev"], labels["date"], labels["by"], labels["description"]]] + [
+            [r.code, r.date, r.by, r.description] for r in project.meta.revisions
+        ]:
+            body.append(
+                "<table:table-row>"
+                + "".join(
+                    f"<table:table-cell><text:p>{_odt_text(c)}</text:p></table:table-cell>"
+                    for c in row
+                )
+                + "</table:table-row>"
+            )
+        body.append("</table:table>")
+    body.append(f"<text:h text:outline-level='2'>{_odt_text(labels['index'])}</text:h>")
+    body.append("<table:table table:name='Index'>")
+    index_rows = [[labels["element"], labels["shape"], labels["ratio"], labels["status"]]]
+    index_rows.extend(_index_rows(report))
+    for row in index_rows:
+        body.append(
+            "<table:table-row>"
+            + "".join(
+                f"<table:table-cell><text:p>{_odt_text(c)}</text:p></table:table-cell>" for c in row
+            )
+            + "</table:table-row>"
+        )
+    body.append("</table:table>")
+    if report.joints:
+        body.append(f"<text:h text:outline-level='2'>{_odt_text(labels['joints'])}</text:h>")
+        body.append("<table:table table:name='Joints'>")
+        header = [
+            labels["joint"],
+            labels["scwb"],
+            labels["status"],
+            labels["panel"],
+            labels["panel_status"],
+            labels["load_set"],
+        ]
+        for row in [header, *_joint_rows(report)]:
+            body.append(
+                "<table:table-row>"
+                + "".join(
+                    f"<table:table-cell><text:p>{_odt_text(c)}</text:p></table:table-cell>"
+                    for c in row
+                )
+                + "</table:table-row>"
+            )
+        body.append("</table:table>")
+    for member in sorted(report.members, key=lambda item: item.element_id):
+        body.append(
+            f"<text:h text:outline-level='2'>{_odt_text(labels['element'])} {member.element_id} - {_odt_text(member.shape)}</text:h>"
+        )
+        body.append(
+            f"<text:p>{_odt_text(labels['governing'])}: {_odt_text(member.check)} ({_odt_text(member.equation)}); {_odt_text(labels['ratio'])} {_fmt(member.ratio)}</text:p>"
+        )
+        shape = _member_shape(project, member.shape)
+        if shape is not None and (props := _properties(shape)):
+            body.append(
+                f"<text:h text:outline-level='3'>{_odt_text(labels['properties'])}</text:h>"
+            )
+            body.append("<table:table table:name='Properties'>")
+            for key, value in props:
+                body.append(
+                    f"<table:table-row><table:table-cell><text:p>{_odt_text(key)}</text:p></table:table-cell><table:table-cell><text:p>{_odt_text(value)}</text:p></table:table-cell></table:table-row>"
+                )
+            body.append("</table:table>")
+        if member.checks:
+            body.append(
+                f"<text:h text:outline-level='3'>{_odt_text(labels['limit_states'])}</text:h>"
+            )
+            body.append("<table:table table:name='Checks'>")
+            header = [
+                labels["check"],
+                labels["equation"],
+                labels["demand"],
+                labels["capacity"],
+                labels["ratio"],
+            ]
+            rows = [header] + [
+                [c.name, c.equation, _fmt(c.demand), _fmt(c.capacity), _fmt(c.ratio)]
+                for c in member.checks
+            ]
+            for row in rows:
+                body.append(
+                    "<table:table-row>"
+                    + "".join(
+                        f"<table:table-cell><text:p>{_odt_text(c)}</text:p></table:table-cell>"
+                        for c in row
+                    )
+                    + "</table:table-row>"
+                )
+            body.append("</table:table>")
+            for check in member.checks:
+                if not check.steps:
+                    continue
+                body.append(
+                    f"<text:h text:outline-level='4'>{_odt_text(check.name)} - {_odt_text(check.equation)}</text:h>"
+                )
+                body.append("<table:table table:name='Steps'>")
+                header = [
+                    labels["label"],
+                    labels["formula"],
+                    labels["substitution"],
+                    labels["value"],
+                ]
+                rows = [header] + [
+                    [
+                        s.label,
+                        s.formula,
+                        s.substitution,
+                        _fmt(s.value) if s.value is not None else "",
+                    ]
+                    for s in check.steps
+                ]
+                for row in rows:
+                    body.append(
+                        "<table:table-row>"
+                        + "".join(
+                            f"<table:table-cell><text:p>{_odt_text(c)}</text:p></table:table-cell>"
+                            for c in row
+                        )
+                        + "</table:table-row>"
+                    )
+                body.append("</table:table>")
+    body.append(
+        f"<text:p><text:span text:style-name='Italic'>{_odt_text(labels['disclaimer'])}</text:span></text:p>"
+    )
+    content = (
+        "<?xml version='1.0' encoding='UTF-8'?>"
+        "<office:document-content "
+        "xmlns:office='urn:oasis:names:tc:opendocument:xmlns:office:1.0' "
+        "xmlns:text='urn:oasis:names:tc:opendocument:xmlns:text:1.0' "
+        "xmlns:table='urn:oasis:names:tc:opendocument:xmlns:table:1.0' "
+        "office:version='1.2'><office:body><office:text>"
+        + "".join(body)
+        + "</office:text></office:body></office:document-content>"
+    )
+    styles = (
+        "<?xml version='1.0' encoding='UTF-8'?>"
+        "<office:document-styles "
+        "xmlns:office='urn:oasis:names:tc:opendocument:xmlns:office:1.0' "
+        "xmlns:text='urn:oasis:names:tc:opendocument:xmlns:text:1.0' "
+        "xmlns:style='urn:oasis:names:tc:opendocument:xmlns:style:1.0' "
+        "office:version='1.2'><office:styles>"
+        "<style:style style:name='Bold' style:family='text'><style:text-properties fo:font-weight='bold' xmlns:fo='urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0'/></style:style>"
+        "<style:style style:name='Italic' style:family='text'><style:text-properties fo:font-style='italic' xmlns:fo='urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0'/></style:style>"
+        "</office:styles></office:document-styles>"
+    )
+    manifest = (
+        "<?xml version='1.0' encoding='UTF-8'?>"
+        "<manifest:manifest xmlns:manifest='urn:oasis:names:tc:opendocument:xmlns:manifest:1.0' manifest:version='1.2'>"
+        "<manifest:file-entry manifest:full-path='/' manifest:media-type='application/vnd.oasis.opendocument.text'/>"
+        "<manifest:file-entry manifest:full-path='content.xml' manifest:media-type='text/xml'/>"
+        "<manifest:file-entry manifest:full-path='styles.xml' manifest:media-type='text/xml'/>"
+        "</manifest:manifest>"
+    )
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as package:
+        package.writestr(
+            "mimetype",
+            "application/vnd.oasis.opendocument.text",
+            compress_type=zipfile.ZIP_STORED,
+        )
+        package.writestr("content.xml", content)
+        package.writestr("styles.xml", styles)
+        package.writestr("META-INF/manifest.xml", manifest)
+    return buffer.getvalue()
