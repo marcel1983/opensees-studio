@@ -379,5 +379,7 @@ def test_smf_joints_get_the_strong_column_weak_beam_ratio() -> None:
     report = steel_frame_check(project, _results(project), DesignSettings(seismic_system="SMF"))
     assert {joint.node_id for joint in report.joints} == {2, 3}
     assert all(joint.ratio > 0.0 for joint in report.joints)
+    assert all(joint.panel_ratio > 0.0 for joint in report.joints)
+    assert all(joint.panel_status in ("OK", "NG") for joint in report.joints)
     assert all(joint.status in ("OK", "NG") for joint in report.joints)
     assert "joint(s) checked" in report.summary()

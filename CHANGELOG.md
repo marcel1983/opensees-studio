@@ -18,6 +18,10 @@ refused instead of silently downgraded).
   SMF check now runs it at every beam-to-column joint of a 2D frame, taking
   `Pr` and the beam shear from each load set; the report adds a joint table
   with the smallest ratio. The E3.4a exception is not applied (conservative).
+- **AISC 360-22 J10.6 panel zone.** The same joints get the panel-zone shear
+  check with the beam face moments (`M_node − V·dc/2`), the column shear and
+  the J10-11/J10-12 strength (column-flange contribution and the axial-force
+  adjustment), `φ = 0.90` / `Ω = 1.67`. The report adds `Vr/φRn` per joint.
 - **AISC 341-22 width-to-thickness engine (Tables D1.1a and D1.1b).**
   `core.design.aisc341` encodes the 18 cases of the seismic provisions,
   including the `Ca = Pr/(αs Ry Fy Ag)` ratio (`αs` = 1.0 LRFD, 1.5 ASD), the

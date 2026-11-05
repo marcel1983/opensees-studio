@@ -1534,6 +1534,11 @@ cantilever**: F1-1 assumes both ends braced.
   E3.4a: the report shows `ΣM*pc/ΣM*be`, which must be greater than 1.0, with
   `Pr` and the beam shear from each load set and `Mpr = Cpr Ry Fy Zb`. The
   E3.4a exception for light top-story columns is not applied (conservative).
+  The same joints get the **panel-zone** check of AISC 360-22 J10.6 (J10-11/
+  J10-12, the inelastic case AISC 341 requires): `Vr = Sum Mf/(db - tbf) - Vc`,
+  with the beam face moments reduced by the shear over `dc/2`, and
+  `φRn = 0.90·0.60Fy dc tw (1 + 3bcf tcf²/(db dc tw))` adjusted for column
+  axial force. The report shows `Vr/φRn` per joint.
 
 Results: one row per member with its governing ratio, the check and equation
 that govern and the load set that produced them; **Select failing members**

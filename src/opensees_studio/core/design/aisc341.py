@@ -351,3 +351,59 @@ def joint_scwb(
         vp = max(2.0 * probable / beam.length, abs(beam.shear))
         mbe += mbe_star(probable, vp * dc / 2.0, method=method)
     return mpc, mbe
+
+
+# ─────────────────────── panel zone: AISC 360 J10.6 ───────────────────────
+def panel_zone_demand(
+    sum_mf: float,
+    db: float,
+    tbf: float,
+    column_shear: float,
+) -> float:
+    """Required panel-zone shear from the beam moments at the column faces.
+
+    ``Vr = sum(Mf) / (db - tbf) - Vc``, not below zero. ``db`` is the beam
+    depth, ``tbf`` its flange thickness and ``Vc`` the column shear at the
+    joint. The face moments come from the member end moments reduced by the
+    shear over half the column depth (the connection-face offset).
+    """
+    if db - tbf <= 0.0:
+        raise ValueError("The beam's clear depth db - tbf must be positive.")
+    return max(0.0, sum_mf / (db - tbf) - max(0.0, column_shear))
+
+
+def panel_zone_strength(
+    fy: float,
+    dc: float,
+    tw: float,
+    bcf: float,
+    tcf: float,
+    db: float,
+    pr: float,
+    py: float,
+    *,
+    method: Method = "LRFD",
+    inelastic: bool = True,
+) -> float:
+    """Available panel-zone shear strength, AISC 360 J10.6 (J10-9 to J10-12).
+
+    ``inelastic=True`` is the case where the analysis accounts for inelastic
+    panel-zone deformation, the one AISC 341 SMF uses (J10-11/J10-12, with the
+    column-flange contribution). ``alpha`` is 1.0 in LRFD and 1.6 in ASD; the
+    resistance factor is 0.90 and the safety factor 1.67.
+    """
+    if min(dc, tw, bcf, tcf, db, fy, py) <= 0.0:
+        raise ValueError("The panel-zone dimensions, Fy and Py must be positive.")
+    alpha = 1.0 if method == "LRFD" else 1.6
+    base = 0.60 * fy * dc * tw
+    if inelastic:
+        flange = 1.0 + 3.0 * bcf * tcf**2 / (db * dc * tw)
+        if alpha * max(0.0, pr) <= 0.75 * py:
+            nominal = base * flange
+        else:
+            nominal = base * flange * max(0.0, 1.9 - 1.2 * alpha * pr / py)
+    elif alpha * max(0.0, pr) <= 0.4 * py:
+        nominal = base
+    else:
+        nominal = base * max(0.0, 1.4 - alpha * pr / py)
+    return nominal * (0.90 if method == "LRFD" else 1.0 / 1.67)
