@@ -73,7 +73,7 @@ from opensees_studio.core.design.aisc360_shapes import (
     RoundHSS,
     Tee,
 )
-from opensees_studio.core.design.calc import LimitStateCheck
+from opensees_studio.core.design.calc import CalcStep, LimitStateCheck
 from opensees_studio.core.design.settings import DesignLoadSet, DesignSettings
 from opensees_studio.core.geometry.elements import FRAME_ELEMENT_CLASSES
 from opensees_studio.core.sections import ElasticSection
@@ -645,6 +645,29 @@ def steel_frame_check(
                         key = f"AISC 341 {item.element} (case {item.case})"
                         check.ratios[key] = item.utilization
                         check.equations[key] = f"AISC 341-22 D1.1 case {item.case}"
+                        check.checks.append(
+                            LimitStateCheck(
+                                key,
+                                f"AISC 341-22 D1.1 case {item.case}",
+                                item.ratio,
+                                item.limit,
+                                item.utilization,
+                                (
+                                    CalcStep(
+                                        "Element slenderness",
+                                        "lambda = b/t or h/tw",
+                                        f"{item.ratio:.6g}",
+                                        item.ratio,
+                                    ),
+                                    CalcStep(
+                                        "Ductility limit",
+                                        f"D1.1 case {item.case}",
+                                        f"{item.limit:.6g}",
+                                        item.limit,
+                                    ),
+                                ),
+                            )
+                        )
                 ratio = check.governing[1]
                 for name, value in check.ratios.items():
                     max_ratios[name] = max(max_ratios.get(name, 0.0), value)

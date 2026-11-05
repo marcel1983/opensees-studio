@@ -35,6 +35,11 @@ _LABELS: dict[Language, dict[str, str]] = {
         "by": "By",
         "description": "Description",
         "index": "Index",
+        "joints": "Joints (AISC 341-22)",
+        "joint": "Joint",
+        "scwb": "Sum M*pc / Sum M*be",
+        "panel": "Vr / phi Rn",
+        "panel_status": "Panel",
         "element": "Element",
         "shape": "Shape",
         "ratio": "Ratio",
@@ -74,6 +79,11 @@ _LABELS: dict[Language, dict[str, str]] = {
         "by": "Por",
         "description": "Descripción",
         "index": "Índice",
+        "joints": "Juntas (AISC 341-22)",
+        "joint": "Junta",
+        "scwb": "Sum M*pc / Sum M*be",
+        "panel": "Vr / phi Rn",
+        "panel_status": "Panel",
         "element": "Elemento",
         "shape": "Perfil",
         "ratio": "Razón",
@@ -179,6 +189,20 @@ def _index_rows(report: Any) -> list[list[str]]:
     ]
 
 
+def _joint_rows(report: Any) -> list[list[str]]:
+    return [
+        [
+            str(j.node_id),
+            _fmt(j.ratio),
+            j.status,
+            _fmt(j.panel_ratio),
+            j.panel_status,
+            j.load_set,
+        ]
+        for j in sorted(report.joints, key=lambda item: item.node_id)
+    ]
+
+
 def _member_html(project: Any, member: Any, labels: dict[str, str]) -> list[str]:
     shape = _member_shape(project, member.shape)
     out = [
@@ -257,6 +281,19 @@ def _html(project: Any, report: Any, labels: dict[str, str]) -> str:
         f"<td>{_e(row[2])}</td><td>{_e(row[3])}</td></tr>"
         for row in _index_rows(report)
     )
+    joints = ""
+    if report.joints:
+        joints = (
+            f"<h2>{labels['joints']}</h2><table><tr>"
+            f"<th>{labels['joint']}</th><th>{labels['scwb']}</th>"
+            f"<th>{labels['status']}</th><th>{labels['panel']}</th>"
+            f"<th>{labels['panel_status']}</th><th>{labels['load_set']}</th></tr>"
+            + "".join(
+                "<tr>" + "".join(f"<td>{_e(cell)}</td>" for cell in row) + "</tr>"
+                for row in _joint_rows(report)
+            )
+            + "</table>"
+        )
     members = []
     for member in sorted(report.members, key=lambda item: item.element_id):
         members.extend(_member_html(project, member, labels))
@@ -275,6 +312,7 @@ def _html(project: Any, report: Any, labels: dict[str, str]) -> str:
         f"<h2>{labels['index']}</h2><table><tr>"
         f"<th>{labels['element']}</th><th>{labels['shape']}</th>"
         f"<th>{labels['ratio']}</th><th>{labels['status']}</th></tr>{index}</table>"
+        + joints
         + "".join(members)
         + f"<p class='note'>{_e(labels['disclaimer'])}</p></body></html>"
     )
@@ -303,6 +341,16 @@ def _markdown(project: Any, report: Any, labels: dict[str, str]) -> str:
         "|---|---|---|---|",
     ]
     lines += ["| " + " | ".join(row) + " |" for row in _index_rows(report)]
+    if report.joints:
+        lines += [
+            "",
+            f"## {labels['joints']}",
+            "",
+            f"| {labels['joint']} | {labels['scwb']} | {labels['status']} | "
+            f"{labels['panel']} | {labels['panel_status']} | {labels['load_set']} |",
+            "|---|---|---|---|---|---|",
+        ]
+        lines += ["| " + " | ".join(row) + " |" for row in _joint_rows(report)]
     for member in sorted(report.members, key=lambda item: item.element_id):
         lines += [
             "",
@@ -426,6 +474,17 @@ def _latex(project: Any, report: Any, labels: dict[str, str]) -> str:
     )
     lines += [" & ".join(_tex_escape(cell) for cell in row) + r" \\" for row in _index_rows(report)]
     lines.append(r"\end{longtable}")
+    if report.joints:
+        lines += [rf"\subsection*{{{_tex_escape(labels['joints'])}}}", r"\begin{longtable}{llllll}"]
+        lines.append(
+            rf"{_tex_escape(labels['joint'])} & {_tex_escape(labels['scwb'])} & "
+            rf"{_tex_escape(labels['status'])} & {_tex_escape(labels['panel'])} & "
+            rf"{_tex_escape(labels['panel_status'])} & {_tex_escape(labels['load_set'])} \\ \toprule"
+        )
+        lines += [
+            " & ".join(_tex_escape(cell) for cell in row) + r" \\" for row in _joint_rows(report)
+        ]
+        lines.append(r"\end{longtable}")
     for member in sorted(report.members, key=lambda item: item.element_id):
         lines += [
             "",
@@ -513,6 +572,27 @@ def odt_bytes(project: Any, report: Any, *, language: Language = "en") -> bytes:
             + "</table:table-row>"
         )
     body.append("</table:table>")
+    if report.joints:
+        body.append(f"<text:h text:outline-level='2'>{_odt_text(labels['joints'])}</text:h>")
+        body.append("<table:table table:name='Joints'>")
+        header = [
+            labels["joint"],
+            labels["scwb"],
+            labels["status"],
+            labels["panel"],
+            labels["panel_status"],
+            labels["load_set"],
+        ]
+        for row in [header, *_joint_rows(report)]:
+            body.append(
+                "<table:table-row>"
+                + "".join(
+                    f"<table:table-cell><text:p>{_odt_text(c)}</text:p></table:table-cell>"
+                    for c in row
+                )
+                + "</table:table-row>"
+            )
+        body.append("</table:table>")
     for member in sorted(report.members, key=lambda item: item.element_id):
         body.append(
             f"<text:h text:outline-level='2'>{_odt_text(labels['element'])} {member.element_id} - {_odt_text(member.shape)}</text:h>"

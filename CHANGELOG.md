@@ -15,8 +15,9 @@ refused instead of silently downgraded).
   and Spanish).** File → Export → Calculation Memory writes the project cover
   (author, company, date, revisions), an index and one sheet per member:
   geometric properties, every `LimitStateCheck` with its demand, capacity,
-  ratio and calculation steps, and the governing result. The dialog chooses
-  the language, the format and the members (all, selection or NG).
+  ratio and calculation steps, and the governing result. The seismic checks
+  (D1.1 per member, E3.4a and panel zone per joint) are included. The dialog
+  chooses the language, the format and the members (all, selection or NG).
 
 - **Structured member calculation records.** `MemberCheck` and `MemberResult`
   now keep one `LimitStateCheck` per limit state (equation, demand, capacity,

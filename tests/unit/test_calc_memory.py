@@ -92,3 +92,24 @@ def test_latex_and_odt_are_generated() -> None:
         assert {"mimetype", "content.xml", "styles.xml", "META-INF/manifest.xml"} <= names
         assert package.read("mimetype").decode() == "application/vnd.oasis.opendocument.text"
         assert "Memoria de cálculo" in package.read("content.xml").decode()
+
+
+def test_the_memory_carries_the_joint_checks() -> None:
+    from opensees_studio.services.steel_design import JointResult
+
+    report = _report()
+    report.joints = [
+        JointResult(
+            node_id=3,
+            ratio=1.25,
+            status="OK",
+            panel_ratio=0.8,
+            panel_status="OK",
+            load_set="Combination 1.2D+1.0E",
+        )
+    ]
+    english = build_member_memory(_project(), report, language="en", fmt="html")
+    assert "Joints (AISC 341-22)" in english
+    assert "1.25" in english and "0.8" in english
+    spanish = build_member_memory(_project(), report, language="es", fmt="markdown")
+    assert "Juntas (AISC 341-22)" in spanish
