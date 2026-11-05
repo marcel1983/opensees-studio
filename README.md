@@ -217,7 +217,8 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   frequent and quasi-permanent, with the ψ factors of Table A1.1) or
   TS 500 / TBDY 2018 (G+nQ±E, 0.9G±E) from cases tagged Dead, Live, Roof live,
   Snow, Rain, Wind and Earthquake, wind and static earthquake both ways, with an
-  optional 100% + 30% orthogonal earthquake rule, and an envelope per group.
+  optional 100% + 30% orthogonal earthquake rule, optional ASCE 7 overstrength
+  (`Ω0 E`) combinations, and an envelope per group.
 - **Results database** — every finished case is appended to
   `<project>_results.sqlite` beside the model: one row per node, element and
   step (displacements, reactions, local forces, shell resultants, storey shear,
