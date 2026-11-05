@@ -19,6 +19,8 @@ from opensees_studio.core.design.aisc341 import (
     member_limits,
     mpc_star,
     mpr,
+    panel_zone_demand,
+    panel_zone_strength,
     scwb_exempt,
     scwb_ratio,
     system_ductility,
@@ -243,3 +245,29 @@ def test_joint_scwb_needs_both_a_column_and_a_beam() -> None:
     beam = JointBeam(50.0, 50.0, 240.0, 10.0)
     assert joint_scwb([], [beam], ry=1.1) is None
     assert joint_scwb([column], [], ry=1.1) is None
+
+
+def test_panel_zone_demand_uses_the_face_moments_and_column_shear() -> None:
+    assert panel_zone_demand(5000.0, 18.0, 0.6, 50.0) == pytest.approx(5000.0 / 17.4 - 50.0)
+    # The column shear cannot make the demand negative.
+    assert panel_zone_demand(100.0, 18.0, 0.6, 500.0) == 0.0
+    with pytest.raises(ValueError, match="clear depth"):
+        panel_zone_demand(100.0, 0.5, 0.6, 10.0)
+
+
+def test_panel_zone_strength_follows_j10_11_and_j10_12() -> None:
+    base = 0.60 * 50.0 * 14.0 * 0.5
+    flange = 1.0 + 3.0 * 10.0 * 0.8**2 / (18.0 * 14.0 * 0.5)
+    low = panel_zone_strength(50.0, 14.0, 0.5, 10.0, 0.8, 18.0, 100.0, 1500.0)
+    assert low == pytest.approx(0.90 * base * flange)
+    high = panel_zone_strength(50.0, 14.0, 0.5, 10.0, 0.8, 18.0, 1200.0, 1500.0)
+    assert high == pytest.approx(0.90 * base * flange * (1.9 - 1.2 * 1200.0 / 1500.0))
+    elastic = panel_zone_strength(50.0, 14.0, 0.5, 10.0, 0.8, 18.0, 100.0, 1500.0, inelastic=False)
+    assert elastic == pytest.approx(0.90 * base)
+    asd = panel_zone_strength(50.0, 14.0, 0.5, 10.0, 0.8, 18.0, 100.0, 1500.0, method="ASD")
+    assert asd == pytest.approx(base * flange / 1.67)
+
+
+def test_panel_zone_strength_refuses_a_zero_dimension() -> None:
+    with pytest.raises(ValueError, match="positive"):
+        panel_zone_strength(50.0, 0.0, 0.5, 10.0, 0.8, 18.0, 100.0, 1500.0)

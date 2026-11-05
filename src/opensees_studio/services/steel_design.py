@@ -47,6 +47,8 @@ from opensees_studio.core.design.aisc341 import (
     ca,
     joint_scwb,
     member_limits,
+    panel_zone_demand,
+    panel_zone_strength,
 )
 from opensees_studio.core.design.aisc360 import (
     I_SHAPE_FAMILIES,
@@ -418,6 +420,11 @@ class JointResult:
     status: str = "not checked"
     columns: int = 0
     beams: int = 0
+    panel_ratio: float = 0.0
+    """Panel-zone demand over available strength, J10.6; must be at most 1.0."""
+    panel_status: str = ""
+    panel_demand: float = 0.0
+    panel_capacity: float = 0.0
 
 
 @dataclass
@@ -442,7 +449,11 @@ class DesignReport:
             text += f"; largest ratio {worst.ratio:.3f} (element {worst.element_id})"
         if self.joints:
             below = [j for j in self.joints if j.status == "NG"]
-            text += f"; {len(self.joints)} joint(s) checked, {len(below)} below 1.0"
+            panels = [j for j in self.joints if j.panel_status == "NG"]
+            text += (
+                f"; {len(self.joints)} joint(s) checked, {len(below)} below 1.0, "
+                f"{len(panels)} panel zone(s) over capacity"
+            )
         return text + "."
 
 
@@ -801,23 +812,37 @@ def _strong_column_weak_beam(
         result = JointResult(node_id=node.id, columns=len(columns), beams=len(beams))
         for label, alt in alternatives:
             joint_columns = []
+            column_shears = []
             for element in columns:
                 shape, _, _, depth = members[element.id]
                 pr = 0.0
+                shear = 0.0
                 for cid, factor in alt.items():
                     values = fields.get(cid, {}).get("N", {}).get(element.id)
                     if values is not None:
                         pr += factor * float(values[_joint_station(element, node.id)])
+                    values = fields.get(cid, {}).get("V2", {}).get(element.id)
+                    if values is not None:
+                        shear += factor * float(values[_joint_station(element, node.id)])
                 joint_columns.append(JointColumn(shape.Zx, fy, shape.A, max(0.0, pr), depth))
+                column_shears.append(abs(shear))
             joint_beams = []
+            sum_mf = 0.0
+            dc = max(members[element.id][3] for element in columns)
             for element in beams:
                 shape, _, length, _ = members[element.id]
                 shear = 0.0
+                moment = 0.0
                 for cid, factor in alt.items():
                     values = fields.get(cid, {}).get("V2", {}).get(element.id)
                     if values is not None:
                         shear += factor * float(values[_joint_station(element, node.id)])
+                    values = fields.get(cid, {}).get("M3", {}).get(element.id)
+                    if values is not None:
+                        moment += factor * float(values[_joint_station(element, node.id)])
                 joint_beams.append(JointBeam(shape.Zx, fy, length, abs(shear)))
+                # A1: the face moment is the end moment less the shear over dc/2.
+                sum_mf += max(0.0, abs(moment) - abs(shear) * dc / 2.0)
             pair = joint_scwb(
                 joint_columns,
                 joint_beams,
@@ -825,6 +850,31 @@ def _strong_column_weak_beam(
                 fu=fu,
                 method=settings.method,
             )
+            deepest = max(beams, key=lambda element: members[element.id][0].d)
+            db = members[deepest.id][0].d
+            tbf = members[deepest.id][0].tf
+            demand = panel_zone_demand(sum_mf, db, tbf, max(column_shears, default=0.0))
+            capacity = min(
+                panel_zone_strength(
+                    fy,
+                    members[element.id][0].d,
+                    members[element.id][0].tw,
+                    members[element.id][0].bf,
+                    members[element.id][0].tf,
+                    db,
+                    column.pr,
+                    fy * members[element.id][0].A,
+                    method=settings.method,
+                    inelastic=True,
+                )
+                for element, column in zip(columns, joint_columns, strict=True)
+            )
+            if capacity > 0.0:
+                panel_ratio = demand / capacity
+                if panel_ratio > result.panel_ratio:
+                    result.panel_ratio = panel_ratio
+                    result.panel_demand = demand
+                    result.panel_capacity = capacity
             if pair is None:
                 continue
             mpc, mbe = pair
@@ -837,5 +887,6 @@ def _strong_column_weak_beam(
         if result.ratio <= 0.0:
             continue
         result.status = "OK" if result.ratio > 1.0 else "NG"
+        result.panel_status = "OK" if result.panel_ratio <= 1.0 else "NG"
         out.append(result)
     return out
