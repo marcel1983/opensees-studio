@@ -87,6 +87,7 @@ from opensees_studio.commands.series_and_patterns import (
     ReplaceTimeSeriesCommand,
     SetPatternNodalLoadsCommand,
 )
+from opensees_studio.commands.stability import AddNotionalLoadsCommand
 from opensees_studio.commands.support_springs import SetSupportSpringsCommand
 from opensees_studio.commands.tables import ApplyModelTablesCommand
 from opensees_studio.commands.transforms import (
@@ -108,6 +109,7 @@ __all__ = [
     "AddMaterialsCommand",
     "AddNodalLoadsCommand",
     "AddNodesCommand",
+    "AddNotionalLoadsCommand",
     "AddPatternLoadsCommand",
     "AddPointElementLoadsCommand",
     "AddRigidLinkCommand",

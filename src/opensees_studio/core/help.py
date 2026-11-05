@@ -1412,6 +1412,35 @@ the case's load: with the default case a downward axle is positive.
             "analyze.cases",
             "display.force_diagram",
         ),
+        "design.notional_loads": _t(
+            "Design → Generate Notional Loads (DAM)",
+            "Design",
+            "The AISC 360 C2.2b notional loads of the Direct Analysis Method.",
+            """
+Creates a **Plain load pattern** with a lateral force at every storey:
+
+- **0.002 Yi** normally, **0.003 Yi** for a combination of gravity loads only
+  (AISC 360-16 C2.2b), where `Yi` is the storey gravity load.
+- The dialog picks **X**, **Y** or **both** (Y only in a 3D model) and the
+  factor. The storey weight comes from the project's mass source; without one,
+  it is the self weight plus the Dead and Live patterns, and typed masses are
+  the last resort.
+- Each storey's force is shared between its joints in proportion to their
+  gravity weight.
+
+The generated pattern is a normal load pattern: add it to the static cases
+that represent the Direct Analysis Method, together with the reduced stiffness
+`τb` on the frame property modifiers (C2.3). The command is one undo step and
+the unrecognised cases are not changed automatically.
+
+This action does not run the analysis and does not by itself make a case
+AISC 360 Chapter C compliant. It gives the engineer the notional loads with the
+right code values and a traceable name.
+""",
+            "design.steel_check",
+            "define.mass_source",
+            "define.plain_pattern",
+        ),
         "design.steel_check": _t(
             "Design → Steel Frame Check (AISC 360-16)",
             "Design",
@@ -5283,6 +5312,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_import_s2k": "file.import_s2k",
     "_act_import_tcl": "file.import_tcl",
     "_act_steel_check": "design.steel_check",
+    "_act_notional_loads": "design.notional_loads",
     "_act_influence_line": "display.influence_line",
     "_act_drift_check": "design.drift_check",
     "_act_steel_ratios": "design.steel_ratios",

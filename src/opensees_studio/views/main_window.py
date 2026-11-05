@@ -47,6 +47,7 @@ from opensees_studio.commands import (
     AddMaterialsCommand,
     AddNodalLoadsCommand,
     AddNodesCommand,
+    AddNotionalLoadsCommand,
     AddPointElementLoadsCommand,
     AddSectionsCommand,
     AddTemperatureLoadsCommand,
@@ -86,6 +87,7 @@ from opensees_studio.commands.tables import ApplyModelTablesCommand
 from opensees_studio.core import (
     SUPPORTED_NDF,
     ElasticSection,
+    LinearTimeSeries,
     Project,
     ShellMITC4Element,
     UnitConverter,
@@ -104,6 +106,7 @@ from opensees_studio.core.connectivity import (
     loose_joints,
 )
 from opensees_studio.core.design.settings import DesignSettings
+from opensees_studio.core.design.stability import notional_pattern
 from opensees_studio.core.duplicates import default_tolerance
 from opensees_studio.core.geometry.ordering import QuadOrderError, order_quad_nodes
 from opensees_studio.core.groups import Group, colour_for, group_members
@@ -194,6 +197,7 @@ from opensees_studio.views.dialogs import (
     MirrorDialog,
     ModelCheckDialog,
     MoveDialog,
+    NotionalLoadsDialog,
     PathTimeSeriesDialog,
     PerformanceDialog,
     PlainPatternDialog,
@@ -598,6 +602,7 @@ class MainWindow(QMainWindow):
         self._act_steel_check = QAction("&Steel Frame Check (AISC 360-16)…", self)
         self._act_drift_check = QAction("Storey &Drift Check…", self)
         self._act_steel_ratios = QAction("Display Steel &Ratios on Model", self)
+        self._act_notional_loads = QAction("Generate &Notional Loads (DAM).", self)
         self._act_check_stability = QAction("Check Model &Stability…", self)
         self._act_cancel_stability = QAction("&Cancel Stability Check", self)
 
@@ -887,6 +892,7 @@ class MainWindow(QMainWindow):
 
         m_design = mb.addMenu("Desi&gn")
         m_design.addAction(self._act_steel_check)
+        m_design.addAction(self._act_notional_loads)
         m_design.addAction(self._act_steel_ratios)
         m_design.addAction(self._act_drift_check)
 
@@ -1339,6 +1345,7 @@ class MainWindow(QMainWindow):
         self._act_run_selected.triggered.connect(self._on_run_selected_cases)
         self._act_clear_results.triggered.connect(self._on_clear_results)
         self._act_steel_check.triggered.connect(self._on_steel_check)
+        self._act_notional_loads.triggered.connect(self._on_notional_loads)
         self._act_drift_check.triggered.connect(self._on_drift_check)
         self._act_steel_ratios.triggered.connect(self._on_steel_ratios)
         self._act_check_stability.triggered.connect(self._on_check_stability)
@@ -2563,6 +2570,52 @@ class MainWindow(QMainWindow):
             return
         dialog = InfluenceLineDialog(self._vm.project, results, parent=self)
         dialog.exec()
+
+    def _on_notional_loads(self) -> None:
+        """Design → Generate Notional Loads: AISC 360 C2.2b patterns, one undo step."""
+        project = self._vm.project
+        if project is None:
+            return
+        dialog = NotionalLoadsDialog(project, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        directions, factor, gravity_only = dialog.settings()
+        series: LinearTimeSeries | None = None
+        if project.time_series:
+            time_series_id = project.time_series[0].id
+        else:
+            series = LinearTimeSeries(id=project.next_time_series_id(), name="Notional")
+            time_series_id = series.id
+        patterns = []
+        next_id = project.next_pattern_id()
+        for direction in directions:
+            pattern = notional_pattern(
+                project,
+                pattern_id=next_id,
+                time_series_id=time_series_id,
+                factor=factor,
+                gravity_only=gravity_only,
+                direction=direction,
+            )
+            next_id += 1
+            if pattern.nodal_loads:
+                patterns.append(pattern)
+        if not patterns:
+            QMessageBox.warning(
+                self,
+                "Notional loads",
+                "No storey carries a gravity load. Define a mass source or a Dead/Live "
+                "load pattern first.",
+            )
+            return
+        self._vm.apply_command(AddNotionalLoadsCommand(self._vm, patterns, series))
+        total = sum(
+            load.forces[0] + load.forces[1] for pattern in patterns for load in pattern.nodal_loads
+        )
+        self._log(
+            f"Added {len(patterns)} notional load pattern(s), total {total:.6g}; "
+            "use them in the cases of the Direct Analysis Method."
+        )
 
     def _on_steel_check(self) -> None:
         """Design → Steel Frame Check: AISC 360-16 ratios over this session's results.
@@ -6353,6 +6406,7 @@ class MainWindow(QMainWindow):
         db_there = has_project and database_path(self._vm.path).exists()
         self._act_clear_results.setEnabled(bool(has_project and (stored or db_there)))
         self._act_steel_check.setEnabled(has_project)
+        self._act_notional_loads.setEnabled(has_project)
         self._act_drift_check.setEnabled(has_project)
         self._act_steel_ratios.setEnabled(has_project)
         self._act_check_stability.setEnabled(
