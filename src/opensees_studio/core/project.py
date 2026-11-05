@@ -26,6 +26,7 @@ from opensees_studio.core.analysis import AnalysisCase
 from opensees_studio.core.combinations import LoadCombination
 from opensees_studio.core.constraints import EqualDOFConstraint, RigidDiaphragm, RigidLink
 from opensees_studio.core.custom_commands import CustomCommandBlock
+from opensees_studio.core.design.connections import RbsConnection
 from opensees_studio.core.design.settings import DesignSettings
 from opensees_studio.core.diaphragms import constraint_chain_problems, diaphragm_problems
 from opensees_studio.core.friction import FrictionModel
@@ -94,6 +95,7 @@ class Project(BaseModel):
         "rigid_links",
         "mass_source",
         "combinations",
+        "connections",
         "groups",
         "section_cuts",
         "custom_commands",
@@ -215,6 +217,10 @@ class Project(BaseModel):
         default_factory=list,
         description="Load combinations of analysis-case results (additive, schema 2).",
     )
+    connections: list[RbsConnection] = Field(
+        default_factory=list,
+        description="AISC 358-22 RBS connections between frame elements (additive).",
+    )
     groups: list[Group] = Field(
         default_factory=list,
         description="Named sets of joints and elements (Define → Groups; additive).",
@@ -332,6 +338,9 @@ class Project(BaseModel):
     def next_combination_id(self) -> int:
         return self._next_id(self.combinations)
 
+    def next_connection_id(self) -> int:
+        return self._next_id(self.connections)
+
     def next_storey_id(self) -> int:
         return self._next_id(self.storeys)
 
@@ -443,6 +452,25 @@ class Project(BaseModel):
         gm_ids = {gm.id for gm in self.ground_motions}
         friction_ids = {fm.id for fm in self.friction_models}
         problems: list[str] = []
+
+        connection_ids = {c.id for c in self.connections}
+        if len(connection_ids) != len(self.connections):
+            problems.append("Duplicate connection ids.")
+        for connection in self.connections:
+            if connection.beam_element_id not in element_ids:
+                problems.append(
+                    f"Connection {connection.id}: beam element "
+                    f"{connection.beam_element_id} does not exist."
+                )
+            if connection.column_element_id not in element_ids:
+                problems.append(
+                    f"Connection {connection.id}: column element "
+                    f"{connection.column_element_id} does not exist."
+                )
+            if connection.beam_element_id == connection.column_element_id:
+                problems.append(
+                    f"Connection {connection.id}: the beam and column are the same element."
+                )
 
         if self.ndm == 2:
             # A 2D model lives in the X-Z plane (core.plane): OpenSees never sees y.

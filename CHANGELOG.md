@@ -11,6 +11,13 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **AISC 358-22 RBS connections: entity and prequalified geometry.** Projects
+  can store `RbsConnection`s (beam, column, `a`, `b`, `c`); `core.design.
+  connections` checks the Section 5.7 limits, computes
+  `Z_RBS = Zb - 2 c tbf (d - tbf)`, `Sh = a + b/2`, `Mpr = Cpr Ry Fy Z_RBS`,
+  `Mf = Mpr + Vh Sh`, the cut radius and the protected zone. The SMF checks
+  will consume the entity in the next increment.
+
 - **AISC 341-22 E3.4a strong-column/weak-beam engine and joint check.**
   `core.design.aisc341` evaluates E3-1, E3-2 and E3-3:
   `M*pc = Zc(Fyc − αs Pr/Ag)`, `M*be = Mpr + αs Mv` with

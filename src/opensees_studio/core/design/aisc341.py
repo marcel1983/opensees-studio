@@ -33,6 +33,7 @@ from opensees_studio.core.design.aisc360_shapes import (
     RoundHSS,
     Tee,
 )
+from opensees_studio.core.design.expected import cpr
 
 Ductility = Literal["moderate", "high"]
 Method = Literal["LRFD", "ASD"]
@@ -240,13 +241,6 @@ def member_limits(
 
 
 # ─────────────────────── SMF E3.4a: strong-column/weak-beam ───────────────────────
-def cpr(fy: float, fu: float | None = None) -> float:
-    """AISC 358: ``Cpr = (Fy + Fu)/(2 Fy) <= 1.2``; 1.2 without ``Fu``."""
-    if fu is None or fy <= 0.0:
-        return 1.2
-    return min(1.2, (fy + fu) / (2.0 * fy))
-
-
 def mpr(ry: float, fy: float, zb: float, *, fu: float | None = None) -> float:
     """Maximum probable moment at the plastic hinge, ``Cpr Ry Fy Zb``."""
     if ry <= 0.0 or fy <= 0.0 or zb <= 0.0:
