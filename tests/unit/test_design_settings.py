@@ -69,3 +69,12 @@ def test_design_settings_do_not_change_the_model_fingerprint() -> None:
     before = model_fingerprint(project)
     project.design = DesignSettings(fy=250e6)
     assert model_fingerprint(project) == before
+
+
+def test_p_delta_round_trips(tmp_path: Path) -> None:
+    project = Project()
+    project.design = DesignSettings(p_delta=True)
+    path = save_project(project, tmp_path / "pdelta.osmodel")
+    assert json.loads(path.read_text(encoding="utf-8"))["design"]["p_delta"] is True
+    assert load_project(path).design is not None
+    assert load_project(path).design.p_delta is True

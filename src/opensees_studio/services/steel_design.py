@@ -563,6 +563,7 @@ def steel_frame_check(
                     k_y=overrides.k_minor,
                     net_area=overrides.net_area,
                     shear_lag=overrides.shear_lag,
+                    p_delta=settings.p_delta,
                 )
                 ratio = check.governing[1]
                 for name, value in check.ratios.items():

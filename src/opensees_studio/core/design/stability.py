@@ -7,7 +7,10 @@ not provide by itself:
   storey, where ``Yi`` is the gravity load on that storey and ``alpha`` is 1.0
   in LRFD and 1.6 in ASD (AISC 360-16 C2-1, C2.2b);
 * **stiffness reduction** - ``tau_b`` on the flexural stiffness of members whose
-  required axial strength exceeds half their yield strength (C2.3).
+  required axial strength exceeds half their yield strength (C2.3);
+* **P-delta amplification** - ``B1`` on the moments of a member in compression
+  when the analysis did not include member curvature (A-8-3, C2.1b of the 2016
+  edition).
 
 This module builds the first and computes the second. It does not run an
 analysis: the caller adds the returned ``PlainLoadPattern`` to the cases that
@@ -28,6 +31,7 @@ No Qt, no OpenSees.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -89,6 +93,36 @@ def tau_b(pr: float, py: float, *, alpha: float = ALPHA_LRFD) -> float:
 def notional_factor(*, method: str = "LRFD") -> float:
     """The C2.2b notional-load fraction for a design method, ``0.002 alpha``."""
     return NOTIONAL_FRACTION * notional_alpha(method)
+
+
+def pe1(elastic_modulus: float, inertia: float, length: float, *, k: float = 1.0) -> float:
+    """A-8-5: elastic critical buckling strength in the plane of bending.
+
+    ``Pe1 = pi^2 EI / (K1 L)^2``. Pass ``EI*``: ``0.8 tau_b EI`` for the direct
+    analysis method, ``EI`` for the effective length and first-order methods.
+    """
+    if length <= 0.0 or k <= 0.0:
+        raise ValueError("The effective length used for Pe1 must be positive.")
+    return math.pi**2 * elastic_modulus * inertia / (k * length) ** 2
+
+
+def b1(pr: float, pe: float, *, alpha: float = ALPHA_LRFD) -> float:
+    """A-8-3: P-delta amplifier of a member in compression, with ``Cm = 1.0``.
+
+    ``B1 = Cm / (1 - alpha Pr / Pe1) >= 1``. ``Cm = 1.0`` is the conservative
+    value A-8-4(b) allows for members with transverse loading between supports,
+    so this function never underestimates the amplification. Tension or zero
+    axial force gives 1.0 (A-8-1); a member at or beyond its elastic critical
+    load gives infinity.
+    """
+    if pr <= 0.0:
+        return 1.0
+    if pe <= 0.0:
+        return math.inf
+    denominator = 1.0 - alpha * pr / pe
+    if denominator <= 0.0:
+        return math.inf
+    return max(1.0, 1.0 / denominator)
 
 
 def gravity_weight_per_node(project: Project) -> dict[int, float]:

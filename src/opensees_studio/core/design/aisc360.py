@@ -35,6 +35,8 @@ import math
 from dataclasses import dataclass, field
 from typing import Literal, Protocol
 
+from opensees_studio.core.design.stability import b1, pe1, tau_b
+
 Method = Literal["LRFD", "ASD"]
 
 #: Families checked with the doubly symmetric I-shape provisions.
@@ -694,9 +696,29 @@ def check_member(
     k_y: float = 1.0,
     net_area: float | None = None,
     shear_lag: float = 1.0,
+    p_delta: bool = False,
 ) -> MemberCheck:
-    """Ratios of axial, flexure, shear and H1 interaction for one demand."""
+    """Ratios of axial, flexure, shear and H1 interaction for one demand.
+
+    With ``p_delta``, a member in compression gets its moments amplified by
+    ``B1`` of AISC 360-16 C2.1b (A-8-3 in the 2022 edition): the analysis is
+    assumed to capture P-Delta but not the member's own curvature (P-delta).
+    ``Pe1`` uses ``EI* = 0.8 tau_b EI`` (C2.3), so the amplifier follows the
+    direct analysis method; it is conservative for the effective length method.
+    """
     check = MemberCheck()
+    mrx = demand.moment_major
+    mry = demand.moment_minor
+    if p_delta and demand.axial < 0.0:
+        alpha = 1.0 if method == "LRFD" else 1.6
+        rigidity = 0.8 * tau_b(-demand.axial, steel.Fy * shape.A, alpha=alpha) * steel.E
+        b_major = b1(-demand.axial, pe1(rigidity, shape.Ix, length_x, k=k_x), alpha=alpha)
+        b_minor = b1(-demand.axial, pe1(rigidity, shape.Iy, length_y, k=k_y), alpha=alpha)
+        mrx *= b_major
+        mry *= b_minor
+        check.notes.append(
+            f"P-delta (C2.1b): B1 = {b_major:.3f} major, {b_minor:.3f} minor, Pe1 on 0.8 tau_b EI."
+        )
     if demand.axial >= 0.0:
         axial = shape.tension(steel, method)
         if net_area is not None:
@@ -745,9 +767,9 @@ def check_member(
     v_minor = shape.shear_minor(steel, method, length=length)
     check.ratios[label] = abs(demand.axial) / axial.available
     check.equations[label] = axial.equation
-    check.ratios["Major flexure"] = abs(demand.moment_major) / major.available
+    check.ratios["Major flexure"] = abs(mrx) / major.available
     check.equations["Major flexure"] = major.equation
-    check.ratios["Minor flexure"] = abs(demand.moment_minor) / minor.available
+    check.ratios["Minor flexure"] = abs(mry) / minor.available
     check.equations["Minor flexure"] = minor.equation
     check.ratios["Major shear"] = abs(demand.shear_major) / v_major.available
     check.equations["Major shear"] = v_major.equation
@@ -756,9 +778,9 @@ def check_member(
     ratio, equation = interaction(
         demand.axial,
         axial.available,
-        demand.moment_major,
+        mrx,
         major.available,
-        demand.moment_minor,
+        mry,
         minor.available,
     )
     check.ratios["P-M interaction"] = ratio

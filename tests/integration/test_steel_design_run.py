@@ -278,3 +278,34 @@ def test_unequal_angle_is_reported_not_designed() -> None:
     member = report.members[0]
     assert member.status == "not designed"
     assert "unequal legs" in member.notes[0]
+
+
+def test_p_delta_lifts_the_ratio_of_a_beam_column() -> None:
+    section = shape_to_elastic_section(
+        get_shape("W14X90"), elastic_modulus=E, shear_modulus=G, units=KIP_IN, ndm=2
+    )
+    project = Project(
+        meta=ProjectMeta(units=KIP_IN),
+        ndm=2,
+        ndf=3,
+        nodes=[
+            Node(id=1, coords=(0.0, 0.0, 0.0), restraint=(True,) * 6),
+            Node(id=2, coords=(0.0, 0.0, 144.0)),
+        ],
+        sections=[section],
+        elements=[ElasticBeamColumn(id=1, nodes=(1, 2), section_id=1)],
+        time_series=[LinearTimeSeries(id=1)],
+        load_patterns=[
+            PlainLoadPattern(
+                id=1,
+                time_series_id=1,
+                nodal_loads=[NodalLoad(node_id=2, forces=(20.0, 0.0, -200.0, 0.0, 0.0, 0.0))],
+            )
+        ],
+        analyses=[StaticCase(id=1, name="P", pattern_ids=[1])],
+    )
+    results = _results(project)
+    plain = steel_frame_check(project, results).members[0]
+    amplified = steel_frame_check(project, results, DesignSettings(p_delta=True)).members[0]
+    assert any("B1" in note for note in amplified.notes)
+    assert amplified.ratio > plain.ratio

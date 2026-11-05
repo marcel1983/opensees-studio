@@ -92,7 +92,10 @@ script o un notebook de Jupyter: la interfaz es una forma de usarlo, no la únic
   iguales, HSS rectangulares y circulares y tubos—: tracción (D2-1 y D2-2 con
   área neta y factor de retraso), compresión (E3, E4, E7), flexión con pandeo
   lateral-torsional (F2, F3, F4, F5, F6, F7, F8, F9, F10), corte
-  (G2 a G6) e interacción H1, sobre las combinaciones ya corridas; Design → Display Steel Ratios on Model
+  (G2 a G6) e interacción H1, sobre las combinaciones ya corridas; una
+  **amplificación opcional B1 de P-δ** (AISC 360-16 C2.1b) cubre la curvatura
+  del miembro que un análisis de primer orden deja fuera. Design → Display Steel
+  Ratios on Model
   pinta cada miembro según su razón D/C, y el reporte de cálculo imprime la
   verificación. Design → Generate Notional Loads (DAM) genera el patrón
   `0.002 α Yi` de AISC 360 C2-1 (α = 1,0 LRFD y 1,6 ASD) para el Direct Analysis

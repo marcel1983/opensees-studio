@@ -27,6 +27,12 @@ refused instead of silently downgraded).
   one undoable step. `core.design.stability.tau_b` gives the C2-3 stiffness
   reduction factor, with the same α. The action does not run the analysis by
   itself.
+- **AISC 360-16 C2.1b: optional B1 P-δ amplification.** The steel check can
+  multiply the moments of members in compression by `B1 = 1/(1 - α Pr/Pe1)`
+  (A-8-3 in the 2022 edition) with the conservative `Cm = 1.0` and `Pe1` on
+  `0.8 EI`, for analyses that include P-Δ but not the member's own curvature.
+  The member note carries both B1 values; the setting is saved with the project
+  and printed in the report.
 
 ## [0.0.38] - 2026-11-03
 

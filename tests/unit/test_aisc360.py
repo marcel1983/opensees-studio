@@ -183,6 +183,89 @@ def test_check_member_picks_the_governing_ratio() -> None:
     }
 
 
+def test_p_delta_amplifies_the_moments_of_a_member_in_compression() -> None:
+    """C2.1b / A-8-3: B1 on the moments, Pe1 on 0.8 EI, Cm = 1.0."""
+    shape = _shape("W14X99")
+    demand = Demand(-400.0, 250 * FT, 80 * FT, 20.0, 5.0)
+    plain = check_member(
+        shape, A992, "LRFD", demand, length_x=14 * FT, length_y=14 * FT, length_ltb=14 * FT
+    )
+    amplified = check_member(
+        shape,
+        A992,
+        "LRFD",
+        demand,
+        length_x=14 * FT,
+        length_y=14 * FT,
+        length_ltb=14 * FT,
+        p_delta=True,
+    )
+    pe_major = math.pi**2 * 0.8 * A992.E * shape.Ix / (14 * FT) ** 2
+    b_major = 1.0 / (1.0 - 400.0 / pe_major)
+    assert b_major > 1.0
+    assert amplified.ratios["Major flexure"] == pytest.approx(
+        plain.ratios["Major flexure"] * b_major, rel=1e-9
+    )
+    assert amplified.ratios["P-M interaction"] > plain.ratios["P-M interaction"]
+    assert any("B1" in note for note in amplified.notes)
+    # The compression-only and shear ratios do not depend on B1.
+    assert amplified.ratios["Compression"] == pytest.approx(plain.ratios["Compression"])
+    assert amplified.ratios["Major shear"] == pytest.approx(plain.ratios["Major shear"])
+
+
+def test_p_delta_uses_tau_b_above_half_the_squash_load() -> None:
+    """C2.3: Pe1 takes ``0.8 tau_b EI``, so a heavily loaded member amplifies more."""
+    shape = _shape("W14X99")
+    pr = 0.75 * A992.Fy * shape.A
+    demand = Demand(-pr, 100 * FT, 0.0, 0.0, 0.0)
+    check = check_member(
+        shape,
+        A992,
+        "LRFD",
+        demand,
+        length_x=14 * FT,
+        length_y=14 * FT,
+        length_ltb=14 * FT,
+        p_delta=True,
+    )
+    tau = 4.0 * 0.75 * (1.0 - 0.75)
+    pe = math.pi**2 * 0.8 * tau * A992.E * shape.Ix / (14 * FT) ** 2
+    expected = 1.0 / (1.0 - pr / pe)
+    assert expected == pytest.approx(1.19, abs=0.01)
+    plain = check_member(
+        shape,
+        A992,
+        "LRFD",
+        Demand(-pr, 100 * FT, 0.0, 0.0, 0.0),
+        length_x=14 * FT,
+        length_y=14 * FT,
+        length_ltb=14 * FT,
+    )
+    assert check.ratios["Major flexure"] == pytest.approx(
+        plain.ratios["Major flexure"] * expected, rel=1e-9
+    )
+
+
+def test_p_delta_leaves_a_member_in_tension_alone() -> None:
+    shape = _shape("W14X99")
+    demand = Demand(400.0, 250 * FT, 80 * FT, 20.0, 5.0)
+    plain = check_member(
+        shape, A992, "LRFD", demand, length_x=14 * FT, length_y=14 * FT, length_ltb=14 * FT
+    )
+    amplified = check_member(
+        shape,
+        A992,
+        "LRFD",
+        demand,
+        length_x=14 * FT,
+        length_y=14 * FT,
+        length_ltb=14 * FT,
+        p_delta=True,
+    )
+    assert amplified.ratios == pytest.approx(plain.ratios)
+    assert not any("B1" in note for note in amplified.notes)
+
+
 def test_d2_2_tension_rupture_governs_when_ae_is_small() -> None:
     """D2-2: Fy 50 ksi, Fu 65 ksi, An 20 in2, U 0.9 -> 0.75 * 65 * 18 = 877.5 kip."""
     shape = _shape("W14X99")
