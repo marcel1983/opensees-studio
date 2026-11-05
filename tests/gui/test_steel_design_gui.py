@@ -57,6 +57,19 @@ def test_a_low_limit_fails_members_and_selects_them(qtbot) -> None:  # type: ign
 
 
 @pytest.mark.gui
+def test_p_delta_is_a_saved_setting(qtbot) -> None:  # type: ignore[no-untyped-def]
+    project = _beam_project()
+    project.design = DesignSettings(p_delta=True)
+    dialog = SteelDesignDialog(project, _results(project))
+    qtbot.addWidget(dialog)
+    assert dialog._p_delta.isChecked()
+    dialog._p_delta.setChecked(False)
+    assert dialog.settings().p_delta is False
+    dialog._p_delta.setChecked(True)
+    assert dialog.settings().p_delta is True
+
+
+@pytest.mark.gui
 def test_overrides_apply_to_the_selection(qtbot) -> None:  # type: ignore[no-untyped-def]
     project = _beam_project()
     dialog = SteelDesignDialog(project, _results(project), selected_elements=frozenset({2, 3}))

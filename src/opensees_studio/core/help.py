@@ -1516,6 +1516,12 @@ cantilever**: F1-1 assumes both ends braced.
   (0 = from the diagram), the net area An (0 = D2-2 rupture unchecked) and the
   shear-lag factor U in `Ae = U An`. The buckling lengths are the member length
   times K.
+- **Amplify P-δ (B1)**: multiplies the moments of members in compression by
+  `B1 = 1 / (1 - α Pr / Pe1) >= 1` (AISC 360-16 C2.1b; A-8-3 in the 2022
+  edition) with the conservative `Cm = 1.0` and `Pe1` on `0.8 EI`. Use it when
+  the analysis includes P-Δ but not the member's own curvature (P-δ); leave it
+  off for a full second-order analysis, which already captures both. The member
+  note shows the two B1 values.
 
 Results: one row per member with its governing ratio, the check and equation
 that govern and the load set that produced them; **Select failing members**

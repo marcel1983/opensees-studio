@@ -327,7 +327,9 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   combinations already run, checked at 25 stations with each station's own
   axial force, moments and shears, with `Cb`
   from the moment diagram and per-member K, Lb, Cb, net area and shear-lag
-  overrides; failing members can be selected in the model, and Design →
+  overrides; an optional **B1 P-δ amplification** (AISC 360-16 C2.1b) covers
+  the member curvature a first-order analysis leaves out; failing members can be
+  selected in the model, and Design →
   Display Steel Ratios on Model paints every member by its ratio (blue to red,
   grey when not designed). The report prints the check. Design → Generate
   Notional Loads (DAM) writes the AISC 360 C2-1 `0.002 α Yi` pattern (α = 1.0

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import pytest
 
 from opensees_studio.core import (
@@ -18,11 +20,13 @@ from opensees_studio.core.design.stability import (
     ALPHA_ASD,
     ALPHA_LRFD,
     NOTIONAL_FRACTION,
+    b1,
     gravity_weight_per_node,
     notional_alpha,
     notional_factor,
     notional_loads,
     notional_pattern,
+    pe1,
     storey_notional_loads,
     tau_b,
 )
@@ -123,3 +127,21 @@ def test_the_y_direction_is_refused_in_a_2d_model() -> None:
     project = _two_storey()
     with pytest.raises(ValueError, match="only the global X"):
         notional_loads(project, direction=1)
+
+
+def test_pe1_is_the_euler_load_in_the_plane_of_bending() -> None:
+    assert pe1(29000.0, 1000.0, 120.0) == pytest.approx(math.pi**2 * 29000.0 * 1000.0 / 120.0**2)
+    assert pe1(29000.0, 1000.0, 120.0, k=2.0) == pytest.approx(
+        math.pi**2 * 29000.0 * 1000.0 / 240.0**2
+    )
+    with pytest.raises(ValueError, match="positive"):
+        pe1(29000.0, 1000.0, 0.0)
+
+
+def test_b1_follows_a_8_3_and_never_drops_below_one() -> None:
+    assert b1(0.0, 1000.0) == pytest.approx(1.0)
+    assert b1(100.0, 1000.0) == pytest.approx(1.0 / (1.0 - 0.1))
+    assert b1(100.0, 1000.0, alpha=ALPHA_ASD) == pytest.approx(1.0 / (1.0 - 1.6 * 0.1))
+    # A member past its elastic critical load has no finite amplifier.
+    assert b1(1000.0, 1000.0) == math.inf
+    assert b1(1200.0, 1000.0) == math.inf

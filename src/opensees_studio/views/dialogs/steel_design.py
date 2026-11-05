@@ -16,6 +16,7 @@ from typing import Any
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDialogButtonBox,
     QFormLayout,
@@ -118,6 +119,13 @@ class SteelDesignDialog(FittedDialog):
         self._limit = FloatField()
         self._limit.setRange(0.01, 100.0)
         form.addRow("Ratio limit:", self._limit)
+        self._p_delta = QCheckBox("Amplify P-δ (B1)")
+        self._p_delta.setToolTip(
+            "AISC 360-16 C2.1b: amplify the moments of members in compression by B1 "
+            "when the analysis includes P-Δ but not the member's own curvature. "
+            "Pe1 is taken on 0.8 EI."
+        )
+        form.addRow("", self._p_delta)
         top.addLayout(form)
 
         self._load_sets = QListWidget()
@@ -203,6 +211,7 @@ class SteelDesignDialog(FittedDialog):
         self._fy.setValue(settings.fy if settings.fy is not None else default_fy(units))
         self._fu.setValue(settings.fu if settings.fu is not None else default_fu(units))
         self._limit.setValue(settings.ratio_limit)
+        self._p_delta.setChecked(settings.p_delta)
         chosen = {
             (s.source, s.ref_id) for s in (settings.load_sets or default_load_sets(self._project))
         }
@@ -274,6 +283,7 @@ class SteelDesignDialog(FittedDialog):
                 "fy": None if abs(fy - default_fy(units)) <= 1e-9 * fy else fy,
                 "fu": None if abs(fu - default_fu(units)) <= 1e-9 * fu else fu,
                 "ratio_limit": self._limit.value(),
+                "p_delta": self._p_delta.isChecked(),
                 "load_sets": [] if same_as_default else chosen,
                 "members": members,
             }

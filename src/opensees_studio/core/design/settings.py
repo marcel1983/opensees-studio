@@ -96,6 +96,7 @@ class DesignSettings(BaseModel):
         "fy",
         "fu",
         "ratio_limit",
+        "p_delta",
         "load_sets",
         "members",
         "drift_limit",
@@ -114,6 +115,13 @@ class DesignSettings(BaseModel):
     )
     ratio_limit: PositiveFloat = Field(
         default=1.0, description="Demand/capacity ratio above which a member fails."
+    )
+    p_delta: bool = Field(
+        default=False,
+        description=(
+            "Amplify the moments of members in compression by B1 (AISC 360-16 "
+            "C2.1b) when the analysis captures P-Delta but not member curvature."
+        ),
     )
     load_sets: list[DesignLoadSet] = Field(
         default_factory=list,
