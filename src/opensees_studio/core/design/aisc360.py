@@ -35,7 +35,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Literal, Protocol
 
-from opensees_studio.core.design.stability import b1, pe1
+from opensees_studio.core.design.stability import b1, pe1, tau_b
 
 Method = Literal["LRFD", "ASD"]
 
@@ -703,21 +703,21 @@ def check_member(
     With ``p_delta``, a member in compression gets its moments amplified by
     ``B1`` of AISC 360-16 C2.1b (A-8-3 in the 2022 edition): the analysis is
     assumed to capture P-Delta but not the member's own curvature (P-delta).
-    ``Pe1`` uses ``0.8 EI``, the reduced rigidity of the direct analysis method,
-    which is conservative for the effective length method too.
+    ``Pe1`` uses ``EI* = 0.8 tau_b EI`` (C2.3), so the amplifier follows the
+    direct analysis method; it is conservative for the effective length method.
     """
     check = MemberCheck()
     mrx = demand.moment_major
     mry = demand.moment_minor
     if p_delta and demand.axial < 0.0:
         alpha = 1.0 if method == "LRFD" else 1.6
-        rigidity = 0.8 * steel.E
+        rigidity = 0.8 * tau_b(-demand.axial, steel.Fy * shape.A, alpha=alpha) * steel.E
         b_major = b1(-demand.axial, pe1(rigidity, shape.Ix, length_x, k=k_x), alpha=alpha)
         b_minor = b1(-demand.axial, pe1(rigidity, shape.Iy, length_y, k=k_y), alpha=alpha)
         mrx *= b_major
         mry *= b_minor
         check.notes.append(
-            f"P-delta (C2.1b): B1 = {b_major:.3f} major, {b_minor:.3f} minor, Pe1 on 0.8 EI."
+            f"P-delta (C2.1b): B1 = {b_major:.3f} major, {b_minor:.3f} minor, Pe1 on 0.8 tau_b EI."
         )
     if demand.axial >= 0.0:
         axial = shape.tension(steel, method)

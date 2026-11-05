@@ -213,6 +213,39 @@ def test_p_delta_amplifies_the_moments_of_a_member_in_compression() -> None:
     assert amplified.ratios["Major shear"] == pytest.approx(plain.ratios["Major shear"])
 
 
+def test_p_delta_uses_tau_b_above_half_the_squash_load() -> None:
+    """C2.3: Pe1 takes ``0.8 tau_b EI``, so a heavily loaded member amplifies more."""
+    shape = _shape("W14X99")
+    pr = 0.75 * A992.Fy * shape.A
+    demand = Demand(-pr, 100 * FT, 0.0, 0.0, 0.0)
+    check = check_member(
+        shape,
+        A992,
+        "LRFD",
+        demand,
+        length_x=14 * FT,
+        length_y=14 * FT,
+        length_ltb=14 * FT,
+        p_delta=True,
+    )
+    tau = 4.0 * 0.75 * (1.0 - 0.75)
+    pe = math.pi**2 * 0.8 * tau * A992.E * shape.Ix / (14 * FT) ** 2
+    expected = 1.0 / (1.0 - pr / pe)
+    assert expected == pytest.approx(1.19, abs=0.01)
+    plain = check_member(
+        shape,
+        A992,
+        "LRFD",
+        Demand(-pr, 100 * FT, 0.0, 0.0, 0.0),
+        length_x=14 * FT,
+        length_y=14 * FT,
+        length_ltb=14 * FT,
+    )
+    assert check.ratios["Major flexure"] == pytest.approx(
+        plain.ratios["Major flexure"] * expected, rel=1e-9
+    )
+
+
 def test_p_delta_leaves_a_member_in_tension_alone() -> None:
     shape = _shape("W14X99")
     demand = Demand(400.0, 250 * FT, 80 * FT, 20.0, 5.0)

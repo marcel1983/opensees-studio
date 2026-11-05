@@ -123,7 +123,7 @@ class SteelDesignDialog(FittedDialog):
         self._p_delta.setToolTip(
             "AISC 360-16 C2.1b: amplify the moments of members in compression by B1 "
             "when the analysis includes P-Δ but not the member's own curvature. "
-            "Pe1 is taken on 0.8 EI."
+            "Pe1 is taken on 0.8 τb EI."
         )
         form.addRow("", self._p_delta)
         top.addLayout(form)
