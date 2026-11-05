@@ -114,7 +114,7 @@ def limit(
     if case == 11:
         # AISC 341-22 Table D1.1b: the new deep-column expression.
         coefficient = 2.5 if ductility == "high" else 5.4
-        return coefficient * (1.0 - min(1.0, ratio)) ** 2.3 * root
+        return coefficient * math.pow(1.0 - min(1.0, ratio), 2.3) * root
     if case == 13:
         high = ratio <= _CASE_13_BREAK
         if ductility == "high":
