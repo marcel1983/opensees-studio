@@ -65,6 +65,7 @@ from opensees_studio.commands import (
     ReplicateCommand,
     SetCoordSystemsCommand,
     SetMassCommand,
+    SetProjectMetaCommand,
     SetRestraintCommand,
     SetSpringCommand,
 )
@@ -201,6 +202,7 @@ from opensees_studio.views.dialogs import (
     PathTimeSeriesDialog,
     PerformanceDialog,
     PlainPatternDialog,
+    ProjectInfoDialog,
     ReplicateDialog,
     RunAnalysisDialog,
     S3dImportDialog,
@@ -436,6 +438,7 @@ class MainWindow(QMainWindow):
         self._act_open = QAction("&Open…", self, shortcut=QKeySequence.StandardKey.Open)
         self._act_save = QAction("&Save", self, shortcut=QKeySequence.StandardKey.Save)
         self._act_save_as = QAction("Save &As…", self, shortcut=QKeySequence.StandardKey.SaveAs)
+        self._act_project_info = QAction("Project &Information…", self)
         self._act_import_dxf = QAction("&DXF Drawing…", self)
         self._act_import_s3d = QAction("&PORTICO Model (.s3d)…", self)
         self._act_import_s2k = QAction("SAP2000 &Text (.s2k / .$2k)…", self)
@@ -728,6 +731,7 @@ class MainWindow(QMainWindow):
         )
         m_file.addSeparator()
         m_file.addActions([self._act_save, self._act_save_as])
+        m_file.addAction(self._act_project_info)
         m_file.addSeparator()
         m_import = m_file.addMenu("&Import")
         m_import.addAction(self._act_import_dxf)
@@ -1196,6 +1200,7 @@ class MainWindow(QMainWindow):
         self._act_open.triggered.connect(self._on_open)
         self._act_save.triggered.connect(self._on_save)
         self._act_save_as.triggered.connect(self._on_save_as)
+        self._act_project_info.triggered.connect(self._on_project_info)
         self._act_import_dxf.triggered.connect(self._on_import_dxf)
         self._act_import_s3d.triggered.connect(self._on_import_s3d)
         self._act_import_s2k.triggered.connect(self._on_import_s2k)
@@ -1690,6 +1695,17 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Save failed", str(exc))
             return False
         return True
+
+    def _on_project_info(self) -> None:
+        """File → Project Information: the cover data of the calculation report."""
+        project = self._vm.project
+        if project is None:
+            return
+        dialog = ProjectInfoDialog(project.meta, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        self._vm.apply_command(SetProjectMetaCommand(self._vm, dialog.meta()))
+        self._log("Project information updated.")
 
     def _on_save_as(self) -> bool:
         path, _ = QFileDialog.getSaveFileName(
@@ -6372,6 +6388,7 @@ class MainWindow(QMainWindow):
         n_sel = len(self._canvas.selection.nodes)
         self._act_save.setEnabled(has_project)
         self._act_save_as.setEnabled(has_project)
+        self._act_project_info.setEnabled(has_project)
         self._act_import_dxf.setEnabled(has_project)
         self._act_export_script.setEnabled(has_project)
         self._act_export_ifc.setEnabled(has_project)

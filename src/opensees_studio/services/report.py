@@ -380,12 +380,24 @@ def build_report(
         _table(
             ["Field", "Value"],
             [
-                ["Author", meta.author or "—"],
-                ["Date", stamp],
+                ["Author", meta.author or "-"],
+                ["Company", meta.company or "-"],
+                ["Date", meta.date or stamp],
                 ["Units", units],
                 ["Model", f"{project.ndm}D, {project.ndf} DOF per joint (Z up)"],
                 ["Program", f"OpenSees Studio {__version__}"],
             ],
+        ),
+        *(
+            [
+                "<h3>Revisions</h3>",
+                _table(
+                    ["Rev", "Date", "By", "Description"],
+                    [[r.code, r.date, r.by, r.description] for r in meta.revisions],
+                ),
+            ]
+            if meta.revisions
+            else []
         ),
         "<h2>Model</h2>",
         _model_summary(project),

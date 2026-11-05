@@ -1598,6 +1598,24 @@ The project needs storeys; the limit and the amplification are saved with it.
             "design.steel_check",
             "define.storeys",
         ),
+        "file.project_info": _t(
+            "File → Project Information",
+            "File",
+            "Project, author, company, date and revisions used by the report cover.",
+            """
+The calculation report starts with a cover built from these fields:
+
+- **Project**, **Author**, **Company** and **Date**: free text; the date starts
+  as today's.
+- **Description**: a short paragraph under the project name.
+- **Revisions**: one row per revision (`Rev`, `Date`, `By`, `Description`).
+  Empty revision codes are ignored when the project is saved.
+
+The values are stored in `Project.meta` in the `.osmodel`, are undoable as one
+step, and are used by the report and by any future calculation-memory export.
+""",
+            "file.export_report",
+        ),
         "file.export_report": _t(
             "File → Export → Report (HTML / PDF)",
             "File",
@@ -5356,6 +5374,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_import_ifc": "file.import_ifc",
     "_act_export_s2k": "file.export_s2k",
     "_act_export_report": "file.export_report",
+    "_act_project_info": "file.project_info",
     "_act_run_batch": "file.run_batch",
     "_act_quit": "file.quit",
     # ── Edit and tools ──────────────────────────────────────────────
