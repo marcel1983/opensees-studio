@@ -106,3 +106,34 @@ AISC 341 remain separate phases so that the member engine stays reviewable.
 - GUI tests for the new fields and the existing report.
 - The verification manual records the example, the expected value and the
   relative error.
+
+## 6. Implementation status (2026-11-05)
+
+| Phase | Item | Status |
+|---|---|---|
+| 1 | D2-2 tension rupture; F4/F5 flexure | shipped (PR #107) |
+| 1 | Station-wise demands and governing station | shipped (PR #110) |
+| 2 | C2-2b notional loads and C2-3 `tau_b` | shipped (PR #111) |
+| 2 | C2.1b B1 P-delta amplification (optional) | shipped (PR #113) |
+| 4 | ASCE 7 overstrength combinations | shipped (PR #114), groundwork |
+| 2 | B2 storey amplifier | delegated to the analysis, see below |
+| 2 | Automatic `0.8 tau_b` model modifiers | not implemented, see below |
+| 3-6 | Torsion, AISC 341 checks, Chapter J, AISC 358, sizing | not started |
+
+Two architecture limits decided while implementing Phase 2:
+
+- **B2 and P-Delta belong to the analysis.** The check reads results per case,
+  not per load pattern, so it cannot separate `Mnt` from `Mlt` inside a mixed
+  combination; applying B2 to the total moment would amplify gravity moments
+  that do not sway. The approved route is a `PDelta` or `Corotational` model, so
+  the analysis supplies P-Delta and the check supplies B1 (P-delta) when asked.
+- **The DAM stiffness reduction is not applied automatically.** `0.8 tau_b EI`
+  is a property of the analysis model in this application, and the model has no
+  per-case variants: changing the modifiers would change every existing case
+  and result. `core.design.stability.tau_b` computes the factor and
+  `DesignSettings.p_delta` consumes it for B1, but the modifiers remain a
+  deliberate model edit until a design-case concept exists.
+
+The Chapter C equations were checked against the AISC 360-22 text (C2-1, C2-2,
+A-8-3, A-8-5); the 2016 edition carries the same provisions in C2.2b, C2.3 and
+C2.1b. The overstrength combinations follow ASCE 7-16 2.3.6 and 2.4.5.
