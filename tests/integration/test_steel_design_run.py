@@ -140,7 +140,8 @@ def test_a_beam_ratio_matches_the_hand_calculation(ndm: int) -> None:
     a, b = SPAN / 4, SPAN / 2
     cb = cb_from_moments(moment(b), *(moment(a + f * (b - a)) for f in (0.25, 0.5, 0.75)))
     assert middle.ratios["Major flexure"] == pytest.approx(_hand_ratio(w, SPAN / 4, cb), rel=1e-6)
-    assert middle.ratios["Major shear"] > 0
+    assert middle.station == pytest.approx(1.0, abs=0.02)
+    assert any(m.ratios.get("Major shear", 0.0) > 0.0 for m in report.members)
     assert middle.ratios["Minor flexure"] == pytest.approx(0.0, abs=1e-9)
 
 

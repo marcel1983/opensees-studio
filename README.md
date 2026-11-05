@@ -324,7 +324,8 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   E7), flexure (F2, F3, F4 or F5 by web slenderness, F6), shear (G2, G6) and H1
   interaction ratios — channels (E4, F2), tees (F9), equal-leg angles (F10),
   rectangular HSS (F7, G4) and round HSS and pipes (F8, G5) too — over the
-  combinations already run, read at 25 stations along the member, with `Cb`
+  combinations already run, checked at 25 stations with each station's own
+  axial force, moments and shears, with `Cb`
   from the moment diagram and per-member K, Lb, Cb, net area and shear-lag
   overrides; failing members can be selected in the model, and Design →
   Display Steel Ratios on Model paints every member by its ratio (blue to red,

@@ -17,6 +17,10 @@ refused instead of silently downgraded).
   major-axis flexure follows F4 for a noncompact web and F5 for a slender web
   instead of falling back to F2. Both methods keep their LRFD and ASD factors,
   and the result still names the governing equation.
+- **AISC 360-16 steel check: station-wise demands.** Every station is checked
+  with its own axial force, moments and shears, so the H1 interaction uses
+  forces that act at the same place; the report and the table also show the
+  governing station.
 
 ## [0.0.38] - 2026-11-03
 
