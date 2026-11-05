@@ -11,12 +11,12 @@ refused instead of silently downgraded).
 
 ### Added
 
-- **Member calculation memory (HTML and Markdown, English and Spanish).**
-  `services.calc_memory.build_member_memory` turns the design report into a
-  document with the project cover (author, company, date, revisions), an index
-  and one sheet per member: geometric properties, every `LimitStateCheck` with
-  its demand, capacity, ratio and calculation steps, and the governing result.
-  The export menu and the LaTeX/ODT/PDF renderers come next.
+- **Member calculation memory (HTML, Markdown, LaTeX, ODT and PDF; English
+  and Spanish).** File → Export → Calculation Memory writes the project cover
+  (author, company, date, revisions), an index and one sheet per member:
+  geometric properties, every `LimitStateCheck` with its demand, capacity,
+  ratio and calculation steps, and the governing result. The dialog chooses
+  the language, the format and the members (all, selection or NG).
 
 - **Structured member calculation records.** `MemberCheck` and `MemberResult`
   now keep one `LimitStateCheck` per limit state (equation, demand, capacity,

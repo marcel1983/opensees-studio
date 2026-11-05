@@ -14,7 +14,7 @@ import math
 from collections.abc import Callable, Iterator, Sequence
 from functools import partial
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import shiboken6
@@ -151,7 +151,7 @@ from opensees_studio.services.results import (
 from opensees_studio.services.results_db import database_path, delete_all_results, record_results
 from opensees_studio.services.shell_fields import shell_elements
 from opensees_studio.services.stability import StabilityReport
-from opensees_studio.services.steel_design import steel_frame_check
+from opensees_studio.services.steel_design import DesignReport, steel_frame_check
 from opensees_studio.viewmodels import AnalysisRunner, ProjectViewModel
 from opensees_studio.viewmodels.case_results import CaseResultsCache
 from opensees_studio.viewmodels.stability_checker import StabilityChecker
@@ -178,6 +178,7 @@ from opensees_studio.views.dialogs import (
     AssignTemperatureLoadDialog,
     AssignZeroLengthDialog,
     AssignZeroLengthSectionDialog,
+    CalculationMemoryDialog,
     CoordinateGridSystemsDialog,
     DisplayOptionsDialog,
     DriftCheckDialog,
@@ -448,6 +449,7 @@ class MainWindow(QMainWindow):
         self._act_export_ifc = QAction("&IFC (.ifc)…", self)
         self._act_export_s2k = QAction("SAP2000 &Text (.s2k)…", self)
         self._act_export_report = QAction("&Report (HTML / PDF)…", self)
+        self._act_calc_memory = QAction("Calculation &Memory…", self)
         self._act_run_batch = QAction("Run &Batch…", self)
         self._act_quit = QAction("&Quit", self, shortcut=QKeySequence.StandardKey.Quit)
 
@@ -744,6 +746,7 @@ class MainWindow(QMainWindow):
         m_export.addAction(self._act_export_ifc)
         m_export.addAction(self._act_export_s2k)
         m_export.addAction(self._act_export_report)
+        m_export.addAction(self._act_calc_memory)
         m_file.addSeparator()
         m_file.addAction(self._act_run_batch)
         m_file.addSeparator()
@@ -1210,6 +1213,7 @@ class MainWindow(QMainWindow):
         self._act_export_ifc.triggered.connect(self._on_export_ifc)
         self._act_export_s2k.triggered.connect(self._on_export_s2k)
         self._act_export_report.triggered.connect(self._on_export_report)
+        self._act_calc_memory.triggered.connect(self._on_calc_memory)
         self._act_run_batch.triggered.connect(self._on_run_batch)
         self._act_quit.triggered.connect(self._on_quit)
         self._act_about.triggered.connect(self._on_about)
@@ -1814,6 +1818,84 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Export report failed", str(exc))
             return
         self._log(f"Report written: {path} ({len(results)} result set(s)).")
+
+    def _on_calc_memory(self) -> None:
+        """File → Export → Calculation Memory: member sheets in the chosen format."""
+        from opensees_studio.services.calc_memory import (
+            Language,
+            build_member_memory,
+            odt_bytes,
+        )
+
+        project = self._vm.project
+        if project is None:
+            QMessageBox.information(self, "Calculation memory", "Open or create a project first.")
+            return
+        dialog = CalculationMemoryDialog(self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        results = dict(self._case_results.current(project))
+        report = steel_frame_check(project, results, project.design)
+        members = report.members
+        chosen = dialog.member_filter()
+        if chosen == "selected":
+            ids = set(self._canvas.selection.elements)
+            members = [m for m in members if m.element_id in ids]
+        elif chosen == "ng":
+            members = [m for m in members if m.status == "NG"]
+        if not members:
+            QMessageBox.information(
+                self, "Calculation memory", "No member matches the chosen filter."
+            )
+            return
+        filtered = DesignReport(
+            members=members,
+            joints=report.joints,
+            load_sets=report.load_sets,
+            notes=report.notes,
+        )
+        fmt = dialog.format()
+        extensions = {
+            "html": (".html", "HTML page (*.html)"),
+            "markdown": (".md", "Markdown (*.md)"),
+            "latex": (".tex", "LaTeX (*.tex)"),
+            "odt": (".odt", "OpenDocument text (*.odt)"),
+            "pdf": (".pdf", "PDF (*.pdf)"),
+        }
+        suffix, file_filter = extensions[fmt]
+        stem = self._vm.path.stem if self._vm.path is not None else "model"
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export calculation memory",
+            f"{stem}-calc-memory{suffix}",
+            file_filter,
+        )
+        if not path:
+            return
+        language = cast(Language, dialog.language())
+        try:
+            if fmt == "odt":
+                Path(path).write_bytes(odt_bytes(project, filtered, language=language))
+            elif fmt == "pdf":
+                page = build_member_memory(
+                    project,
+                    filtered,
+                    language=language,
+                    fmt="html",
+                )
+                write_pdf(page, path)
+            else:
+                text = build_member_memory(
+                    project,
+                    filtered,
+                    language=language,
+                    fmt=cast(Any, fmt),
+                )
+                Path(path).write_text(text, encoding="utf-8")
+        except (OSError, ValueError) as exc:
+            QMessageBox.critical(self, "Calculation memory failed", str(exc))
+            return
+        self._log(f"Calculation memory written: {path} ({len(members)} member(s)).")
 
     def _on_export_script(self) -> None:
         """File → Export → OpenSees script: the model as plain OpenSeesPy.
@@ -6394,6 +6476,7 @@ class MainWindow(QMainWindow):
         self._act_export_ifc.setEnabled(has_project)
         self._act_export_s2k.setEnabled(has_project)
         self._act_export_report.setEnabled(has_project)
+        self._act_calc_memory.setEnabled(has_project)
         self._act_grid.setEnabled(True)
         self._act_add_node.setEnabled(True)
         self._act_create_shell.setEnabled(has_project)

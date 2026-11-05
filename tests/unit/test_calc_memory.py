@@ -7,7 +7,7 @@ import pytest
 from opensees_studio.core import Project
 from opensees_studio.core.design.calc import CalcStep, LimitStateCheck
 from opensees_studio.core.project import ProjectMeta, Revision
-from opensees_studio.services.calc_memory import build_member_memory
+from opensees_studio.services.calc_memory import build_member_memory, odt_bytes
 from opensees_studio.services.steel_design import DesignReport, MemberResult
 
 
@@ -75,3 +75,20 @@ def test_unknown_language_or_format_is_refused() -> None:
         build_member_memory(_project(), _report(), language="fr")  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="format"):
         build_member_memory(_project(), _report(), fmt="pdf")  # type: ignore[arg-type]
+
+
+def test_latex_and_odt_are_generated() -> None:
+    latex = build_member_memory(_project(), _report(), language="en", fmt="latex")
+    assert r"\documentclass" in latex
+    assert r"\section*{Steel tower}" in latex
+    assert "F2-2 inelastic LTB" in latex
+    odt = odt_bytes(_project(), _report(), language="es")
+    assert odt.startswith(b"PK")
+    import io
+    import zipfile
+
+    with zipfile.ZipFile(io.BytesIO(odt)) as package:
+        names = set(package.namelist())
+        assert {"mimetype", "content.xml", "styles.xml", "META-INF/manifest.xml"} <= names
+        assert package.read("mimetype").decode() == "application/vnd.oasis.opendocument.text"
+        assert "Memoria de cálculo" in package.read("content.xml").decode()
