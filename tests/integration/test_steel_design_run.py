@@ -309,3 +309,17 @@ def test_p_delta_lifts_the_ratio_of_a_beam_column() -> None:
     amplified = steel_frame_check(project, results, DesignSettings(p_delta=True)).members[0]
     assert any("B1" in note for note in amplified.notes)
     assert amplified.ratio > plain.ratio
+
+
+def test_the_seismic_system_adds_the_aisc_341_checks() -> None:
+    project = _beam()
+    results = _results(project)
+    plain = steel_frame_check(project, results).members[0]
+    assert not any(key.startswith("AISC 341") for key in plain.ratios)
+
+    seismic = steel_frame_check(
+        project, results, DesignSettings(seismic_system="SMF", ry=1.1)
+    ).members[0]
+    # A horizontal beam: flange case 7 and moment-frame web case 11.
+    assert seismic.ratios["AISC 341 Flange (case 7)"] > 0.0
+    assert "AISC 341 Web (case 11)" in seismic.ratios

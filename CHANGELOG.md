@@ -15,9 +15,12 @@ refused instead of silently downgraded).
   `core.design.aisc341` encodes the 18 cases of the seismic provisions,
   including the `Ca = Pr/(αs Ry Fy Ag)` ratio (`αs` = 1.0 LRFD, 1.5 ASD), the
   new case 11 for moment-frame webs and the two-branch case 13 for braced
-  frames with its 1.56 floor. It is the classification engine the steel check
-  will consume; this entry adds the engine and its tests, not yet the check
-  wiring.
+  frames with its 1.56 floor. The steel check consumes it when a seismic
+  system is chosen: SMF/IMF members are highly/moderately ductile, braces use
+  Table D1.1a, columns and beams Table D1.1b, and the report carries the
+  element ratio against its limit. `Ry` (1.1 by default) sets `Ry Fy` and
+  `Ca = Pr/(αs Ry Fy Ag)`. Section D1.1 only; the system rules of Chapters E
+  to H are not implied.
 
 ## [0.0.39] - 2026-11-05
 

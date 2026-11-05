@@ -40,6 +40,7 @@ import numpy as np
 
 from opensees_studio.core.aisc import SOURCE_UNITS, get_shape, load_shapes
 from opensees_studio.core.analysis import ResponseSpectrumCase, StaticCase
+from opensees_studio.core.design.aisc341 import Role, ca, member_limits
 from opensees_studio.core.design.aisc360 import (
     I_SHAPE_FAMILIES,
     Demand,
@@ -439,6 +440,27 @@ def _length(project: Any, element: Any) -> float:
     return float(np.linalg.norm(coords[element.nodes[1]] - coords[element.nodes[0]]))
 
 
+def _member_role(project: Any, element: Any) -> Role:
+    """``column``, ``beam`` or ``brace`` from the member's direction.
+
+    A member within 20% of vertical is a column; within 20% of horizontal is a
+    beam (a plan diagonal in 3D is a brace); anything else is a brace.
+    """
+    coords = {n.id: np.asarray(n.coords, dtype=float) for n in project.nodes}
+    delta = coords[element.nodes[1]] - coords[element.nodes[0]]
+    length = float(np.linalg.norm(delta))
+    if length <= 0.0:
+        return "beam"
+    vertical = abs(float(delta[2])) / length
+    if vertical >= 0.8:
+        return "column"
+    if vertical <= 0.2:
+        horizontal = math.hypot(float(delta[0]), float(delta[1]))
+        if project.ndm == 2 or min(abs(float(delta[0])), abs(float(delta[1]))) <= 0.2 * horizontal:
+            return "beam"
+    return "brace"
+
+
 def steel_frame_check(
     project: Any,
     results: Mapping[int, Any],
@@ -509,6 +531,7 @@ def steel_frame_check(
         g = float(getattr(section, "G", 0.0) or 0.0) or e / 2.6
         steel = Steel(Fy=fy, E=e, G=g, Fu=fu)
         length = _length(project, element)
+        role = _member_role(project, element)
         m_major, v_major, m_minor, v_minor, about_major = _axes(project, section, shape)
         if not about_major:
             result.notes.append("Bent about the shape's minor axis in this 2D model.")
@@ -565,6 +588,26 @@ def steel_frame_check(
                     shear_lag=overrides.shear_lag,
                     p_delta=settings.p_delta,
                 )
+                if settings.seismic_system != "none":
+                    ca_value = ca(
+                        max(0.0, -demand.axial),
+                        settings.ry,
+                        steel.Fy,
+                        shape.A,
+                        method=settings.method,
+                    )
+                    for item in member_limits(
+                        shape,
+                        role=role,
+                        system=settings.seismic_system,
+                        e=steel.E,
+                        ry=settings.ry,
+                        fy=steel.Fy,
+                        ca_value=ca_value,
+                    ):
+                        key = f"AISC 341 {item.element} (case {item.case})"
+                        check.ratios[key] = item.utilization
+                        check.equations[key] = f"AISC 341-22 D1.1 case {item.case}"
                 ratio = check.governing[1]
                 for name, value in check.ratios.items():
                     max_ratios[name] = max(max_ratios.get(name, 0.0), value)

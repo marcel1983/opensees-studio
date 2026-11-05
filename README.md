@@ -329,7 +329,9 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   axial force, moments and shears, with `Cb`
   from the moment diagram and per-member K, Lb, Cb, net area and shear-lag
   overrides; an optional **B1 P-δ amplification** (AISC 360-16 C2.1b) covers
-  the member curvature a first-order analysis leaves out; failing members can be
+  the member curvature a first-order analysis leaves out; a **seismic system**
+  (AISC 341-22) adds the Table D1.1 width-to-thickness check for its ductility
+  class, with `Ry` (1.1 default) and `Ca`; failing members can be
   selected in the model, and Design →
   Display Steel Ratios on Model paints every member by its ratio (blue to red,
   grey when not designed). The report prints the check. Design → Generate

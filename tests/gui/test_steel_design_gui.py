@@ -57,6 +57,21 @@ def test_a_low_limit_fails_members_and_selects_them(qtbot) -> None:  # type: ign
 
 
 @pytest.mark.gui
+def test_the_seismic_settings_round_trip(qtbot) -> None:  # type: ignore[no-untyped-def]
+    project = _beam_project()
+    project.design = DesignSettings(seismic_system="SCBF", ry=1.2)
+    dialog = SteelDesignDialog(project, _results(project))
+    qtbot.addWidget(dialog)
+    assert dialog._seismic.currentText() == "SCBF"
+    assert dialog._ry.value() == pytest.approx(1.2)
+    dialog._seismic.setCurrentText("IMF")
+    dialog._ry.setValue(1.0)
+    settings = dialog.settings()
+    assert settings.seismic_system == "IMF"
+    assert settings.ry == pytest.approx(1.0)
+
+
+@pytest.mark.gui
 def test_p_delta_is_a_saved_setting(qtbot) -> None:  # type: ignore[no-untyped-def]
     project = _beam_project()
     project.design = DesignSettings(p_delta=True)

@@ -78,3 +78,13 @@ def test_p_delta_round_trips(tmp_path: Path) -> None:
     assert json.loads(path.read_text(encoding="utf-8"))["design"]["p_delta"] is True
     assert load_project(path).design is not None
     assert load_project(path).design.p_delta is True
+
+
+def test_the_seismic_settings_round_trip(tmp_path: Path) -> None:
+    project = Project()
+    project.design = DesignSettings(seismic_system="SCBF", ry=1.2)
+    path = save_project(project, tmp_path / "seismic.osmodel")
+    design = json.loads(path.read_text(encoding="utf-8"))["design"]
+    assert design["seismic_system"] == "SCBF"
+    assert design["ry"] == 1.2
+    assert load_project(path).design == project.design

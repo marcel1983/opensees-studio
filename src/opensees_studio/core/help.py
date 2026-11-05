@@ -1522,6 +1522,14 @@ cantilever**: F1-1 assumes both ends braced.
   Use it when the analysis includes P-Δ but not the member's own curvature
   (P-δ); leave it off for a full second-order analysis, which already captures
   both. The member note shows the two B1 values.
+- **Seismic system** (AISC 341-22): `none` leaves the AISC 360 check alone. With
+  SMF or IMF the webs of I-shapes and channels use case 11; with SCBF or OCBF
+  they use case 13; braces use Table D1.1a. Members are classified by their
+  direction (column within 20% of vertical, beam within 20% of horizontal,
+  otherwise a brace). The **Ry** field (1.1 default) gives the expected yield
+  stress `Ry Fy` of the limits and of `Ca = Pr/(αs Ry Fy Ag)`, with `αs` 1.0
+  LRFD / 1.5 ASD. This checks Section D1.1 only: the system rules of Chapters
+  E to H (capacity design, protected zones, connections) are not part of it.
 
 Results: one row per member with its governing ratio, the check and equation
 that govern and the load set that produced them; **Select failing members**

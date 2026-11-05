@@ -97,6 +97,8 @@ class DesignSettings(BaseModel):
         "fu",
         "ratio_limit",
         "p_delta",
+        "seismic_system",
+        "ry",
         "load_sets",
         "members",
         "drift_limit",
@@ -122,6 +124,17 @@ class DesignSettings(BaseModel):
             "Amplify the moments of members in compression by B1 (AISC 360-16 "
             "C2.1b) when the analysis captures P-Delta but not member curvature."
         ),
+    )
+    seismic_system: Literal["none", "SMF", "IMF", "SCBF", "OCBF"] = Field(
+        default="none",
+        description=(
+            "AISC 341-22 system: adds the Table D1.1 width-to-thickness check "
+            "for its ductility class; none leaves the AISC 360 check alone."
+        ),
+    )
+    ry: PositiveFloat = Field(
+        default=1.1,
+        description="Ratio of expected to specified yield stress Ry (AISC 341).",
     )
     load_sets: list[DesignLoadSet] = Field(
         default_factory=list,
