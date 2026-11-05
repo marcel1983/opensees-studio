@@ -11,6 +11,11 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **ASCE 7-16 overstrength combinations.** The ASCE 7 LRFD and ASD generators
+  can add the capacity-design pair of Sections 2.3.6 and 2.4.5 (`Ω0 E`, with
+  `SDS` and `Ω0` in the dialog). They are named `Ω0: …` and are off by default,
+  so existing combination sets do not change.
+
 - **AISC 360-16 steel check: tension rupture and F4/F5 flexure.** The frame
   check now evaluates D2-2 tension rupture when a net area and shear-lag factor
   are given on a member (`Ae = U An`, with `Fu` in the design settings), and

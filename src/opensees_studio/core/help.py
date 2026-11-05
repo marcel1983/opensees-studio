@@ -3055,11 +3055,18 @@ earthquake cases, each acts at 100% with the others at 30% (±Ex ± 0.3Ey and
 The live-load factor in the last combinations is 1.0: the 0.5 exception depends
 on the occupancy.
 
+With **Add overstrength combinations (Ω0 E)** and a seismic case, Section 2.3.6
+adds `(1.2 + 0.2SDS)D + Ω0E + L + 0.2S` and `(0.9 - 0.2SDS)D + Ω0E`, named
+`Ω0: …`; `Ω0` (Table 12.2-1) and `SDS` are dialog fields.
+
 ## ASCE 7-16 ASD (Section 2.4.1)
 - D; D + L; D + (Lr or S or R); D + 0.75L + 0.75(Lr or S or R)
 - D + 0.6W; D + 0.7E
 - D + 0.75L + 0.75(0.6W) + 0.75(Lr or S or R); D + 0.75L + 0.75(0.7E) + 0.75S
 - 0.6D + 0.6W; 0.6D + 0.7E
+
+The overstrength option adds Section 2.4.5:
+`(1.0 + 0.14SDS)D + 0.7Ω0E` and `(0.6 - 0.14SDS)D + 0.7Ω0E`.
 
 ## EN 1990
 - **Ultimate, equation 6.10**: 1.35G + 1.5Q1 + Σ 1.5 ψ0,i Qi, with each variable
