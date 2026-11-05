@@ -357,3 +357,38 @@ def test_f4_and_f5_switch_to_elastic_ltb_beyond_lr() -> None:
     assert f4.equation == "F4-3 elastic lateral-torsional buckling"
     f5 = flexure_major(shape, Steel(Fy=500.0, E=29000.0, G=11200.0), "LRFD", unbraced=5 * FT)
     assert f5.equation == "F5-2 lateral-torsional buckling"
+
+
+def test_check_member_keeps_a_structured_calculation_record() -> None:
+    shape = _shape("W14X99")
+    check = check_member(
+        shape,
+        A992,
+        "LRFD",
+        Demand(
+            axial=-400.0,
+            moment_major=250 * FT,
+            moment_minor=80 * FT,
+            shear_major=20.0,
+            shear_minor=5.0,
+        ),
+        length_x=14 * FT,
+        length_y=14 * FT,
+        length_ltb=14 * FT,
+    )
+    assert {c.name for c in check.checks} == {
+        "Compression",
+        "Major flexure",
+        "Minor flexure",
+        "Major shear",
+        "Minor shear",
+        "P-M interaction",
+    }
+    compression = next(c for c in check.checks if c.name == "Compression")
+    assert compression.equation.startswith("E3")
+    assert compression.capacity == pytest.approx(
+        shape.compression(A992, "LRFD", length_x=14 * FT, length_y=14 * FT).available
+    )
+    assert compression.steps[0].label == "Nominal strength"
+    assert compression.steps[1].value == pytest.approx(compression.capacity)
+    assert compression.ratio == pytest.approx(400.0 / compression.capacity)

@@ -11,6 +11,12 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **Structured member calculation records.** `MemberCheck` and `MemberResult`
+  now keep one `LimitStateCheck` per limit state (equation, demand, capacity,
+  ratio, nominal/available steps and notes) for the governing station. This is
+  the data the calculation-memory report will print; the document renderer is
+  the next increment.
+
 - **Project information for the report cover.** File → Project Information
   edits the project name, author, company, date, description and the revision
   table (Rev, Date, By, Description). The values live in `Project.meta`, are

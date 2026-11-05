@@ -35,6 +35,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Literal, Protocol
 
+from opensees_studio.core.design.calc import CalcStep, LimitStateCheck
 from opensees_studio.core.design.stability import b1, pe1, tau_b
 
 Method = Literal["LRFD", "ASD"]
@@ -674,6 +675,7 @@ class MemberCheck:
     ratios: dict[str, float] = field(default_factory=dict)
     equations: dict[str, str] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
+    checks: list[LimitStateCheck] = field(default_factory=list)
 
     @property
     def governing(self) -> tuple[str, float]:
@@ -681,6 +683,31 @@ class MemberCheck:
             return ("", 0.0)
         key = max(self.ratios, key=lambda k: self.ratios[k])
         return key, self.ratios[key]
+
+
+def _record(check: MemberCheck, name: str, strength: Strength, demand: float) -> None:
+    """Keep one limit state with its nominal and available strengths."""
+    capacity = strength.available
+    ratio = abs(demand) / capacity if capacity > 0.0 else math.inf
+    steps = (
+        CalcStep(
+            "Nominal strength",
+            strength.equation,
+            f"{strength.nominal:.6g}",
+            strength.nominal,
+        ),
+        CalcStep(
+            "Available strength",
+            "phi Rn (LRFD) / Rn / Omega (ASD)",
+            f"{capacity:.6g}",
+            capacity,
+        ),
+    )
+    check.checks.append(
+        LimitStateCheck(
+            name, strength.equation, abs(demand), capacity, ratio, steps, strength.notes
+        )
+    )
 
 
 def check_member(
@@ -785,6 +812,24 @@ def check_member(
     )
     check.ratios["P-M interaction"] = ratio
     check.equations["P-M interaction"] = equation
+    check.checks.append(
+        LimitStateCheck(
+            "P-M interaction",
+            equation,
+            ratio,
+            1.0,
+            ratio,
+            (CalcStep("Interaction", equation, f"{ratio:.6g}", ratio),),
+        )
+    )
+    for strength, name, value in (
+        (axial, label, demand.axial),
+        (major, "Major flexure", mrx),
+        (minor, "Minor flexure", mry),
+        (v_major, "Major shear", demand.shear_major),
+        (v_minor, "Minor shear", demand.shear_minor),
+    ):
+        _record(check, name, strength, value)
     for strength in (axial, major, minor, v_major, v_minor):
         check.notes.extend(strength.notes)
     return check
