@@ -7,10 +7,13 @@ import math
 import pytest
 
 from opensees_studio.core.design.aisc341 import (
+    JointBeam,
+    JointColumn,
     admissible,
     alpha_s,
     ca,
     cpr,
+    joint_scwb,
     limit,
     mbe_star,
     member_limits,
@@ -216,3 +219,27 @@ def test_scwb_exception_needs_a_light_column_and_a_listed_case() -> None:
     assert scwb_exempt(100.0, pyc, story_shear_share=0.10, line_shear_share=0.20)
     assert not scwb_exempt(100.0, pyc, story_shear_share=0.25, line_shear_share=0.20)
     assert not scwb_exempt(100.0, pyc)
+
+
+def test_joint_scwb_sums_the_columns_and_projects_the_beam_shear() -> None:
+    columns = [
+        JointColumn(zc=100.0, fyc=50.0, ag=20.0, pr=500.0, depth=14.0),
+        JointColumn(zc=80.0, fyc=50.0, ag=18.0, pr=300.0, depth=14.0),
+    ]
+    beams = [JointBeam(zb=50.0, fyb=50.0, length=240.0, shear=100.0)]
+    pair = joint_scwb(columns, beams, ry=1.1, fu=65.0)
+    assert pair is not None
+    mpc, mbe = pair
+    assert mpc == pytest.approx(100.0 * 25.0 + 80.0 * (50.0 - 300.0 / 18.0))
+    # Mpr = 1.15 x 1.1 x 50 x 50; Vp is the larger of 2Mpr/L and 100.
+    probable = 1.15 * 1.1 * 50.0 * 50.0
+    expected_mbe = probable + 100.0 * 14.0 / 2.0
+    assert mbe == pytest.approx(expected_mbe)
+    assert mpc / mbe == pytest.approx(1.337, abs=1e-3)
+
+
+def test_joint_scwb_needs_both_a_column_and_a_beam() -> None:
+    column = JointColumn(100.0, 50.0, 20.0, 100.0, 14.0)
+    beam = JointBeam(50.0, 50.0, 240.0, 10.0)
+    assert joint_scwb([], [beam], ry=1.1) is None
+    assert joint_scwb([column], [], ry=1.1) is None
