@@ -61,6 +61,7 @@ _RESULT_COLUMNS = [
     "Governs",
     "Equation",
     "Load set",
+    "Station",
     "Notes",
 ]
 _FAIL = QColor("#f8d7da")
@@ -306,6 +307,7 @@ class SteelDesignDialog(FittedDialog):
                 member.check,
                 member.equation,
                 member.load_set,
+                f"{member.station:.2f}",
                 " ".join(member.notes),
             ]
             for column, text in enumerate(cells):

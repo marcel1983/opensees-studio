@@ -10,12 +10,12 @@ combination is expanded into linear sums of cases: *Linear Add* adds its terms,
 enters as ±its peak (the sign of a combined peak is unknown), linear between the
 two ends. *Absolute Add* and *SRSS* combinations are reported as not checked.
 
-Per member and load set the check takes the largest axial force (with its
-sign: tension or compression; the diagrams draw compression positive), the largest moments and shears over the
-stations, and ``Cb`` from the major-axis diagram (F1-1) unless the user set it;
-taking maxima at different stations is conservative for the H1 interaction.
-The governing ratio over all load sets is reported with the equation that
-produced it.
+Per member and load set the check evaluates every station with that station's
+axial force (with its sign: tension or compression; the diagrams draw compression
+positive), moments and shears, so the H1 interaction uses forces that act at the
+same place. ``Cb`` comes from the major-axis diagram (F1-1) unless the user set
+it. The governing ratio over all stations and load sets is reported with the
+equation that produced it and the station where it occurred.
 
 The shape. A member is checked when its section's name is an AISC v16 shape
 of a family the check covers (W, M, S, HP, C, MC, WT, MT, ST, equal-leg L,
@@ -393,6 +393,8 @@ class MemberResult:
     check: str = ""
     equation: str = ""
     load_set: str = ""
+    station: float = 0.0
+    """Fraction of the member length where the governing check was evaluated."""
     ratios: dict[str, float] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
 
@@ -513,7 +515,8 @@ def steel_frame_check(
         if not alternatives:
             result.notes.append("No load set with results.")
             continue
-        worst: tuple[float, MemberCheck, str] | None = None
+        worst: tuple[float, MemberCheck, str, float] | None = None
+        max_ratios: dict[str, float] = {}
         for label, alt in alternatives:
             values: dict[str, np.ndarray] = {}
             for component in ("N", "V2", "V3", "M2", "M3"):
@@ -523,54 +526,58 @@ def steel_frame_check(
                     if per_case is not None:
                         total = total + factor * per_case
                 values[component] = total
-            axial_index = int(np.argmax(np.abs(values["N"])))
             major_moment = values[m_major] if m_major else np.zeros(STATIONS)
             quarter = [float(np.interp(s, _GRID, major_moment)) for s in (0.25, 0.5, 0.75)]
             peak = float(np.max(np.abs(major_moment)))
             cb = overrides.cb or cb_from_moments(peak, *quarter)
             # The diagrams draw compression positive (OpenSees' end-i axial force);
-            # the check takes tension positive.
-            axial = -float(values["N"][axial_index])
-            demand = Demand(
-                axial=axial,
-                moment_major=peak,
-                moment_minor=float(np.max(np.abs(values[m_minor]))) if m_minor else 0.0,
-                shear_major=float(np.max(np.abs(values[v_major]))) if v_major else 0.0,
-                shear_minor=float(np.max(np.abs(values[v_minor]))) if v_minor else 0.0,
-                cb=cb,
-            )
-            if not about_major:
+            # the check takes tension positive. Evaluate every station with the
+            # axial force, moments and shears of that same station, so the H1
+            # interaction is not built from maxima at different places.
+            for k, station_value in enumerate(_GRID):
                 demand = Demand(
-                    axial=axial,
-                    moment_major=0.0,
-                    moment_minor=float(np.max(np.abs(values["M3"]))),
-                    shear_major=0.0,
-                    shear_minor=float(np.max(np.abs(values["V2"]))),
+                    axial=-float(values["N"][k]),
+                    moment_major=float(values[m_major][k]) if m_major else 0.0,
+                    moment_minor=float(values[m_minor][k]) if m_minor else 0.0,
+                    shear_major=float(values[v_major][k]) if v_major else 0.0,
+                    shear_minor=float(values[v_minor][k]) if v_minor else 0.0,
+                    cb=cb,
                 )
-            check = check_member(
-                shape,
-                steel,
-                settings.method,
-                demand,
-                length_x=overrides.length_major or length,
-                length_y=overrides.length_minor or length,
-                length_ltb=overrides.length_ltb or length,
-                k_x=overrides.k_major,
-                k_y=overrides.k_minor,
-                net_area=overrides.net_area,
-                shear_lag=overrides.shear_lag,
-            )
-            ratio = check.governing[1]
-            if worst is None or ratio > worst[0]:
-                worst = (ratio, check, label)
+                if not about_major:
+                    demand = Demand(
+                        axial=-float(values["N"][k]),
+                        moment_major=0.0,
+                        moment_minor=float(values["M3"][k]),
+                        shear_major=0.0,
+                        shear_minor=float(values["V2"][k]),
+                    )
+                check = check_member(
+                    shape,
+                    steel,
+                    settings.method,
+                    demand,
+                    length_x=overrides.length_major or length,
+                    length_y=overrides.length_minor or length,
+                    length_ltb=overrides.length_ltb or length,
+                    k_x=overrides.k_major,
+                    k_y=overrides.k_minor,
+                    net_area=overrides.net_area,
+                    shear_lag=overrides.shear_lag,
+                )
+                ratio = check.governing[1]
+                for name, value in check.ratios.items():
+                    max_ratios[name] = max(max_ratios.get(name, 0.0), value)
+                if worst is None or ratio > worst[0]:
+                    worst = (ratio, check, label, float(station_value))
         assert worst is not None
-        ratio, check, label = worst
+        ratio, check, label, station = worst
         key = check.governing[0]
         result.ratio = ratio
         result.check = key
         result.equation = check.equations.get(key, "")
         result.load_set = label
-        result.ratios = dict(check.ratios)
+        result.station = station
+        result.ratios = max_ratios
         result.notes.extend(dict.fromkeys(check.notes))
         result.status = "NG" if ratio > settings.ratio_limit else "OK"
     return report

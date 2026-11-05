@@ -42,6 +42,7 @@ from opensees_studio.services.results import (
     TransientResults,
 )
 from opensees_studio.services.steel_design import (
+    default_fu,
     default_fy,
     default_load_sets,
     load_set_label,
@@ -222,6 +223,7 @@ def _design_section(project: Project, results: Mapping[int, Any]) -> str:
     if settings is None:
         return ""
     fy = settings.fy if settings.fy is not None else default_fy(project.meta.units)
+    fu = settings.fu if settings.fu is not None else default_fu(project.meta.units)
     load_sets = settings.load_sets or default_load_sets(project)
     out = [
         "<h2>Steel frame check — AISC 360-16</h2>",
@@ -230,6 +232,7 @@ def _design_section(project: Project, results: Mapping[int, Any]) -> str:
             [
                 ["Method", settings.method],
                 ["Fy", fy],
+                ["Fu", fu],
                 ["Ratio limit", settings.ratio_limit],
                 ["Load sets", ", ".join(load_set_label(project, ls) for ls in load_sets) or "—"],
             ],
@@ -243,12 +246,30 @@ def _design_section(project: Project, results: Mapping[int, Any]) -> str:
     )
     if designed:
         rows = [
-            [m.element_id, m.shape, m.ratio, m.status, m.check, m.equation, m.load_set]
+            [
+                m.element_id,
+                m.shape,
+                m.ratio,
+                m.status,
+                m.check,
+                m.equation,
+                m.load_set,
+                f"{m.station:.2f}",
+            ]
             for m in designed
         ]
         out.append(
             _table(
-                ["Element", "Shape", "Ratio", "Status", "Governs", "Equation", "Load set"],
+                [
+                    "Element",
+                    "Shape",
+                    "Ratio",
+                    "Status",
+                    "Governs",
+                    "Equation",
+                    "Load set",
+                    "Station",
+                ],
                 rows,
             )
         )

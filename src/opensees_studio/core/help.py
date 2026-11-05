@@ -1467,10 +1467,11 @@ Linear Add adds its terms, Envelope keeps each term, and a response spectrum
 case enters as plus and minus its peak. Absolute Add and SRSS combinations have
 no signed demands and are skipped with a note.
 
-Each member is read at 25 stations along its length, span loads included. The
-largest axial force, moments and shears are taken together (conservative for the
-interaction), and Cb comes from the major-axis moment diagram (F1-1) unless you
-set it. **Set Cb = 1.0 for a cantilever**: F1-1 assumes both ends braced.
+Each member is read at 25 stations along its length, span loads included. Every
+station is checked with its own axial force, moments and shears, so the interaction
+uses forces that act at the same place; the governing station is reported. Cb comes
+from the major-axis moment diagram (F1-1) unless you set it. **Set Cb = 1.0 for a
+cantilever**: F1-1 assumes both ends braced.
 
 # The values the dialog asks for
 - **Method** LRFD (φ) or ASD (Ω); **Fy** and **Fu** (50 and 65 ksi by default,
