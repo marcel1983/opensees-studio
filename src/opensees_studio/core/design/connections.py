@@ -20,6 +20,7 @@ from typing import Protocol
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt
 
 from opensees_studio.core._base import omit_when_default
+from opensees_studio.core.design.expected import cpr
 
 
 class RbsConnection(BaseModel):
@@ -114,8 +115,6 @@ def rbs_mpr(
     fu: float | None = None,
 ) -> float:
     """Probable maximum moment at the hinge, ``Cpr Ry Fy Z_RBS`` (2.4.3)."""
-    from opensees_studio.core.design.aisc341 import cpr
-
     if ry <= 0.0 or fy <= 0.0:
         raise ValueError("Ry and Fy must be positive for Mpr.")
     return cpr(fy, fu) * ry * fy * geometry.z_rbs
