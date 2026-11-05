@@ -460,11 +460,20 @@ def _flexure_major_f4(
     candidates.append((min(cflb, mp), "F4-13/14 compression flange local buckling"))
     candidates.append((mp, "F4-15 tension flange yielding"))
     nominal, equation = min(candidates)
+    steps = (
+        _step("Yield moment", "My = Fy Sx", f"{fy:g} x {sx:g}", my),
+        _step("Web plastification", "Rpc from F4-9", f"{rpc:.6g}", rpc),
+        _step("Plastic moment", "Mp = min(Fy Zx, 1.6 My)", f"{mp:.6g}", mp),
+        _step("Lp", "Lp = 1.1 rt sqrt(E/Fy)", f"{lp:.6g}", lp),
+        _step("Lr", "Lr from F4-8", f"{lr:.6g}", lr),
+        _step("Nominal strength", equation, f"{nominal:.6g}", nominal),
+    )
     return Strength(
         nominal,
         _available(nominal, "flexure", method),
         equation,
         ("F4: noncompact web.",),
+        steps,
     )
 
 
@@ -522,11 +531,19 @@ def _flexure_major_f5(
         (fy * sx, "F5-10 tension flange yielding"),
     ]
     nominal, equation = min(candidates)
+    steps = (
+        _step("Web bending factor", "Rpg from F5-6", f"{rpg:.6g}", rpg),
+        _step("Plastic moment", "Mp = Rpg Fy Sx", f"{mp:.6g}", mp),
+        _step("Lp", "Lp = 1.1 rt sqrt(E/Fy)", f"{lp:.6g}", lp),
+        _step("Lr", "Lr = pi rt sqrt(E/(0.7 Fy))", f"{lr:.6g}", lr),
+        _step("Nominal strength", equation, f"{nominal:.6g}", nominal),
+    )
     return Strength(
         nominal,
         _available(nominal, "flexure", method),
         equation,
         ("F5: slender web.",),
+        steps,
     )
 
 

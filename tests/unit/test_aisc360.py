@@ -334,6 +334,8 @@ def test_f4_noncompact_web_and_flange() -> None:
         / (classes.flange_noncompact - classes.flange_compact)
     )
     assert strength.nominal == pytest.approx(cflb)
+    labels = [step.label for step in strength.steps]
+    assert "Web plastification" in labels and "Lp" in labels and "Lr" in labels
     assert flexure_major(shape, steel, "ASD", unbraced=0.0).available == pytest.approx(
         strength.nominal / 1.67
     )
@@ -347,6 +349,8 @@ def test_f5_slender_web() -> None:
     strength = flexure_major(shape, steel, "LRFD", unbraced=0.0)
     assert strength.equation.startswith("F5")
     assert strength.nominal > 0.0
+    labels = [step.label for step in strength.steps]
+    assert "Web bending factor" in labels and "Lp" in labels and "Lr" in labels
     assert flexure_major(shape, steel, "ASD", unbraced=0.0).available == pytest.approx(
         strength.nominal / 1.67
     )
