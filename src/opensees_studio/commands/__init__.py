@@ -76,6 +76,7 @@ from opensees_studio.commands.nodes import (
     SetRestraintCommand,
     SetSpringCommand,
 )
+from opensees_studio.commands.project_info import SetProjectMetaCommand
 from opensees_studio.commands.sections import (
     AddSectionsCommand,
     DeleteSectionsCommand,
@@ -153,6 +154,7 @@ __all__ = [
     "SetMassCommand",
     "SetMassSourceCommand",
     "SetPatternNodalLoadsCommand",
+    "SetProjectMetaCommand",
     "SetRestraintCommand",
     "SetSectionCutsCommand",
     "SetSpringCommand",

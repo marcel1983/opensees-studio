@@ -58,16 +58,32 @@ from opensees_studio.core.units import UnitSystem
 from opensees_studio.core.view_settings import ViewSettings
 
 
+class Revision(BaseModel):
+    """One row of the calculation report's revision table."""
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+    serialize_without_defaults = omit_when_default("date", "by", "description")
+
+    code: str = Field(min_length=1, description="Revision code, e.g. A or 01.")
+    date: str = ""
+    by: str = ""
+    description: str = ""
+
+
 class ProjectMeta(BaseModel):
     """Project-level metadata."""
 
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
     # A project that never changed its display system dumps exactly as before.
-    serialize_without_defaults = omit_when_default("display_units")
+    serialize_without_defaults = omit_when_default("display_units", "company", "date", "revisions")
 
     name: str = "Untitled"
     description: str = ""
     author: str = ""
+    company: str = ""
+    date: str = ""
+    """Free-text date of the calculation report's cover, e.g. 2026-11-05."""
+    revisions: list[Revision] = Field(default_factory=list)
     units: UnitSystem = UnitSystem.SI_M_N
     """The unit system the model is built in — the units of every value the
     engineer typed. Never rewritten by a display change."""

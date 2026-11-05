@@ -11,6 +11,12 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **Project information for the report cover.** File → Project Information
+  edits the project name, author, company, date, description and the revision
+  table (Rev, Date, By, Description). The values live in `Project.meta`, are
+  undone as one step, and the report cover prints the company, the report date
+  and the revisions.
+
 - **AISC 358-22 RBS connections: entity and prequalified geometry.** Projects
   can store `RbsConnection`s (beam, column, `a`, `b`, `c`); `core.design.
   connections` checks the Section 5.7 limits, computes

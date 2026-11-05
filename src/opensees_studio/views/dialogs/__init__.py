@@ -56,6 +56,7 @@ from opensees_studio.views.dialogs.path_time_series import PathTimeSeriesDialog
 from opensees_studio.views.dialogs.performance import PerformanceDialog
 from opensees_studio.views.dialogs.plain_pattern import PlainPatternDialog
 from opensees_studio.views.dialogs.point_element_load import AssignPointElementLoadDialog
+from opensees_studio.views.dialogs.project_info import ProjectInfoDialog
 from opensees_studio.views.dialogs.quick_grid_lines import QuickGridLinesDialog
 from opensees_studio.views.dialogs.replicate import ReplicateDialog
 from opensees_studio.views.dialogs.run_analysis import RunAnalysisDialog
@@ -117,6 +118,7 @@ __all__ = [
     "PathTimeSeriesDialog",
     "PerformanceDialog",
     "PlainPatternDialog",
+    "ProjectInfoDialog",
     "QuickGridLinesDialog",
     "ReplicateDialog",
     "RunAnalysisDialog",
