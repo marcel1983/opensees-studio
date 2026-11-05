@@ -21,10 +21,21 @@ of ANSI/AISC 341-22, Tables D1.1a and D1.1b, as published.
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from typing import Literal
+
+from opensees_studio.core.design.aisc360 import IShape
+from opensees_studio.core.design.aisc360_shapes import (
+    Channel,
+    EqualLegAngle,
+    RectHSS,
+    RoundHSS,
+    Tee,
+)
 
 Ductility = Literal["moderate", "high"]
 Method = Literal["LRFD", "ASD"]
+Role = Literal["brace", "beam", "column"]
 
 #: Tables D1.1a and D1.1b: (highly ductile, moderately ductile) coefficients.
 #: The simple cases are ``coefficient * sqrt(E / (Ry Fy))``.
@@ -137,3 +148,91 @@ def admissible(
 ) -> bool:
     """Whether an element ratio ``b/t`` (or ``h/tw``, ``D/t``) passes the case."""
     return ratio <= limit(case, e, ry, fy, ductility=ductility, ca_value=ca_value) + 1e-9
+
+
+#: Systems the layer knows, and the ductility their members are designed for.
+SYSTEM_DUCTILITY: dict[str, Ductility] = {
+    "SMF": "high",
+    "IMF": "moderate",
+    "SCBF": "high",
+    "OCBF": "moderate",
+}
+SEISMIC_SYSTEMS = ("none", "SMF", "IMF", "SCBF", "OCBF")
+
+
+def system_ductility(system: str) -> Ductility | None:
+    """The ductility class of a seismic system, or None for ``"none"``."""
+    if system == "none":
+        return None
+    try:
+        return SYSTEM_DUCTILITY[system]
+    except KeyError:
+        raise ValueError(f"Unknown seismic system {system!r}.") from None
+
+
+@dataclass(frozen=True)
+class ElementLimit:
+    """One compression element, its ratio and the D1.1 case it is checked with."""
+
+    element: str
+    case: int
+    ratio: float
+    limit: float
+
+    @property
+    def utilization(self) -> float:
+        """``ratio / limit``; the check reports it like any other ratio."""
+        return self.ratio / self.limit if self.limit > 0.0 else math.inf
+
+
+def member_limits(
+    shape: object,
+    *,
+    role: Role,
+    system: str,
+    e: float,
+    ry: float,
+    fy: float,
+    ca_value: float = 0.0,
+) -> list[ElementLimit]:
+    """The Table D1.1 checks of a shape for one member role and system.
+
+    Braces use Table D1.1a; beams and columns use Table D1.1b. Webs of I-shapes
+    and channels follow case 11 in moment frames (SMF, IMF) and case 13 in
+    braced frames (SCBF, OCBF). ``ca_value`` only enters those two cases.
+    """
+    ductility = system_ductility(system)
+    if ductility is None:
+        return []
+    if role not in ("brace", "beam", "column"):
+        raise ValueError(f"Unknown member role {role!r}.")
+    out: list[ElementLimit] = []
+
+    def add(element: str, case: int, ratio: float) -> None:
+        out.append(
+            ElementLimit(
+                element,
+                case,
+                ratio,
+                limit(case, e, ry, fy, ductility=ductility, ca_value=ca_value),
+            )
+        )
+
+    if isinstance(shape, IShape | Channel):
+        add("Flange", 7, shape.flange_ratio)
+        if role == "brace":
+            add("Web", 4, shape.web_ratio)
+        else:
+            add("Web", 11 if system in ("SMF", "IMF") else 13, shape.web_ratio)
+    elif isinstance(shape, Tee):
+        add("Flange", 7, shape.flange_ratio)
+        add("Stem", 7, shape.stem_ratio)
+    elif isinstance(shape, EqualLegAngle):
+        add("Leg", 7, shape.leg_ratio)
+    elif isinstance(shape, RectHSS):
+        case = 2 if role == "brace" else (13 if system in ("SCBF", "OCBF") else 12)
+        add("Wall B", case, shape.b_flat / shape.t)
+        add("Wall H", case, shape.h_flat / shape.t)
+    elif isinstance(shape, RoundHSS):
+        add("Wall", 3 if role == "brace" else 16, shape.D / shape.t)
+    return out

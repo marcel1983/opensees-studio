@@ -235,6 +235,8 @@ def _design_section(project: Project, results: Mapping[int, Any]) -> str:
                 ["Fu", fu],
                 ["Ratio limit", settings.ratio_limit],
                 ["P-δ (B1)", "on" if settings.p_delta else "off"],
+                ["Seismic system", settings.seismic_system],
+                ["Ry", settings.ry],
                 ["Load sets", ", ".join(load_set_label(project, ls) for ls in load_sets) or "—"],
             ],
         ),

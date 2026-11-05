@@ -126,6 +126,18 @@ class SteelDesignDialog(FittedDialog):
             "Pe1 is taken on 0.8 τb EI."
         )
         form.addRow("", self._p_delta)
+        self._seismic = QComboBox()
+        self._seismic.addItems(["none", "SMF", "IMF", "SCBF", "OCBF"])
+        self._seismic.setToolTip(
+            "AISC 341-22 system: adds the Table D1.1 width-to-thickness check for "
+            "the ductility class of its members (SMF/SCBF highly ductile, IMF/OCBF "
+            "moderately ductile)."
+        )
+        form.addRow("Seismic system:", self._seismic)
+        self._ry = FloatField()
+        self._ry.setRange(0.1, 3.0)
+        self._ry.setToolTip("Ry: expected yield stress over the specified one (AISC 341).")
+        form.addRow("Ry:", self._ry)
         top.addLayout(form)
 
         self._load_sets = QListWidget()
@@ -212,6 +224,8 @@ class SteelDesignDialog(FittedDialog):
         self._fu.setValue(settings.fu if settings.fu is not None else default_fu(units))
         self._limit.setValue(settings.ratio_limit)
         self._p_delta.setChecked(settings.p_delta)
+        self._seismic.setCurrentText(settings.seismic_system)
+        self._ry.setValue(settings.ry)
         chosen = {
             (s.source, s.ref_id) for s in (settings.load_sets or default_load_sets(self._project))
         }
@@ -284,6 +298,8 @@ class SteelDesignDialog(FittedDialog):
                 "fu": None if abs(fu - default_fu(units)) <= 1e-9 * fu else fu,
                 "ratio_limit": self._limit.value(),
                 "p_delta": self._p_delta.isChecked(),
+                "seismic_system": self._seismic.currentText(),
+                "ry": self._ry.value(),
                 "load_sets": [] if same_as_default else chosen,
                 "members": members,
             }

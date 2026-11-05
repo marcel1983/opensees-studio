@@ -11,6 +11,8 @@ from opensees_studio.core.design.aisc341 import (
     alpha_s,
     ca,
     limit,
+    member_limits,
+    system_ductility,
 )
 
 E, RY, FY = 29000.0, 1.1, 50.0
@@ -106,3 +108,67 @@ def test_unknown_cases_and_ductility_are_refused() -> None:
         limit(19, E, RY, FY)
     with pytest.raises(ValueError, match="ductility"):
         limit(7, E, RY, FY, ductility="low")  # type: ignore[arg-type]
+
+
+def _shape(name: str):  # type: ignore[no-untyped-def]
+    from opensees_studio.core import UnitSystem
+    from opensees_studio.services.steel_design import shape_in_units
+
+    return shape_in_units(name, UnitSystem.US_IN_KIP)
+
+
+def test_every_system_maps_to_its_ductility_class() -> None:
+    assert system_ductility("SMF") == "high"
+    assert system_ductility("SCBF") == "high"
+    assert system_ductility("IMF") == "moderate"
+    assert system_ductility("OCBF") == "moderate"
+    assert system_ductility("none") is None
+    with pytest.raises(ValueError, match="Unknown seismic system"):
+        system_ductility("X")
+
+
+def test_an_i_beam_checks_its_flange_and_moment_frame_web() -> None:
+    hits = member_limits(_shape("W14X99"), role="beam", system="SMF", e=E, ry=RY, fy=FY)
+    assert [(h.element, h.case) for h in hits] == [("Flange", 7), ("Web", 11)]
+    assert hits[0].ratio == pytest.approx(14.6 / (2 * 0.78), rel=1e-6)
+    assert hits[1].limit == pytest.approx(2.5 * ROOT)
+
+
+def test_the_same_i_shape_in_a_brace_uses_table_d1_1a_for_the_web() -> None:
+    hits = member_limits(_shape("W14X99"), role="brace", system="SCBF", e=E, ry=RY, fy=FY)
+    assert [(h.element, h.case) for h in hits] == [("Flange", 7), ("Web", 4)]
+    assert hits[1].limit == pytest.approx(1.49 * ROOT)
+
+
+def test_a_braced_frame_column_uses_case_13_with_ca() -> None:
+    hits = member_limits(
+        _shape("W14X99"),
+        role="column",
+        system="SCBF",
+        e=E,
+        ry=RY,
+        fy=FY,
+        ca_value=0.5,
+    )
+    assert [h.case for h in hits] == [7, 13]
+    assert hits[1].limit == pytest.approx(2.26 * (1 - 0.38 * 0.5) * ROOT)
+
+
+def test_hss_and_pipe_use_their_own_cases() -> None:
+    rect = member_limits(_shape("HSS8X8X1/2"), role="brace", system="SCBF", e=E, ry=RY, fy=FY)
+    assert [h.case for h in rect] == [2, 2]
+    rect_column = member_limits(
+        _shape("HSS8X8X1/2"), role="column", system="SMF", e=E, ry=RY, fy=FY
+    )
+    assert [h.case for h in rect_column] == [12, 12]
+    pipe = member_limits(_shape("Pipe10STD"), role="column", system="IMF", e=E, ry=RY, fy=FY)
+    assert [h.case for h in pipe] == [16]
+
+
+def test_no_system_means_no_seismic_checks() -> None:
+    assert member_limits(_shape("W14X99"), role="beam", system="none", e=E, ry=RY, fy=FY) == []
+
+
+def test_utilization_is_ratio_over_limit() -> None:
+    hits = member_limits(_shape("W14X99"), role="beam", system="SMF", e=E, ry=RY, fy=FY)
+    assert hits[0].utilization == pytest.approx(hits[0].ratio / hits[0].limit)
