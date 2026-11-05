@@ -11,6 +11,12 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **AISC 341-22 E3.4a strong-column/weak-beam engine.** `core.design.aisc341`
+  now evaluates E3-1, E3-2 and E3-3: `M*pc = Zc(Fyc − αs Pr/Ag)`,
+  `M*be = Mpr + αs Mv` with `Mpr = Cpr Ry Fy Zb` (AISC 358), the
+  `ΣM*pc/ΣM*be > 1.0` ratio, and the E3.4a exception
+  (`αs Prc < 0.3 Pyc`, one-story/top story or the 20%/33% shear shares).
+  The joint-level wiring comes in the next increment.
 - **AISC 341-22 width-to-thickness engine (Tables D1.1a and D1.1b).**
   `core.design.aisc341` encodes the 18 cases of the seismic provisions,
   including the `Ca = Pr/(αs Ry Fy Ag)` ratio (`αs` = 1.0 LRFD, 1.5 ASD), the
