@@ -329,7 +329,9 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   from the moment diagram and per-member K, Lb, Cb, net area and shear-lag
   overrides; failing members can be selected in the model, and Design →
   Display Steel Ratios on Model paints every member by its ratio (blue to red,
-  grey when not designed). The report prints the check. Design → Storey
+  grey when not designed). The report prints the check. Design → Generate
+  Notional Loads (DAM) writes the AISC 360 C2-1 `0.002 α Yi` pattern (α = 1.0
+  LRFD, 1.6 ASD) for the Direct Analysis Method. Design → Storey
   Drift Check compares amplified storey drifts with ASCE 7, NCh433 or Eurocode 8
   limits. The settings are saved with the project.
 - **Export** — the model, with or without one analysis case, as a plain

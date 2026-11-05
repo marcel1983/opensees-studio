@@ -94,7 +94,9 @@ script o un notebook de Jupyter: la interfaz es una forma de usarlo, no la únic
   lateral-torsional (F2, F3, F4, F5, F6, F7, F8, F9, F10), corte
   (G2 a G6) e interacción H1, sobre las combinaciones ya corridas; Design → Display Steel Ratios on Model
   pinta cada miembro según su razón D/C, y el reporte de cálculo imprime la
-  verificación. Design → Storey Drift Check compara las
+  verificación. Design → Generate Notional Loads (DAM) genera el patrón
+  `0.002 α Yi` de AISC 360 C2-1 (α = 1,0 LRFD y 1,6 ASD) para el Direct Analysis
+  Method. Design → Storey Drift Check compara las
   derivas de piso con ASCE 7, NCh433 o Eurocódigo 8.
 - **Importar y exportar**: dibujos DXF, modelos de
   [PORTICO](https://github.com/jpreyes/portico-core) (`.s3d`, escalados a las
