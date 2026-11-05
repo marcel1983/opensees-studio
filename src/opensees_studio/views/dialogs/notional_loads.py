@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any
 
 from PySide6.QtWidgets import (
-    QCheckBox,
     QComboBox,
     QDialogButtonBox,
     QFormLayout,
@@ -15,7 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from opensees_studio.core.design.stability import (
-    NOTIONAL_FACTOR,
+    notional_factor,
     storey_notional_loads,
 )
 from opensees_studio.core.help import TOPIC_PROPERTY
@@ -24,9 +23,9 @@ from opensees_studio.views.screen_fit import FittedDialog
 
 
 class NotionalLoadsDialog(FittedDialog):
-    """Choose the direction and factor of the AISC 360 C2.2b notional loads."""
+    """Choose the direction, method and factor of the AISC 360 C2-1 notional loads."""
 
-    def __init__(self, project: Any, parent: QWidget | None = None) -> None:
+    def __init__(self, project: Any, parent: QWidget | None = None, method: str = "LRFD") -> None:
         super().__init__(parent)
         self._project = project
         self.setWindowTitle("Generate Notional Loads (DAM)")
@@ -34,14 +33,19 @@ class NotionalLoadsDialog(FittedDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(
             QLabel(
-                "AISC 360-16 C2.2b: a lateral force of <b>0.002 Yi</b> at every storey, "
-                "where Yi is the storey gravity load (0.003 Yi for a gravity-only "
-                "combination). Add the generated patterns to the cases of the Direct "
+                "AISC 360 C2-1: a lateral force of <b>Ni = 0.002 α Yi</b> at every "
+                "storey, where Yi is the storey gravity load and α is 1.0 in LRFD and "
+                "1.6 in ASD. Add the generated patterns to the cases of the Direct "
                 "Analysis Method; the stiffness reduction τb is a separate property "
                 "modifier."
             )
         )
         form = QFormLayout()
+        self._method = QComboBox()
+        self._method.addItem("LRFD (α = 1.0)", "LRFD")
+        self._method.addItem("ASD (α = 1.6)", "ASD")
+        self._method.setCurrentIndex(1 if method.strip().upper() == "ASD" else 0)
+        form.addRow("Design method:", self._method)
         self._direction = QComboBox()
         self._direction.addItem("X", 0)
         if project.ndm == 3:
@@ -50,10 +54,8 @@ class NotionalLoadsDialog(FittedDialog):
         form.addRow("Direction:", self._direction)
         self._factor = FloatField()
         self._factor.setRange(1e-9, 1.0)
-        self._factor.setValue(NOTIONAL_FACTOR)
+        self._factor.setValue(notional_factor(method=method))
         form.addRow("Factor:", self._factor)
-        self._gravity = QCheckBox("Gravity-only combination (0.003 Yi)")
-        form.addRow("", self._gravity)
         layout.addLayout(form)
         self._summary = QLabel()
         self._summary.setWordWrap(True)
@@ -64,14 +66,23 @@ class NotionalLoadsDialog(FittedDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+        self._method.currentIndexChanged.connect(self._reset_factor)
         self._factor.valueChanged.connect(self._update_summary)
-        self._gravity.toggled.connect(self._update_summary)
         self._direction.currentIndexChanged.connect(self._update_summary)
+        self._update_summary()
+
+    def _reset_factor(self) -> None:
+        """Follow the method's α until the user types a different factor."""
+        self._factor.setValue(notional_factor(method=self.method()))
         self._update_summary()
 
     def _directions(self) -> list[int]:
         value = self._direction.currentData()
         return [0, 1] if value == "both" else [int(value)]
+
+    def method(self) -> str:
+        """``"LRFD"`` or ``"ASD"``."""
+        return str(self._method.currentData())
 
     def _update_summary(self) -> None:
         lines: list[str] = []
@@ -79,7 +90,7 @@ class NotionalLoadsDialog(FittedDialog):
             levels = storey_notional_loads(
                 self._project,
                 factor=self._factor.value(),
-                gravity_only=self._gravity.isChecked(),
+                method=self.method(),
                 direction=direction,
             )
             total = sum(level.force for level in levels)
@@ -90,6 +101,6 @@ class NotionalLoadsDialog(FittedDialog):
             )
         self._summary.setText("\n".join(lines) if lines else "No storey carries gravity load.")
 
-    def settings(self) -> tuple[list[int], float, bool]:
-        """``(directions, factor, gravity_only)`` as the dialog shows them."""
-        return self._directions(), self._factor.value(), self._gravity.isChecked()
+    def settings(self) -> tuple[list[int], float, str]:
+        """``(directions, factor, method)`` as the dialog shows them."""
+        return self._directions(), self._factor.value(), self.method()

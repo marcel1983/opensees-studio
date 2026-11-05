@@ -2572,14 +2572,15 @@ class MainWindow(QMainWindow):
         dialog.exec()
 
     def _on_notional_loads(self) -> None:
-        """Design → Generate Notional Loads: AISC 360 C2.2b patterns, one undo step."""
+        """Design → Generate Notional Loads: AISC 360 C2-1 patterns, one undo step."""
         project = self._vm.project
         if project is None:
             return
-        dialog = NotionalLoadsDialog(project, self)
+        method = project.design.method if project.design is not None else "LRFD"
+        dialog = NotionalLoadsDialog(project, self, method=method)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
-        directions, factor, gravity_only = dialog.settings()
+        directions, factor, method = dialog.settings()
         series: LinearTimeSeries | None = None
         if project.time_series:
             time_series_id = project.time_series[0].id
@@ -2594,7 +2595,7 @@ class MainWindow(QMainWindow):
                 pattern_id=next_id,
                 time_series_id=time_series_id,
                 factor=factor,
-                gravity_only=gravity_only,
+                method=method,
                 direction=direction,
             )
             next_id += 1

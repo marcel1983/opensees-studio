@@ -15,9 +15,11 @@ from opensees_studio.core import (
     UnitSystem,
 )
 from opensees_studio.core.design.stability import (
-    GRAVITY_ONLY_FACTOR,
-    NOTIONAL_FACTOR,
+    ALPHA_ASD,
+    ALPHA_LRFD,
+    NOTIONAL_FRACTION,
     gravity_weight_per_node,
+    notional_alpha,
     notional_factor,
     notional_loads,
     notional_pattern,
@@ -65,9 +67,19 @@ def test_tau_b_follows_the_two_branches() -> None:
     assert tau_b(10.0, 0.0) == pytest.approx(1.0)
 
 
-def test_notional_factor_is_the_aisc_pair() -> None:
-    assert notional_factor() == NOTIONAL_FACTOR
-    assert notional_factor(gravity_only=True) == GRAVITY_ONLY_FACTOR
+def test_tau_b_scales_the_service_force_by_alpha_in_asd() -> None:
+    # C2-2 uses alpha Pr / Pns: 40 kN in ASD counts as 1.6 x 40 = 64 kN.
+    assert tau_b(40.0, 100.0, alpha=ALPHA_LRFD) == pytest.approx(1.0)
+    assert tau_b(40.0, 100.0, alpha=ALPHA_ASD) == pytest.approx(4.0 * 0.64 * (1.0 - 0.64))
+
+
+def test_notional_factor_is_0_002_alpha() -> None:
+    assert notional_alpha("LRFD") == ALPHA_LRFD
+    assert notional_alpha("ASD") == ALPHA_ASD
+    assert notional_factor() == pytest.approx(NOTIONAL_FRACTION)
+    assert notional_factor(method="ASD") == pytest.approx(NOTIONAL_FRACTION * 1.6)
+    with pytest.raises(ValueError, match="LRFD"):
+        notional_alpha("WSD")
 
 
 def test_gravity_weight_comes_from_the_dead_pattern() -> None:
@@ -88,10 +100,13 @@ def test_notional_loads_are_0_002_of_each_storey_weight() -> None:
     assert all(load.forces[0] > 0.0 for load in loads)
 
 
-def test_gravity_only_uses_the_larger_factor() -> None:
+def test_asd_uses_1_6_times_the_lrfd_notional_load() -> None:
     project = _two_storey()
-    loads = notional_loads(project, gravity_only=True)
-    assert sum(load.forces[0] for load in loads) == pytest.approx(GRAVITY_ONLY_FACTOR * 20.0)
+    lrfd = notional_loads(project)
+    asd = notional_loads(project, method="ASD")
+    assert sum(load.forces[0] for load in asd) == pytest.approx(
+        1.6 * sum(load.forces[0] for load in lrfd)
+    )
 
 
 def test_a_notional_pattern_is_a_plain_pattern() -> None:

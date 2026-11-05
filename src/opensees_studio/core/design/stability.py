@@ -3,9 +3,9 @@
 The Direct Analysis Method needs two things a plain second-order analysis does
 not provide by itself:
 
-* **notional loads** - a lateral force of ``0.002 Yi`` at every storey, where
-  ``Yi`` is the gravity load on that storey (``0.003 Yi`` for a combination of
-  gravity loads only, AISC 360-16 C2.2b);
+* **notional loads** - a lateral force of ``Ni = 0.002 alpha Yi`` at every
+  storey, where ``Yi`` is the gravity load on that storey and ``alpha`` is 1.0
+  in LRFD and 1.6 in ASD (AISC 360-16 C2-1, C2.2b);
 * **stiffness reduction** - ``tau_b`` on the flexural stiffness of members whose
   required axial strength exceeds half their yield strength (C2.3).
 
@@ -50,31 +50,45 @@ from opensees_studio.core.units import gravity
 if TYPE_CHECKING:
     from opensees_studio.core.project import Project
 
-#: AISC 360-16 C2.2b: notional load as a fraction of the storey gravity load.
-NOTIONAL_FACTOR = 0.002
-#: C2.2b: the larger fraction for a combination of gravity loads only.
-GRAVITY_ONLY_FACTOR = 0.003
+#: AISC 360-16 C2-1: notional load as a fraction of the storey gravity load.
+NOTIONAL_FRACTION = 0.002
+#: C2-1: ``alpha`` for LRFD load combinations.
+ALPHA_LRFD = 1.0
+#: C2-1: ``alpha`` for ASD load combinations (1.6 times the service gravity).
+ALPHA_ASD = 1.6
 
 
-def tau_b(pr: float, py: float) -> float:
+def notional_alpha(method: str) -> float:
+    """C2-1 ``alpha`` for a design method: 1.0 in LRFD, 1.6 in ASD."""
+    name = method.strip().upper()
+    if name == "LRFD":
+        return ALPHA_LRFD
+    if name == "ASD":
+        return ALPHA_ASD
+    raise ValueError(f"Unknown design method {method!r}: use 'LRFD' or 'ASD'.")
+
+
+def tau_b(pr: float, py: float, *, alpha: float = ALPHA_LRFD) -> float:
     """C2.3 stiffness reduction factor for a member with axial force ``pr``.
 
-    ``tau_b = 1.0`` while ``Pr / Py <= 0.5``; above that it is
-    ``4 (Pr/Py) (1 - Pr/Py)``. The caller applies it to the member's flexural
-    stiffness (and, for a beam-column, may also apply it to the axial one as
-    the Direct Analysis Method permits).
+    ``tau_b = 1.0`` while ``alpha Pr / Py <= 0.5``; above that it is
+    ``4 (alpha Pr/Py) (1 - alpha Pr/Py)``. ``alpha`` is 1.0 in LRFD and 1.6 in
+    ASD (C2-1), because ``pr`` is the service axial force there. The caller
+    applies ``tau_b`` to the member's flexural stiffness (and, for a
+    beam-column, may also apply it to the axial one as the Direct Analysis
+    Method permits).
     """
     if py <= 0.0:
         return 1.0
-    ratio = max(0.0, pr) / py
+    ratio = alpha * max(0.0, pr) / py
     if ratio <= 0.5:
         return 1.0
     return max(0.0, min(1.0, 4.0 * ratio * (1.0 - ratio)))
 
 
-def notional_factor(*, gravity_only: bool = False) -> float:
-    """The C2.2b notional-load fraction."""
-    return GRAVITY_ONLY_FACTOR if gravity_only else NOTIONAL_FACTOR
+def notional_factor(*, method: str = "LRFD") -> float:
+    """The C2.2b notional-load fraction for a design method, ``0.002 alpha``."""
+    return NOTIONAL_FRACTION * notional_alpha(method)
 
 
 def gravity_weight_per_node(project: Project) -> dict[int, float]:
@@ -147,20 +161,21 @@ def storey_notional_loads(
     project: Project,
     *,
     factor: float | None = None,
-    gravity_only: bool = False,
+    method: str = "LRFD",
     direction: int = 0,
 ) -> list[StoreyNotional]:
     """The notional load of every storey, with the nodal loads that carry it.
 
-    ``direction`` is the global lateral axis (0 = X, 1 = Y; a 2D model has only
-    X). Each storey's force is shared between its joints in proportion to their
-    gravity weight, or equally when the weights are not available.
+    ``factor`` overrides the C2-1 value ``0.002 alpha`` (``method`` chooses
+    ``alpha``: 1.0 in LRFD, 1.6 in ASD). ``direction`` is the global lateral
+    axis (0 = X, 1 = Y; a 2D model has only X). Each storey's force is shared
+    between its joints in proportion to their gravity weight.
     """
     if direction not in (0, 1):
         raise ValueError("A notional load acts along X (0) or Y (1).")
     if project.ndm == 2 and direction != 0:
         raise ValueError("A 2D model has only the global X direction.")
-    fraction = notional_factor(gravity_only=gravity_only) if factor is None else factor
+    fraction = notional_factor(method=method) if factor is None else factor
     if fraction <= 0.0:
         raise ValueError("The notional-load factor must be positive.")
 
@@ -196,14 +211,14 @@ def notional_loads(
     project: Project,
     *,
     factor: float | None = None,
-    gravity_only: bool = False,
+    method: str = "LRFD",
     direction: int = 0,
 ) -> list[NodalLoad]:
     """Every nodal load of the notional pattern, flattened."""
     return [
         load
         for storey in storey_notional_loads(
-            project, factor=factor, gravity_only=gravity_only, direction=direction
+            project, factor=factor, method=method, direction=direction
         )
         for load in storey.loads
     ]
@@ -216,7 +231,7 @@ def notional_pattern(
     time_series_id: int,
     name: str | None = None,
     factor: float | None = None,
-    gravity_only: bool = False,
+    method: str = "LRFD",
     direction: int = 0,
 ) -> PlainLoadPattern:
     """A Plain pattern holding the notional loads of one direction."""
@@ -225,7 +240,5 @@ def notional_pattern(
         id=pattern_id,
         name=name or f"NOTIONAL {axis}",
         time_series_id=time_series_id,
-        nodal_loads=notional_loads(
-            project, factor=factor, gravity_only=gravity_only, direction=direction
-        ),
+        nodal_loads=notional_loads(project, factor=factor, method=method, direction=direction),
     )

@@ -116,6 +116,22 @@ def test_notional_loads_action_adds_and_undoes_in_one_step(qtbot, monkeypatch) -
 
 
 @pytest.mark.gui
+def test_the_notional_dialog_follows_alpha(qtbot) -> None:  # type: ignore[no-untyped-def]
+    from examples.building_3storey_diaphragm import build_building
+
+    from opensees_studio.views.dialogs.notional_loads import NotionalLoadsDialog
+
+    project = build_building()
+    dialog = NotionalLoadsDialog(project, method="ASD")
+    qtbot.addWidget(dialog)
+    assert dialog.method() == "ASD"
+    assert dialog.settings()[1] == pytest.approx(0.0032)
+    dialog._method.setCurrentIndex(0)
+    assert dialog.method() == "LRFD"
+    assert dialog.settings()[1] == pytest.approx(0.002)
+
+
+@pytest.mark.gui
 def test_cases_without_results_are_marked(qtbot) -> None:  # type: ignore[no-untyped-def]
     project = _beam_project()
     dialog = SteelDesignDialog(project, {})

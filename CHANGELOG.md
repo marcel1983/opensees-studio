@@ -21,11 +21,12 @@ refused instead of silently downgraded).
   with its own axial force, moments and shears, so the H1 interaction uses
   forces that act at the same place; the report and the table also show the
   governing station.
-- **AISC 360-16 Chapter C: notional loads for the Direct Analysis Method.**
-  Design → Generate Notional Loads writes the 0.002 Yi pattern (0.003 Yi for
-  gravity-only combinations) from the storey gravity weights, for X, Y or both,
-  as one undoable step. `core.design.stability.tau_b` gives the C2.3 stiffness
-  reduction factor. The action does not run the analysis by itself.
+- **AISC 360 Chapter C: notional loads for the Direct Analysis Method.**
+  Design → Generate Notional Loads writes the C2-1 pattern `Ni = 0.002 α Yi`
+  (α = 1.0 LRFD, 1.6 ASD) from the storey gravity weights, for X, Y or both, as
+  one undoable step. `core.design.stability.tau_b` gives the C2-3 stiffness
+  reduction factor, with the same α. The action does not run the analysis by
+  itself.
 
 ## [0.0.38] - 2026-11-03
 
