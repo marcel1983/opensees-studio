@@ -383,3 +383,12 @@ def test_smf_joints_get_the_strong_column_weak_beam_ratio() -> None:
     assert all(joint.panel_status in ("OK", "NG") for joint in report.joints)
     assert all(joint.status in ("OK", "NG") for joint in report.joints)
     assert "joint(s) checked" in report.summary()
+
+
+def test_the_member_result_carries_the_limit_state_records() -> None:
+    project = _beam()
+    member = steel_frame_check(project, _results(project)).members[0]
+    assert member.checks
+    names = {check.name for check in member.checks}
+    assert "Major flexure" in names and "P-M interaction" in names
+    assert all(check.capacity >= 0.0 for check in member.checks)

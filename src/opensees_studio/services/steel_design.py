@@ -73,6 +73,7 @@ from opensees_studio.core.design.aisc360_shapes import (
     RoundHSS,
     Tee,
 )
+from opensees_studio.core.design.calc import LimitStateCheck
 from opensees_studio.core.design.settings import DesignLoadSet, DesignSettings
 from opensees_studio.core.geometry.elements import FRAME_ELEMENT_CLASSES
 from opensees_studio.core.sections import ElasticSection
@@ -407,6 +408,7 @@ class MemberResult:
     """Fraction of the member length where the governing check was evaluated."""
     ratios: dict[str, float] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
+    checks: list[LimitStateCheck] = field(default_factory=list)
 
 
 @dataclass
@@ -657,6 +659,7 @@ def steel_frame_check(
         result.load_set = label
         result.station = station
         result.ratios = max_ratios
+        result.checks = list(check.checks)
         result.notes.extend(dict.fromkeys(check.notes))
         result.status = "NG" if ratio > settings.ratio_limit else "OK"
     if settings.seismic_system == "SMF":
