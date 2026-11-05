@@ -534,7 +534,7 @@ def steel_frame_check(
             # the check takes tension positive. Evaluate every station with the
             # axial force, moments and shears of that same station, so the H1
             # interaction is not built from maxima at different places.
-            for k, station in enumerate(_GRID):
+            for k, station_value in enumerate(_GRID):
                 demand = Demand(
                     axial=-float(values["N"][k]),
                     moment_major=float(values[m_major][k]) if m_major else 0.0,
@@ -568,7 +568,7 @@ def steel_frame_check(
                 for name, value in check.ratios.items():
                     max_ratios[name] = max(max_ratios.get(name, 0.0), value)
                 if worst is None or ratio > worst[0]:
-                    worst = (ratio, check, label, float(station))
+                    worst = (ratio, check, label, float(station_value))
         assert worst is not None
         ratio, check, label, station = worst
         key = check.governing[0]
