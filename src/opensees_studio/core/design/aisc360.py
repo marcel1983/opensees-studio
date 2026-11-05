@@ -156,6 +156,11 @@ class Strength:
     available: float
     equation: str
     notes: tuple[str, ...] = ()
+    steps: tuple[CalcStep, ...] = ()
+
+
+def _step(label: str, formula: str, substitution: str, value: float) -> CalcStep:
+    return CalcStep(label, formula, substitution, value)
 
 
 def _available(nominal: float, kind: str, method: Method) -> float:
@@ -225,6 +230,11 @@ def tension(
     known to a line model. Without them the result is D2-1 only and says so.
     """
     candidates: list[tuple[float, str]] = [(steel.Fy * shape.A, "D2-1 yielding")]
+    steps: dict[str, tuple[CalcStep, ...]] = {
+        "D2-1 yielding": (
+            _step("D2-1 yielding", "Pn = Fy Ag", f"{steel.Fy:g} x {shape.A:g}", steel.Fy * shape.A),
+        )
+    }
     notes: list[str] = []
     if net_area is None:
         notes.append("Tensile rupture (D2-2) needs the net area and is not checked.")
@@ -237,6 +247,12 @@ def tension(
             raise ValueError("shear_lag must be in (0, 1]")
         effective = shear_lag * net_area
         candidates.append((steel.Fu * effective, "D2-2 rupture"))
+        steps["D2-2 rupture"] = (
+            _step("Effective net area", "Ae = U An", f"{shear_lag:g} x {net_area:g}", effective),
+            _step(
+                "D2-2 rupture", "Pn = Fu Ae", f"{steel.Fu:g} x {effective:g}", steel.Fu * effective
+            ),
+        )
         notes.append(f"D2-2 with Ae = U An = {effective:.6g}.")
     nominal, equation = min(candidates)
     return Strength(
@@ -246,6 +262,7 @@ def tension(
         ),
         equation,
         tuple(notes),
+        steps[equation],
     )
 
 
@@ -327,7 +344,30 @@ def compression(
         else:
             notes.append("Slender element(s), fully effective at the buckling stress (E7).")
     nominal = fcr * area
-    return Strength(nominal, _available(nominal, "compression", method), equation, tuple(notes))
+    steps = [
+        _step(
+            "Elastic buckling",
+            "Fe = pi^2 E / (KL/r)^2",
+            f"{which}: {fe:.6g}",
+            fe,
+        ),
+        _step(
+            "Critical stress",
+            "Fcr = 0.658^(Fy/Fe) Fy" if fy / fe <= 2.25 else "Fcr = 0.877 Fe",
+            f"{fcr:.6g}",
+            fcr,
+        ),
+    ]
+    if area != shape.A:
+        steps.insert(1, _step("Effective area", "Ae from E7", f"{area:.6g}", area))
+    steps.append(_step("Nominal strength", "Pn = Fcr Ae", f"{fcr:.6g} x {area:.6g}", nominal))
+    return Strength(
+        nominal,
+        _available(nominal, "compression", method),
+        equation,
+        tuple(notes),
+        tuple(steps),
+    )
 
 
 # ──────────────────────────── flexure ────────────────────────────
@@ -501,6 +541,9 @@ def flexure_major(
     if classes.web_class == "slender":
         return _flexure_major_f5(shape, steel, method, unbraced=unbraced, cb=cb, classes=classes)
     mp = fy * shape.Zx
+    steps: dict[str, tuple[CalcStep, ...]] = {
+        "F2-1 yielding": (_step("F2-1 yielding", "Mp = Fy Zx", f"{fy:g} x {shape.Zx:g}", mp),)
+    }
     notes: list[str] = []
     candidates: list[tuple[float, str]] = [(mp, "F2-1 yielding")]
     lp, lr = lp_lr(shape, steel)
@@ -508,29 +551,65 @@ def flexure_major(
         if unbraced <= lr:
             mn = cb * (mp - (mp - 0.7 * fy * shape.Sx) * (unbraced - lp) / (lr - lp))
             candidates.append((min(mn, mp), "F2-2 inelastic LTB"))
+            steps["F2-2 inelastic LTB"] = (
+                _step("Lp", "Lp = 1.76 ry sqrt(E/Fy)", f"{lp:.6g}", lp),
+                _step("Lr", "Lr from F2-6", f"{lr:.6g}", lr),
+                _step(
+                    "F2-2 inelastic LTB",
+                    "Mn = Cb [Mp - (Mp - 0.7 Fy Sx)(Lb - Lp)/(Lr - Lp)]",
+                    f"Cb={cb:.4g}, Lb={unbraced:.6g}",
+                    mn,
+                ),
+            )
         else:
             jc = shape.J * shape.c / (shape.Sx * shape.ho)
             ratio = unbraced / shape.rts
             fcr = cb * math.pi**2 * e / ratio**2 * math.sqrt(1.0 + 0.078 * jc * ratio**2)
             candidates.append((min(fcr * shape.Sx, mp), "F2-3 elastic LTB"))
+            steps["F2-3 elastic LTB"] = (
+                _step("Lp", "Lp = 1.76 ry sqrt(E/Fy)", f"{lp:.6g}", lp),
+                _step("Lr", "Lr from F2-6", f"{lr:.6g}", lr),
+                _step("Fcr", "Fcr from F2-4", f"{fcr:.6g}", fcr),
+                _step(
+                    "F2-3 elastic LTB",
+                    "Mn = Fcr Sx <= Mp",
+                    f"{fcr:.6g} x {shape.Sx:g}",
+                    fcr * shape.Sx,
+                ),
+            )
     if classes.flange_class == "noncompact":
         mn = mp - (mp - 0.7 * fy * shape.Sx) * (
             (classes.flange - classes.flange_compact)
             / (classes.flange_noncompact - classes.flange_compact)
         )
         candidates.append((mn, "F3-1 flange local buckling"))
+        steps["F3-1 flange local buckling"] = (
+            _step("F3-1", "Mn by flange slenderness interpolation", f"{mn:.6g}", mn),
+        )
     elif classes.flange_class == "slender":
         kc = min(max(4.0 / math.sqrt(classes.web), 0.35), 0.76)
         mn = 0.9 * e * kc * shape.Sx / classes.flange**2
         candidates.append((mn, "F3-2 flange local buckling"))
+        steps["F3-2 flange local buckling"] = (
+            _step("F3-2", "Mn = 0.9 E kc Sx / (b/t)^2", f"{mn:.6g}", mn),
+        )
     nominal, equation = min(candidates)
-    return Strength(nominal, _available(nominal, "flexure", method), equation, tuple(notes))
+    return Strength(
+        nominal,
+        _available(nominal, "flexure", method),
+        equation,
+        tuple(notes),
+        steps[equation],
+    )
 
 
 def flexure_minor(shape: IShape, steel: Steel, method: Method) -> Strength:
     """F6: yielding and flange local buckling about the minor axis."""
     e, fy = steel.E, steel.Fy
     mp = min(fy * shape.Zy, 1.6 * fy * shape.Sy)
+    steps: dict[str, tuple[CalcStep, ...]] = {
+        "F6-1 yielding": (_step("F6-1 yielding", "Mn = min(Fy Zy, 1.6 Fy Sy)", f"{mp:.6g}", mp),)
+    }
     classes = slenderness(shape, steel)
     candidates: list[tuple[float, str]] = [(mp, "F6-1 yielding")]
     if classes.flange_class == "noncompact":
@@ -539,11 +618,23 @@ def flexure_minor(shape: IShape, steel: Steel, method: Method) -> Strength:
             / (classes.flange_noncompact - classes.flange_compact)
         )
         candidates.append((mn, "F6-2 flange local buckling"))
+        steps["F6-2 flange local buckling"] = (
+            _step("F6-2", "Mn by flange slenderness interpolation", f"{mn:.6g}", mn),
+        )
     elif classes.flange_class == "slender":
         fcr = 0.69 * e / classes.flange**2
         candidates.append((fcr * shape.Sy, "F6-3 flange local buckling"))
+        steps["F6-3 flange local buckling"] = (
+            _step("F6-3", "Mn = 0.69 E Sy / (b/t)^2", f"{fcr * shape.Sy:.6g}", fcr * shape.Sy),
+        )
     nominal, equation = min(candidates)
-    return Strength(nominal, _available(nominal, "flexure", method), equation)
+    return Strength(
+        nominal,
+        _available(nominal, "flexure", method),
+        equation,
+        (),
+        steps[equation],
+    )
 
 
 # ──────────────────────────── shear ────────────────────────────
@@ -554,12 +645,32 @@ def shear_major(shape: IShape, steel: Steel, method: Method) -> Strength:
     aw = shape.d * shape.tw
     if ratio <= 2.24 * math.sqrt(e / fy):
         nominal = 0.6 * fy * aw
-        return Strength(nominal, _available(nominal, "shear_rolled", method), "G2-1 (Cv1 = 1)")
+        return Strength(
+            nominal,
+            _available(nominal, "shear_rolled", method),
+            "G2-1 (Cv1 = 1)",
+            (),
+            (
+                _step("Web area", "Aw = d tw", f"{shape.d:g} x {shape.tw:g}", aw),
+                _step("G2-1", "Vn = 0.6 Fy Aw Cv1 (Cv1 = 1)", f"{nominal:.6g}", nominal),
+            ),
+        )
     kv = 5.34  # webs without transverse stiffeners
     limit = 1.10 * math.sqrt(kv * e / fy)
     cv1 = 1.0 if ratio <= limit else limit / ratio
     nominal = 0.6 * fy * aw * cv1
-    return Strength(nominal, _available(nominal, "shear", method), f"G2-1 (Cv1 = {cv1:.3f})")
+    return Strength(
+        nominal,
+        _available(nominal, "shear", method),
+        f"G2-1 (Cv1 = {cv1:.3f})",
+        (),
+        (
+            _step("Web area", "Aw = d tw", f"{shape.d:g} x {shape.tw:g}", aw),
+            _step("Slenderness", "h/tw", f"{ratio:.6g}", ratio),
+            _step("Shear coefficient", "Cv1 from G2-3/G2-4", f"{cv1:.6g}", cv1),
+            _step("G2-1", "Vn = 0.6 Fy Aw Cv1", f"{nominal:.6g}", nominal),
+        ),
+    )
 
 
 def shear_minor(shape: IShape, steel: Steel, method: Method) -> Strength:
@@ -575,7 +686,23 @@ def shear_minor(shape: IShape, steel: Steel, method: Method) -> Strength:
     else:
         cv2 = 1.51 * kv * e / (ratio**2 * fy)
     nominal = 0.6 * fy * (2.0 * shape.bf * shape.tf) * cv2
-    return Strength(nominal, _available(nominal, "shear", method), f"G6-1 (Cv2 = {cv2:.3f})")
+    return Strength(
+        nominal,
+        _available(nominal, "shear", method),
+        f"G6-1 (Cv2 = {cv2:.3f})",
+        (),
+        (
+            _step(
+                "Flange area",
+                "Aw = 2 bf tf",
+                f"{2.0 * shape.bf * shape.tf:.6g}",
+                2.0 * shape.bf * shape.tf,
+            ),
+            _step("Slenderness", "bf/2tf", f"{ratio:.6g}", ratio),
+            _step("Shear coefficient", "Cv2 from G6-2 to G6-4", f"{cv2:.6g}", cv2),
+            _step("G6-1", "Vn = 0.6 Fy Aw Cv2", f"{nominal:.6g}", nominal),
+        ),
+    )
 
 
 # ──────────────────────────── interaction ────────────────────────────
@@ -689,23 +816,27 @@ def _record(check: MemberCheck, name: str, strength: Strength, demand: float) ->
     """Keep one limit state with its nominal and available strengths."""
     capacity = strength.available
     ratio = abs(demand) / capacity if capacity > 0.0 else math.inf
-    steps = (
-        CalcStep(
-            "Nominal strength",
-            strength.equation,
-            f"{strength.nominal:.6g}",
-            strength.nominal,
-        ),
+    steps = list(strength.steps)
+    if not steps:
+        steps.append(
+            CalcStep(
+                "Nominal strength",
+                strength.equation,
+                f"{strength.nominal:.6g}",
+                strength.nominal,
+            )
+        )
+    steps.append(
         CalcStep(
             "Available strength",
             "phi Rn (LRFD) / Rn / Omega (ASD)",
             f"{capacity:.6g}",
             capacity,
-        ),
+        )
     )
     check.checks.append(
         LimitStateCheck(
-            name, strength.equation, abs(demand), capacity, ratio, steps, strength.notes
+            name, strength.equation, abs(demand), capacity, ratio, tuple(steps), strength.notes
         )
     )
 
@@ -812,6 +943,10 @@ def check_member(
     )
     check.ratios["P-M interaction"] = ratio
     check.equations["P-M interaction"] = equation
+    p = abs(demand.axial) / axial.available if axial.available > 0 else math.inf
+    m = (abs(mrx) / major.available if major.available > 0 else 0.0) + (
+        abs(mry) / minor.available if minor.available > 0 else 0.0
+    )
     check.checks.append(
         LimitStateCheck(
             "P-M interaction",
@@ -819,7 +954,11 @@ def check_member(
             ratio,
             1.0,
             ratio,
-            (CalcStep("Interaction", equation, f"{ratio:.6g}", ratio),),
+            (
+                _step("Axial ratio", "p = Pr / Pc", f"{p:.6g}", p),
+                _step("Moment ratio", "m = Mrx/Mcx + Mry/Mcy", f"{m:.6g}", m),
+                _step("Interaction", equation, f"{ratio:.6g}", ratio),
+            ),
         )
     )
     for strength, name, value in (
