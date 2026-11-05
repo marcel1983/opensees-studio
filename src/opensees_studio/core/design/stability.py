@@ -172,10 +172,7 @@ def storey_notional_loads(
         if total <= 0.0:
             continue
         force = fraction * total
-        if total > 0.0:
-            load_shares = [force * share / total for share in shares]
-        else:
-            load_shares = [force / len(shares)] * len(shares)
+        load_shares = [force * share / total for share in shares]
         loads: list[NodalLoad] = []
         for nid, share in zip(node_ids, load_shares, strict=True):
             if share == 0.0:
