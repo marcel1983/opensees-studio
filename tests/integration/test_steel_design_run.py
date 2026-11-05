@@ -323,3 +323,61 @@ def test_the_seismic_system_adds_the_aisc_341_checks() -> None:
     # A horizontal beam: flange case 7 and moment-frame web case 11.
     assert seismic.ratios["AISC 341 Flange (case 7)"] > 0.0
     assert "AISC 341 Web (case 11)" in seismic.ratios
+
+
+def _portal() -> Project:
+    """A one-bay, one-storey steel portal frame in the X-Z plane."""
+    column = shape_to_elastic_section(
+        get_shape("W14X99"),
+        elastic_modulus=E,
+        shear_modulus=G,
+        units=KIP_IN,
+        ndm=2,
+        section_id=1,
+    )
+    beam = shape_to_elastic_section(
+        get_shape("W18X50"),
+        elastic_modulus=E,
+        shear_modulus=G,
+        units=KIP_IN,
+        ndm=2,
+        section_id=2,
+    )
+    return Project(
+        meta=ProjectMeta(units=KIP_IN),
+        ndm=2,
+        ndf=3,
+        nodes=[
+            Node(id=1, coords=(0.0, 0.0, 0.0), restraint=(True,) * 6),
+            Node(id=2, coords=(0.0, 0.0, 144.0)),
+            Node(id=3, coords=(240.0, 0.0, 144.0)),
+            Node(id=4, coords=(240.0, 0.0, 0.0), restraint=(True,) * 6),
+        ],
+        sections=[column, beam],
+        elements=[
+            ElasticBeamColumn(id=1, nodes=(1, 2), section_id=1),
+            ElasticBeamColumn(id=2, nodes=(2, 3), section_id=2),
+            ElasticBeamColumn(id=3, nodes=(4, 3), section_id=1),
+        ],
+        time_series=[LinearTimeSeries(id=1)],
+        load_patterns=[
+            PlainLoadPattern(
+                id=1,
+                time_series_id=1,
+                nodal_loads=[
+                    NodalLoad(node_id=2, forces=(20.0, 0.0, 0.0, 0.0, 0.0, 0.0)),
+                    NodalLoad(node_id=3, forces=(0.0, 0.0, -100.0, 0.0, 0.0, 0.0)),
+                ],
+            )
+        ],
+        analyses=[StaticCase(id=1, name="P", pattern_ids=[1])],
+    )
+
+
+def test_smf_joints_get_the_strong_column_weak_beam_ratio() -> None:
+    project = _portal()
+    report = steel_frame_check(project, _results(project), DesignSettings(seismic_system="SMF"))
+    assert {joint.node_id for joint in report.joints} == {2, 3}
+    assert all(joint.ratio > 0.0 for joint in report.joints)
+    assert all(joint.status in ("OK", "NG") for joint in report.joints)
+    assert "joint(s) checked" in report.summary()

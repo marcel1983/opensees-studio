@@ -1530,6 +1530,10 @@ cantilever**: F1-1 assumes both ends braced.
   stress `Ry Fy` of the limits and of `Ca = Pr/(αs Ry Fy Ag)`, with `αs` 1.0
   LRFD / 1.5 ASD. This checks Section D1.1 only: the system rules of Chapters
   E to H (capacity design, protected zones, connections) are not part of it.
+  With **SMF**, each beam-to-column joint of a 2D frame is also checked for
+  E3.4a: the report shows `ΣM*pc/ΣM*be`, which must be greater than 1.0, with
+  `Pr` and the beam shear from each load set and `Mpr = Cpr Ry Fy Zb`. The
+  E3.4a exception for light top-story columns is not applied (conservative).
 
 Results: one row per member with its governing ratio, the check and equation
 that govern and the load set that produced them; **Select failing members**

@@ -279,6 +279,18 @@ def _design_section(project: Project, results: Mapping[int, Any]) -> str:
     skipped = len(report.members) - len(designed)
     if skipped:
         out.append(f"<p class='note'>{skipped} frame member(s) not designed.</p>")
+    if report.joints:
+        joint_rows = [
+            [j.node_id, j.ratio, j.status, j.load_set, j.columns, j.beams]
+            for j in sorted(report.joints, key=lambda j: j.ratio)
+        ]
+        out.append("<h3>Strong-column/weak-beam (AISC 341-22 E3.4a)</h3>")
+        out.append(
+            _table(
+                ["Joint", "Sum M*pc / Sum M*be", "Status", "Load set", "Columns", "Beams"],
+                joint_rows,
+            )
+        )
 
     drift_rows: list[list[Any]] = []
     for result in sorted(results.values(), key=lambda r: getattr(r, "case_id", 0)):

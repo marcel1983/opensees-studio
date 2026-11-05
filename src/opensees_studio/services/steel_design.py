@@ -40,7 +40,14 @@ import numpy as np
 
 from opensees_studio.core.aisc import SOURCE_UNITS, get_shape, load_shapes
 from opensees_studio.core.analysis import ResponseSpectrumCase, StaticCase
-from opensees_studio.core.design.aisc341 import Role, ca, member_limits
+from opensees_studio.core.design.aisc341 import (
+    JointBeam,
+    JointColumn,
+    Role,
+    ca,
+    joint_scwb,
+    member_limits,
+)
 from opensees_studio.core.design.aisc360 import (
     I_SHAPE_FAMILIES,
     Demand,
@@ -401,8 +408,22 @@ class MemberResult:
 
 
 @dataclass
+class JointResult:
+    """The E3.4a outcome of one beam-to-column joint."""
+
+    node_id: int
+    ratio: float = 0.0
+    """``sum M*pc / sum M*be``; E3-1 requires more than 1.0."""
+    load_set: str = ""
+    status: str = "not checked"
+    columns: int = 0
+    beams: int = 0
+
+
+@dataclass
 class DesignReport:
     members: list[MemberResult] = field(default_factory=list)
+    joints: list[JointResult] = field(default_factory=list)
     load_sets: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
 
@@ -419,6 +440,9 @@ class DesignReport:
         )
         if worst is not None:
             text += f"; largest ratio {worst.ratio:.3f} (element {worst.element_id})"
+        if self.joints:
+            below = [j for j in self.joints if j.status == "NG"]
+            text += f"; {len(self.joints)} joint(s) checked, {len(below)} below 1.0"
         return text + "."
 
 
@@ -624,6 +648,16 @@ def steel_frame_check(
         result.ratios = max_ratios
         result.notes.extend(dict.fromkeys(check.notes))
         result.status = "NG" if ratio > settings.ratio_limit else "OK"
+    if settings.seismic_system == "SMF":
+        report.joints = _strong_column_weak_beam(
+            project,
+            fields,
+            alternatives,
+            settings,
+            units,
+            fy=fy,
+            fu=fu,
+        )
     return report
 
 
@@ -695,3 +729,113 @@ def storey_drift_check(
             )
         )
     return report
+
+
+def _joint_station(element: Any, node_id: int) -> int:
+    """The station of ``element`` at ``node_id``: 0 at its first node, else the end."""
+    return 0 if element.nodes[0] == node_id else STATIONS - 1
+
+
+def _ishape_members(
+    project: Any, settings: DesignSettings, units: Any
+) -> dict[int, tuple[IShape, str, float, float]]:
+    """Element id -> (I-shape, role, length, depth) for the E3.4a joints."""
+    sections = {s.id: s for s in project.sections}
+    coords = {n.id: np.asarray(n.coords, dtype=float) for n in project.nodes}
+    out: dict[int, tuple[IShape, str, float, float]] = {}
+    for element in project.elements:
+        if not isinstance(element, FRAME_ELEMENT_CLASSES):
+            continue
+        overrides = settings.member(element.id)
+        section = sections.get(getattr(element, "section_id", -1))
+        name = overrides.shape or (getattr(section, "name", "") or "")
+        try:
+            shape = shape_in_units(name, units)
+        except (KeyError, ValueError):
+            continue
+        if not isinstance(shape, IShape):
+            continue
+        length = float(np.linalg.norm(coords[element.nodes[1]] - coords[element.nodes[0]]))
+        out[element.id] = (shape, _member_role(project, element), length, shape.d)
+    return out
+
+
+def _strong_column_weak_beam(
+    project: Any,
+    fields: dict[int, Field],
+    alternatives: list[tuple[str, Alternative]],
+    settings: DesignSettings,
+    units: Any,
+    *,
+    fy: float,
+    fu: float,
+) -> list[JointResult]:
+    """E3.4a at every joint of a 2D frame, over the load sets with results.
+
+    The smallest E3-1 ratio over the load sets is reported. The E3.4a
+    exception for light columns in one-story or top-story buildings is not
+    applied: every joint is checked, which is conservative.
+    """
+    if project.ndm != 2 or settings.seismic_system != "SMF" or not alternatives:
+        return []
+    members = _ishape_members(project, settings, units)
+    out: list[JointResult] = []
+    for node in project.nodes:
+        incident = [
+            element
+            for element in project.elements
+            if isinstance(element, FRAME_ELEMENT_CLASSES) and node.id in element.nodes
+        ]
+        columns = [
+            element
+            for element in incident
+            if members.get(element.id, (None, "", 0, 0))[1] == "column"
+        ]
+        beams = [
+            element
+            for element in incident
+            if members.get(element.id, (None, "", 0, 0))[1] == "beam"
+        ]
+        if not columns or not beams:
+            continue
+        result = JointResult(node_id=node.id, columns=len(columns), beams=len(beams))
+        for label, alt in alternatives:
+            joint_columns = []
+            for element in columns:
+                shape, _, _, depth = members[element.id]
+                pr = 0.0
+                for cid, factor in alt.items():
+                    values = fields.get(cid, {}).get("N", {}).get(element.id)
+                    if values is not None:
+                        pr += factor * float(values[_joint_station(element, node.id)])
+                joint_columns.append(JointColumn(shape.Zx, fy, shape.A, max(0.0, pr), depth))
+            joint_beams = []
+            for element in beams:
+                shape, _, length, _ = members[element.id]
+                shear = 0.0
+                for cid, factor in alt.items():
+                    values = fields.get(cid, {}).get("V2", {}).get(element.id)
+                    if values is not None:
+                        shear += factor * float(values[_joint_station(element, node.id)])
+                joint_beams.append(JointBeam(shape.Zx, fy, length, abs(shear)))
+            pair = joint_scwb(
+                joint_columns,
+                joint_beams,
+                ry=settings.ry,
+                fu=fu,
+                method=settings.method,
+            )
+            if pair is None:
+                continue
+            mpc, mbe = pair
+            if mbe <= 0.0:
+                continue
+            ratio = mpc / mbe
+            if result.ratio <= 0.0 or ratio < result.ratio:
+                result.ratio = ratio
+                result.load_set = label
+        if result.ratio <= 0.0:
+            continue
+        result.status = "OK" if result.ratio > 1.0 else "NG"
+        out.append(result)
+    return out

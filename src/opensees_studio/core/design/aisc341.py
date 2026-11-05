@@ -21,6 +21,7 @@ of ANSI/AISC 341-22, Tables D1.1a and D1.1b, as published.
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
 
@@ -302,3 +303,51 @@ def scwb_exempt(
     light = alpha_s(method) * max(0.0, prc) < 0.3 * pyc
     small_share = story_shear_share < 0.20 and line_shear_share < 0.33
     return light and (one_story_or_top or small_share)
+
+
+@dataclass(frozen=True)
+class JointColumn:
+    """One column above or below a joint, for E3-1."""
+
+    zc: float
+    fyc: float
+    ag: float
+    pr: float
+    depth: float
+
+
+@dataclass(frozen=True)
+class JointBeam:
+    """One beam framing into the joint, for E3-1."""
+
+    zb: float
+    fyb: float
+    length: float
+    shear: float
+
+
+def joint_scwb(
+    columns: Sequence[JointColumn],
+    beams: Sequence[JointBeam],
+    *,
+    ry: float,
+    fu: float | None = None,
+    method: Method = "LRFD",
+) -> tuple[float, float] | None:
+    """E3-1 at one joint: ``(M*pc sum, M*be sum)``, or None when no beam frames in.
+
+    The beam shear at the plastic hinge is the larger of the mechanism value
+    ``2 Mpr / L`` and the shear from the analysis. ``Mv`` projects that shear
+    from the face of the column to its centerline (``dc / 2``), the standard
+    connection assumption when no RBS geometry is modelled.
+    """
+    if not beams or not columns:
+        return None
+    mpc = sum(mpc_star(c.zc, c.fyc, c.pr, c.ag, method=method) for c in columns)
+    dc = max(c.depth for c in columns)
+    mbe = 0.0
+    for beam in beams:
+        probable = mpr(ry, beam.fyb, beam.zb, fu=fu)
+        vp = max(2.0 * probable / beam.length, abs(beam.shear))
+        mbe += mbe_star(probable, vp * dc / 2.0, method=method)
+    return mpc, mbe
