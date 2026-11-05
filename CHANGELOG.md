@@ -9,6 +9,16 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Added
+
+- **AISC 341-22 width-to-thickness engine (Tables D1.1a and D1.1b).**
+  `core.design.aisc341` encodes the 18 cases of the seismic provisions,
+  including the `Ca = Pr/(αs Ry Fy Ag)` ratio (`αs` = 1.0 LRFD, 1.5 ASD), the
+  new case 11 for moment-frame webs and the two-branch case 13 for braced
+  frames with its 1.56 floor. It is the classification engine the steel check
+  will consume; this entry adds the engine and its tests, not yet the check
+  wiring.
+
 ## [0.0.39] - 2026-11-05
 
 ### Added
