@@ -10,8 +10,14 @@ from opensees_studio.core.design.aisc341 import (
     admissible,
     alpha_s,
     ca,
+    cpr,
     limit,
+    mbe_star,
     member_limits,
+    mpc_star,
+    mpr,
+    scwb_exempt,
+    scwb_ratio,
     system_ductility,
 )
 
@@ -172,3 +178,41 @@ def test_no_system_means_no_seismic_checks() -> None:
 def test_utilization_is_ratio_over_limit() -> None:
     hits = member_limits(_shape("W14X99"), role="beam", system="SMF", e=E, ry=RY, fy=FY)
     assert hits[0].utilization == pytest.approx(hits[0].ratio / hits[0].limit)
+
+
+def test_cpr_and_mpr_follow_aisc_358() -> None:
+    assert cpr(50.0, 65.0) == pytest.approx(1.15)
+    assert cpr(50.0, 100.0) == pytest.approx(1.2)
+    assert cpr(50.0, None) == pytest.approx(1.2)
+    assert mpr(1.1, 50.0, 100.0, fu=65.0) == pytest.approx(1.15 * 1.1 * 50.0 * 100.0)
+    with pytest.raises(ValueError, match="positive"):
+        mpr(0.0, 50.0, 100.0)
+
+
+def test_mpc_star_reduces_the_column_for_axial_force() -> None:
+    # Zc (Fyc - alpha_s Pr / Ag)
+    assert mpc_star(100.0, 50.0, 500.0, 20.0) == pytest.approx(2500.0)
+    assert mpc_star(100.0, 50.0, 500.0, 20.0, method="ASD") == pytest.approx(1250.0)
+    # A column at its yield force contributes nothing.
+    assert mpc_star(100.0, 50.0, 2000.0, 20.0) == 0.0
+    with pytest.raises(ValueError, match="Ag"):
+        mpc_star(100.0, 50.0, 500.0, 0.0)
+
+
+def test_mbe_star_adds_the_amplified_shear_moment() -> None:
+    assert mbe_star(6000.0, 200.0) == pytest.approx(6200.0)
+    assert mbe_star(6000.0, 200.0, method="ASD") == pytest.approx(6300.0)
+
+
+def test_scwb_ratio_and_the_beamless_case() -> None:
+    assert scwb_ratio(5000.0, 4000.0) == pytest.approx(1.25)
+    assert scwb_ratio(5000.0, 0.0) == pytest.approx(math.inf)
+
+
+def test_scwb_exception_needs_a_light_column_and_a_listed_case() -> None:
+    pyc = 50.0 * 20.0
+    assert scwb_exempt(100.0, pyc, one_story_or_top=True)
+    assert not scwb_exempt(400.0, pyc, one_story_or_top=True)
+    assert scwb_exempt(100.0, pyc, story_shear_share=0.10, line_shear_share=0.20)
+    assert not scwb_exempt(100.0, pyc, story_shear_share=0.25, line_shear_share=0.20)
+    assert not scwb_exempt(100.0, pyc)

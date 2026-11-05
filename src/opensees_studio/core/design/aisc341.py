@@ -236,3 +236,69 @@ def member_limits(
     elif isinstance(shape, RoundHSS):
         add("Wall", 3 if role == "brace" else 16, shape.D / shape.t)
     return out
+
+
+# ─────────────────────── SMF E3.4a: strong-column/weak-beam ───────────────────────
+def cpr(fy: float, fu: float | None = None) -> float:
+    """AISC 358: ``Cpr = (Fy + Fu)/(2 Fy) <= 1.2``; 1.2 without ``Fu``."""
+    if fu is None or fy <= 0.0:
+        return 1.2
+    return min(1.2, (fy + fu) / (2.0 * fy))
+
+
+def mpr(ry: float, fy: float, zb: float, *, fu: float | None = None) -> float:
+    """Maximum probable moment at the plastic hinge, ``Cpr Ry Fy Zb``."""
+    if ry <= 0.0 or fy <= 0.0 or zb <= 0.0:
+        raise ValueError("Ry, Fy and Zb must be positive for Mpr.")
+    return cpr(fy, fu) * ry * fy * zb
+
+
+def mpc_star(
+    zc: float,
+    fyc: float,
+    pr: float,
+    ag: float,
+    *,
+    method: Method = "LRFD",
+) -> float:
+    """E3-2: a column's nominal flexural strength reduced for axial force.
+
+    ``M*pc = Zc (Fyc - alpha_s Pr / Ag)``; a column whose axial force exceeds
+    its yield force contributes no flexural strength (the expression is
+    clamped at zero).
+    """
+    if ag <= 0.0:
+        raise ValueError("Ag must be positive for M*pc.")
+    return zc * max(0.0, fyc - alpha_s(method) * max(0.0, pr) / ag)
+
+
+def mbe_star(mpr_value: float, mv: float = 0.0, *, method: Method = "LRFD") -> float:
+    """E3-3: ``M*be = Mpr + alpha_s Mv`` for one beam at the joint."""
+    return mpr_value + alpha_s(method) * max(0.0, mv)
+
+
+def scwb_ratio(mpc_sum: float, mbe_sum: float) -> float:
+    """E3-1: ``sum M*pc / sum M*be``; infinite when the beams contribute none."""
+    if mbe_sum <= 0.0:
+        return math.inf
+    return mpc_sum / mbe_sum
+
+
+def scwb_exempt(
+    prc: float,
+    pyc: float,
+    *,
+    method: Method = "LRFD",
+    one_story_or_top: bool = False,
+    story_shear_share: float = 1.0,
+    line_shear_share: float = 1.0,
+) -> bool:
+    """The E3.4a exception: light columns, in the cases the provisions allow.
+
+    ``alpha_s Prc < 0.3 Pyc`` and either the column is in a one-story building
+    or the top story, or its available shear is a small share of the story and
+    of its column line (20% and 33%).
+    """
+    light = alpha_s(method) * max(0.0, prc) < 0.3 * pyc
+    small_share = story_shear_share < 0.20 and line_shear_share < 0.33
+    return light and (one_story_or_top or small_share)
