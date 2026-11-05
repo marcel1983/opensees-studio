@@ -273,6 +273,7 @@ def test_d2_2_tension_rupture_governs_when_ae_is_small() -> None:
     assert strength.equation == "D2-2 rupture"
     assert strength.nominal == pytest.approx(65.0 * 18.0)
     assert strength.available == pytest.approx(0.75 * 65.0 * 18.0)
+    assert [step.label for step in strength.steps] == ["Effective net area", "D2-2 rupture"]
     assert tension(shape, A992, "ASD", net_area=20.0, shear_lag=0.9).available == pytest.approx(
         65.0 * 18.0 / 2.0
     )
@@ -389,6 +390,14 @@ def test_check_member_keeps_a_structured_calculation_record() -> None:
     assert compression.capacity == pytest.approx(
         shape.compression(A992, "LRFD", length_x=14 * FT, length_y=14 * FT).available
     )
-    assert compression.steps[0].label == "Nominal strength"
-    assert compression.steps[1].value == pytest.approx(compression.capacity)
+    assert compression.steps[-2].label == "Nominal strength"
+    assert compression.steps[-1].label == "Available strength"
+    assert compression.steps[-1].value == pytest.approx(compression.capacity)
     assert compression.ratio == pytest.approx(400.0 / compression.capacity)
+    labels = [step.label for step in compression.steps]
+    assert "Elastic buckling" in labels and "Critical stress" in labels
+    flexure = next(c for c in check.checks if c.name == "Major flexure")
+    flexure_labels = [step.label for step in flexure.steps]
+    assert "Lp" in flexure_labels and "Lr" in flexure_labels
+    shear = next(c for c in check.checks if c.name == "Major shear")
+    assert "Web area" in [step.label for step in shear.steps]
