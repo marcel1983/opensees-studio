@@ -43,6 +43,11 @@ _LABELS: dict[Language, dict[str, str]] = {
         "gusset": "Gusset",
         "brace": "Brace",
         "expected": "Ry Fy Ag",
+        "capacity_design": "SCBF capacity design (AISC 341-22 F2.3)",
+        "state": "State",
+        "analysis_force": "Analysis force",
+        "expected_strength": "Expected strength",
+        "factor": "Factor",
         "connection": "Connection",
         "beam": "Beam",
         "column": "Column",
@@ -99,6 +104,11 @@ _LABELS: dict[Language, dict[str, str]] = {
         "gusset": "Plancha",
         "brace": "Arriostramiento",
         "expected": "Ry Fy Ag",
+        "capacity_design": "Diseño por capacidad SCBF (AISC 341-22 F2.3)",
+        "state": "Estado",
+        "analysis_force": "Fuerza de análisis",
+        "expected_strength": "Resistencia esperada",
+        "factor": "Factor",
         "connection": "Conexión",
         "beam": "Viga",
         "column": "Columna",
@@ -275,6 +285,21 @@ def _gusset_rows(report: Any) -> list[list[str]]:
     ]
 
 
+def _capacity_rows(report: Any) -> list[list[str]]:
+    return [
+        [
+            item.load_set,
+            str(item.brace_element_id),
+            item.shape,
+            item.state,
+            _fmt(item.analysis_force),
+            _fmt(item.expected_force),
+            _fmt(item.factor),
+        ]
+        for item in report.capacity_design
+    ]
+
+
 def _member_html(project: Any, member: Any, labels: dict[str, str]) -> list[str]:
     shape = _member_shape(project, member.shape)
     out = [
@@ -407,6 +432,20 @@ def _html(project: Any, report: Any, labels: dict[str, str]) -> str:
             )
             + "</table>"
         )
+    capacity_html = ""
+    if report.capacity_design:
+        capacity_html = (
+            f"<h2>{labels['capacity_design']}</h2><table><tr>"
+            f"<th>{labels['load_set']}</th><th>{labels['brace']}</th>"
+            f"<th>{labels['shape']}</th><th>{labels['state']}</th>"
+            f"<th>{labels['analysis_force']}</th><th>{labels['expected_strength']}</th>"
+            f"<th>{labels['factor']}</th></tr>"
+            + "".join(
+                "<tr>" + "".join(f"<td>{_e(cell)}</td>" for cell in row) + "</tr>"
+                for row in _capacity_rows(report)
+            )
+            + "</table>"
+        )
     members = []
     for member in sorted(report.members, key=lambda item: item.element_id):
         members.extend(_member_html(project, member, labels))
@@ -429,6 +468,7 @@ def _html(project: Any, report: Any, labels: dict[str, str]) -> str:
         + connections_html
         + zones_html
         + gussets_html
+        + capacity_html
         + "".join(members)
         + f"<p class='note'>{_e(labels['disclaimer'])}</p></body></html>"
     )
@@ -497,6 +537,17 @@ def _markdown(project: Any, report: Any, labels: dict[str, str]) -> str:
             "|---|---|---|---|---|---|---|---|---|---|",
         ]
         lines += ["| " + " | ".join(row) + " |" for row in _gusset_rows(report)]
+    if report.capacity_design:
+        lines += [
+            "",
+            f"## {labels['capacity_design']}",
+            "",
+            f"| {labels['load_set']} | {labels['brace']} | {labels['shape']} | "
+            f"{labels['state']} | {labels['analysis_force']} | "
+            f"{labels['expected_strength']} | {labels['factor']} |",
+            "|---|---|---|---|---|---|---|",
+        ]
+        lines += ["| " + " | ".join(row) + " |" for row in _capacity_rows(report)]
     for member in sorted(report.members, key=lambda item: item.element_id):
         lines += [
             "",
@@ -676,6 +727,22 @@ def _latex(project: Any, report: Any, labels: dict[str, str]) -> str:
             " & ".join(_tex_escape(cell) for cell in row) + r" \\" for row in _gusset_rows(report)
         ]
         lines.append(r"\end{longtable}")
+    if report.capacity_design:
+        lines += [
+            rf"\subsection*{{{_tex_escape(labels['capacity_design'])}}}",
+            r"\begin{longtable}{lllllll}",
+        ]
+        lines.append(
+            rf"{_tex_escape(labels['load_set'])} & {_tex_escape(labels['brace'])} & "
+            rf"{_tex_escape(labels['shape'])} & {_tex_escape(labels['state'])} & "
+            rf"{_tex_escape(labels['analysis_force'])} & "
+            rf"{_tex_escape(labels['expected_strength'])} & "
+            rf"{_tex_escape(labels['factor'])} \\ \toprule"
+        )
+        lines += [
+            " & ".join(_tex_escape(cell) for cell in row) + r" \\" for row in _capacity_rows(report)
+        ]
+        lines.append(r"\end{longtable}")
     for member in sorted(report.members, key=lambda item: item.element_id):
         lines += [
             "",
@@ -839,6 +906,30 @@ def odt_bytes(project: Any, report: Any, *, language: Language = "en") -> bytes:
             labels["status"],
         ]
         for row in [header, *_gusset_rows(report)]:
+            body.append(
+                "<table:table-row>"
+                + "".join(
+                    f"<table:table-cell><text:p>{_odt_text(c)}</text:p></table:table-cell>"
+                    for c in row
+                )
+                + "</table:table-row>"
+            )
+        body.append("</table:table>")
+    if report.capacity_design:
+        body.append(
+            f"<text:h text:outline-level='2'>{_odt_text(labels['capacity_design'])}</text:h>"
+        )
+        body.append("<table:table table:name='Capacity'>")
+        header = [
+            labels["load_set"],
+            labels["brace"],
+            labels["shape"],
+            labels["state"],
+            labels["analysis_force"],
+            labels["expected_strength"],
+            labels["factor"],
+        ]
+        for row in [header, *_capacity_rows(report)]:
             body.append(
                 "<table:table-row>"
                 + "".join(

@@ -25,7 +25,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
 
-from opensees_studio.core.design.aisc360 import IShape
+from opensees_studio.core.design.aisc360 import IShape, Steel, SteelShape
 from opensees_studio.core.design.aisc360_shapes import (
     Channel,
     EqualLegAngle,
@@ -150,6 +150,55 @@ def admissible(
 ) -> bool:
     """Whether an element ratio ``b/t`` (or ``h/tw``, ``D/t``) passes the case."""
     return ratio <= limit(case, e, ry, fy, ductility=ductility, ca_value=ca_value) + 1e-9
+
+
+# ─────────────────── SCBF F2.3: expected brace strengths ───────────────────
+@dataclass(frozen=True)
+class BraceStrength:
+    """The expected strength of one brace in tension and in compression."""
+
+    tension: float
+    """``Ry Fy Ag`` (AISC 341-22 F2.3)."""
+    compression: float
+    """The lesser of ``Ry Fy Ag`` and ``(1/0.877) Fne Ag``."""
+    post_buckling: float
+    """``0.3`` times the expected compression strength (F2.3(b))."""
+
+
+def expected_brace_strength(
+    shape: SteelShape,
+    steel: Steel,
+    *,
+    ry: float,
+    length_x: float,
+    length_y: float,
+    k_x: float = 1.0,
+    k_y: float = 1.0,
+    method: Method = "LRFD",
+) -> BraceStrength:
+    """F2.3: expected brace strengths from the expected yield stress ``Ry Fy``.
+
+    Tension is ``Ry Fy Ag``. Compression is the lesser of that and
+    ``(1/0.877) Fne Ag``, where ``Fne`` is the nominal compressive stress of
+    AISC 360 Chapter E with ``Ry Fy`` in place of ``Fy``. The nominal strength
+    returned by the shape already includes the E7 effective area when the
+    section is slender; using it directly is conservative. The post-buckling
+    strength is ``0.3`` times the compression one.
+    """
+    if ry <= 0.0 or steel.Fy <= 0.0 or shape.A <= 0.0:
+        raise ValueError("Ry, Fy and Ag must be positive for the expected brace strength.")
+    expected_steel = Steel(Fy=ry * steel.Fy, E=steel.E, G=steel.G, Fu=steel.Fu)
+    tension = ry * steel.Fy * shape.A
+    nominal = shape.compression(
+        expected_steel,
+        method,
+        length_x=length_x,
+        length_y=length_y,
+        k_x=k_x,
+        k_y=k_y,
+    ).nominal
+    compression = min(tension, nominal / 0.877)
+    return BraceStrength(tension, compression, 0.3 * compression)
 
 
 #: Systems the layer knows, and the ductility their members are designed for.

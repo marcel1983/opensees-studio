@@ -512,3 +512,27 @@ def test_a_gusset_is_checked_against_the_expected_brace_force() -> None:
         "Gusset buckling",
     ]
     assert gusset.status in ("OK", "NG")
+
+
+def test_scbf_capacity_design_scales_the_seismic_terms() -> None:
+    project = _portal()
+    project.elements.append(ElasticBeamColumn(id=5, nodes=(1, 3), section_id=2))
+    project.analyses[0].name = "EQ"
+    report = steel_frame_check(project, _results(project), DesignSettings(seismic_system="SCBF"))
+    assert len(report.capacity_design) == 1
+    record = report.capacity_design[0]
+    assert record.brace_element_id == 5
+    assert record.state == "tension"
+    assert record.analysis_force < 0.0
+    assert record.expected_force == pytest.approx(1.1 * 50.0 * 14.7)
+    assert record.factor == pytest.approx(record.expected_force / abs(record.analysis_force))
+    beam = next(member for member in report.members if member.element_id == 2)
+    assert beam.capacity_ratio > 0.0
+    capacity_ratios = {
+        key: value for key, value in beam.ratios.items() if key.startswith("SCBF capacity ")
+    }
+    assert capacity_ratios
+    assert beam.capacity_ratio == pytest.approx(max(capacity_ratios.values()))
+
+    plain = steel_frame_check(project, _results(project), DesignSettings())
+    assert plain.capacity_design == []

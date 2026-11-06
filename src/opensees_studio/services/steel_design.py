@@ -32,7 +32,7 @@ from __future__ import annotations
 import itertools
 import math
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import lru_cache
 from typing import Any
 
@@ -40,6 +40,7 @@ import numpy as np
 
 from opensees_studio.core.aisc import SOURCE_UNITS, get_shape, load_shapes
 from opensees_studio.core.analysis import ResponseSpectrumCase, StaticCase
+from opensees_studio.core.combinations import guess_load_role
 from opensees_studio.core.design.aisc341 import (
     JointBeam,
     JointColumn,
@@ -47,6 +48,7 @@ from opensees_studio.core.design.aisc341 import (
     ca,
     continuity_plate_thickness,
     continuity_tlim,
+    expected_brace_strength,
     joint_scwb,
     member_limits,
     panel_zone_demand,
@@ -419,6 +421,8 @@ class MemberResult:
     ratios: dict[str, float] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
     checks: list[LimitStateCheck] = field(default_factory=list)
+    capacity_ratio: float = 0.0
+    """Worst ratio of the SCBF capacity-design alternative (AISC 341-22 F2.3)."""
 
 
 @dataclass
@@ -501,12 +505,33 @@ class GussetResult:
 
 
 @dataclass
+class CapacityDesign:
+    """One load set's SCBF capacity-design amplification (AISC 341-22 F2.3)."""
+
+    load_set: str
+    brace_element_id: int
+    shape: str = ""
+    state: str = ""
+    """``tension`` or ``compression`` of the governing brace."""
+    analysis_force: float = 0.0
+    """Brace force from the seismic terms of the load set."""
+    expected_force: float = 0.0
+    """Expected brace strength for that state (F2.3)."""
+    factor: float = 1.0
+    """``max(1, expected / analysis)`` applied to the seismic terms."""
+    skipped: list[int] = field(default_factory=list)
+    """Braces with no seismic force, left out of the factor."""
+    notes: list[str] = field(default_factory=list)
+
+
+@dataclass
 class DesignReport:
     members: list[MemberResult] = field(default_factory=list)
     joints: list[JointResult] = field(default_factory=list)
     connections: list[ConnectionResult] = field(default_factory=list)
     protected_zones: list[ProtectedZone] = field(default_factory=list)
     gussets: list[GussetResult] = field(default_factory=list)
+    capacity_design: list[CapacityDesign] = field(default_factory=list)
     load_sets: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
 
@@ -572,6 +597,136 @@ def _member_role(project: Any, element: Any) -> Role:
     return "brace"
 
 
+def _case_role(case: Any) -> str | None:
+    """The load role a case name suggests (``EX`` → ``E``)."""
+    return guess_load_role(getattr(case, "name", "") or "")
+
+
+def _capacity_alternatives(
+    project: Any,
+    fields: Mapping[int, Field],
+    alternatives: list[tuple[str, Alternative]],
+    settings: DesignSettings,
+    units: Any,
+    *,
+    fy: float,
+    fu: float,
+) -> tuple[list[tuple[str, Alternative]], list[CapacityDesign], list[str]]:
+    """AISC 341-22 F2.3: capacity-limited seismic terms of each load set.
+
+    The capacity-limited seismic load effect is the frame's response with every
+    brace at its expected strength. For a linear analysis the response is
+    proportional to the brace force, so the seismic terms of a load set are
+    scaled by the largest ``expected / analysis`` ratio of its braces. Every
+    brace then reaches at least its expected strength: this is conservative
+    with respect to both F2.3 analyses (compression at expected strength is
+    more severe than at 0.3 of it). Gravity terms are not scaled. The factor
+    is never below 1.0, so the check cannot reduce the analysis demand.
+    """
+    if settings.seismic_system != "SCBF":
+        return [], [], []
+    cases = {c.id: c for c in project.analyses}
+    sections = {s.id: s for s in project.sections}
+    braces: list[tuple[Any, Any, float, Any]] = []
+    notes: list[str] = []
+    for element in project.elements:
+        if not isinstance(element, FRAME_ELEMENT_CLASSES):
+            continue
+        if _member_role(project, element) != "brace":
+            continue
+        overrides = settings.member(element.id)
+        section = sections.get(getattr(element, "section_id", -1))
+        name = overrides.shape or (getattr(section, "name", "") or "")
+        try:
+            shape = shape_in_units(name, units)
+        except (KeyError, ValueError) as exc:
+            notes.append(f"Capacity design: brace {element.id} has no AISC shape ({exc}).")
+            continue
+        braces.append((element, shape, _length(project, element), overrides))
+    if not braces:
+        return [], [], notes
+
+    out: list[tuple[str, Alternative]] = []
+    records: list[CapacityDesign] = []
+    for label, alt in alternatives:
+        seismic = {cid: factor for cid, factor in alt.items() if _case_role(cases.get(cid)) == "E"}
+        if not seismic:
+            continue
+        best: CapacityDesign | None = None
+        skipped: list[int] = []
+        for element, shape, length, overrides in braces:
+            total = np.zeros(STATIONS)
+            peak = False
+            for cid, factor in seismic.items():
+                per_case = fields.get(cid, {}).get("N", {}).get(element.id)
+                if per_case is not None:
+                    total = total + factor * per_case
+                if isinstance(cases.get(cid), ResponseSpectrumCase):
+                    peak = True
+            force = float(total[int(np.argmax(np.abs(total)))])
+            if abs(force) <= 1e-9:
+                skipped.append(element.id)
+                continue
+            section = sections.get(getattr(element, "section_id", -1))
+            e = float(getattr(section, "E", 0.0) or 0.0) or 29000.0 * stress_scale(
+                SOURCE_UNITS, units
+            )
+            g = float(getattr(section, "G", 0.0) or 0.0) or e / 2.6
+            expected = expected_brace_strength(
+                shape,
+                Steel(Fy=fy, E=e, G=g, Fu=fu),
+                ry=settings.ry,
+                length_x=overrides.length_major or length,
+                length_y=overrides.length_minor or length,
+                k_x=overrides.k_major,
+                k_y=overrides.k_minor,
+                method=settings.method,
+            )
+            if peak or force < 0.0:
+                state, magnitude = "tension", expected.tension
+            else:
+                state, magnitude = "compression", expected.compression
+            record = CapacityDesign(
+                load_set=label,
+                brace_element_id=element.id,
+                shape=shape.name,
+                state=state,
+                analysis_force=force,
+                expected_force=magnitude,
+                factor=max(1.0, magnitude / abs(force)),
+            )
+            if best is None or record.factor > best.factor:
+                best = record
+        if best is None:
+            continue
+        best.skipped = skipped
+        if skipped:
+            best.notes.append(
+                "No seismic force, left out of the factor: braces "
+                + ", ".join(str(eid) for eid in skipped)
+                + "."
+            )
+        if best.factor > 1.0:
+            out.append(
+                (
+                    f"{label} (SCBF capacity)",
+                    {
+                        cid: value * best.factor if cid in seismic else value
+                        for cid, value in alt.items()
+                    },
+                )
+            )
+        records.append(best)
+    return out, records, notes
+
+
+def _prefix_check(check: MemberCheck, prefix: str) -> None:
+    """Name every limit state of ``check`` under the capacity-design prefix."""
+    check.ratios = {prefix + key: value for key, value in check.ratios.items()}
+    check.equations = {prefix + key: value for key, value in check.equations.items()}
+    check.checks = [replace(item, name=prefix + item.name) for item in check.checks]
+
+
 def steel_frame_check(
     project: Any,
     results: Mapping[int, Any],
@@ -617,6 +772,22 @@ def steel_frame_check(
         report.load_sets.append(label)
         alternatives += [(label, alt) for alt in options]
 
+    capacity, capacity_records, capacity_notes = _capacity_alternatives(
+        project,
+        fields,
+        alternatives,
+        settings,
+        units,
+        fy=fy,
+        fu=fu,
+    )
+    report.capacity_design = capacity_records
+    report.notes.extend(capacity_notes)
+    evaluations: list[tuple[str, Alternative, str]] = [
+        (label, alt, "") for label, alt in alternatives
+    ]
+    evaluations += [(label, alt, "SCBF capacity ") for label, alt in capacity]
+
     sections = {s.id: s for s in project.sections}
     for element in project.elements:
         if not isinstance(element, FRAME_ELEMENT_CLASSES):
@@ -650,8 +821,11 @@ def steel_frame_check(
             result.notes.append("No load set with results.")
             continue
         worst: tuple[float, MemberCheck, str, float] | None = None
+        worst_capacity = 0.0
         max_ratios: dict[str, float] = {}
-        for label, alt in alternatives:
+        for label, alt, prefix in evaluations:
+            if prefix and role == "brace":
+                continue
             values: dict[str, np.ndarray] = {}
             for component in ("N", "V2", "V3", "M2", "M3"):
                 total = np.zeros(STATIONS)
@@ -816,11 +990,17 @@ def steel_frame_check(
                     )
                     if note not in check.notes:
                         check.notes.append(note)
+                if prefix:
+                    _prefix_check(check, prefix)
                 ratio = check.governing[1]
+                if prefix:
+                    worst_capacity = max(worst_capacity, ratio)
                 for name, value in check.ratios.items():
                     max_ratios[name] = max(max_ratios.get(name, 0.0), value)
                 if worst is None or ratio > worst[0]:
                     worst = (ratio, check, label, float(station_value))
+        if worst_capacity:
+            result.capacity_ratio = worst_capacity
         assert worst is not None
         ratio, check, label, station = worst
         key = check.governing[0]

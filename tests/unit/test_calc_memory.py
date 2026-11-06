@@ -183,3 +183,24 @@ def test_the_memory_carries_the_scbf_gussets() -> None:
     assert "SCBF gusset plates" in english and "W18X50" in english
     spanish = build_member_memory(_project(), report, language="es", fmt="markdown")
     assert "Planchas de unión SCBF" in spanish
+
+
+def test_the_memory_carries_the_scbf_capacity_design() -> None:
+    from opensees_studio.services.steel_design import CapacityDesign
+
+    report = _report()
+    report.capacity_design = [
+        CapacityDesign(
+            load_set="Case EQ",
+            brace_element_id=5,
+            shape="W18X50",
+            state="tension",
+            analysis_force=100.0,
+            expected_force=800.0,
+            factor=8.0,
+        )
+    ]
+    english = build_member_memory(_project(), report, language="en", fmt="html")
+    assert "SCBF capacity design" in english and "Case EQ" in english
+    spanish = build_member_memory(_project(), report, language="es", fmt="markdown")
+    assert "Diseño por capacidad SCBF" in spanish

@@ -14,7 +14,7 @@ Units are SI (m, N, kg, s) for the V cases and kip-inch for the D (design)
 cases, as in the AISC examples. Errors below 1e-6 are floating-point noise
 and are printed as `< 1e-6`.
 
-**23 of 23 cases pass.**
+**24 of 24 cases pass.**
 
 | Case | Title | Group | Max. error | Verdict |
 |---|---|---|---|---|
@@ -41,6 +41,7 @@ and are printed as `< 1e-6`.
 | [D-04](#d-04) | AISC: combined axial force and biaxial flexure | Design, AISC 360-16 | 2.5e-03 | ✅ pass |
 | [D-05](#d-05) | Steel frame check of a beam, end to end | Design, AISC 360-16 | 3.2e-04 | ✅ pass |
 | [D-06](#d-06) | Calculation memory of the D-05 beam | Design, AISC 360-16 | < 1e-06 | ✅ pass |
+| [D-07](#d-07) | AISC 341: expected SCBF brace strength | Design, AISC 341-22 | < 1e-06 | ✅ pass |
 
 <a id="v-01"></a>
 
@@ -351,3 +352,17 @@ and are printed as `< 1e-6`.
 | Limit states printed in the member sheet | - | 6 | 6 | < 1e-06 | 0e+00 | ✅ |
 | Calculation steps printed | - | 20 | 20 | < 1e-06 | 0e+00 | ✅ |
 | Governing ratio printed | - | 1 | 1 | < 1e-06 | 0e+00 | ✅ |
+
+<a id="d-07"></a>
+
+## D-07 — AISC 341: expected SCBF brace strength
+
+**Model.** W18X50 brace, Ry = 1.1, Fy = 50 ksi, Lc = 280 in about both axes.
+
+**Reference.** F2.3: RyFyAg in tension and (1/0.877)FneAg in compression, with Fne from AISC 360 E3 using RyFy.
+
+| Quantity | Unit | OpenSees Studio | Reference | Rel. error | Tolerance | |
+|---|---|---|---|---|---|---|
+| Expected tension Ry Fy Ag | kip | 808.5 | 808.5 | < 1e-06 | 1e-09 | ✅ |
+| Expected compression (1/0.877) Fe Ag | kip | 146.106 | 146.106 | < 1e-06 | 2e-03 | ✅ |
+| Post-buckling 0.3 C | kip | 43.8317 | 43.8317 | < 1e-06 | 2e-03 | ✅ |
