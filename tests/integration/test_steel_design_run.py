@@ -435,3 +435,19 @@ def test_an_invalid_rbs_connection_is_reported() -> None:
     report = steel_frame_check(project, _results(project))
     assert report.connections[0].status == "invalid"
     assert "RBS c" in report.connections[0].notes[0]
+
+
+def test_the_rbs_protected_zone_flags_a_node_inside() -> None:
+    from opensees_studio.core.design.connections import RbsConnection
+
+    project = _portal()
+    project.connections = [
+        RbsConnection(id=1, beam_element_id=2, column_element_id=1, a=4.5, b=13.0, c=1.0)
+    ]
+    report = steel_frame_check(project, _results(project))
+    assert report.connections[0].zone_clear
+
+    project.nodes.append(Node(id=99, coords=(10.0, 0.0, 144.0), restraint=(True,) * 6))
+    report = steel_frame_check(project, _results(project))
+    assert not report.connections[0].zone_clear
+    assert any("protected zone" in note for note in report.connections[0].notes)

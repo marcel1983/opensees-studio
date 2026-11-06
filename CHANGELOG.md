@@ -11,6 +11,12 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **RBS in the joint checks and protected zones.** The SCWB ratio uses the
+  reduced `Z_RBS` and `Mv = Vh Sh` when a connection exists, and the panel
+  zone takes the beam face moment at `Sh` instead of `dc/2`. Each connection
+  also reports whether the protected zone `0..a+b` contains a joint or a
+  support.
+
 - **Design → Connections: the RBS editor.** A dialog lists, adds, edits and
   removes the AISC 358-22 RBS connections, suggests the midpoints of the
   Section 5.7 limits from the beam shape, refuses an out-of-limit cut with the

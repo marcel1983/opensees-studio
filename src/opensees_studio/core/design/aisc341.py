@@ -318,6 +318,10 @@ class JointBeam:
     fyb: float
     length: float
     shear: float
+    mpr_override: float | None = None
+    """Probable moment at the hinge when the connection is an RBS."""
+    mv_override: float | None = None
+    """Shear moment from the hinge to the column centerline, when it is known."""
 
 
 def joint_scwb(
@@ -341,9 +345,17 @@ def joint_scwb(
     dc = max(c.depth for c in columns)
     mbe = 0.0
     for beam in beams:
-        probable = mpr(ry, beam.fyb, beam.zb, fu=fu)
-        vp = max(2.0 * probable / beam.length, abs(beam.shear))
-        mbe += mbe_star(probable, vp * dc / 2.0, method=method)
+        probable = (
+            beam.mpr_override
+            if beam.mpr_override is not None
+            else mpr(ry, beam.fyb, beam.zb, fu=fu)
+        )
+        if beam.mv_override is not None:
+            mv = beam.mv_override
+        else:
+            vp = max(2.0 * probable / beam.length, abs(beam.shear))
+            mv = vp * dc / 2.0
+        mbe += mbe_star(probable, mv, method=method)
     return mpc, mbe
 
 
