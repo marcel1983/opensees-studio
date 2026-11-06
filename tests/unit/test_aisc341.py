@@ -12,6 +12,8 @@ from opensees_studio.core.design.aisc341 import (
     admissible,
     alpha_s,
     ca,
+    continuity_plate_thickness,
+    continuity_tlim,
     cpr,
     joint_scwb,
     limit,
@@ -271,3 +273,11 @@ def test_panel_zone_strength_follows_j10_11_and_j10_12() -> None:
 def test_panel_zone_strength_refuses_a_zero_dimension() -> None:
     with pytest.raises(ValueError, match="positive"):
         panel_zone_strength(50.0, 0.0, 0.5, 10.0, 0.8, 18.0, 100.0, 1500.0)
+
+
+def test_continuity_plate_limits_follow_e3_6f() -> None:
+    assert continuity_tlim(7.5) == pytest.approx(0.6 * math.sqrt(7.5))
+    assert continuity_plate_thickness([0.57], two_sided=False) == pytest.approx(0.285)
+    assert continuity_plate_thickness([0.57, 0.63], two_sided=True) == pytest.approx(0.4725)
+    with pytest.raises(ValueError, match="positive"):
+        continuity_tlim(0.0)

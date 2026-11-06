@@ -398,3 +398,12 @@ def test_the_seismic_checks_reach_the_member_records() -> None:
     project = _beam()
     report = steel_frame_check(project, _results(project), DesignSettings(seismic_system="SMF"))
     assert any(check.name.startswith("AISC 341") for check in report.members[0].checks)
+
+
+def test_smf_joints_report_continuity_plates() -> None:
+    project = _portal()
+    report = steel_frame_check(project, _results(project), DesignSettings(seismic_system="SMF"))
+    for joint in report.joints:
+        assert joint.continuity_tlim > 0.0
+        assert joint.continuity_tcf > 0.0
+        assert joint.continuity_status in ("required", "check E3.6f.1(a)")

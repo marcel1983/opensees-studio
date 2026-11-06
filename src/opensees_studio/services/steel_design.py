@@ -45,6 +45,8 @@ from opensees_studio.core.design.aisc341 import (
     JointColumn,
     Role,
     ca,
+    continuity_plate_thickness,
+    continuity_tlim,
     joint_scwb,
     member_limits,
     panel_zone_demand,
@@ -427,6 +429,11 @@ class JointResult:
     panel_status: str = ""
     panel_demand: float = 0.0
     panel_capacity: float = 0.0
+    continuity_required: bool = False
+    continuity_status: str = ""
+    continuity_tcf: float = 0.0
+    continuity_tlim: float = 0.0
+    continuity_plate_t: float = 0.0
 
 
 @dataclass
@@ -836,6 +843,15 @@ def _strong_column_weak_beam(
         if not columns or not beams:
             continue
         result = JointResult(node_id=node.id, columns=len(columns), beams=len(beams))
+        beam_shapes = [members[element.id][0] for element in beams]
+        column_shapes = [members[element.id][0] for element in columns]
+        result.continuity_tcf = min(shape.tf for shape in column_shapes)
+        result.continuity_tlim = continuity_tlim(max(shape.bf for shape in beam_shapes))
+        result.continuity_required = result.continuity_tcf < result.continuity_tlim
+        result.continuity_plate_t = continuity_plate_thickness(
+            [shape.tf for shape in beam_shapes], two_sided=len(beams) >= 2
+        )
+        result.continuity_status = "required" if result.continuity_required else "check E3.6f.1(a)"
         for label, alt in alternatives:
             joint_columns = []
             column_shears = []

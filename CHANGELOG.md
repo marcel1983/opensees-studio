@@ -11,6 +11,13 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **AISC 341-22 E3.6f continuity plates at SMF joints.** The joint check now
+  compares the column flange thickness with `tlim = 0.6 sqrt(bbf)` (E3-7),
+  reports whether continuity plates are required by that condition or whether
+  E3.6f.1(a) still has to be checked, and gives the minimum plate thickness
+  (50% of the beam flange one-sided, 75% of the thicker two-sided). The joint
+  table in the report carries `tcf/tlim`.
+
 - **Calculation steps for every shape family.** Channels, tees, angles,
   rectangular HSS, round HSS and pipes now print `Fe`, the governing `Fcr`,
   the E7 effective area, `Pn`, and the steps of their flexure and shear checks
