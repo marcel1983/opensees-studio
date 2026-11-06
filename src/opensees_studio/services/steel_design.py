@@ -710,6 +710,38 @@ def steel_frame_check(
                                 ),
                             )
                         )
+                if settings.seismic_system == "SCBF" and role == "brace":
+                    radius = min(
+                        float(getattr(shape, "rx", math.inf)),
+                        float(getattr(shape, "ry", math.inf)),
+                        float(getattr(shape, "rz", math.inf)),
+                    )
+                    if radius > 0.0 and math.isfinite(radius):
+                        lc = max(
+                            overrides.k_major * (overrides.length_major or length),
+                            overrides.k_minor * (overrides.length_minor or length),
+                        )
+                        slenderness = lc / radius
+                        key = "SCBF brace slenderness (F2.5b)"
+                        check.ratios[key] = slenderness / 200.0
+                        check.equations[key] = "AISC 341-22 F2.5b"
+                        check.checks.append(
+                            LimitStateCheck(
+                                key,
+                                "AISC 341-22 F2.5b",
+                                slenderness,
+                                200.0,
+                                slenderness / 200.0,
+                                (
+                                    CalcStep(
+                                        "Brace slenderness",
+                                        "Lc/r <= 200 (Lc = KL)",
+                                        f"{slenderness:.6g}",
+                                        slenderness,
+                                    ),
+                                ),
+                            )
+                        )
                 ratio = check.governing[1]
                 for name, value in check.ratios.items():
                     max_ratios[name] = max(max_ratios.get(name, 0.0), value)

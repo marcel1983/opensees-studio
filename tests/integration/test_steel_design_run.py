@@ -465,3 +465,12 @@ def test_the_rbs_flexure_check_uses_the_face_moment() -> None:
     assert connection.mpe > 0.0
     assert connection.mf > connection.mpr
     assert connection.flexure_status in ("OK", "NG")
+
+
+def test_scbf_braces_check_their_slenderness() -> None:
+    project = _portal()
+    project.elements.append(ElasticBeamColumn(id=5, nodes=(1, 3), section_id=2))
+    report = steel_frame_check(project, _results(project), DesignSettings(seismic_system="SCBF"))
+    brace = next(member for member in report.members if member.element_id == 5)
+    assert "SCBF brace slenderness (F2.5b)" in brace.ratios
+    assert any(check.name.startswith("SCBF brace") for check in brace.checks)
