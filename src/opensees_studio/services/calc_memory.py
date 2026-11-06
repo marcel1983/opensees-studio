@@ -37,6 +37,8 @@ _LABELS: dict[Language, dict[str, str]] = {
         "index": "Index",
         "joints": "Joints (AISC 341-22)",
         "connections": "Connections (AISC 358-22)",
+        "zones": "SCBF protected zones (AISC 341-22 F2.5c)",
+        "zones_x": "Zones (x/L)",
         "connection": "Connection",
         "beam": "Beam",
         "column": "Column",
@@ -87,6 +89,8 @@ _LABELS: dict[Language, dict[str, str]] = {
         "index": "Índice",
         "joints": "Juntas (AISC 341-22)",
         "connections": "Conexiones (AISC 358-22)",
+        "zones": "Zonas protegidas SCBF (AISC 341-22 F2.5c)",
+        "zones_x": "Zonas (x/L)",
         "connection": "Conexión",
         "beam": "Viga",
         "column": "Columna",
@@ -234,6 +238,17 @@ def _connection_rows(report: Any) -> list[list[str]]:
     ]
 
 
+def _protected_rows(report: Any) -> list[list[str]]:
+    return [
+        [
+            str(zone.element_id),
+            ", ".join(f"{low:.2f}-{high:.2f}" for low, high in zone.ranges),
+            "clear" if zone.zone_clear else "node inside",
+        ]
+        for zone in report.protected_zones
+    ]
+
+
 def _member_html(project: Any, member: Any, labels: dict[str, str]) -> list[str]:
     shape = _member_shape(project, member.shape)
     out = [
@@ -340,6 +355,18 @@ def _html(project: Any, report: Any, labels: dict[str, str]) -> str:
             )
             + "</table>"
         )
+    zones_html = ""
+    if report.protected_zones:
+        zones_html = (
+            f"<h2>{labels['zones']}</h2><table><tr>"
+            f"<th>{labels['element']}</th><th>{labels['zones_x']}</th>"
+            f"<th>{labels['status']}</th></tr>"
+            + "".join(
+                "<tr>" + "".join(f"<td>{_e(cell)}</td>" for cell in row) + "</tr>"
+                for row in _protected_rows(report)
+            )
+            + "</table>"
+        )
     members = []
     for member in sorted(report.members, key=lambda item: item.element_id):
         members.extend(_member_html(project, member, labels))
@@ -360,6 +387,7 @@ def _html(project: Any, report: Any, labels: dict[str, str]) -> str:
         f"<th>{labels['ratio']}</th><th>{labels['status']}</th></tr>{index}</table>"
         + joints
         + connections_html
+        + zones_html
         + "".join(members)
         + f"<p class='note'>{_e(labels['disclaimer'])}</p></body></html>"
     )
@@ -409,6 +437,15 @@ def _markdown(project: Any, report: Any, labels: dict[str, str]) -> str:
             "|---|---|---|---|---|---|---|---|---|---|",
         ]
         lines += ["| " + " | ".join(row) + " |" for row in _connection_rows(report)]
+    if report.protected_zones:
+        lines += [
+            "",
+            f"## {labels['zones']}",
+            "",
+            f"| {labels['element']} | {labels['zones_x']} | {labels['status']} |",
+            "|---|---|---|",
+        ]
+        lines += ["| " + " | ".join(row) + " |" for row in _protected_rows(report)]
     for member in sorted(report.members, key=lambda item: item.element_id):
         lines += [
             "",
@@ -559,6 +596,20 @@ def _latex(project: Any, report: Any, labels: dict[str, str]) -> str:
             for row in _connection_rows(report)
         ]
         lines.append(r"\end{longtable}")
+    if report.protected_zones:
+        lines += [
+            rf"\subsection*{{{_tex_escape(labels['zones'])}}}",
+            r"\begin{longtable}{lll}",
+        ]
+        lines.append(
+            rf"{_tex_escape(labels['element'])} & {_tex_escape(labels['zones_x'])} & "
+            rf"{_tex_escape(labels['status'])} \\ \toprule"
+        )
+        lines += [
+            " & ".join(_tex_escape(cell) for cell in row) + r" \\"
+            for row in _protected_rows(report)
+        ]
+        lines.append(r"\end{longtable}")
     for member in sorted(report.members, key=lambda item: item.element_id):
         lines += [
             "",
@@ -683,6 +734,20 @@ def odt_bytes(project: Any, report: Any, *, language: Language = "en") -> bytes:
             labels["status"],
         ]
         for row in [header, *_connection_rows(report)]:
+            body.append(
+                "<table:table-row>"
+                + "".join(
+                    f"<table:table-cell><text:p>{_odt_text(c)}</text:p></table:table-cell>"
+                    for c in row
+                )
+                + "</table:table-row>"
+            )
+        body.append("</table:table>")
+    if report.protected_zones:
+        body.append(f"<text:h text:outline-level='2'>{_odt_text(labels['zones'])}</text:h>")
+        body.append("<table:table table:name='Zones'>")
+        header = [labels["element"], labels["zones_x"], labels["status"]]
+        for row in [header, *_protected_rows(report)]:
             body.append(
                 "<table:table-row>"
                 + "".join(

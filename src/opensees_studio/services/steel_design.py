@@ -471,10 +471,22 @@ class ConnectionResult:
 
 
 @dataclass
+class ProtectedZone:
+    """The SCBF protected zones of one brace and whether they are clear."""
+
+    element_id: int
+    ranges: tuple[tuple[float, float], ...] = ()
+    """Fractions of the member length: the centre quarter and the ends."""
+    zone_clear: bool = True
+    notes: list[str] = field(default_factory=list)
+
+
+@dataclass
 class DesignReport:
     members: list[MemberResult] = field(default_factory=list)
     joints: list[JointResult] = field(default_factory=list)
     connections: list[ConnectionResult] = field(default_factory=list)
+    protected_zones: list[ProtectedZone] = field(default_factory=list)
     load_sets: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
 
@@ -821,6 +833,8 @@ def steel_frame_check(
             fields=fields,
             alternatives=alternatives,
         )
+    if settings.seismic_system == "SCBF":
+        report.protected_zones = _scbf_protected_zones(project, settings, units)
     return report
 
 
@@ -1190,4 +1204,53 @@ def _connection_results(
             result.flexure_status = "OK" if result.flexure_ratio <= 1.0 else "NG"
         result.status = "checked"
         out.append(result)
+    return out
+
+
+def _scbf_protected_zones(
+    project: Any, settings: DesignSettings, units: Any
+) -> list[ProtectedZone]:
+    """The F2.5c protected zones of every SCBF brace.
+
+    The centre quarter of the brace and a length equal to its depth at each
+    end. A joint or support inside one of them is reported.
+    """
+    if settings.seismic_system != "SCBF":
+        return []
+    sections = {s.id: s for s in project.sections}
+    coords = {n.id: np.asarray(n.coords, dtype=float) for n in project.nodes}
+    out: list[ProtectedZone] = []
+    for element in project.elements:
+        if not isinstance(element, FRAME_ELEMENT_CLASSES):
+            continue
+        if _member_role(project, element) != "brace":
+            continue
+        section = sections.get(getattr(element, "section_id", -1))
+        name = getattr(section, "name", "") or ""
+        try:
+            shape = shape_in_units(name, units)
+        except (KeyError, ValueError):
+            continue
+        depth = float(getattr(shape, "d", getattr(shape, "H", getattr(shape, "D", 0.0))))
+        start, end = coords[element.nodes[0]], coords[element.nodes[1]]
+        vector = end - start
+        length = float(np.linalg.norm(vector))
+        if depth <= 0.0 or length <= 0.0:
+            continue
+        direction = vector / length
+        ranges = (
+            (0.0, depth / length),
+            (0.375, 0.625),
+            (max(0.0, 1.0 - depth / length), 1.0),
+        )
+        zone = ProtectedZone(element_id=element.id, ranges=ranges)
+        for node in project.nodes:
+            if node.id in element.nodes:
+                continue
+            along = float(np.dot(coords[node.id] - start, direction)) / length
+            if any(low - 1e-9 <= along <= high + 1e-9 for low, high in ranges):
+                zone.zone_clear = False
+                support = " (restrained)" if any(node.restraint) else ""
+                zone.notes.append(f"Node {node.id} lies inside the protected zone{support}.")
+        out.append(zone)
     return out

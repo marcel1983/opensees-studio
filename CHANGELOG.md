@@ -9,6 +9,13 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Added
+
+- **AISC 341-22 SCBF protected zones.** Each brace reports the centre quarter
+  and the depth-long zones at its ends (F2.5c); a joint or support inside them
+  flips the zone to `node inside` with the node and whether it is restrained.
+  The report and the calculation memory list the zones.
+
 ## [0.0.41] - 2026-11-06
 
 ### Added

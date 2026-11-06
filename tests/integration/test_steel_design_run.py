@@ -480,3 +480,17 @@ def test_scbf_braces_check_their_slenderness() -> None:
     assert any(check.name.startswith("SCBF brace") for check in brace.checks)
     assert brace.ratios["SCBF brace net area (F2.5b(c))"] == pytest.approx(14.7 / 14.0)
     assert any("Ry Fy Ag" in note for note in brace.notes)
+
+
+def test_scbf_brace_protected_zone_flags_a_node_inside() -> None:
+    project = _portal()
+    project.elements.append(ElasticBeamColumn(id=5, nodes=(1, 3), section_id=2))
+    report = steel_frame_check(project, _results(project), DesignSettings(seismic_system="SCBF"))
+    zone = next(item for item in report.protected_zones if item.element_id == 5)
+    assert zone.zone_clear
+
+    project.nodes.append(Node(id=98, coords=(120.0, 0.0, 72.0), restraint=(True,) * 6))
+    report = steel_frame_check(project, _results(project), DesignSettings(seismic_system="SCBF"))
+    zone = next(item for item in report.protected_zones if item.element_id == 5)
+    assert not zone.zone_clear
+    assert any("protected zone" in note for note in zone.notes)

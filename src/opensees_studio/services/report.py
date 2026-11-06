@@ -361,6 +361,22 @@ def _design_section(project: Project, results: Mapping[int, Any]) -> str:
                 connection_rows,
             )
         )
+    if report.protected_zones:
+        zone_rows = [
+            [
+                zone.element_id,
+                ", ".join(f"{low:.2f}-{high:.2f}" for low, high in zone.ranges),
+                "clear" if zone.zone_clear else "node inside",
+            ]
+            for zone in report.protected_zones
+        ]
+        out.append("<h3>SCBF protected zones (AISC 341-22 F2.5c)</h3>")
+        out += [
+            f"<p class='note'>Element {zone.element_id}: {_e(note)}</p>"
+            for zone in report.protected_zones
+            for note in zone.notes
+        ]
+        out.append(_table(["Element", "Zones (x/L)", "Status"], zone_rows))
 
     drift_rows: list[list[Any]] = []
     for result in sorted(results.values(), key=lambda r: getattr(r, "case_id", 0)):
