@@ -742,6 +742,48 @@ def steel_frame_check(
                                 ),
                             )
                         )
+                    if overrides.net_area is None:
+                        note = (
+                            "SCBF F2.5b(c): the effective net area needs An; "
+                            "Ae >= Ag is not checked."
+                        )
+                        if note not in check.notes:
+                            check.notes.append(note)
+                    else:
+                        effective = overrides.shear_lag * overrides.net_area
+                        key = "SCBF brace net area (F2.5b(c))"
+                        check.ratios[key] = shape.A / effective if effective > 0 else math.inf
+                        check.equations[key] = "AISC 341-22 F2.5b(c)"
+                        check.checks.append(
+                            LimitStateCheck(
+                                key,
+                                "AISC 341-22 F2.5b(c)",
+                                shape.A,
+                                effective,
+                                shape.A / effective if effective > 0 else math.inf,
+                                (
+                                    CalcStep(
+                                        "Effective net area",
+                                        "Ae = U An",
+                                        f"{effective:.6g}",
+                                        effective,
+                                    ),
+                                    CalcStep(
+                                        "Brace gross area",
+                                        "Ag",
+                                        f"{shape.A:.6g}",
+                                        shape.A,
+                                    ),
+                                ),
+                            )
+                        )
+                    expected = settings.ry * steel.Fy * shape.A
+                    note = (
+                        f"SCBF expected brace yield strength Ry Fy Ag = {expected:.6g}; "
+                        "use it for the brace connections."
+                    )
+                    if note not in check.notes:
+                        check.notes.append(note)
                 ratio = check.governing[1]
                 for name, value in check.ratios.items():
                     max_ratios[name] = max(max_ratios.get(name, 0.0), value)
