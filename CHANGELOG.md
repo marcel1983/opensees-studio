@@ -9,6 +9,8 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.41] - 2026-11-06
+
 ### Added
 
 - **AISC 341-22 SCBF brace rules.** With `SCBF` selected, diagonal braces
