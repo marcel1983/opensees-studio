@@ -1468,6 +1468,28 @@ and the full AISC 358 design procedure are not part of this dialog yet.
             "design.steel_check",
             "file.calc_memory",
         ),
+        "design.gussets": _t(
+            "Design → Gussets (AISC 341-22)",
+            "Design",
+            "SCBF gusset plates: Whitmore width, yielding and plate buckling.",
+            """
+Lists, adds, edits and removes the gusset plates of an SCBF.
+
+- Pick the **brace** frame element, then the plate thickness `t`, the plate
+  width `b`, the Whitmore length `Lw` along the brace and the free length `Lc`
+  for plate buckling. The fields start from the brace shape and can be edited.
+- The plate is checked against the expected brace force `Ry Fy Ag`:
+  **Whitmore width** `bw = 2 Lw tan(30) + t_brace`, **yielding**
+  `Pn = Fy b t` and **buckling** with `r = t/sqrt(12)` and `K = 0.65`.
+- OK stores the list as one undoable step; the report and the calculation
+  memory show each plate with its demand, ratio and status.
+
+The gusset interface, the brace-to-gusset welds and the full AISC 341
+connection design procedure are not part of this dialog yet.
+""",
+            "design.steel_check",
+            "design.connections",
+        ),
         "design.steel_check": _t(
             "Design → Steel Frame Check (AISC 360-16)",
             "Design",
@@ -5415,6 +5437,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_import_tcl": "file.import_tcl",
     "_act_steel_check": "design.steel_check",
     "_act_connections": "design.connections",
+    "_act_gussets": "design.gussets",
     "_act_notional_loads": "design.notional_loads",
     "_act_influence_line": "display.influence_line",
     "_act_drift_check": "design.drift_check",

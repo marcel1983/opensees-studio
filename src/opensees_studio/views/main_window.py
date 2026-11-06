@@ -65,6 +65,7 @@ from opensees_studio.commands import (
     ReplicateCommand,
     SetConnectionsCommand,
     SetCoordSystemsCommand,
+    SetGussetsCommand,
     SetMassCommand,
     SetProjectMetaCommand,
     SetRestraintCommand,
@@ -238,6 +239,7 @@ from opensees_studio.views.dialogs.groups import (
     GroupsDialog,
     SectionCutsDialog,
 )
+from opensees_studio.views.dialogs.gussets import GussetsDialog
 from opensees_studio.views.dialogs.joint_patterns import (
     AssignJointPatternDialog,
     JointPatternsDialog,
@@ -608,6 +610,7 @@ class MainWindow(QMainWindow):
         self._act_clear_results = QAction("Delete &All Results…", self)
         self._act_steel_check = QAction("&Steel Frame Check (AISC 360-16)…", self)
         self._act_connections = QAction("&Connections (AISC 358-22)…", self)
+        self._act_gussets = QAction("&Gussets (AISC 341-22)…", self)
         self._act_drift_check = QAction("Storey &Drift Check…", self)
         self._act_steel_ratios = QAction("Display Steel &Ratios on Model", self)
         self._act_notional_loads = QAction("Generate &Notional Loads (DAM).", self)
@@ -903,6 +906,7 @@ class MainWindow(QMainWindow):
         m_design = mb.addMenu("Desi&gn")
         m_design.addAction(self._act_steel_check)
         m_design.addAction(self._act_connections)
+        m_design.addAction(self._act_gussets)
         m_design.addAction(self._act_notional_loads)
         m_design.addAction(self._act_steel_ratios)
         m_design.addAction(self._act_drift_check)
@@ -1359,6 +1363,7 @@ class MainWindow(QMainWindow):
         self._act_clear_results.triggered.connect(self._on_clear_results)
         self._act_steel_check.triggered.connect(self._on_steel_check)
         self._act_connections.triggered.connect(self._on_connections)
+        self._act_gussets.triggered.connect(self._on_gussets)
         self._act_notional_loads.triggered.connect(self._on_notional_loads)
         self._act_drift_check.triggered.connect(self._on_drift_check)
         self._act_steel_ratios.triggered.connect(self._on_steel_ratios)
@@ -2734,6 +2739,19 @@ class MainWindow(QMainWindow):
         if connections != project.connections:
             self._vm.apply_command(SetConnectionsCommand(self._vm, connections))
         self._log(f"{len(connections)} RBS connection(s).")
+
+    def _on_gussets(self) -> None:
+        """Design → Gussets: edit the AISC 341 SCBF gusset plates."""
+        project = self._vm.project
+        if project is None:
+            return
+        dialog = GussetsDialog(project, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        gussets = dialog.gussets()
+        if gussets != project.gussets:
+            self._vm.apply_command(SetGussetsCommand(self._vm, gussets))
+        self._log(f"{len(gussets)} gusset plate(s).")
 
     def _on_steel_check(self) -> None:
         """Design → Steel Frame Check: AISC 360-16 ratios over this session's results.
@@ -6527,6 +6545,7 @@ class MainWindow(QMainWindow):
         self._act_clear_results.setEnabled(bool(has_project and (stored or db_there)))
         self._act_steel_check.setEnabled(has_project)
         self._act_connections.setEnabled(has_project)
+        self._act_gussets.setEnabled(has_project)
         self._act_notional_loads.setEnabled(has_project)
         self._act_drift_check.setEnabled(has_project)
         self._act_steel_ratios.setEnabled(has_project)
