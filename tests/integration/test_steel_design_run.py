@@ -451,3 +451,17 @@ def test_the_rbs_protected_zone_flags_a_node_inside() -> None:
     report = steel_frame_check(project, _results(project))
     assert not report.connections[0].zone_clear
     assert any("protected zone" in note for note in report.connections[0].notes)
+
+
+def test_the_rbs_flexure_check_uses_the_face_moment() -> None:
+    from opensees_studio.core.design.connections import RbsConnection
+
+    project = _portal()
+    project.connections = [
+        RbsConnection(id=1, beam_element_id=2, column_element_id=1, a=4.5, b=13.0, c=1.0)
+    ]
+    report = steel_frame_check(project, _results(project))
+    connection = report.connections[0]
+    assert connection.mpe > 0.0
+    assert connection.mf > connection.mpr
+    assert connection.flexure_status in ("OK", "NG")

@@ -139,3 +139,18 @@ def rbs_protected_zone(geometry: RbsGeometry) -> tuple[float, float]:
     i.e. ``a + b``.
     """
     return (0.0, geometry.a + geometry.b)
+
+
+def rbs_mpe(ry: float, fy: float, zb: float) -> float:
+    """5.7-6: ``Mpe = Ry Fy Zb`` with the full beam modulus."""
+    if ry <= 0.0 or fy <= 0.0 or zb <= 0.0:
+        raise ValueError("Ry, Fy and Zb must be positive for Mpe.")
+    return ry * fy * zb
+
+
+def rbs_flexure_ratio(mf: float, mpe: float, *, method: str = "LRFD") -> float:
+    """5.7-7: ``Mf / (phi_d Mpe)``; ``phi_d = 1.0`` LRFD, ``1/1.5`` ASD."""
+    if mpe <= 0.0:
+        raise ValueError("Mpe must be positive.")
+    available = mpe if method == "LRFD" else mpe / 1.5
+    return mf / available

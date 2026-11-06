@@ -328,6 +328,8 @@ def _design_section(project: Project, results: Mapping[int, Any]) -> str:
                 c.mpr,
                 f"{c.protected_from:g} to {c.protected_to:g} "
                 f"({'clear' if c.zone_clear else 'node inside'})",
+                f"{c.flexure_ratio:.3f}" if c.flexure_status else "-",
+                c.flexure_status or "-",
                 c.status,
             ]
             for c in report.connections
@@ -352,6 +354,8 @@ def _design_section(project: Project, results: Mapping[int, Any]) -> str:
                     "Z_RBS",
                     "Mpr",
                     "Protected zone",
+                    "Mf / phi Mpe",
+                    "RBS",
                     "Status",
                 ],
                 connection_rows,
