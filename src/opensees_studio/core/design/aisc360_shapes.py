@@ -50,6 +50,7 @@ from opensees_studio.core.design.aisc360 import (
     flexure_minor,
     tension,
 )
+from opensees_studio.core.design.calc import CalcStep
 
 #: Families with a class here (the AISC table's family codes).
 CHANNEL_FAMILIES = frozenset({"C", "MC"})
@@ -100,7 +101,35 @@ def _compression_strength(
         equation = f"E7-1 ({which}, effective area)"
         notes = (f"Slender element(s): effective area {effective / area:.3f} Ag.",)
     nominal = fcr * effective
-    return Strength(nominal, _available(nominal, "compression", method), equation, notes)
+    steps = []
+    if fe is not None and math.isfinite(fe):
+        steps.append(
+            CalcStep("Elastic buckling", "Fe = pi^2 E / (KL/r)^2", f"{which}: {fe:.6g}", fe)
+        )
+        steps.append(
+            CalcStep(
+                "Critical stress",
+                "Fcr = 0.658^(Fy/Fe) Fy" if fy / fe <= 2.25 else "Fcr = 0.877 Fe",
+                f"{fcr:.6g}",
+                fcr,
+            )
+        )
+    else:
+        steps.append(
+            CalcStep("Critical stress", "Fcr = Fy (no buckling length)", f"{fcr:.6g}", fcr)
+        )
+    if effective < area:
+        steps.append(CalcStep("Effective area", "Ae from E7", f"{effective:.6g}", effective))
+    steps.append(
+        CalcStep("Nominal strength", "Pn = Fcr Ae", f"{fcr:.6g} x {effective:.6g}", nominal)
+    )
+    return Strength(
+        nominal,
+        _available(nominal, "compression", method),
+        equation,
+        notes,
+        tuple(steps),
+    )
 
 
 # ──────────────────────────── channels ────────────────────────────
