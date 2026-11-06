@@ -11,6 +11,11 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **Verification manual D-06: the calculation memory of the D-05 beam.** The
+  memory is generated from the same end-to-end run and the case asserts that
+  every limit state, every calculation step and the governing ratio are
+  printed.
+
 - **Member calculation memory (HTML, Markdown, LaTeX, ODT and PDF; English
   and Spanish).** File → Export → Calculation Memory writes the project cover
   (author, company, date, revisions), an index and one sheet per member:
