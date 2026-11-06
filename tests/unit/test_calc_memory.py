@@ -113,3 +113,31 @@ def test_the_memory_carries_the_joint_checks() -> None:
     assert "1.25" in english and "0.8" in english
     spanish = build_member_memory(_project(), report, language="es", fmt="markdown")
     assert "Juntas (AISC 341-22)" in spanish
+
+
+def test_the_memory_carries_the_rbs_connections() -> None:
+    from opensees_studio.services.steel_design import ConnectionResult
+
+    report = _report()
+    report.connections = [
+        ConnectionResult(
+            connection_id=1,
+            beam_element_id=2,
+            column_element_id=1,
+            shape="W18X50",
+            a=4.5,
+            b=13.0,
+            c=1.0,
+            sh=11.0,
+            z_rbs=80.0,
+            mpr=5000.0,
+            protected_from=0.0,
+            protected_to=17.5,
+            status="checked",
+        )
+    ]
+    english = build_member_memory(_project(), report, language="en", fmt="html")
+    assert "Connections (AISC 358-22)" in english
+    assert "17.5" in english
+    spanish = build_member_memory(_project(), report, language="es", fmt="markdown")
+    assert "Conexiones (AISC 358-22)" in spanish

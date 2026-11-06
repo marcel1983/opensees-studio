@@ -36,6 +36,12 @@ _LABELS: dict[Language, dict[str, str]] = {
         "description": "Description",
         "index": "Index",
         "joints": "Joints (AISC 341-22)",
+        "connections": "Connections (AISC 358-22)",
+        "connection": "Connection",
+        "beam": "Beam",
+        "column": "Column",
+        "protected": "Protected zone",
+        "mpr": "Mpr",
         "joint": "Joint",
         "scwb": "Sum M*pc / Sum M*be",
         "panel": "Vr / phi Rn",
@@ -80,6 +86,12 @@ _LABELS: dict[Language, dict[str, str]] = {
         "description": "Descripción",
         "index": "Índice",
         "joints": "Juntas (AISC 341-22)",
+        "connections": "Conexiones (AISC 358-22)",
+        "connection": "Conexión",
+        "beam": "Viga",
+        "column": "Columna",
+        "protected": "Zona protegida",
+        "mpr": "Mpr",
         "joint": "Junta",
         "scwb": "Sum M*pc / Sum M*be",
         "panel": "Vr / phi Rn",
@@ -203,6 +215,22 @@ def _joint_rows(report: Any) -> list[list[str]]:
     ]
 
 
+def _connection_rows(report: Any) -> list[list[str]]:
+    return [
+        [
+            str(c.connection_id),
+            str(c.beam_element_id),
+            str(c.column_element_id),
+            c.shape,
+            _fmt(c.sh),
+            _fmt(c.mpr),
+            f"{c.protected_from:g}-{c.protected_to:g}",
+            c.status,
+        ]
+        for c in report.connections
+    ]
+
+
 def _member_html(project: Any, member: Any, labels: dict[str, str]) -> list[str]:
     shape = _member_shape(project, member.shape)
     out = [
@@ -294,6 +322,20 @@ def _html(project: Any, report: Any, labels: dict[str, str]) -> str:
             )
             + "</table>"
         )
+    connections_html = ""
+    if report.connections:
+        connections_html = (
+            f"<h2>{labels['connections']}</h2><table><tr>"
+            f"<th>{labels['connection']}</th><th>{labels['beam']}</th>"
+            f"<th>{labels['column']}</th><th>{labels['shape']}</th>"
+            f"<th>Sh</th><th>{labels['mpr']}</th><th>{labels['protected']}</th>"
+            f"<th>{labels['status']}</th></tr>"
+            + "".join(
+                "<tr>" + "".join(f"<td>{_e(cell)}</td>" for cell in row) + "</tr>"
+                for row in _connection_rows(report)
+            )
+            + "</table>"
+        )
     members = []
     for member in sorted(report.members, key=lambda item: item.element_id):
         members.extend(_member_html(project, member, labels))
@@ -313,6 +355,7 @@ def _html(project: Any, report: Any, labels: dict[str, str]) -> str:
         f"<th>{labels['element']}</th><th>{labels['shape']}</th>"
         f"<th>{labels['ratio']}</th><th>{labels['status']}</th></tr>{index}</table>"
         + joints
+        + connections_html
         + "".join(members)
         + f"<p class='note'>{_e(labels['disclaimer'])}</p></body></html>"
     )
@@ -351,6 +394,17 @@ def _markdown(project: Any, report: Any, labels: dict[str, str]) -> str:
             "|---|---|---|---|---|---|",
         ]
         lines += ["| " + " | ".join(row) + " |" for row in _joint_rows(report)]
+    if report.connections:
+        lines += [
+            "",
+            f"## {labels['connections']}",
+            "",
+            f"| {labels['connection']} | {labels['beam']} | {labels['column']} | "
+            f"{labels['shape']} | Sh | {labels['mpr']} | {labels['protected']} | "
+            f"{labels['status']} |",
+            "|---|---|---|---|---|---|---|---|",
+        ]
+        lines += ["| " + " | ".join(row) + " |" for row in _connection_rows(report)]
     for member in sorted(report.members, key=lambda item: item.element_id):
         lines += [
             "",
@@ -485,6 +539,22 @@ def _latex(project: Any, report: Any, labels: dict[str, str]) -> str:
             " & ".join(_tex_escape(cell) for cell in row) + r" \\" for row in _joint_rows(report)
         ]
         lines.append(r"\end{longtable}")
+    if report.connections:
+        lines += [
+            rf"\subsection*{{{_tex_escape(labels['connections'])}}}",
+            r"\begin{longtable}{llllllll}",
+        ]
+        lines.append(
+            rf"{_tex_escape(labels['connection'])} & {_tex_escape(labels['beam'])} & "
+            rf"{_tex_escape(labels['column'])} & {_tex_escape(labels['shape'])} & Sh & "
+            rf"{_tex_escape(labels['mpr'])} & {_tex_escape(labels['protected'])} & "
+            rf"{_tex_escape(labels['status'])} \\ \toprule"
+        )
+        lines += [
+            " & ".join(_tex_escape(cell) for cell in row) + r" \\"
+            for row in _connection_rows(report)
+        ]
+        lines.append(r"\end{longtable}")
     for member in sorted(report.members, key=lambda item: item.element_id):
         lines += [
             "",
@@ -584,6 +654,29 @@ def odt_bytes(project: Any, report: Any, *, language: Language = "en") -> bytes:
             labels["load_set"],
         ]
         for row in [header, *_joint_rows(report)]:
+            body.append(
+                "<table:table-row>"
+                + "".join(
+                    f"<table:table-cell><text:p>{_odt_text(c)}</text:p></table:table-cell>"
+                    for c in row
+                )
+                + "</table:table-row>"
+            )
+        body.append("</table:table>")
+    if report.connections:
+        body.append(f"<text:h text:outline-level='2'>{_odt_text(labels['connections'])}</text:h>")
+        body.append("<table:table table:name='Connections'>")
+        header = [
+            labels["connection"],
+            labels["beam"],
+            labels["column"],
+            labels["shape"],
+            "Sh",
+            labels["mpr"],
+            labels["protected"],
+            labels["status"],
+        ]
+        for row in [header, *_connection_rows(report)]:
             body.append(
                 "<table:table-row>"
                 + "".join(

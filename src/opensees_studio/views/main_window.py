@@ -1851,6 +1851,7 @@ class MainWindow(QMainWindow):
         filtered = DesignReport(
             members=members,
             joints=report.joints,
+            connections=report.connections,
             load_sets=report.load_sets,
             notes=report.notes,
         )
