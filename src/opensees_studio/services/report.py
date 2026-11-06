@@ -326,7 +326,8 @@ def _design_section(project: Project, results: Mapping[int, Any]) -> str:
                 c.sh,
                 c.z_rbs,
                 c.mpr,
-                f"{c.protected_from:g} to {c.protected_to:g}",
+                f"{c.protected_from:g} to {c.protected_to:g} "
+                f"({'clear' if c.zone_clear else 'node inside'})",
                 c.status,
             ]
             for c in report.connections

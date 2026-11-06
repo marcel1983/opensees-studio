@@ -457,6 +457,8 @@ class ConnectionResult:
     mpr: float = 0.0
     protected_from: float = 0.0
     protected_to: float = 0.0
+    joint_node: int = 0
+    zone_clear: bool = True
     status: str = "not checked"
     notes: list[str] = field(default_factory=list)
 
@@ -851,6 +853,19 @@ def _strong_column_weak_beam(
     if project.ndm != 2 or settings.seismic_system != "SMF" or not alternatives:
         return []
     members = _ishape_members(project, settings, units)
+    rbs: dict[int, tuple[float, float]] = {}
+    for connection in project.connections:
+        if connection.beam_element_id not in members:
+            continue
+        shape = members[connection.beam_element_id][0]
+        try:
+            geometry = rbs_geometry(connection, shape)
+        except ValueError:
+            continue
+        rbs[connection.beam_element_id] = (
+            rbs_mpr(geometry, ry=settings.ry, fy=fy, fu=fu or None),
+            geometry.sh,
+        )
     out: list[JointResult] = []
     for node in project.nodes:
         incident = [
@@ -910,9 +925,29 @@ def _strong_column_weak_beam(
                     values = fields.get(cid, {}).get("M3", {}).get(element.id)
                     if values is not None:
                         moment += factor * float(values[_joint_station(element, node.id)])
-                joint_beams.append(JointBeam(shape.Zx, fy, length, abs(shear)))
-                # A1: the face moment is the end moment less the shear over dc/2.
-                sum_mf += max(0.0, abs(moment) - abs(shear) * dc / 2.0)
+                face_offset = dc / 2.0
+                mpr_override: float | None = None
+                mv_override: float | None = None
+                if element.id in rbs:
+                    mpr_override, face_offset = rbs[element.id]
+                    vh = max(
+                        2.0 * mpr_override / max(length - 2.0 * face_offset, 1e-9),
+                        abs(shear),
+                    )
+                    mv_override = vh * face_offset
+                joint_beams.append(
+                    JointBeam(
+                        shape.Zx,
+                        fy,
+                        length,
+                        abs(shear),
+                        mpr_override,
+                        mv_override,
+                    )
+                )
+                # A1: the face moment is the end moment less the shear over the
+                # face offset (dc/2, or Sh for an RBS).
+                sum_mf += max(0.0, abs(moment) - abs(shear) * face_offset)
             pair = joint_scwb(
                 joint_columns,
                 joint_beams,
@@ -1013,6 +1048,33 @@ def _connection_results(
         result.z_rbs = geometry.z_rbs
         result.mpr = rbs_mpr(geometry, ry=settings.ry, fy=fy, fu=fu or None)
         result.protected_from, result.protected_to = rbs_protected_zone(geometry)
+        column = elements.get(connection.column_element_id)
+        if column is not None:
+            shared = set(beam.nodes) & set(column.nodes)
+            if shared:
+                joint = min(shared)
+                result.joint_node = joint
+                coords = {n.id: np.asarray(n.coords, dtype=float) for n in project.nodes}
+                start = coords[joint]
+                far = coords[beam.nodes[1] if beam.nodes[0] == joint else beam.nodes[0]]
+                direction = far - start
+                beam_length = float(np.linalg.norm(direction))
+                if beam_length > 0.0:
+                    direction = direction / beam_length
+                    for node in project.nodes:
+                        if node.id in beam.nodes:
+                            continue
+                        relative = coords[node.id] - start
+                        along = float(np.dot(relative, direction))
+                        perpendicular = float(np.linalg.norm(relative - along * direction))
+                        if 0.0 < along <= result.protected_to and perpendicular <= 1e-6 * max(
+                            1.0, beam_length
+                        ):
+                            result.zone_clear = False
+                            support = " (restrained)" if any(node.restraint) else ""
+                            result.notes.append(
+                                f"Node {node.id} lies inside the protected zone{support}."
+                            )
         result.status = "checked"
         out.append(result)
     return out

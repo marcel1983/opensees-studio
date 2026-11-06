@@ -281,3 +281,21 @@ def test_continuity_plate_limits_follow_e3_6f() -> None:
     assert continuity_plate_thickness([0.57, 0.63], two_sided=True) == pytest.approx(0.4725)
     with pytest.raises(ValueError, match="positive"):
         continuity_tlim(0.0)
+
+
+def test_joint_scwb_uses_the_rbs_hinge_moment_and_shear() -> None:
+    columns = [JointColumn(100.0, 50.0, 20.0, 100.0, 14.0)]
+    beams = [
+        JointBeam(
+            zb=50.0,
+            fyb=50.0,
+            length=240.0,
+            shear=10.0,
+            mpr_override=5000.0,
+            mv_override=600.0,
+        )
+    ]
+    pair = joint_scwb(columns, beams, ry=1.1, fu=65.0)
+    assert pair is not None
+    _mpc, mbe = pair
+    assert mbe == pytest.approx(5000.0 + 600.0)

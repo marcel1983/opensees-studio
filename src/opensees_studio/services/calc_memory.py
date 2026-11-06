@@ -224,7 +224,8 @@ def _connection_rows(report: Any) -> list[list[str]]:
             c.shape,
             _fmt(c.sh),
             _fmt(c.mpr),
-            f"{c.protected_from:g}-{c.protected_to:g}",
+            f"{c.protected_from:g}-{c.protected_to:g} "
+            f"({'clear' if c.zone_clear else 'node inside'})",
             c.status,
         ]
         for c in report.connections
