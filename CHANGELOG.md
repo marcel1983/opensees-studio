@@ -11,6 +11,10 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **AISC 341-22 SCBF brace slenderness.** With `SCBF` selected, diagonal
+  braces also check `Lc/r <= 200` (F2.5b) as a limit state of the member, with
+  the governing radius of gyration and the member's K and unbraced lengths.
+
 - **RBS in the joint checks and protected zones.** The SCWB ratio uses the
   reduced `Z_RBS` and `Mv = Vh Sh` when a connection exists, and the panel
   zone takes the beam face moment at `Sh` instead of `dc/2`. Each connection
