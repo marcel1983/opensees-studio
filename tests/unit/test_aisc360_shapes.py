@@ -289,3 +289,16 @@ def test_a_member_check_runs_on_every_family() -> None:
         )
         assert set(check.ratios) >= {"Compression", "Major flexure", "P-M interaction"}
         assert check.governing[1] > 0
+
+
+def test_every_family_reports_calculation_steps() -> None:
+    for name in ("C12X20.7", "WT9X17.5", "L4X4X1/2", "HSS8X8X1/2", "Pipe10STD"):
+        shape = shape_in_units(name, KIP_IN)
+        strengths = (
+            shape.flexure_major(STEEL, "LRFD", unbraced=10 * FT),
+            shape.flexure_minor(STEEL, "LRFD", unbraced=10 * FT),
+            shape.shear_major(STEEL, "LRFD", length=10 * FT),
+            shape.shear_minor(STEEL, "LRFD", length=10 * FT),
+        )
+        for strength in strengths:
+            assert strength.steps, (name, strength.equation)
