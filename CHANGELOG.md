@@ -9,6 +9,8 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.40] - 2026-11-05
+
 ### Added
 
 - **AISC 341-22 E3.6f continuity plates at SMF joints.** The joint check now
@@ -39,8 +41,7 @@ refused instead of silently downgraded).
 - **Structured member calculation records.** `MemberCheck` and `MemberResult`
   now keep one `LimitStateCheck` per limit state (equation, demand, capacity,
   ratio, nominal/available steps and notes) for the governing station. This is
-  the data the calculation-memory report will print; the document renderer is
-  the next increment.
+  the data the calculation-memory report prints.
 
 - **Project information for the report cover.** File → Project Information
   edits the project name, author, company, date, description and the revision
