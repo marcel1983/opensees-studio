@@ -903,6 +903,39 @@ def _aisc_memory_check() -> list[Check]:
     ]
 
 
+def _aisc_expected_brace() -> list[Check]:
+    """F2.3: expected tension and compression of a W18X50 brace."""
+    from opensees_studio.core.design.aisc341 import expected_brace_strength
+
+    shape = _aisc("W18X50")
+    steel = _a992()
+    strength = expected_brace_strength(shape, steel, ry=1.1, length_x=280.0, length_y=280.0)
+    fe = math.pi**2 * steel.E / (280.0 / shape.ry) ** 2
+    return [
+        Check(
+            "Expected tension Ry Fy Ag",
+            "kip",
+            strength.tension,
+            1.1 * 50.0 * shape.A,
+            1e-9,
+        ),
+        Check(
+            "Expected compression (1/0.877) Fe Ag",
+            "kip",
+            strength.compression,
+            fe * shape.A,
+            2e-3,
+        ),
+        Check(
+            "Post-buckling 0.3 C",
+            "kip",
+            strength.post_buckling,
+            0.3 * fe * shape.A,
+            2e-3,
+        ),
+    ]
+
+
 # ──────────────────────────── catalogue ────────────────────────────
 CASES: list[Case] = [
     Case(
@@ -1101,6 +1134,15 @@ CASES: list[Case] = [
         "Every limit state and calculation step of the member check appears in the memory.",
         "The D-05 beam, rendered as the English HTML calculation memory.",
         _aisc_memory_check,
+    ),
+    Case(
+        "D-07",
+        "AISC 341: expected SCBF brace strength",
+        "Design, AISC 341-22",
+        "F2.3: RyFyAg in tension and (1/0.877)FneAg in compression, with Fne from "
+        "AISC 360 E3 using RyFy.",
+        "W18X50 brace, Ry = 1.1, Fy = 50 ksi, Lc = 280 in about both axes.",
+        _aisc_expected_brace,
     ),
 ]
 

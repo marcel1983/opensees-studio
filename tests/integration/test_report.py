@@ -49,3 +49,17 @@ def test_report_leaves_the_design_out_without_settings() -> None:
     project = load_project(EXAMPLES / "building_3storey_diaphragm.osmodel")
     assert project.design is None
     assert "Steel frame check" not in build_report(project)
+
+
+def test_report_carries_the_scbf_capacity_design() -> None:
+    from opensees_studio.core import ElasticBeamColumn
+    from opensees_studio.core.design.settings import DesignSettings
+    from tests.integration.test_steel_design_run import _portal, _results
+
+    project = _portal()
+    project.elements.append(ElasticBeamColumn(id=5, nodes=(1, 3), section_id=2))
+    project.analyses[0].name = "EQ"
+    project.design = DesignSettings(seismic_system="SCBF")
+    page = build_report(project, _results(project))
+    assert "SCBF capacity design (AISC 341-22 F2.3)" in page
+    assert "SCBF capacity" in page

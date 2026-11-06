@@ -299,3 +299,24 @@ def test_joint_scwb_uses_the_rbs_hinge_moment_and_shear() -> None:
     assert pair is not None
     _mpc, mbe = pair
     assert mbe == pytest.approx(5000.0 + 600.0)
+
+
+def test_the_expected_brace_strength_follows_f2_3() -> None:
+    from opensees_studio.core.design.aisc341 import expected_brace_strength
+    from opensees_studio.core.design.aisc360 import Steel
+    from opensees_studio.core.units import UnitSystem
+    from opensees_studio.services.steel_design import ishape_in_units
+
+    shape = ishape_in_units("W18X50", UnitSystem.US_IN_KIP)
+    steel = Steel(FY, E, 11200.0)
+    short = expected_brace_strength(shape, steel, ry=RY, length_x=10.0, length_y=10.0)
+    assert short.tension == pytest.approx(RY * FY * shape.A)
+    assert short.compression == pytest.approx(short.tension)
+    assert short.post_buckling == pytest.approx(0.3 * short.compression)
+
+    slender = expected_brace_strength(shape, steel, ry=RY, length_x=280.0, length_y=280.0)
+    assert slender.tension == pytest.approx(short.tension)
+    assert 0.0 < slender.compression < slender.tension
+    assert slender.post_buckling == pytest.approx(0.3 * slender.compression)
+    with pytest.raises(ValueError, match="positive"):
+        expected_brace_strength(shape, steel, ry=0.0, length_x=10.0, length_y=10.0)

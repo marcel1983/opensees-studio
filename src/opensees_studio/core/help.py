@@ -1584,9 +1584,23 @@ cantilever**: F1-1 assumes both ends braced.
   axial force. The joint table also reports the **continuity-plate** condition
   of E3.6f (`tcf` against `tlim = 0.6 sqrt(bbf)`). With **SCBF**, diagonal
   braces also check `Lc/r <= 200` (F2.5b) and `Ae >= Ag` (F2.5b(c)); the notes
-  give the expected brace strength `Ry Fy Ag` for the connections. The
-  capacity-design rules of Chapters E to H beyond these checks, and the
-  connection design of Chapters J and AISC 358, are not implied.
+  give the expected brace strength `Ry Fy Ag` for the connections.
+  The check also runs the **F2.3 capacity design** for columns and beams: when
+  a load set contains a case named as an earthquake (`E`, `EQ`, `EX`, ...), it
+  computes each brace's expected strength (tension `Ry Fy Ag`, compression the
+  lesser of that and `(1/0.877) Fne Ag`), takes the largest
+  `expected / analysis` ratio and scales the seismic terms of the load set by
+  it; gravity terms are not scaled. The factor is never below 1.0 and is
+  conservative with respect to both F2.3 analyses: every brace reaches at
+  least its expected strength, and the compression brace is checked at its
+  expected strength (more severe than the 0.3 post-buckling value). Braces
+  with no seismic force are left out of the factor and listed in the note. The
+  report and the memory show the governing brace, its state, the analysis and
+  expected forces and the factor; the capacity checks appear in the member
+  ratios with the `SCBF capacity` prefix. The check does not identify which
+  members belong to the braced frame: it applies the factor to every column
+  and beam of the model, which is conservative for members outside it. The
+  connection design of Chapter J and AISC 358 is not implied.
 
 Results: one row per member with its governing ratio, the check and equation
 that govern and the load set that produced them; **Select failing members**

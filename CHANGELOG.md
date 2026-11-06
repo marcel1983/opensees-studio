@@ -11,6 +11,16 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **AISC 341-22 SCBF capacity design (F2.3).** With the SCBF system, the
+  member check computes each brace's expected strength (tension `Ry Fy Ag`,
+  compression the lesser of that and `(1/0.877) Fne Ag`), takes the largest
+  `expected / analysis` ratio of the seismic terms of every load set and
+  scales those terms by it. Gravity is not scaled and the factor is never
+  below 1.0; every brace reaches at least its expected strength, which is
+  conservative with respect to the two F2.3 analyses. The report and the
+  calculation memory list the governing brace, state, forces and factor, and
+  the capacity checks carry the `SCBF capacity` prefix.
+
 - **Design → Gussets.** The gusset editor lists, adds, updates and removes the
   SCBF plates of the project, prefills `t`, `b`, `Lw` and `Lc` from the brace
   shape, refuses a brace without an AISC shape and stores the list as one

@@ -253,6 +253,7 @@ def _design_section(project: Project, results: Mapping[int, Any]) -> str:
                 m.element_id,
                 m.shape,
                 m.ratio,
+                m.capacity_ratio if m.capacity_ratio else "-",
                 m.status,
                 m.check,
                 m.equation,
@@ -267,6 +268,7 @@ def _design_section(project: Project, results: Mapping[int, Any]) -> str:
                     "Element",
                     "Shape",
                     "Ratio",
+                    "Capacity",
                     "Status",
                     "Governs",
                     "Equation",
@@ -415,6 +417,44 @@ def _design_section(project: Project, results: Mapping[int, Any]) -> str:
                 ],
                 gusset_rows,
             )
+        )
+    if report.capacity_design:
+        capacity_rows = [
+            [
+                item.load_set,
+                item.brace_element_id,
+                item.shape,
+                item.state,
+                item.analysis_force,
+                item.expected_force,
+                item.factor,
+            ]
+            for item in report.capacity_design
+        ]
+        out.append("<h3>SCBF capacity design (AISC 341-22 F2.3)</h3>")
+        out += [
+            f"<p class='note'>Brace {item.brace_element_id}: {_e(note)}</p>"
+            for item in report.capacity_design
+            for note in item.notes
+        ]
+        out.append(
+            _table(
+                [
+                    "Load set",
+                    "Brace",
+                    "Shape",
+                    "State",
+                    "Analysis force",
+                    "Expected strength",
+                    "Factor",
+                ],
+                capacity_rows,
+            )
+        )
+        out.append(
+            "<p class='note'>The seismic terms of the load set are scaled by the "
+            "factor; gravity terms are not. The check is conservative with respect "
+            "to F2.3(a) and (b): every brace reaches at least its expected strength.</p>"
         )
 
     drift_rows: list[list[Any]] = []
