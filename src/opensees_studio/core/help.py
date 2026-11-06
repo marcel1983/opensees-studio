@@ -1561,9 +1561,10 @@ cantilever**: F1-1 assumes both ends braced.
   `φRn = 0.90·0.60Fy dc tw (1 + 3bcf tcf²/(db dc tw))` adjusted for column
   axial force. The joint table also reports the **continuity-plate** condition
   of E3.6f (`tcf` against `tlim = 0.6 sqrt(bbf)`). With **SCBF**, diagonal
-  braces also check `Lc/r <= 200` (F2.5b). The capacity-design rules of
-  Chapters E to H beyond these checks, and the connection design of Chapters J
-  and AISC 358, are not implied.
+  braces also check `Lc/r <= 200` (F2.5b) and `Ae >= Ag` (F2.5b(c)); the notes
+  give the expected brace strength `Ry Fy Ag` for the connections. The
+  capacity-design rules of Chapters E to H beyond these checks, and the
+  connection design of Chapters J and AISC 358, are not implied.
 
 Results: one row per member with its governing ratio, the check and equation
 that govern and the load set that produced them; **Select failing members**

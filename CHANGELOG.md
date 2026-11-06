@@ -11,9 +11,11 @@ refused instead of silently downgraded).
 
 ### Added
 
-- **AISC 341-22 SCBF brace slenderness.** With `SCBF` selected, diagonal
-  braces also check `Lc/r <= 200` (F2.5b) as a limit state of the member, with
-  the governing radius of gyration and the member's K and unbraced lengths.
+- **AISC 341-22 SCBF brace rules.** With `SCBF` selected, diagonal braces
+  check `Lc/r <= 200` (F2.5b) and the effective net area `Ae >= Ag`
+  (F2.5b(c), using the member's `An` and `U`); when `An` is missing the check
+  says so instead of passing silently. The member notes carry the expected
+  brace yield strength `Ry Fy Ag` for the connection design.
 
 - **RBS in the joint checks and protected zones.** The SCWB ratio uses the
   reduced `Z_RBS` and `Mv = Vh Sh` when a connection exists, and the panel
