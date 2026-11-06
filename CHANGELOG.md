@@ -11,10 +11,10 @@ refused instead of silently downgraded).
 
 ### Added
 
-- **Calculation steps for the compression of every shape family.** Channels,
-  tees, angles, rectangular HSS, round HSS and pipes now print `Fe`, the
-  governing `Fcr` branch, the E7 effective area and `Pn` in the calculation
-  memory, through the shared compression helper.
+- **Calculation steps for every shape family.** Channels, tees, angles,
+  rectangular HSS, round HSS and pipes now print `Fe`, the governing `Fcr`,
+  the E7 effective area, `Pn`, and the steps of their flexure and shear checks
+  (F7 to F10, G3 to G5) in the calculation memory.
 
 - **Verification manual D-06: the calculation memory of the D-05 beam.** The
   memory is generated from the same end-to-end run and the case asserts that
