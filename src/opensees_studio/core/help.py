@@ -1446,6 +1446,28 @@ engineer the notional loads with the right code values and a traceable name.
             "define.mass_source",
             "define.plain_pattern",
         ),
+        "design.connections": _t(
+            "Design → Connections",
+            "Design",
+            "AISC 358-22 reduced beam section (RBS) connections.",
+            """
+Lists, adds, edits and removes RBS connections of the project.
+
+- Pick the **beam** and **column** frame elements, then `a` (start of the cut),
+  `b` (cut length) and `c` (cut depth). The fields start at the midpoints of
+  the Section 5.7 limits for the chosen beam.
+- The cut is checked when added: `0.5 bf <= a <= 0.75 bf`,
+  `0.65 d <= b <= 0.85 d`, `0.1 bf <= c <= 0.25 bf`. An invalid cut is refused
+  with the reason.
+- OK stores the list as one undoable step; the report and the calculation
+  memory show each connection with its `Z_RBS`, `Sh`, `Mpr` and protected zone.
+
+The connection check (probable moment at the face, shear at the hinge, welds)
+and the full AISC 358 design procedure are not part of this dialog yet.
+""",
+            "design.steel_check",
+            "file.calc_memory",
+        ),
         "design.steel_check": _t(
             "Design → Steel Frame Check (AISC 360-16)",
             "Design",
@@ -5388,6 +5410,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_import_s2k": "file.import_s2k",
     "_act_import_tcl": "file.import_tcl",
     "_act_steel_check": "design.steel_check",
+    "_act_connections": "design.connections",
     "_act_notional_loads": "design.notional_loads",
     "_act_influence_line": "display.influence_line",
     "_act_drift_check": "design.drift_check",
