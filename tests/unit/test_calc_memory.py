@@ -141,3 +141,21 @@ def test_the_memory_carries_the_rbs_connections() -> None:
     assert "17.5" in english
     spanish = build_member_memory(_project(), report, language="es", fmt="markdown")
     assert "Conexiones (AISC 358-22)" in spanish
+
+
+def test_the_memory_carries_the_scbf_protected_zones() -> None:
+    from opensees_studio.services.steel_design import ProtectedZone
+
+    report = _report()
+    report.protected_zones = [
+        ProtectedZone(
+            element_id=5,
+            ranges=((0.0, 0.1), (0.375, 0.625), (0.9, 1.0)),
+            zone_clear=False,
+            notes=["Node 98 lies inside the protected zone."],
+        )
+    ]
+    english = build_member_memory(_project(), report, language="en", fmt="html")
+    assert "SCBF protected zones" in english and "node inside" in english
+    spanish = build_member_memory(_project(), report, language="es", fmt="markdown")
+    assert "Zonas protegidas SCBF" in spanish
