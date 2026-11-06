@@ -11,6 +11,13 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **AISC 341-22 gusset-plate engine.** `core.design.gussets` computes the
+  Whitmore width (`bw = 2 Lw tan 30 + t_brace`), gusset yielding
+  (`Pn = Fy b t`) and plate buckling (`r = t/sqrt(12)`, `K = 0.65`) with their
+  calculation steps, and returns the three `LimitStateCheck`s against the
+  expected brace force `Ry Fy Ag`. The SCBF entity, dialog and report wiring
+  come next.
+
 - **AISC 341-22 SCBF protected zones.** Each brace reports the centre quarter
   and the depth-long zones at its ends (F2.5c); a joint or support inside them
   flips the zone to `node inside` with the node and whether it is restrained.
