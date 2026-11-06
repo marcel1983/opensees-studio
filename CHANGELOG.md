@@ -11,6 +11,12 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **SCBF gusset entity, report and memory.** `Project.gussets` stores the
+  brace, plate thickness, width, Whitmore length and free length; the steel
+  check runs the Whitmore, yielding and buckling checks against the expected
+  brace force `Ry Fy Ag` and reports the maximum ratio. The report and the
+  calculation memory (HTML, Markdown, LaTeX, ODT; EN/ES) list the plates.
+
 - **AISC 341-22 gusset-plate engine.** `core.design.gussets` computes the
   Whitmore width (`bw = 2 Lw tan 30 + t_brace`), gusset yielding
   (`Pn = Fy b t`) and plate buckling (`r = t/sqrt(12)`, `K = 0.65`) with their

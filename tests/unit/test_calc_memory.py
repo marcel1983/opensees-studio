@@ -159,3 +159,27 @@ def test_the_memory_carries_the_scbf_protected_zones() -> None:
     assert "SCBF protected zones" in english and "node inside" in english
     spanish = build_member_memory(_project(), report, language="es", fmt="markdown")
     assert "Zonas protegidas SCBF" in spanish
+
+
+def test_the_memory_carries_the_scbf_gussets() -> None:
+    from opensees_studio.services.steel_design import GussetResult
+
+    report = _report()
+    report.gussets = [
+        GussetResult(
+            gusset_id=1,
+            brace_element_id=5,
+            shape="W18X50",
+            t=0.5,
+            b=12.0,
+            lw=10.0,
+            free_length=10.0,
+            demand=800.0,
+            ratio=0.75,
+            status="OK",
+        )
+    ]
+    english = build_member_memory(_project(), report, language="en", fmt="html")
+    assert "SCBF gusset plates" in english and "W18X50" in english
+    spanish = build_member_memory(_project(), report, language="es", fmt="markdown")
+    assert "Planchas de unión SCBF" in spanish

@@ -494,3 +494,21 @@ def test_scbf_brace_protected_zone_flags_a_node_inside() -> None:
     zone = next(item for item in report.protected_zones if item.element_id == 5)
     assert not zone.zone_clear
     assert any("protected zone" in note for note in zone.notes)
+
+
+def test_a_gusset_is_checked_against_the_expected_brace_force() -> None:
+    from opensees_studio.core.design.gusset_model import Gusset
+
+    project = _portal()
+    project.elements.append(ElasticBeamColumn(id=5, nodes=(1, 3), section_id=2))
+    project.gussets = [Gusset(id=1, brace_element_id=5, t=0.5, b=12.0, lw=10.0, free_length=10.0)]
+    report = steel_frame_check(project, _results(project), DesignSettings(seismic_system="SCBF"))
+    gusset = report.gussets[0]
+    assert gusset.shape == "W18X50"
+    assert gusset.demand == pytest.approx(1.1 * 50.0 * 14.7)
+    assert [check.name for check in gusset.checks] == [
+        "Gusset Whitmore width",
+        "Gusset yielding",
+        "Gusset buckling",
+    ]
+    assert gusset.status in ("OK", "NG")

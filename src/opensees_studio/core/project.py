@@ -27,6 +27,7 @@ from opensees_studio.core.combinations import LoadCombination
 from opensees_studio.core.constraints import EqualDOFConstraint, RigidDiaphragm, RigidLink
 from opensees_studio.core.custom_commands import CustomCommandBlock
 from opensees_studio.core.design.connections import RbsConnection
+from opensees_studio.core.design.gusset_model import Gusset
 from opensees_studio.core.design.settings import DesignSettings
 from opensees_studio.core.diaphragms import constraint_chain_problems, diaphragm_problems
 from opensees_studio.core.friction import FrictionModel
@@ -112,6 +113,7 @@ class Project(BaseModel):
         "mass_source",
         "combinations",
         "connections",
+        "gussets",
         "groups",
         "section_cuts",
         "custom_commands",
@@ -237,6 +239,10 @@ class Project(BaseModel):
         default_factory=list,
         description="AISC 358-22 RBS connections between frame elements (additive).",
     )
+    gussets: list[Gusset] = Field(
+        default_factory=list,
+        description="AISC 341-22 SCBF gusset plates at brace ends (additive).",
+    )
     groups: list[Group] = Field(
         default_factory=list,
         description="Named sets of joints and elements (Define → Groups; additive).",
@@ -356,6 +362,9 @@ class Project(BaseModel):
 
     def next_connection_id(self) -> int:
         return self._next_id(self.connections)
+
+    def next_gusset_id(self) -> int:
+        return self._next_id(self.gussets)
 
     def next_storey_id(self) -> int:
         return self._next_id(self.storeys)
@@ -486,6 +495,15 @@ class Project(BaseModel):
             if connection.beam_element_id == connection.column_element_id:
                 problems.append(
                     f"Connection {connection.id}: the beam and column are the same element."
+                )
+
+        gusset_ids = {g.id for g in self.gussets}
+        if len(gusset_ids) != len(self.gussets):
+            problems.append("Duplicate gusset ids.")
+        for gusset in self.gussets:
+            if gusset.brace_element_id not in element_ids:
+                problems.append(
+                    f"Gusset {gusset.id}: brace element {gusset.brace_element_id} does not exist."
                 )
 
         if self.ndm == 2:
