@@ -11,6 +11,11 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **Design → Gussets.** The gusset editor lists, adds, updates and removes the
+  SCBF plates of the project, prefills `t`, `b`, `Lw` and `Lc` from the brace
+  shape, refuses a brace without an AISC shape and stores the list as one
+  undoable step. The action has its help page (`design.gussets`).
+
 - **SCBF gusset entity, report and memory.** `Project.gussets` stores the
   brace, plate thickness, width, Whitmore length and free length; the steel
   check runs the Whitmore, yielding and buckling checks against the expected
