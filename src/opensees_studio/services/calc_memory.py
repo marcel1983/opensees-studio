@@ -39,6 +39,10 @@ _LABELS: dict[Language, dict[str, str]] = {
         "connections": "Connections (AISC 358-22)",
         "zones": "SCBF protected zones (AISC 341-22 F2.5c)",
         "zones_x": "Zones (x/L)",
+        "gussets": "SCBF gusset plates (AISC 341-22 F2.6c)",
+        "gusset": "Gusset",
+        "brace": "Brace",
+        "expected": "Ry Fy Ag",
         "connection": "Connection",
         "beam": "Beam",
         "column": "Column",
@@ -91,6 +95,10 @@ _LABELS: dict[Language, dict[str, str]] = {
         "connections": "Conexiones (AISC 358-22)",
         "zones": "Zonas protegidas SCBF (AISC 341-22 F2.5c)",
         "zones_x": "Zonas (x/L)",
+        "gussets": "Planchas de unión SCBF (AISC 341-22 F2.6c)",
+        "gusset": "Plancha",
+        "brace": "Arriostramiento",
+        "expected": "Ry Fy Ag",
         "connection": "Conexión",
         "beam": "Viga",
         "column": "Columna",
@@ -249,6 +257,24 @@ def _protected_rows(report: Any) -> list[list[str]]:
     ]
 
 
+def _gusset_rows(report: Any) -> list[list[str]]:
+    return [
+        [
+            str(g.gusset_id),
+            str(g.brace_element_id),
+            g.shape,
+            _fmt(g.t),
+            _fmt(g.b),
+            _fmt(g.lw),
+            _fmt(g.free_length),
+            _fmt(g.demand),
+            _fmt(g.ratio),
+            g.status,
+        ]
+        for g in report.gussets
+    ]
+
+
 def _member_html(project: Any, member: Any, labels: dict[str, str]) -> list[str]:
     shape = _member_shape(project, member.shape)
     out = [
@@ -367,6 +393,20 @@ def _html(project: Any, report: Any, labels: dict[str, str]) -> str:
             )
             + "</table>"
         )
+    gussets_html = ""
+    if report.gussets:
+        gussets_html = (
+            f"<h2>{labels['gussets']}</h2><table><tr>"
+            f"<th>{labels['gusset']}</th><th>{labels['brace']}</th>"
+            f"<th>{labels['shape']}</th><th>t</th><th>b</th><th>Lw</th><th>Lc</th>"
+            f"<th>{labels['expected']}</th><th>{labels['ratio']}</th>"
+            f"<th>{labels['status']}</th></tr>"
+            + "".join(
+                "<tr>" + "".join(f"<td>{_e(cell)}</td>" for cell in row) + "</tr>"
+                for row in _gusset_rows(report)
+            )
+            + "</table>"
+        )
     members = []
     for member in sorted(report.members, key=lambda item: item.element_id):
         members.extend(_member_html(project, member, labels))
@@ -388,6 +428,7 @@ def _html(project: Any, report: Any, labels: dict[str, str]) -> str:
         + joints
         + connections_html
         + zones_html
+        + gussets_html
         + "".join(members)
         + f"<p class='note'>{_e(labels['disclaimer'])}</p></body></html>"
     )
@@ -446,6 +487,16 @@ def _markdown(project: Any, report: Any, labels: dict[str, str]) -> str:
             "|---|---|---|",
         ]
         lines += ["| " + " | ".join(row) + " |" for row in _protected_rows(report)]
+    if report.gussets:
+        lines += [
+            "",
+            f"## {labels['gussets']}",
+            "",
+            f"| {labels['gusset']} | {labels['brace']} | {labels['shape']} | t | b | Lw | Lc | "
+            f"{labels['expected']} | {labels['ratio']} | {labels['status']} |",
+            "|---|---|---|---|---|---|---|---|---|---|",
+        ]
+        lines += ["| " + " | ".join(row) + " |" for row in _gusset_rows(report)]
     for member in sorted(report.members, key=lambda item: item.element_id):
         lines += [
             "",
@@ -610,6 +661,21 @@ def _latex(project: Any, report: Any, labels: dict[str, str]) -> str:
             for row in _protected_rows(report)
         ]
         lines.append(r"\end{longtable}")
+    if report.gussets:
+        lines += [
+            rf"\subsection*{{{_tex_escape(labels['gussets'])}}}",
+            r"\begin{longtable}{llllllllll}",
+        ]
+        lines.append(
+            rf"{_tex_escape(labels['gusset'])} & {_tex_escape(labels['brace'])} & "
+            rf"{_tex_escape(labels['shape'])} & t & b & Lw & Lc & "
+            rf"{_tex_escape(labels['expected'])} & {_tex_escape(labels['ratio'])} & "
+            rf"{_tex_escape(labels['status'])} \\ \toprule"
+        )
+        lines += [
+            " & ".join(_tex_escape(cell) for cell in row) + r" \\" for row in _gusset_rows(report)
+        ]
+        lines.append(r"\end{longtable}")
     for member in sorted(report.members, key=lambda item: item.element_id):
         lines += [
             "",
@@ -748,6 +814,31 @@ def odt_bytes(project: Any, report: Any, *, language: Language = "en") -> bytes:
         body.append("<table:table table:name='Zones'>")
         header = [labels["element"], labels["zones_x"], labels["status"]]
         for row in [header, *_protected_rows(report)]:
+            body.append(
+                "<table:table-row>"
+                + "".join(
+                    f"<table:table-cell><text:p>{_odt_text(c)}</text:p></table:table-cell>"
+                    for c in row
+                )
+                + "</table:table-row>"
+            )
+        body.append("</table:table>")
+    if report.gussets:
+        body.append(f"<text:h text:outline-level='2'>{_odt_text(labels['gussets'])}</text:h>")
+        body.append("<table:table table:name='Gussets'>")
+        header = [
+            labels["gusset"],
+            labels["brace"],
+            labels["shape"],
+            "t",
+            "b",
+            "Lw",
+            "Lc",
+            labels["expected"],
+            labels["ratio"],
+            labels["status"],
+        ]
+        for row in [header, *_gusset_rows(report)]:
             body.append(
                 "<table:table-row>"
                 + "".join(

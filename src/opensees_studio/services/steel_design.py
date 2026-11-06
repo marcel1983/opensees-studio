@@ -83,6 +83,7 @@ from opensees_studio.core.design.connections import (
     rbs_mpr,
     rbs_protected_zone,
 )
+from opensees_studio.core.design.gussets import gusset_checks
 from opensees_studio.core.design.settings import DesignLoadSet, DesignSettings
 from opensees_studio.core.geometry.elements import FRAME_ELEMENT_CLASSES
 from opensees_studio.core.sections import ElasticSection
@@ -482,11 +483,30 @@ class ProtectedZone:
 
 
 @dataclass
+class GussetResult:
+    """One SCBF gusset plate and its three checks."""
+
+    gusset_id: int
+    brace_element_id: int
+    shape: str = ""
+    t: float = 0.0
+    b: float = 0.0
+    lw: float = 0.0
+    free_length: float = 0.0
+    demand: float = 0.0
+    ratio: float = 0.0
+    status: str = "not checked"
+    checks: list[LimitStateCheck] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+
+@dataclass
 class DesignReport:
     members: list[MemberResult] = field(default_factory=list)
     joints: list[JointResult] = field(default_factory=list)
     connections: list[ConnectionResult] = field(default_factory=list)
     protected_zones: list[ProtectedZone] = field(default_factory=list)
+    gussets: list[GussetResult] = field(default_factory=list)
     load_sets: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
 
@@ -835,6 +855,8 @@ def steel_frame_check(
         )
     if settings.seismic_system == "SCBF":
         report.protected_zones = _scbf_protected_zones(project, settings, units)
+    if project.gussets:
+        report.gussets = _gusset_results(project, settings, units, fy=fy)
     return report
 
 
@@ -1253,4 +1275,59 @@ def _scbf_protected_zones(
                 support = " (restrained)" if any(node.restraint) else ""
                 zone.notes.append(f"Node {node.id} lies inside the protected zone{support}.")
         out.append(zone)
+    return out
+
+
+def _gusset_results(
+    project: Any,
+    settings: DesignSettings,
+    units: Any,
+    *,
+    fy: float,
+) -> list[GussetResult]:
+    """The saved gussets checked against the expected brace force."""
+    sections = {s.id: s for s in project.sections}
+    elements = {e.id: e for e in project.elements}
+    out: list[GussetResult] = []
+    for gusset in project.gussets:
+        result = GussetResult(
+            gusset_id=gusset.id,
+            brace_element_id=gusset.brace_element_id,
+            t=gusset.t,
+            b=gusset.b,
+            lw=gusset.lw,
+            free_length=gusset.free_length,
+        )
+        brace = elements.get(gusset.brace_element_id)
+        if brace is None:
+            result.status = "invalid"
+            result.notes.append("The brace element does not exist.")
+            out.append(result)
+            continue
+        section = sections.get(getattr(brace, "section_id", -1))
+        name = getattr(section, "name", "") or ""
+        try:
+            shape = shape_in_units(name, units)
+        except (KeyError, ValueError) as exc:
+            result.status = "invalid"
+            result.notes.append(f"No AISC shape for the brace: {exc}")
+            out.append(result)
+            continue
+        result.shape = shape.name
+        e = float(getattr(section, "E", 0.0) or 0.0) or 29000.0 * stress_scale(SOURCE_UNITS, units)
+        result.demand = settings.ry * fy * shape.A
+        result.checks = gusset_checks(
+            fy=fy,
+            e=e,
+            width=gusset.b,
+            thickness=gusset.t,
+            whitmore_length=gusset.lw,
+            free_length=gusset.free_length,
+            demand=result.demand,
+            brace_thickness=float(getattr(shape, "tf", 0.0) or 0.0),
+            method=settings.method,
+        )
+        result.ratio = max(check.ratio for check in result.checks)
+        result.status = "NG" if result.ratio > 1.0 else "OK"
+        out.append(result)
     return out

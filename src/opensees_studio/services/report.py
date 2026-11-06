@@ -377,6 +377,45 @@ def _design_section(project: Project, results: Mapping[int, Any]) -> str:
             for note in zone.notes
         ]
         out.append(_table(["Element", "Zones (x/L)", "Status"], zone_rows))
+    if report.gussets:
+        gusset_rows = [
+            [
+                g.gusset_id,
+                g.brace_element_id,
+                g.shape,
+                g.t,
+                g.b,
+                g.lw,
+                g.free_length,
+                g.demand,
+                g.ratio,
+                g.status,
+            ]
+            for g in report.gussets
+        ]
+        out.append("<h3>SCBF gusset plates (AISC 341-22 F2.6c)</h3>")
+        out += [
+            f"<p class='note'>Gusset {g.gusset_id}: {_e(note)}</p>"
+            for g in report.gussets
+            for note in g.notes
+        ]
+        out.append(
+            _table(
+                [
+                    "Gusset",
+                    "Brace",
+                    "Shape",
+                    "t",
+                    "b",
+                    "Lw",
+                    "Lc",
+                    "Ry Fy Ag",
+                    "Ratio",
+                    "Status",
+                ],
+                gusset_rows,
+            )
+        )
 
     drift_rows: list[list[Any]] = []
     for result in sorted(results.values(), key=lambda r: getattr(r, "case_id", 0)):
