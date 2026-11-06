@@ -313,6 +313,49 @@ def _design_section(project: Project, results: Mapping[int, Any]) -> str:
                 joint_rows,
             )
         )
+    if report.connections:
+        connection_rows = [
+            [
+                c.connection_id,
+                c.beam_element_id,
+                c.column_element_id,
+                c.shape,
+                c.a,
+                c.b,
+                c.c,
+                c.sh,
+                c.z_rbs,
+                c.mpr,
+                f"{c.protected_from:g} to {c.protected_to:g}",
+                c.status,
+            ]
+            for c in report.connections
+        ]
+        out.append("<h3>Connections (AISC 358-22)</h3>")
+        out += [
+            f"<p class='note'>Connection {c.connection_id}: {_e(note)}</p>"
+            for c in report.connections
+            for note in c.notes
+        ]
+        out.append(
+            _table(
+                [
+                    "Connection",
+                    "Beam",
+                    "Column",
+                    "Shape",
+                    "a",
+                    "b",
+                    "c",
+                    "Sh",
+                    "Z_RBS",
+                    "Mpr",
+                    "Protected zone",
+                    "Status",
+                ],
+                connection_rows,
+            )
+        )
 
     drift_rows: list[list[Any]] = []
     for result in sorted(results.values(), key=lambda r: getattr(r, "case_id", 0)):

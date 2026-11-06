@@ -76,6 +76,11 @@ from opensees_studio.core.design.aisc360_shapes import (
     Tee,
 )
 from opensees_studio.core.design.calc import CalcStep, LimitStateCheck
+from opensees_studio.core.design.connections import (
+    rbs_geometry,
+    rbs_mpr,
+    rbs_protected_zone,
+)
 from opensees_studio.core.design.settings import DesignLoadSet, DesignSettings
 from opensees_studio.core.geometry.elements import FRAME_ELEMENT_CLASSES
 from opensees_studio.core.sections import ElasticSection
@@ -437,9 +442,30 @@ class JointResult:
 
 
 @dataclass
+class ConnectionResult:
+    """One AISC 358 RBS connection, its geometry and probable moment."""
+
+    connection_id: int
+    beam_element_id: int
+    column_element_id: int
+    shape: str = ""
+    a: float = 0.0
+    b: float = 0.0
+    c: float = 0.0
+    sh: float = 0.0
+    z_rbs: float = 0.0
+    mpr: float = 0.0
+    protected_from: float = 0.0
+    protected_to: float = 0.0
+    status: str = "not checked"
+    notes: list[str] = field(default_factory=list)
+
+
+@dataclass
 class DesignReport:
     members: list[MemberResult] = field(default_factory=list)
     joints: list[JointResult] = field(default_factory=list)
+    connections: list[ConnectionResult] = field(default_factory=list)
     load_sets: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
 
@@ -702,6 +728,8 @@ def steel_frame_check(
             fy=fy,
             fu=fu,
         )
+    if project.connections:
+        report.connections = _connection_results(project, settings, units, fy=fy, fu=fu)
     return report
 
 
@@ -930,5 +958,61 @@ def _strong_column_weak_beam(
             continue
         result.status = "OK" if result.ratio > 1.0 else "NG"
         result.panel_status = "OK" if result.panel_ratio <= 1.0 else "NG"
+        out.append(result)
+    return out
+
+
+def _connection_results(
+    project: Any,
+    settings: DesignSettings,
+    units: Any,
+    *,
+    fy: float,
+    fu: float,
+) -> list[ConnectionResult]:
+    """The AISC 358 RBS connections with their checked geometry."""
+    sections = {s.id: s for s in project.sections}
+    elements = {e.id: e for e in project.elements}
+    out: list[ConnectionResult] = []
+    for connection in project.connections:
+        result = ConnectionResult(
+            connection_id=connection.id,
+            beam_element_id=connection.beam_element_id,
+            column_element_id=connection.column_element_id,
+        )
+        beam = elements.get(connection.beam_element_id)
+        if beam is None:
+            result.status = "invalid"
+            result.notes.append("The beam element does not exist.")
+            out.append(result)
+            continue
+        section = sections.get(getattr(beam, "section_id", -1))
+        name = getattr(section, "name", "") or ""
+        try:
+            shape = shape_in_units(name, units)
+        except (KeyError, ValueError) as exc:
+            result.status = "invalid"
+            result.notes.append(f"No AISC shape for the beam: {exc}")
+            out.append(result)
+            continue
+        if not isinstance(shape, IShape):
+            result.status = "invalid"
+            result.notes.append("RBS connections require an I-shaped beam.")
+            out.append(result)
+            continue
+        result.shape = shape.name
+        result.a, result.b, result.c = connection.a, connection.b, connection.c
+        try:
+            geometry = rbs_geometry(connection, shape)
+        except ValueError as exc:
+            result.status = "invalid"
+            result.notes.append(str(exc))
+            out.append(result)
+            continue
+        result.sh = geometry.sh
+        result.z_rbs = geometry.z_rbs
+        result.mpr = rbs_mpr(geometry, ry=settings.ry, fy=fy, fu=fu or None)
+        result.protected_from, result.protected_to = rbs_protected_zone(geometry)
+        result.status = "checked"
         out.append(result)
     return out

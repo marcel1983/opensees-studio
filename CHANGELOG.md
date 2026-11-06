@@ -9,6 +9,14 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Added
+
+- **AISC 358-22 RBS connections in the report and the memory.** Each stored
+  connection is validated against the Section 5.7 geometry and shown with its
+  `Z_RBS`, `Sh = a + b/2`, `Mpr = Cpr Ry Fy Z_RBS`, the protected zone
+  `0 to a+b` and a checked/invalid status with the reason. Invalid geometry is
+  reported, never silently dropped.
+
 ## [0.0.40] - 2026-11-05
 
 ### Added
