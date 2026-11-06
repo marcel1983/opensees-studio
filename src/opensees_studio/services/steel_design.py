@@ -77,7 +77,9 @@ from opensees_studio.core.design.aisc360_shapes import (
 )
 from opensees_studio.core.design.calc import CalcStep, LimitStateCheck
 from opensees_studio.core.design.connections import (
+    rbs_flexure_ratio,
     rbs_geometry,
+    rbs_mpe,
     rbs_mpr,
     rbs_protected_zone,
 )
@@ -459,6 +461,11 @@ class ConnectionResult:
     protected_to: float = 0.0
     joint_node: int = 0
     zone_clear: bool = True
+    vh: float = 0.0
+    mf: float = 0.0
+    mpe: float = 0.0
+    flexure_ratio: float = 0.0
+    flexure_status: str = ""
     status: str = "not checked"
     notes: list[str] = field(default_factory=list)
 
@@ -731,7 +738,15 @@ def steel_frame_check(
             fu=fu,
         )
     if project.connections:
-        report.connections = _connection_results(project, settings, units, fy=fy, fu=fu)
+        report.connections = _connection_results(
+            project,
+            settings,
+            units,
+            fy=fy,
+            fu=fu,
+            fields=fields,
+            alternatives=alternatives,
+        )
     return report
 
 
@@ -1004,6 +1019,8 @@ def _connection_results(
     *,
     fy: float,
     fu: float,
+    fields: dict[int, Field],
+    alternatives: list[tuple[str, Alternative]],
 ) -> list[ConnectionResult]:
     """The AISC 358 RBS connections with their checked geometry."""
     sections = {s.id: s for s in project.sections}
@@ -1049,6 +1066,8 @@ def _connection_results(
         result.mpr = rbs_mpr(geometry, ry=settings.ry, fy=fy, fu=fu or None)
         result.protected_from, result.protected_to = rbs_protected_zone(geometry)
         column = elements.get(connection.column_element_id)
+        joint = 0
+        beam_length = 0.0
         if column is not None:
             shared = set(beam.nodes) & set(column.nodes)
             if shared:
@@ -1075,6 +1094,26 @@ def _connection_results(
                             result.notes.append(
                                 f"Node {node.id} lies inside the protected zone{support}."
                             )
+        result.mpe = rbs_mpe(settings.ry, fy, shape.Zx)
+        if joint and beam_length > 0.0 and alternatives:
+            index = _joint_station(beam, joint)
+            for _label, alt in alternatives:
+                shear = 0.0
+                for cid, factor in alt.items():
+                    values = fields.get(cid, {}).get("V2", {}).get(beam.id)
+                    if values is not None:
+                        shear += factor * float(values[index])
+                vh = max(
+                    2.0 * result.mpr / max(beam_length - 2.0 * result.sh, 1e-9),
+                    abs(shear),
+                )
+                mf = result.mpr + vh * result.sh
+                ratio = rbs_flexure_ratio(mf, result.mpe, method=settings.method)
+                if ratio > result.flexure_ratio:
+                    result.vh = vh
+                    result.mf = mf
+                    result.flexure_ratio = ratio
+            result.flexure_status = "OK" if result.flexure_ratio <= 1.0 else "NG"
         result.status = "checked"
         out.append(result)
     return out

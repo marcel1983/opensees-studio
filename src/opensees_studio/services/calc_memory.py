@@ -226,6 +226,8 @@ def _connection_rows(report: Any) -> list[list[str]]:
             _fmt(c.mpr),
             f"{c.protected_from:g}-{c.protected_to:g} "
             f"({'clear' if c.zone_clear else 'node inside'})",
+            f"{c.flexure_ratio:.3f}" if c.flexure_status else "-",
+            c.flexure_status or "-",
             c.status,
         ]
         for c in report.connections
@@ -330,6 +332,7 @@ def _html(project: Any, report: Any, labels: dict[str, str]) -> str:
             f"<th>{labels['connection']}</th><th>{labels['beam']}</th>"
             f"<th>{labels['column']}</th><th>{labels['shape']}</th>"
             f"<th>Sh</th><th>{labels['mpr']}</th><th>{labels['protected']}</th>"
+            f"<th>Mf / phi Mpe</th><th>RBS</th>"
             f"<th>{labels['status']}</th></tr>"
             + "".join(
                 "<tr>" + "".join(f"<td>{_e(cell)}</td>" for cell in row) + "</tr>"
@@ -402,8 +405,8 @@ def _markdown(project: Any, report: Any, labels: dict[str, str]) -> str:
             "",
             f"| {labels['connection']} | {labels['beam']} | {labels['column']} | "
             f"{labels['shape']} | Sh | {labels['mpr']} | {labels['protected']} | "
-            f"{labels['status']} |",
-            "|---|---|---|---|---|---|---|---|",
+            f"Mf / phi Mpe | RBS | {labels['status']} |",
+            "|---|---|---|---|---|---|---|---|---|---|",
         ]
         lines += ["| " + " | ".join(row) + " |" for row in _connection_rows(report)]
     for member in sorted(report.members, key=lambda item: item.element_id):
@@ -543,13 +546,13 @@ def _latex(project: Any, report: Any, labels: dict[str, str]) -> str:
     if report.connections:
         lines += [
             rf"\subsection*{{{_tex_escape(labels['connections'])}}}",
-            r"\begin{longtable}{llllllll}",
+            r"\begin{longtable}{llllllllll}",
         ]
         lines.append(
             rf"{_tex_escape(labels['connection'])} & {_tex_escape(labels['beam'])} & "
             rf"{_tex_escape(labels['column'])} & {_tex_escape(labels['shape'])} & Sh & "
             rf"{_tex_escape(labels['mpr'])} & {_tex_escape(labels['protected'])} & "
-            rf"{_tex_escape(labels['status'])} \\ \toprule"
+            rf"Mf / phi Mpe & RBS & {_tex_escape(labels['status'])} \\ \toprule"
         )
         lines += [
             " & ".join(_tex_escape(cell) for cell in row) + r" \\"
@@ -675,6 +678,8 @@ def odt_bytes(project: Any, report: Any, *, language: Language = "en") -> bytes:
             "Sh",
             labels["mpr"],
             labels["protected"],
+            "Mf / phi Mpe",
+            "RBS",
             labels["status"],
         ]
         for row in [header, *_connection_rows(report)]:

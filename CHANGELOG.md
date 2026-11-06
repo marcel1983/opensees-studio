@@ -28,6 +28,9 @@ refused instead of silently downgraded).
   `Z_RBS`, `Sh = a + b/2`, `Mpr = Cpr Ry Fy Z_RBS`, the protected zone
   `0 to a+b` and a checked/invalid status with the reason. Invalid geometry is
   reported, never silently dropped.
+- **RBS flexure at the column face (5.7-7).** Each connection reports
+  `Mpe = Ry Fy Zb`, `Vh` (probable hinge shear), `Mf = Mpr + Vh Sh` and the
+  `Mf/(phi_d Mpe)` ratio over the load sets, with an OK/NG status.
 
 ## [0.0.40] - 2026-11-05
 
