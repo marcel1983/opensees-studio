@@ -401,3 +401,23 @@ def panel_zone_strength(
     else:
         nominal = base * max(0.0, 1.4 - alpha * pr / py)
     return nominal * (0.90 if method == "LRFD" else 1.0 / 1.67)
+
+
+# ─────────────────────── SMF E3.6f: continuity plates ───────────────────────
+def continuity_tlim(bbf: float) -> float:
+    """E3-7: the column-flange thickness above which E3.6f.1(b) needs no plates.
+
+    ``tlim = 0.6 sqrt(bbf)`` for a beam flange welded to a W-shape column.
+    """
+    if bbf <= 0.0:
+        raise ValueError("The beam flange width must be positive.")
+    return 0.6 * math.sqrt(bbf)
+
+
+def continuity_plate_thickness(
+    beam_flange_thicknesses: Sequence[float], *, two_sided: bool
+) -> float:
+    """E3.6f.2(b): 50% of the beam flange one-sided, 75% of the thicker two-sided."""
+    if not beam_flange_thicknesses:
+        return 0.0
+    return (0.75 if two_sided else 0.5) * max(beam_flange_thicknesses)
