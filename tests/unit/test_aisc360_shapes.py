@@ -195,6 +195,7 @@ def test_channel_flexural_torsional_buckling() -> None:
     strength = channel.compression(STEEL, "LRFD", length_x=lcx, length_y=lcy)
     assert strength.equation == "E7-1 (E4-5 flexural-torsional, effective area)"
     assert strength.nominal == pytest.approx(fcr * effective)
+    assert "Elastic buckling" in [step.label for step in strength.steps]
 
 
 def test_channel_shear() -> None:
