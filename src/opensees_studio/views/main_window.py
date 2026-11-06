@@ -63,6 +63,7 @@ from opensees_studio.commands import (
     MoveNodesCommand,
     ReplaceElementsCommand,
     ReplicateCommand,
+    SetConnectionsCommand,
     SetCoordSystemsCommand,
     SetMassCommand,
     SetProjectMetaCommand,
@@ -228,6 +229,7 @@ from opensees_studio.views.dialogs.buildings import (
     StoreysDialog,
 )
 from opensees_studio.views.dialogs.connect_joints import DivideFramesDialog, MergeJointsDialog
+from opensees_studio.views.dialogs.connections import ConnectionsDialog
 from opensees_studio.views.dialogs.grid_line_view import GridLineViewDialog
 from opensees_studio.views.dialogs.grid_wizard import GridWizardDialog
 from opensees_studio.views.dialogs.groups import (
@@ -605,6 +607,7 @@ class MainWindow(QMainWindow):
         self._act_run_selected = QAction("Run Se&lected Cases…", self)
         self._act_clear_results = QAction("Delete &All Results…", self)
         self._act_steel_check = QAction("&Steel Frame Check (AISC 360-16)…", self)
+        self._act_connections = QAction("&Connections (AISC 358-22)…", self)
         self._act_drift_check = QAction("Storey &Drift Check…", self)
         self._act_steel_ratios = QAction("Display Steel &Ratios on Model", self)
         self._act_notional_loads = QAction("Generate &Notional Loads (DAM).", self)
@@ -899,6 +902,7 @@ class MainWindow(QMainWindow):
 
         m_design = mb.addMenu("Desi&gn")
         m_design.addAction(self._act_steel_check)
+        m_design.addAction(self._act_connections)
         m_design.addAction(self._act_notional_loads)
         m_design.addAction(self._act_steel_ratios)
         m_design.addAction(self._act_drift_check)
@@ -1354,6 +1358,7 @@ class MainWindow(QMainWindow):
         self._act_run_selected.triggered.connect(self._on_run_selected_cases)
         self._act_clear_results.triggered.connect(self._on_clear_results)
         self._act_steel_check.triggered.connect(self._on_steel_check)
+        self._act_connections.triggered.connect(self._on_connections)
         self._act_notional_loads.triggered.connect(self._on_notional_loads)
         self._act_drift_check.triggered.connect(self._on_drift_check)
         self._act_steel_ratios.triggered.connect(self._on_steel_ratios)
@@ -2716,6 +2721,19 @@ class MainWindow(QMainWindow):
             f"Added {len(patterns)} notional load pattern(s), total {total:.6g}; "
             "use them in the cases of the Direct Analysis Method."
         )
+
+    def _on_connections(self) -> None:
+        """Design → Connections: edit the AISC 358 RBS connections."""
+        project = self._vm.project
+        if project is None:
+            return
+        dialog = ConnectionsDialog(project, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        connections = dialog.connections()
+        if connections != project.connections:
+            self._vm.apply_command(SetConnectionsCommand(self._vm, connections))
+        self._log(f"{len(connections)} RBS connection(s).")
 
     def _on_steel_check(self) -> None:
         """Design → Steel Frame Check: AISC 360-16 ratios over this session's results.
@@ -6508,6 +6526,7 @@ class MainWindow(QMainWindow):
         db_there = has_project and database_path(self._vm.path).exists()
         self._act_clear_results.setEnabled(bool(has_project and (stored or db_there)))
         self._act_steel_check.setEnabled(has_project)
+        self._act_connections.setEnabled(has_project)
         self._act_notional_loads.setEnabled(has_project)
         self._act_drift_check.setEnabled(has_project)
         self._act_steel_ratios.setEnabled(has_project)

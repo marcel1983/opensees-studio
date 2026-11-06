@@ -19,6 +19,7 @@ from opensees_studio.commands.combinations import (
     DeleteCombinationsCommand,
     UpdateCombinationCommand,
 )
+from opensees_studio.commands.connections import SetConnectionsCommand
 from opensees_studio.commands.constraints import (
     AddEqualDOFConstraintCommand,
 )
@@ -145,6 +146,7 @@ __all__ = [
     "ReplaceElementsCommand",
     "ReplaceTimeSeriesCommand",
     "ReplicateCommand",
+    "SetConnectionsCommand",
     "SetCoordSystemsCommand",
     "SetCustomCommandsCommand",
     "SetDesignSettingsCommand",

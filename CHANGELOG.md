@@ -11,6 +11,12 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **Design → Connections: the RBS editor.** A dialog lists, adds, edits and
+  removes the AISC 358-22 RBS connections, suggests the midpoints of the
+  Section 5.7 limits from the beam shape, refuses an out-of-limit cut with the
+  reason, and stores the list as one undoable step. The report and the
+  calculation memory pick the connections up.
+
 - **AISC 358-22 RBS connections in the report and the memory.** Each stored
   connection is validated against the Section 5.7 geometry and shown with its
   `Z_RBS`, `Sh = a + b/2`, `Mpr = Cpr Ry Fy Z_RBS`, the protected zone
