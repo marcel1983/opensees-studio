@@ -9,6 +9,8 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+## [0.0.42] - 2026-11-06
+
 ### Added
 
 - **AISC 341-22 SCBF capacity design (F2.3).** With the SCBF system, the
@@ -36,8 +38,7 @@ refused instead of silently downgraded).
   Whitmore width (`bw = 2 Lw tan 30 + t_brace`), gusset yielding
   (`Pn = Fy b t`) and plate buckling (`r = t/sqrt(12)`, `K = 0.65`) with their
   calculation steps, and returns the three `LimitStateCheck`s against the
-  expected brace force `Ry Fy Ag`. The SCBF entity, dialog and report wiring
-  come next.
+  expected brace force `Ry Fy Ag`.
 
 - **AISC 341-22 SCBF protected zones.** Each brace reports the centre quarter
   and the depth-long zones at its ends (F2.5c); a joint or support inside them
