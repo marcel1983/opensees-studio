@@ -1611,8 +1611,13 @@ cantilever**: F1-1 assumes both ends braced.
   expected forces and the factor; the capacity checks appear in the member
   ratios with the `SCBF capacity` prefix. The check does not identify which
   members belong to the braced frame: it applies the factor to every column
-  and beam of the model, which is conservative for members outside it. The
-  connection design of Chapter J and AISC 358 is not implied.
+  and beam of the model, which is conservative for members outside it. Each
+  joint where a brace ends and at least one beam and one column frame in also
+  reports the **F2.6b** required moment: the lesser of `1.1 Ry Mp` of the beam
+  and `1.1 Σ Ry Fy Z` of the columns, divided by `αs`. When an RBS connection
+  is modelled at the joint its `φd Mpe` gives the ratio; otherwise the joint
+  is reported as a simple connection to verify (0.025 rad rotation, B3.4a).
+  The connection design of Chapter J and AISC 358 is not implied.
 
 Results: one row per member with its governing ratio, the check and equation
 that govern and the load set that produced them; **Select failing members**

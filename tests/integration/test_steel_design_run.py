@@ -566,3 +566,40 @@ def test_a_gusset_weld_is_checked_against_f2_6c_4() -> None:
     assert gusset.weld_ratio == pytest.approx((0.60 * 1.1 * 50.0 * 0.5) / capacity)
     assert gusset.checks[-1].name == "Gusset-to-flange weld (F2.6c.4)"
     assert gusset.weld_status in ("OK", "NG")
+
+
+def test_scbf_beam_column_joint_reports_f2_6b() -> None:
+    from opensees_studio.core.design.connections import RbsConnection
+
+    project = _portal()
+    project.elements.append(ElasticBeamColumn(id=5, nodes=(1, 3), section_id=2))
+    report = steel_frame_check(project, _results(project), DesignSettings(seismic_system="SCBF"))
+    joint = next(item for item in report.scbf_joints if item.node_id == 3)
+    assert joint.beam_element_id == 2
+    assert 3 in joint.column_element_ids
+    assert joint.brace_element_id == 5
+    assert joint.status == "simple / not checked"
+    beam = ishape_in_units("W18X50", project.meta.units)
+    column = ishape_in_units("W14X99", project.meta.units)
+    expected = min(
+        1.1 * 1.1 * 50.0 * beam.Zx,
+        1.1 * 1.1 * 50.0 * column.Zx,
+    )
+    assert joint.required_moment == pytest.approx(expected)
+    assert joint.notes
+
+    project.connections = [
+        RbsConnection(
+            id=1,
+            beam_element_id=2,
+            column_element_id=3,
+            a=4.5,
+            b=13.0,
+            c=1.0,
+        )
+    ]
+    report = steel_frame_check(project, _results(project), DesignSettings(seismic_system="SCBF"))
+    joint = next(item for item in report.scbf_joints if item.node_id == 3)
+    assert joint.available_moment > 0.0
+    assert joint.ratio == pytest.approx(joint.required_moment / joint.available_moment)
+    assert joint.status in ("OK", "NG")

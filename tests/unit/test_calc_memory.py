@@ -213,3 +213,26 @@ def test_the_memory_carries_the_scbf_capacity_design() -> None:
     assert "SCBF capacity design" in english and "Case EQ" in english
     spanish = build_member_memory(_project(), report, language="es", fmt="markdown")
     assert "Diseño por capacidad SCBF" in spanish
+
+
+def test_the_memory_carries_the_scbf_beam_column_joints() -> None:
+    from opensees_studio.services.steel_design import ScbfJointResult
+
+    report = _report()
+    report.scbf_joints = [
+        ScbfJointResult(
+            node_id=3,
+            beam_element_id=2,
+            column_element_ids=[3],
+            brace_element_id=5,
+            beam_moment=5000.0,
+            column_moment=9000.0,
+            required_moment=5000.0,
+            status="simple / not checked",
+        )
+    ]
+    english = build_member_memory(_project(), report, language="en", fmt="html")
+    assert "SCBF beam-to-column connections" in english
+    assert "simple / not checked" in english
+    spanish = build_member_memory(_project(), report, language="es", fmt="markdown")
+    assert "Conexiones viga-columna SCBF" in spanish

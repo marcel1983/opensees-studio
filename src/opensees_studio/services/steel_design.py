@@ -92,6 +92,7 @@ from opensees_studio.core.design.connections import (
     rbs_protected_zone,
 )
 from opensees_studio.core.design.gussets import gusset_checks
+from opensees_studio.core.design.scbf_joints import scbf_beam_column_moment
 from opensees_studio.core.design.settings import DesignLoadSet, DesignSettings
 from opensees_studio.core.geometry.elements import FRAME_ELEMENT_CLASSES
 from opensees_studio.core.sections import ElasticSection
@@ -538,6 +539,23 @@ class CapacityDesign:
 
 
 @dataclass
+class ScbfJointResult:
+    """One SCBF beam-to-column joint and its F2.6b required moment."""
+
+    node_id: int
+    beam_element_id: int
+    column_element_ids: list[int] = field(default_factory=list)
+    brace_element_id: int = 0
+    beam_moment: float = 0.0
+    column_moment: float = 0.0
+    required_moment: float = 0.0
+    available_moment: float = 0.0
+    ratio: float = 0.0
+    status: str = "not checked"
+    notes: list[str] = field(default_factory=list)
+
+
+@dataclass
 class DesignReport:
     members: list[MemberResult] = field(default_factory=list)
     joints: list[JointResult] = field(default_factory=list)
@@ -545,6 +563,7 @@ class DesignReport:
     protected_zones: list[ProtectedZone] = field(default_factory=list)
     gussets: list[GussetResult] = field(default_factory=list)
     capacity_design: list[CapacityDesign] = field(default_factory=list)
+    scbf_joints: list[ScbfJointResult] = field(default_factory=list)
     load_sets: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
 
@@ -1048,6 +1067,7 @@ def steel_frame_check(
         )
     if settings.seismic_system == "SCBF":
         report.protected_zones = _scbf_protected_zones(project, settings, units)
+        report.scbf_joints = _scbf_beam_column_joints(project, settings, units, fy=fy)
     if project.gussets:
         report.gussets = _gusset_results(project, settings, units, fy=fy)
     return report
@@ -1468,6 +1488,121 @@ def _scbf_protected_zones(
                 support = " (restrained)" if any(node.restraint) else ""
                 zone.notes.append(f"Node {node.id} lies inside the protected zone{support}.")
         out.append(zone)
+    return out
+
+
+def _scbf_beam_column_joints(
+    project: Any,
+    settings: DesignSettings,
+    units: Any,
+    *,
+    fy: float,
+) -> list[ScbfJointResult]:
+    """F2.6b: the required moment of every SCBF beam-to-column joint.
+
+    A joint qualifies when a brace ends there and at least one beam and one
+    column frame into it. The required moment is the lesser of the beam and
+    column expected plastic moments times 1.1/alpha_s. When an RBS connection
+    is modelled at the joint, its available moment ``phi_d Mpe`` gives the
+    ratio; otherwise the joint is reported as a simple connection to verify.
+    """
+    if settings.seismic_system != "SCBF":
+        return []
+    sections = {s.id: s for s in project.sections}
+    frame_elements = [
+        element for element in project.elements if isinstance(element, FRAME_ELEMENT_CLASSES)
+    ]
+    roles = {element.id: _member_role(project, element) for element in frame_elements}
+    connected: dict[int, list[Any]] = {}
+    for element in frame_elements:
+        for node_id in element.nodes:
+            connected.setdefault(int(node_id), []).append(element)
+
+    def shape_of(element: Any) -> Any:
+        overrides = settings.member(element.id)
+        section = sections.get(getattr(element, "section_id", -1))
+        name = overrides.shape or (getattr(section, "name", "") or "")
+        try:
+            return shape_in_units(name, units)
+        except (KeyError, ValueError):
+            return None
+
+    def plastic(shape: Any) -> float | None:
+        for attribute in ("Zx", "Z", "Zy"):
+            value = getattr(shape, attribute, None)
+            if value is not None and float(value) > 0.0:
+                return float(value)
+        return None
+
+    out: list[ScbfJointResult] = []
+    for node_id in sorted(connected):
+        items = connected[node_id]
+        beams = [e for e in items if roles[e.id] == "beam"]
+        columns = [e for e in items if roles[e.id] == "column"]
+        braces = [e for e in items if roles[e.id] == "brace"]
+        if not (beams and columns and braces):
+            continue
+        beam_data = []
+        for beam in beams:
+            shape = shape_of(beam)
+            z = plastic(shape) if shape is not None else None
+            if shape is not None and z is not None:
+                beam_data.append((beam, shape, z))
+        if not beam_data:
+            continue
+        beam, beam_shape, beam_z = max(beam_data, key=lambda item: item[2])
+        column_data = []
+        for column in columns:
+            shape = shape_of(column)
+            z = plastic(shape) if shape is not None else None
+            if z is not None:
+                column_data.append((column, z))
+        if not column_data:
+            continue
+        moment = scbf_beam_column_moment(
+            ry=settings.ry,
+            beam_fy=fy,
+            beam_z=beam_z,
+            columns=[(fy, z) for _column, z in column_data],
+            method=settings.method,
+        )
+        result = ScbfJointResult(
+            node_id=node_id,
+            beam_element_id=beam.id,
+            column_element_ids=[column.id for column, _z in column_data],
+            brace_element_id=braces[0].id,
+            beam_moment=moment.beam_moment,
+            column_moment=moment.column_moment,
+            required_moment=moment.required,
+        )
+        connection = next(
+            (
+                item
+                for item in project.connections
+                if item.beam_element_id == beam.id
+                and item.column_element_id in result.column_element_ids
+            ),
+            None,
+        )
+        if connection is None:
+            result.status = "simple / not checked"
+            result.notes.append(
+                "F2.6b: no RBS connection is modelled at this joint. Use a simple "
+                "connection with 0.025 rad rotation (B3.4a) or design the connection "
+                "for the required moment."
+            )
+        else:
+            try:
+                rbs_geometry(connection, beam_shape)
+                mpe = rbs_mpe(settings.ry, fy, beam_z)
+                available = mpe if settings.method == "LRFD" else mpe / 1.5
+                result.available_moment = available
+                result.ratio = moment.required / available if available > 0.0 else math.inf
+                result.status = "OK" if result.ratio <= 1.0 else "NG"
+            except (ValueError, AttributeError) as exc:
+                result.status = "invalid"
+                result.notes.append(f"The RBS connection is invalid: {exc}")
+        out.append(result)
     return out
 
 

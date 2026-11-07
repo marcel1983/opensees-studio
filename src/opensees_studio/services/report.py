@@ -487,6 +487,45 @@ def _design_section(project: Project, results: Mapping[int, Any]) -> str:
             "factor; gravity terms are not. The check is conservative with respect "
             "to F2.3(a) and (b): every brace reaches at least its expected strength.</p>"
         )
+    if report.scbf_joints:
+        joint_rows = [
+            [
+                j.node_id,
+                j.beam_element_id,
+                ", ".join(str(c) for c in j.column_element_ids),
+                j.brace_element_id,
+                j.beam_moment,
+                j.column_moment,
+                j.required_moment,
+                j.available_moment if j.available_moment else "-",
+                j.ratio if j.available_moment else "-",
+                j.status,
+            ]
+            for j in report.scbf_joints
+        ]
+        out.append("<h3>SCBF beam-to-column connections (AISC 341-22 F2.6b)</h3>")
+        out += [
+            f"<p class='note'>Joint {j.node_id}: {_e(note)}</p>"
+            for j in report.scbf_joints
+            for note in j.notes
+        ]
+        out.append(
+            _table(
+                [
+                    "Joint",
+                    "Beam",
+                    "Columns",
+                    "Brace",
+                    "Beam moment",
+                    "Column moment",
+                    "Required",
+                    "Available",
+                    "Ratio",
+                    "Status",
+                ],
+                joint_rows,
+            )
+        )
 
     drift_rows: list[list[Any]] = []
     for result in sorted(results.values(), key=lambda r: getattr(r, "case_id", 0)):
