@@ -40,6 +40,17 @@ class ScbfJointMoment:
     steps: tuple[CalcStep, ...] = field(default_factory=tuple)
 
 
+@dataclass(frozen=True)
+class ColumnSpliceDemand:
+    """The required moment and shear of one SCBF column splice (F2.6d)."""
+
+    moment: float
+    """``0.5 min(Mp_top, Mp_bottom) / alpha_s``."""
+    shear: float
+    """``(Mp_top + Mp_bottom) / (alpha_s Hc)``."""
+    steps: tuple[CalcStep, ...] = field(default_factory=tuple)
+
+
 def scbf_beam_column_moment(
     *,
     ry: float,
@@ -84,6 +95,61 @@ def scbf_beam_column_moment(
                 "min(beam, columns)",
                 f"min({beam:.6g}, {column:.6g})",
                 required,
+            ),
+        ),
+    )
+
+
+def column_splice_demand(
+    *,
+    top_fy: float,
+    top_z: float,
+    bottom_fy: float,
+    bottom_z: float,
+    clear_height: float,
+    method: Method = "LRFD",
+) -> ColumnSpliceDemand:
+    """F2.6d: required moment and shear of a column splice.
+
+    The splice develops at least 50% of the lesser plastic moment of the two
+    connected column segments, divided by ``alpha_s``. The required shear is
+    ``(Mp_top + Mp_bottom) / (alpha_s Hc)``, where ``Hc`` is the clear height
+    between beam connections.
+    """
+    if min(top_fy, top_z, bottom_fy, bottom_z, clear_height) <= 0.0:
+        raise ValueError("Fy, Z and the clear height must be positive.")
+    factor = alpha_s(method)
+    mp_top = top_fy * top_z
+    mp_bottom = bottom_fy * bottom_z
+    moment = 0.5 * min(mp_top, mp_bottom) / factor
+    shear = (mp_top + mp_bottom) / factor / clear_height
+    return ColumnSpliceDemand(
+        moment,
+        shear,
+        (
+            CalcStep(
+                "Top plastic moment",
+                "Mp_top = Fy_top Z_top",
+                f"{top_fy:g} x {top_z:g}",
+                mp_top,
+            ),
+            CalcStep(
+                "Bottom plastic moment",
+                "Mp_bottom = Fy_bottom Z_bottom",
+                f"{bottom_fy:g} x {bottom_z:g}",
+                mp_bottom,
+            ),
+            CalcStep(
+                "Required moment",
+                "0.5 min(Mp_top, Mp_bottom) / alpha_s",
+                f"0.5 x {min(mp_top, mp_bottom):g} / {factor:g}",
+                moment,
+            ),
+            CalcStep(
+                "Required shear",
+                "(Mp_top + Mp_bottom) / (alpha_s Hc)",
+                f"({mp_top:g} + {mp_bottom:g}) / ({factor:g} x {clear_height:g})",
+                shear,
             ),
         ),
     )

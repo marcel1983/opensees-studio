@@ -11,6 +11,12 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **AISC 341-22 SCBF column splices (F2.6d).** `core.design.scbf_joints`
+  computes the required splice moment `0.5 min(Mp_top, Mp_bottom) / alpha_s`
+  and the required shear `(Mp_top + Mp_bottom) / (alpha_s Hc)`, with the
+  calculation steps. The entity and editor for placing the splices are the
+  next increment.
+
 - **AISC 341-22 SCBF beam-to-column connections (F2.6b).** Every joint where
   a brace ends and a beam and a column frame in reports the required moment
   `min(1.1 Ry Fyb Zb / alpha_s, 1.1 Ry sum(Fyc Zc) / alpha_s)`. When an RBS

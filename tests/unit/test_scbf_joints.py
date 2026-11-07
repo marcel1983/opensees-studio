@@ -57,3 +57,47 @@ def test_the_inputs_must_be_positive() -> None:
         scbf_beam_column_moment(ry=1.1, beam_fy=50.0, beam_z=50.0, columns=[(0.0, 100.0)])
     with pytest.raises(ValueError, match="positive"):
         scbf_beam_column_moment(ry=1.1, beam_fy=50.0, beam_z=50.0, columns=[])
+
+
+def test_column_splice_demand_follows_f2_6d() -> None:
+    from opensees_studio.core.design.scbf_joints import column_splice_demand
+
+    splice = column_splice_demand(
+        top_fy=50.0,
+        top_z=100.0,
+        bottom_fy=50.0,
+        bottom_z=80.0,
+        clear_height=144.0,
+    )
+    assert splice.moment == pytest.approx(0.5 * 50.0 * 80.0)
+    assert splice.shear == pytest.approx((50.0 * 100.0 + 50.0 * 80.0) / 144.0)
+    assert [step.label for step in splice.steps] == [
+        "Top plastic moment",
+        "Bottom plastic moment",
+        "Required moment",
+        "Required shear",
+    ]
+
+    asd = column_splice_demand(
+        top_fy=50.0,
+        top_z=100.0,
+        bottom_fy=50.0,
+        bottom_z=80.0,
+        clear_height=144.0,
+        method="ASD",
+    )
+    assert asd.moment == pytest.approx(splice.moment / 1.5)
+    assert asd.shear == pytest.approx(splice.shear / 1.5)
+
+
+def test_column_splice_inputs_must_be_positive() -> None:
+    from opensees_studio.core.design.scbf_joints import column_splice_demand
+
+    with pytest.raises(ValueError, match="positive"):
+        column_splice_demand(
+            top_fy=50.0,
+            top_z=100.0,
+            bottom_fy=50.0,
+            bottom_z=80.0,
+            clear_height=0.0,
+        )
