@@ -236,3 +236,36 @@ def test_the_memory_carries_the_scbf_beam_column_joints() -> None:
     assert "simple / not checked" in english
     spanish = build_member_memory(_project(), report, language="es", fmt="markdown")
     assert "Conexiones viga-columna SCBF" in spanish
+
+
+def test_the_memory_carries_the_column_splices() -> None:
+    from opensees_studio.core.design.calc import CalcStep
+    from opensees_studio.services.steel_design import ColumnSpliceResult
+
+    report = _report()
+    report.column_splices = [
+        ColumnSpliceResult(
+            splice_id=1,
+            node_id=2,
+            top_element_id=6,
+            bottom_element_id=1,
+            shape_top="W14X99",
+            shape_bottom="W14X99",
+            clear_height=144.0,
+            moment=4000.0,
+            shear=100.0,
+            status="checked",
+            steps=[
+                CalcStep(
+                    "Required moment",
+                    "0.5 min(Mp_top, Mp_bottom) / alpha_s",
+                    "4000",
+                    4000.0,
+                )
+            ],
+        )
+    ]
+    english = build_member_memory(_project(), report, language="en", fmt="html")
+    assert "SCBF column splices" in english and "W14X99" in english
+    spanish = build_member_memory(_project(), report, language="es", fmt="markdown")
+    assert "Empalmes de columna SCBF" in spanish

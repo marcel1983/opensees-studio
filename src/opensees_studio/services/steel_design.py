@@ -92,7 +92,10 @@ from opensees_studio.core.design.connections import (
     rbs_protected_zone,
 )
 from opensees_studio.core.design.gussets import gusset_checks
-from opensees_studio.core.design.scbf_joints import scbf_beam_column_moment
+from opensees_studio.core.design.scbf_joints import (
+    column_splice_demand,
+    scbf_beam_column_moment,
+)
 from opensees_studio.core.design.settings import DesignLoadSet, DesignSettings
 from opensees_studio.core.geometry.elements import FRAME_ELEMENT_CLASSES
 from opensees_studio.core.sections import ElasticSection
@@ -556,6 +559,24 @@ class ScbfJointResult:
 
 
 @dataclass
+class ColumnSpliceResult:
+    """One SCBF column splice and its F2.6d required moment and shear."""
+
+    splice_id: int
+    node_id: int
+    top_element_id: int
+    bottom_element_id: int
+    shape_top: str = ""
+    shape_bottom: str = ""
+    clear_height: float = 0.0
+    moment: float = 0.0
+    shear: float = 0.0
+    status: str = "not checked"
+    steps: list[CalcStep] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+
+@dataclass
 class DesignReport:
     members: list[MemberResult] = field(default_factory=list)
     joints: list[JointResult] = field(default_factory=list)
@@ -564,6 +585,7 @@ class DesignReport:
     gussets: list[GussetResult] = field(default_factory=list)
     capacity_design: list[CapacityDesign] = field(default_factory=list)
     scbf_joints: list[ScbfJointResult] = field(default_factory=list)
+    column_splices: list[ColumnSpliceResult] = field(default_factory=list)
     load_sets: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
 
@@ -1070,6 +1092,8 @@ def steel_frame_check(
         report.scbf_joints = _scbf_beam_column_joints(project, settings, units, fy=fy)
     if project.gussets:
         report.gussets = _gusset_results(project, settings, units, fy=fy)
+    if project.column_splices:
+        report.column_splices = _column_splice_results(project, settings, units, fy=fy)
     return report
 
 
@@ -1491,6 +1515,15 @@ def _scbf_protected_zones(
     return out
 
 
+def _plastic_modulus(shape: Any) -> float | None:
+    """The plastic section modulus of a shape, major axis first."""
+    for attribute in ("Zx", "Z", "Zy"):
+        value = getattr(shape, attribute, None)
+        if value is not None and float(value) > 0.0:
+            return float(value)
+    return None
+
+
 def _scbf_beam_column_joints(
     project: Any,
     settings: DesignSettings,
@@ -1527,13 +1560,6 @@ def _scbf_beam_column_joints(
         except (KeyError, ValueError):
             return None
 
-    def plastic(shape: Any) -> float | None:
-        for attribute in ("Zx", "Z", "Zy"):
-            value = getattr(shape, attribute, None)
-            if value is not None and float(value) > 0.0:
-                return float(value)
-        return None
-
     out: list[ScbfJointResult] = []
     for node_id in sorted(connected):
         items = connected[node_id]
@@ -1545,7 +1571,7 @@ def _scbf_beam_column_joints(
         beam_data = []
         for beam in beams:
             shape = shape_of(beam)
-            z = plastic(shape) if shape is not None else None
+            z = _plastic_modulus(shape) if shape is not None else None
             if shape is not None and z is not None:
                 beam_data.append((beam, shape, z))
         if not beam_data:
@@ -1554,7 +1580,7 @@ def _scbf_beam_column_joints(
         column_data = []
         for column in columns:
             shape = shape_of(column)
-            z = plastic(shape) if shape is not None else None
+            z = _plastic_modulus(shape) if shape is not None else None
             if z is not None:
                 column_data.append((column, z))
         if not column_data:
@@ -1602,6 +1628,74 @@ def _scbf_beam_column_joints(
             except (ValueError, AttributeError) as exc:
                 result.status = "invalid"
                 result.notes.append(f"The RBS connection is invalid: {exc}")
+        out.append(result)
+    return out
+
+
+def _column_splice_results(
+    project: Any,
+    settings: DesignSettings,
+    units: Any,
+    *,
+    fy: float,
+) -> list[ColumnSpliceResult]:
+    """The saved column splices checked against F2.6d."""
+    sections = {s.id: s for s in project.sections}
+    elements = {e.id: e for e in project.elements}
+    out: list[ColumnSpliceResult] = []
+    for splice in project.column_splices:
+        result = ColumnSpliceResult(
+            splice_id=splice.id,
+            node_id=splice.node_id,
+            top_element_id=splice.top_element_id,
+            bottom_element_id=splice.bottom_element_id,
+            clear_height=splice.clear_height,
+        )
+        top = elements.get(splice.top_element_id)
+        bottom = elements.get(splice.bottom_element_id)
+        if top is None or bottom is None:
+            result.status = "invalid"
+            result.notes.append("The top or bottom column element does not exist.")
+            out.append(result)
+            continue
+
+        def shape_of(element: Any) -> Any:
+            overrides = settings.member(element.id)
+            section = sections.get(getattr(element, "section_id", -1))
+            name = overrides.shape or (getattr(section, "name", "") or "")
+            try:
+                return shape_in_units(name, units)
+            except (KeyError, ValueError):
+                return None
+
+        top_shape = shape_of(top)
+        bottom_shape = shape_of(bottom)
+        if top_shape is None or bottom_shape is None:
+            result.status = "invalid"
+            result.notes.append("The top or bottom column section is not an AISC shape.")
+            out.append(result)
+            continue
+        top_z = _plastic_modulus(top_shape)
+        bottom_z = _plastic_modulus(bottom_shape)
+        if top_z is None or bottom_z is None:
+            result.status = "invalid"
+            result.notes.append("A column shape has no plastic modulus in the table.")
+            out.append(result)
+            continue
+        result.shape_top = top_shape.name
+        result.shape_bottom = bottom_shape.name
+        demand = column_splice_demand(
+            top_fy=fy,
+            top_z=top_z,
+            bottom_fy=fy,
+            bottom_z=bottom_z,
+            clear_height=splice.clear_height,
+            method=settings.method,
+        )
+        result.moment = demand.moment
+        result.shear = demand.shear
+        result.steps = list(demand.steps)
+        result.status = "checked"
         out.append(result)
     return out
 

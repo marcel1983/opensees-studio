@@ -57,6 +57,12 @@ _LABELS: dict[Language, dict[str, str]] = {
         "column_moment": "Column moment",
         "required_moment": "Required moment",
         "available_moment": "Available moment",
+        "column_splices": "SCBF column splices (AISC 341-22 F2.6d)",
+        "splice": "Splice",
+        "top_column": "Top column",
+        "bottom_column": "Bottom column",
+        "clear_height": "Hc",
+        "required_shear": "Required shear",
         "capacity_design": "SCBF capacity design (AISC 341-22 F2.3)",
         "state": "State",
         "analysis_force": "Analysis force",
@@ -132,6 +138,12 @@ _LABELS: dict[Language, dict[str, str]] = {
         "column_moment": "Momento columna",
         "required_moment": "Momento requerido",
         "available_moment": "Momento disponible",
+        "column_splices": "Empalmes de columna SCBF (AISC 341-22 F2.6d)",
+        "splice": "Empalme",
+        "top_column": "Columna superior",
+        "bottom_column": "Columna inferior",
+        "clear_height": "Hc",
+        "required_shear": "Corte requerido",
         "capacity_design": "Diseño por capacidad SCBF (AISC 341-22 F2.3)",
         "state": "Estado",
         "analysis_force": "Fuerza de análisis",
@@ -348,6 +360,22 @@ def _scbf_joint_rows(report: Any) -> list[list[str]]:
     ]
 
 
+def _column_splice_rows(report: Any) -> list[list[str]]:
+    return [
+        [
+            str(s.splice_id),
+            str(s.node_id),
+            f"{s.top_element_id} ({s.shape_top})",
+            f"{s.bottom_element_id} ({s.shape_bottom})",
+            _fmt(s.clear_height),
+            _fmt(s.moment),
+            _fmt(s.shear),
+            s.status,
+        ]
+        for s in report.column_splices
+    ]
+
+
 def _capacity_rows(report: Any) -> list[list[str]]:
     return [
         [
@@ -525,6 +553,20 @@ def _html(project: Any, report: Any, labels: dict[str, str]) -> str:
             )
             + "</table>"
         )
+    column_splices_html = ""
+    if report.column_splices:
+        column_splices_html = (
+            f"<h2>{labels['column_splices']}</h2><table><tr>"
+            f"<th>{labels['splice']}</th><th>{labels['joint']}</th>"
+            f"<th>{labels['top_column']}</th><th>{labels['bottom_column']}</th>"
+            f"<th>{labels['clear_height']}</th><th>{labels['required_moment']}</th>"
+            f"<th>{labels['required_shear']}</th><th>{labels['status']}</th></tr>"
+            + "".join(
+                "<tr>" + "".join(f"<td>{_e(cell)}</td>" for cell in row) + "</tr>"
+                for row in _column_splice_rows(report)
+            )
+            + "</table>"
+        )
     capacity_html = ""
     if report.capacity_design:
         capacity_html = (
@@ -563,6 +605,7 @@ def _html(project: Any, report: Any, labels: dict[str, str]) -> str:
         + gussets_html
         + brace_connections_html
         + scbf_joints_html
+        + column_splices_html
         + capacity_html
         + "".join(members)
         + f"<p class='note'>{_e(labels['disclaimer'])}</p></body></html>"
@@ -655,6 +698,18 @@ def _markdown(project: Any, report: Any, labels: dict[str, str]) -> str:
             "|---|---|---|---|---|---|---|---|---|---|",
         ]
         lines += ["| " + " | ".join(row) + " |" for row in _scbf_joint_rows(report)]
+    if report.column_splices:
+        lines += [
+            "",
+            f"## {labels['column_splices']}",
+            "",
+            f"| {labels['splice']} | {labels['joint']} | {labels['top_column']} | "
+            f"{labels['bottom_column']} | {labels['clear_height']} | "
+            f"{labels['required_moment']} | {labels['required_shear']} | "
+            f"{labels['status']} |",
+            "|---|---|---|---|---|---|---|---|",
+        ]
+        lines += ["| " + " | ".join(row) + " |" for row in _column_splice_rows(report)]
     if report.capacity_design:
         lines += [
             "",
@@ -877,6 +932,22 @@ def _latex(project: Any, report: Any, labels: dict[str, str]) -> str:
         lines += [
             " & ".join(_tex_escape(cell) for cell in row) + r" \\"
             for row in _scbf_joint_rows(report)
+        ]
+        lines.append(r"\end{longtable}")
+    if report.column_splices:
+        lines += [
+            rf"\subsection*{{{_tex_escape(labels['column_splices'])}}}",
+            r"\begin{longtable}{llllllll}",
+        ]
+        lines.append(
+            rf"{_tex_escape(labels['splice'])} & {_tex_escape(labels['joint'])} & "
+            rf"{_tex_escape(labels['top_column'])} & {_tex_escape(labels['bottom_column'])} & "
+            rf"{_tex_escape(labels['clear_height'])} & {_tex_escape(labels['required_moment'])} & "
+            rf"{_tex_escape(labels['required_shear'])} & {_tex_escape(labels['status'])} \\ \toprule"
+        )
+        lines += [
+            " & ".join(_tex_escape(cell) for cell in row) + r" \\"
+            for row in _column_splice_rows(report)
         ]
         lines.append(r"\end{longtable}")
     if report.capacity_design:
@@ -1109,6 +1180,31 @@ def odt_bytes(project: Any, report: Any, *, language: Language = "en") -> bytes:
             labels["status"],
         ]
         for row in [header, *_scbf_joint_rows(report)]:
+            body.append(
+                "<table:table-row>"
+                + "".join(
+                    f"<table:table-cell><text:p>{_odt_text(c)}</text:p></table:table-cell>"
+                    for c in row
+                )
+                + "</table:table-row>"
+            )
+        body.append("</table:table>")
+    if report.column_splices:
+        body.append(
+            f"<text:h text:outline-level='2'>{_odt_text(labels['column_splices'])}</text:h>"
+        )
+        body.append("<table:table table:name='ColumnSplices'>")
+        header = [
+            labels["splice"],
+            labels["joint"],
+            labels["top_column"],
+            labels["bottom_column"],
+            labels["clear_height"],
+            labels["required_moment"],
+            labels["required_shear"],
+            labels["status"],
+        ]
+        for row in [header, *_column_splice_rows(report)]:
             body.append(
                 "<table:table-row>"
                 + "".join(

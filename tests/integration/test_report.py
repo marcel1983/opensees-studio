@@ -76,3 +76,27 @@ def test_report_carries_the_scbf_beam_column_joint() -> None:
     page = build_report(project, _results(project))
     assert "SCBF beam-to-column connections (AISC 341-22 F2.6b)" in page
     assert "simple / not checked" in page
+
+
+def test_report_carries_the_column_splices() -> None:
+    from opensees_studio.core import ElasticBeamColumn, Node
+    from opensees_studio.core.design.column_splice_model import ColumnSplice
+    from opensees_studio.core.design.settings import DesignSettings
+    from tests.integration.test_steel_design_run import _portal, _results
+
+    project = _portal()
+    project.nodes.append(Node(id=5, coords=(0.0, 0.0, 288.0)))
+    project.elements.append(ElasticBeamColumn(id=6, nodes=(2, 5), section_id=1))
+    project.column_splices = [
+        ColumnSplice(
+            id=1,
+            node_id=2,
+            top_element_id=6,
+            bottom_element_id=1,
+            clear_height=144.0,
+        )
+    ]
+    project.design = DesignSettings(seismic_system="SCBF")
+    page = build_report(project, _results(project))
+    assert "SCBF column splices (AISC 341-22 F2.6d)" in page
+    assert "W14X99" in page

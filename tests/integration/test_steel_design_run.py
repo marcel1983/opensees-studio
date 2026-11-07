@@ -603,3 +603,26 @@ def test_scbf_beam_column_joint_reports_f2_6b() -> None:
     assert joint.available_moment > 0.0
     assert joint.ratio == pytest.approx(joint.required_moment / joint.available_moment)
     assert joint.status in ("OK", "NG")
+
+
+def test_a_column_splice_reports_f2_6d() -> None:
+    from opensees_studio.core.design.column_splice_model import ColumnSplice
+
+    project = _portal()
+    project.nodes.append(Node(id=5, coords=(0.0, 0.0, 288.0)))
+    project.elements.append(ElasticBeamColumn(id=6, nodes=(2, 5), section_id=1))
+    project.column_splices = [
+        ColumnSplice(
+            id=1,
+            node_id=2,
+            top_element_id=6,
+            bottom_element_id=1,
+            clear_height=144.0,
+        )
+    ]
+    report = steel_frame_check(project, _results(project), DesignSettings(seismic_system="SCBF"))
+    splice = report.column_splices[0]
+    column = ishape_in_units("W14X99", project.meta.units)
+    assert splice.moment == pytest.approx(0.5 * 50.0 * column.Zx)
+    assert splice.shear == pytest.approx(2.0 * 50.0 * column.Zx / 144.0)
+    assert splice.status == "checked"

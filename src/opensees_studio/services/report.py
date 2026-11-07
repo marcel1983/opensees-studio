@@ -526,6 +526,41 @@ def _design_section(project: Project, results: Mapping[int, Any]) -> str:
                 joint_rows,
             )
         )
+    if report.column_splices:
+        splice_rows = [
+            [
+                s.splice_id,
+                s.node_id,
+                f"{s.top_element_id} ({s.shape_top})",
+                f"{s.bottom_element_id} ({s.shape_bottom})",
+                s.clear_height,
+                s.moment,
+                s.shear,
+                s.status,
+            ]
+            for s in report.column_splices
+        ]
+        out.append("<h3>SCBF column splices (AISC 341-22 F2.6d)</h3>")
+        out += [
+            f"<p class='note'>Splice {s.splice_id}: {_e(note)}</p>"
+            for s in report.column_splices
+            for note in s.notes
+        ]
+        out.append(
+            _table(
+                [
+                    "Splice",
+                    "Node",
+                    "Top column",
+                    "Bottom column",
+                    "Hc",
+                    "Required moment",
+                    "Required shear",
+                    "Status",
+                ],
+                splice_rows,
+            )
+        )
 
     drift_rows: list[list[Any]] = []
     for result in sorted(results.values(), key=lambda r: getattr(r, "case_id", 0)):
