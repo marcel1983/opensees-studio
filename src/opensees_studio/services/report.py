@@ -418,6 +418,37 @@ def _design_section(project: Project, results: Mapping[int, Any]) -> str:
                 gusset_rows,
             )
         )
+        connection_rows = [
+            [
+                g.gusset_id,
+                g.brace_element_id,
+                g.tension_demand,
+                g.compression_demand,
+                g.flexure_demand if g.flexure_demand else "-",
+                g.weld_leg if g.weld_leg else "-",
+                g.weld_required_leg if g.weld_leg else "-",
+                g.weld_ratio if g.weld_leg else "-",
+                g.weld_status or "not checked",
+            ]
+            for g in report.gussets
+        ]
+        out.append("<h3>SCBF brace connections (AISC 341-22 F2.6c)</h3>")
+        out.append(
+            _table(
+                [
+                    "Gusset",
+                    "Brace",
+                    "Tension",
+                    "Compression",
+                    "Flexure",
+                    "Weld leg",
+                    "Required leg",
+                    "Weld ratio",
+                    "Weld status",
+                ],
+                connection_rows,
+            )
+        )
     if report.capacity_design:
         capacity_rows = [
             [

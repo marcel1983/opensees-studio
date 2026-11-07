@@ -175,14 +175,23 @@ def test_the_memory_carries_the_scbf_gussets() -> None:
             lw=10.0,
             free_length=10.0,
             demand=800.0,
+            tension_demand=800.0,
+            compression_demand=200.0,
+            flexure_demand=3000.0,
+            weld_leg=0.5,
+            weld_required_leg=0.37,
+            weld_ratio=0.74,
+            weld_status="OK",
             ratio=0.75,
             status="OK",
         )
     ]
     english = build_member_memory(_project(), report, language="en", fmt="html")
     assert "SCBF gusset plates" in english and "W18X50" in english
+    assert "SCBF brace connections" in english and "Weld status" in english
     spanish = build_member_memory(_project(), report, language="es", fmt="markdown")
     assert "Planchas de unión SCBF" in spanish
+    assert "Conexiones de arriostramiento SCBF" in spanish
 
 
 def test_the_memory_carries_the_scbf_capacity_design() -> None:

@@ -8,6 +8,8 @@ is not designed are pinned on top of it.
 
 from __future__ import annotations
 
+import math
+
 import pytest
 
 pytest.importorskip("openseespy")
@@ -536,3 +538,31 @@ def test_scbf_capacity_design_scales_the_seismic_terms() -> None:
 
     plain = steel_frame_check(project, _results(project), DesignSettings())
     assert plain.capacity_design == []
+
+
+def test_a_gusset_weld_is_checked_against_f2_6c_4() -> None:
+    from opensees_studio.core.design.gusset_model import Gusset
+
+    project = _portal()
+    project.elements.append(ElasticBeamColumn(id=5, nodes=(1, 3), section_id=2))
+    project.gussets = [
+        Gusset(
+            id=1,
+            brace_element_id=5,
+            t=0.5,
+            b=12.0,
+            lw=10.0,
+            free_length=10.0,
+            weld_leg=0.5,
+        )
+    ]
+    report = steel_frame_check(project, _results(project), DesignSettings(seismic_system="SCBF"))
+    gusset = report.gussets[0]
+    assert gusset.tension_demand == pytest.approx(1.1 * 50.0 * 14.7)
+    assert gusset.compression_demand > 0.0
+    assert gusset.flexure_demand > 0.0
+    assert gusset.weld_leg == pytest.approx(0.5)
+    capacity = 0.75 * 2.0 * 0.60 * 70.0 * math.sqrt(0.5) * 0.5
+    assert gusset.weld_ratio == pytest.approx((0.60 * 1.1 * 50.0 * 0.5) / capacity)
+    assert gusset.checks[-1].name == "Gusset-to-flange weld (F2.6c.4)"
+    assert gusset.weld_status in ("OK", "NG")

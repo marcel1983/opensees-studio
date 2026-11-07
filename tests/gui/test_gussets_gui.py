@@ -66,3 +66,18 @@ def test_the_action_stores_and_undoes_the_gussets(qtbot, monkeypatch) -> None:  
     assert project.gussets == [gusset]
     window._vm.undo_stack.undo()
     assert project.gussets == []
+
+
+@pytest.mark.gui
+def test_the_dialog_suggests_and_stores_the_weld_leg(qtbot) -> None:  # type: ignore[no-untyped-def]
+    project = _portal()
+    dialog = GussetsDialog(project)
+    qtbot.addWidget(dialog)
+    dialog._brace.setCurrentIndex(dialog._brace.findData(5))
+    dialog._t.setValue(0.5)
+    dialog._weld_check.setChecked(True)
+    assert dialog._weld_leg.value() == pytest.approx(0.74 * 0.5)
+    dialog._add()
+    gusset = dialog.gussets()[0]
+    assert gusset.weld_leg == pytest.approx(0.37)
+    assert gusset.weld_both_sides
