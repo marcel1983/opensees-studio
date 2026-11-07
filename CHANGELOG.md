@@ -7,15 +7,18 @@ that this is pre-alpha: minor and patch releases may change the `.osmodel`
 schema (it carries a `schema_version`, and a file from a newer build is now
 refused instead of silently downgraded).
 
-## [Unreleased]
+## [0.0.43] - 2026-11-07
 
 ### Added
 
-- **AISC 341-22 SCBF column splices (F2.6d).** `core.design.scbf_joints`
-  computes the required splice moment `0.5 min(Mp_top, Mp_bottom) / alpha_s`
-  and the required shear `(Mp_top + Mp_bottom) / (alpha_s Hc)`, with the
-  calculation steps. The entity and editor for placing the splices are the
-  next increment.
+- **AISC 341-22 SCBF column splices (F2.6d).** `Project.column_splices` stores
+  the splice node, the top and bottom column elements and the clear height
+  `Hc`; the check reports the required moment
+  `0.5 min(Mp_top, Mp_bottom) / alpha_s` and the required shear
+  `(Mp_top + Mp_bottom) / (alpha_s Hc)` with its calculation steps.
+  **Design → Column Splices** lists, adds, edits and removes them as one
+  undoable step, and the report and the calculation memory (HTML, Markdown,
+  LaTeX, ODT; EN/ES) list each splice.
 
 - **AISC 341-22 SCBF beam-to-column connections (F2.6b).** Every joint where
   a brace ends and a beam and a column frame in reports the required moment
