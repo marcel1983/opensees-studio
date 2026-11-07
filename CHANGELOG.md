@@ -7,6 +7,15 @@ that this is pre-alpha: minor and patch releases may change the `.osmodel`
 schema (it carries a `schema_version`, and a file from a newer build is now
 refused instead of silently downgraded).
 
+## [0.0.46] - 2026-11-07
+
+### Added
+
+- **OCBF F1.4b, F1.4c and F1.5a scope notes.** The OCBF report states that
+  K-braced frames are not permitted (F1.4b), that the multi-tiered OCBF rules
+  of F1.4c are not checked, and that braces use the moderately ductile D1.1
+  limits of F1.5a.
+
 ## [0.0.45] - 2026-11-07
 
 ### Added
