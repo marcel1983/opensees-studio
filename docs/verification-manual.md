@@ -14,7 +14,7 @@ Units are SI (m, N, kg, s) for the V cases and kip-inch for the D (design)
 cases, as in the AISC examples. Errors below 1e-6 are floating-point noise
 and are printed as `< 1e-6`.
 
-**28 of 28 cases pass.**
+**29 of 29 cases pass.**
 
 | Case | Title | Group | Max. error | Verdict |
 |---|---|---|---|---|
@@ -46,6 +46,7 @@ and are printed as `< 1e-6`.
 | [D-09](#d-09) | AISC 341: SCBF beam-to-column connection moment | Design, AISC 341-22 | < 1e-06 | ✅ pass |
 | [D-10](#d-10) | AISC 341: SCBF column splice demand | Design, AISC 341-22 | < 1e-06 | ✅ pass |
 | [D-11](#d-11) | AISC 341: OCBF brace slenderness | Design, AISC 341-22 | < 1e-06 | ✅ pass |
+| [D-12](#d-12) | AISC 360 Chapter J: weld, bolts and block shear | Design, AISC 360-16 | 1.1e-05 | ✅ pass |
 
 <a id="v-01"></a>
 
@@ -426,3 +427,18 @@ and are printed as `< 1e-6`.
 | OCBF slenderness limit 4 sqrt(E/Fy) | - | 96.3328 | 96.3328 | < 1e-06 | 1e-09 | ✅ |
 | Brace Lc/r | - | 169.697 | 169.697 | < 1e-06 | 1e-09 | ✅ |
 | Brace Lc/r over the limit | - | 1.76157 | 1.76157 | < 1e-06 | 1e-09 | ✅ |
+
+<a id="d-12"></a>
+
+## D-12 — AISC 360 Chapter J: weld, bolts and block shear
+
+**Model.** Fillet weld E70, 1/4 in. leg, 10 in.; four 3/4 in. A325 bolts; 1/2 in. plate, 1.5 in. edge distance; block shear with Agv = 6, Anv = 4.375 and Ant = 1 in.2.
+
+**Reference.** J2-4, J3-1, J3-6 and J4-5 with the AISC 360 factors.
+
+| Quantity | Unit | OpenSees Studio | Reference | Rel. error | Tolerance | |
+|---|---|---|---|---|---|---|
+| Fillet weld nominal J2-4 | kip | 74.2462 | 74.247 | 1.1e-05 | 2e-03 | ✅ |
+| Bolt shear nominal J3-1 | kip | 95.4259 | 95.426 | 1.3e-06 | 2e-03 | ✅ |
+| Bolt bearing/tearout nominal J3-6 | kip | 170.625 | 170.625 | < 1e-06 | 2e-03 | ✅ |
+| Block shear nominal J4-5 | kip | 235.625 | 235.625 | < 1e-06 | 2e-03 | ✅ |

@@ -1089,6 +1089,40 @@ def _aisc_ocbf_brace() -> list[Check]:
     ]
 
 
+def _aisc_chapter_j() -> list[Check]:
+    """AISC 360 Chapter J: fillet weld, bolt shear, bearing and block shear."""
+    from opensees_studio.core.design.chapter_j import (
+        block_shear_strength,
+        bolt_bearing_strength,
+        bolt_shear_strength,
+        fillet_weld_strength,
+    )
+
+    weld = fillet_weld_strength(fexx=70.0, leg=0.25, length=10.0, both_sides=False)
+    bolts = bolt_shear_strength(fnv=54.0, diameter=0.75, count=4)
+    bearing = bolt_bearing_strength(
+        fu=65.0,
+        thickness=0.5,
+        diameter=0.75,
+        count=4,
+        edge_distance=1.5,
+        hole_diameter=0.8125,
+    )
+    block = block_shear_strength(
+        fy=50.0,
+        fu=65.0,
+        agv=6.0,
+        anv=4.375,
+        ant=1.0,
+    )
+    return [
+        Check("Fillet weld nominal J2-4", "kip", weld.nominal, 74.247, 2e-3),
+        Check("Bolt shear nominal J3-1", "kip", bolts.nominal, 95.426, 2e-3),
+        Check("Bolt bearing/tearout nominal J3-6", "kip", bearing.nominal, 170.625, 2e-3),
+        Check("Block shear nominal J4-5", "kip", block.nominal, 235.625, 2e-3),
+    ]
+
+
 # ──────────────────────────── catalogue ────────────────────────────
 CASES: list[Case] = [
     Case(
@@ -1330,6 +1364,16 @@ CASES: list[Case] = [
         "F1.5b: Lc/r <= 4 sqrt(E/Fy) for V and inverted-V braces.",
         "W18X50 brace, Fy = 50 ksi, Lc = 280 in about the minor axis.",
         _aisc_ocbf_brace,
+    ),
+    Case(
+        "D-12",
+        "AISC 360 Chapter J: weld, bolts and block shear",
+        "Design, AISC 360-16",
+        "J2-4, J3-1, J3-6 and J4-5 with the AISC 360 factors.",
+        "Fillet weld E70, 1/4 in. leg, 10 in.; four 3/4 in. A325 bolts; "
+        "1/2 in. plate, 1.5 in. edge distance; block shear with Agv = 6, "
+        "Anv = 4.375 and Ant = 1 in.2.",
+        _aisc_chapter_j,
     ),
 ]
 
