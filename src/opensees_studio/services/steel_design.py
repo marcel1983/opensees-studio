@@ -77,6 +77,12 @@ from opensees_studio.core.design.aisc360_shapes import (
     RoundHSS,
     Tee,
 )
+from opensees_studio.core.design.brace_connections import (
+    brace_connection_demands,
+    critical_plastic_modulus,
+    gusset_weld_check,
+    gusset_weld_required_leg,
+)
 from opensees_studio.core.design.calc import CalcStep, LimitStateCheck
 from opensees_studio.core.design.connections import (
     rbs_flexure_ratio,
@@ -488,7 +494,7 @@ class ProtectedZone:
 
 @dataclass
 class GussetResult:
-    """One SCBF gusset plate and its three checks."""
+    """One SCBF gusset plate, its connection demands and its checks."""
 
     gusset_id: int
     brace_element_id: int
@@ -498,6 +504,13 @@ class GussetResult:
     lw: float = 0.0
     free_length: float = 0.0
     demand: float = 0.0
+    tension_demand: float = 0.0
+    compression_demand: float = 0.0
+    flexure_demand: float = 0.0
+    weld_leg: float = 0.0
+    weld_required_leg: float = 0.0
+    weld_ratio: float = 0.0
+    weld_status: str = ""
     ratio: float = 0.0
     status: str = "not checked"
     checks: list[LimitStateCheck] = field(default_factory=list)
@@ -1495,7 +1508,20 @@ def _gusset_results(
             continue
         result.shape = shape.name
         e = float(getattr(section, "E", 0.0) or 0.0) or 29000.0 * stress_scale(SOURCE_UNITS, units)
-        result.demand = settings.ry * fy * shape.A
+        g = float(getattr(section, "G", 0.0) or 0.0) or e / 2.6
+        overrides = settings.member(brace.id)
+        length = _length(project, brace)
+        expected = expected_brace_strength(
+            shape,
+            Steel(Fy=fy, E=e, G=g),
+            ry=settings.ry,
+            length_x=overrides.length_major or length,
+            length_y=overrides.length_minor or length,
+            k_x=overrides.k_major,
+            k_y=overrides.k_minor,
+            method=settings.method,
+        )
+        result.demand = expected.tension
         result.checks = gusset_checks(
             fy=fy,
             e=e,
@@ -1507,6 +1533,45 @@ def _gusset_results(
             brace_thickness=float(getattr(shape, "tf", 0.0) or 0.0),
             method=settings.method,
         )
+        demands = brace_connection_demands(
+            ry=settings.ry,
+            fy=fy,
+            ag=shape.A,
+            expected_compression=expected.compression,
+            plastic_modulus=critical_plastic_modulus(shape),
+            method=settings.method,
+        )
+        result.tension_demand = demands.tension
+        result.compression_demand = demands.compression
+        result.flexure_demand = demands.flexure
+        result.notes.extend(demands.notes)
+        if gusset.weld_leg is not None:
+            fexx = gusset.weld_fexx or 70.0 * stress_scale(SOURCE_UNITS, units)
+            weld = gusset_weld_check(
+                ry=settings.ry,
+                fy=fy,
+                thickness=gusset.t,
+                fexx=fexx,
+                leg=gusset.weld_leg,
+                both_sides=gusset.weld_both_sides,
+                method=settings.method,
+            )
+            result.checks.append(weld)
+            result.weld_leg = gusset.weld_leg
+            result.weld_required_leg = gusset_weld_required_leg(
+                ry=settings.ry,
+                fy=fy,
+                thickness=gusset.t,
+                fexx=fexx,
+                both_sides=gusset.weld_both_sides,
+                method=settings.method,
+            )
+            result.weld_ratio = weld.ratio
+            result.weld_status = "NG" if weld.ratio > 1.0 else "OK"
+        else:
+            result.notes.append(
+                "F2.6c.4: the gusset-to-flange weld is not checked; set the weld leg."
+            )
         result.ratio = max(check.ratio for check in result.checks)
         result.status = "NG" if result.ratio > 1.0 else "OK"
         out.append(result)

@@ -9,6 +9,17 @@ refused instead of silently downgraded).
 
 ## [Unreleased]
 
+### Added
+
+- **AISC 341-22 SCBF brace connections (F2.6c).** Each gusset reports the
+  required tension `Ry Fy Ag / alpha_s`, the expected compression divided by
+  `alpha_s` and the flexure `1.1 Ry Mp / alpha_s` about the critical buckling
+  axis. An optional gusset-to-flange fillet weld checks F2.6c.4 per unit
+  length against AISC 360 J2.4; the editor stores the leg, both sides and the
+  electrode strength, and suggests `0.74 t` for A572 Gr. 50 and E70. The
+  report and the calculation memory (HTML, Markdown, LaTeX, ODT; EN/ES) list
+  the demands and the weld check.
+
 ## [0.0.42] - 2026-11-06
 
 ### Added

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDialogButtonBox,
     QFormLayout,
@@ -18,10 +19,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from opensees_studio.core.aisc import SOURCE_UNITS
 from opensees_studio.core.design.gusset_model import Gusset
 from opensees_studio.core.design.gussets import whitmore_width
 from opensees_studio.core.geometry.elements import FRAME_ELEMENT_CLASSES
 from opensees_studio.core.help import TOPIC_PROPERTY
+from opensees_studio.core.units import stress_scale
 from opensees_studio.services.steel_design import shape_in_units
 from opensees_studio.views.float_field import FloatField
 from opensees_studio.views.screen_fit import FittedDialog
@@ -43,11 +46,12 @@ class GussetsDialog(FittedDialog):
             QLabel(
                 "SCBF gusset plates (AISC 341-22 F2.6c). The plate is checked for "
                 "Whitmore width, yielding and plate buckling against the expected "
-                "brace force Ry Fy Ag."
+                "brace force Ry Fy Ag. The brace connection demands and the "
+                "gusset-to-flange fillet weld (F2.6c.4) are reported with the plate."
             )
         )
-        self._table = QTableWidget(0, 6)
-        self._table.setHorizontalHeaderLabels(["Gusset", "Brace", "t", "b", "Lw", "Lc"])
+        self._table = QTableWidget(0, 7)
+        self._table.setHorizontalHeaderLabels(["Gusset", "Brace", "t", "b", "Lw", "Lc", "Weld"])
         self._table.horizontalHeader().setStretchLastSection(True)
         self._table.setMinimumHeight(130)
         self._table.itemSelectionChanged.connect(self._load_selected)
@@ -73,6 +77,20 @@ class GussetsDialog(FittedDialog):
         self._lc = FloatField()
         self._lc.setRange(1e-6, 1e9)
         form.addRow("Free length Lc:", self._lc)
+        self._weld_check = QCheckBox("Check gusset-to-flange weld (F2.6c.4)")
+        self._weld_check.toggled.connect(self._prefill_weld)
+        form.addRow("Weld:", self._weld_check)
+        self._weld_leg = FloatField()
+        self._weld_leg.setRange(1e-6, 1e9)
+        form.addRow("Fillet weld leg:", self._weld_leg)
+        self._weld_both = QCheckBox("Both sides")
+        self._weld_both.setChecked(True)
+        form.addRow("Weld sides:", self._weld_both)
+        self._weld_fexx = FloatField()
+        self._weld_fexx.setRange(1e-6, 1e9)
+        self._weld_fexx.setValue(70.0 * stress_scale(SOURCE_UNITS, project.meta.units))
+        form.addRow("Electrode Fexx:", self._weld_fexx)
+        self._t.valueChanged.connect(self._on_thickness_changed)
         layout.addLayout(form)
 
         row = QHBoxLayout()
@@ -128,6 +146,21 @@ class GussetsDialog(FittedDialog):
         self._lc.setValue(depth)
         self._b.setValue(whitmore_width(depth, thickness))
 
+    def _prefill_weld(self, checked: bool = False) -> None:
+        """Suggest 0.74 t (A572 Gr 50, E70) when the weld check is enabled."""
+        if not checked:
+            return
+        thickness = self._t.value()
+        if thickness > 0.0:
+            self._weld_leg.setValue(0.74 * thickness)
+
+    def _on_thickness_changed(self, value: float) -> None:
+        """Keep the suggested weld leg in step while the user has not set it."""
+        if not self._weld_check.isChecked():
+            return
+        if self._weld_leg.value() <= 1e-6 * 1.001:
+            self._weld_leg.setValue(0.74 * value)
+
     def _next_id(self) -> int:
         used = {item.id for item in self._items}
         return max(used, default=0) + 1
@@ -142,6 +175,7 @@ class GussetsDialog(FittedDialog):
             QMessageBox.warning(self, "Gussets", "The brace section is not an AISC shape.")
             return None
         try:
+            weld_leg = self._weld_leg.value() if self._weld_check.isChecked() else None
             candidate = Gusset(
                 id=self._next_id(),
                 brace_element_id=brace_id,
@@ -149,6 +183,9 @@ class GussetsDialog(FittedDialog):
                 b=self._b.value(),
                 lw=self._lw.value(),
                 free_length=self._lc.value(),
+                weld_leg=weld_leg,
+                weld_both_sides=self._weld_both.isChecked(),
+                weld_fexx=self._weld_fexx.value() if weld_leg is not None else None,
             )
             whitmore_width(candidate.lw, float(getattr(shape, "tf", 0.0) or 0.0))
         except ValueError as exc:
@@ -189,10 +226,12 @@ class GussetsDialog(FittedDialog):
                 item.b,
                 item.lw,
                 item.free_length,
+                item.weld_leg if item.weld_leg is not None else "-",
             )
             for column, value in enumerate(values):
                 self._table.setItem(row, column, QTableWidgetItem(str(value)))
-        self._summary.setText(f"{len(self._items)} gusset(s).")
+        welds = sum(1 for item in self._items if item.weld_leg is not None)
+        self._summary.setText(f"{len(self._items)} gusset(s), {welds} weld(s).")
 
     def _load_selected(self) -> None:
         row = self._table.currentRow()
@@ -206,6 +245,11 @@ class GussetsDialog(FittedDialog):
         self._b.setValue(item.b)
         self._lw.setValue(item.lw)
         self._lc.setValue(item.free_length)
+        self._weld_check.setChecked(item.weld_leg is not None)
+        self._weld_leg.setValue(item.weld_leg if item.weld_leg is not None else 0.74 * item.t)
+        self._weld_both.setChecked(item.weld_both_sides)
+        default_fexx = 70.0 * stress_scale(SOURCE_UNITS, self._project.meta.units)
+        self._weld_fexx.setValue(item.weld_fexx or default_fexx)
 
     def gussets(self) -> list[Gusset]:
         """The gussets as the dialog shows them."""

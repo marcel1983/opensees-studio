@@ -14,7 +14,7 @@ Units are SI (m, N, kg, s) for the V cases and kip-inch for the D (design)
 cases, as in the AISC examples. Errors below 1e-6 are floating-point noise
 and are printed as `< 1e-6`.
 
-**24 of 24 cases pass.**
+**25 of 25 cases pass.**
 
 | Case | Title | Group | Max. error | Verdict |
 |---|---|---|---|---|
@@ -42,6 +42,7 @@ and are printed as `< 1e-6`.
 | [D-05](#d-05) | Steel frame check of a beam, end to end | Design, AISC 360-16 | 3.2e-04 | ✅ pass |
 | [D-06](#d-06) | Calculation memory of the D-05 beam | Design, AISC 360-16 | < 1e-06 | ✅ pass |
 | [D-07](#d-07) | AISC 341: expected SCBF brace strength | Design, AISC 341-22 | < 1e-06 | ✅ pass |
+| [D-08](#d-08) | AISC 341: SCBF brace connection demands | Design, AISC 341-22 | 2.9e-05 | ✅ pass |
 
 <a id="v-01"></a>
 
@@ -366,3 +367,18 @@ and are printed as `< 1e-6`.
 | Expected tension Ry Fy Ag | kip | 808.5 | 808.5 | < 1e-06 | 1e-09 | ✅ |
 | Expected compression (1/0.877) Fe Ag | kip | 146.106 | 146.106 | < 1e-06 | 2e-03 | ✅ |
 | Post-buckling 0.3 C | kip | 43.8317 | 43.8317 | < 1e-06 | 2e-03 | ✅ |
+
+<a id="d-08"></a>
+
+## D-08 — AISC 341: SCBF brace connection demands
+
+**Model.** W18X50 brace, Ry = 1.1, Fy = 50 ksi, Lc = 280 in; gusset tp = 0.5 in, double-sided E70 fillet welds.
+
+**Reference.** F2.6c: RyFyAg/alpha_s, P_expected/alpha_s, 1.1RyFyZ/alpha_s and the F2.6c.4 weld leg for 0.6RyFytp/alpha_s with E70 fillets.
+
+| Quantity | Unit | OpenSees Studio | Reference | Rel. error | Tolerance | |
+|---|---|---|---|---|---|---|
+| Required tension Ry Fy Ag / alpha_s | kip | 808.5 | 808.5 | < 1e-06 | 1e-09 | ✅ |
+| Required compression P_expected / alpha_s | kip | 146.106 | 146.106 | < 1e-06 | 2e-03 | ✅ |
+| Required flexure 1.1 Ry Fy Z / alpha_s | kip-in | 1004.3 | 1004.3 | < 1e-06 | 2e-03 | ✅ |
+| Required weld leg, tp = 0.5 in, E70, both sides | in | 0.370389 | 0.3704 | 2.9e-05 | 2e-03 | ✅ |

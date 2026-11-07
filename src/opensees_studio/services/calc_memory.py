@@ -43,6 +43,14 @@ _LABELS: dict[Language, dict[str, str]] = {
         "gusset": "Gusset",
         "brace": "Brace",
         "expected": "Ry Fy Ag",
+        "brace_connections": "SCBF brace connections (AISC 341-22 F2.6c)",
+        "tension": "Tension",
+        "compression": "Compression",
+        "flexure": "Flexure",
+        "weld_leg": "Weld leg",
+        "required_leg": "Required leg",
+        "weld_ratio": "Weld ratio",
+        "weld_status": "Weld status",
         "capacity_design": "SCBF capacity design (AISC 341-22 F2.3)",
         "state": "State",
         "analysis_force": "Analysis force",
@@ -104,6 +112,14 @@ _LABELS: dict[Language, dict[str, str]] = {
         "gusset": "Plancha",
         "brace": "Arriostramiento",
         "expected": "Ry Fy Ag",
+        "brace_connections": "Conexiones de arriostramiento SCBF (AISC 341-22 F2.6c)",
+        "tension": "Tracción",
+        "compression": "Compresión",
+        "flexure": "Flexión",
+        "weld_leg": "Pierna de soldadura",
+        "required_leg": "Pierna requerida",
+        "weld_ratio": "Relación soldadura",
+        "weld_status": "Estado soldadura",
         "capacity_design": "Diseño por capacidad SCBF (AISC 341-22 F2.3)",
         "state": "Estado",
         "analysis_force": "Fuerza de análisis",
@@ -285,6 +301,23 @@ def _gusset_rows(report: Any) -> list[list[str]]:
     ]
 
 
+def _brace_connection_rows(report: Any) -> list[list[str]]:
+    return [
+        [
+            str(g.gusset_id),
+            str(g.brace_element_id),
+            _fmt(g.tension_demand),
+            _fmt(g.compression_demand),
+            _fmt(g.flexure_demand) if g.flexure_demand else "-",
+            _fmt(g.weld_leg) if g.weld_leg else "-",
+            _fmt(g.weld_required_leg) if g.weld_leg else "-",
+            _fmt(g.weld_ratio) if g.weld_leg else "-",
+            g.weld_status or "not checked",
+        ]
+        for g in report.gussets
+    ]
+
+
 def _capacity_rows(report: Any) -> list[list[str]]:
     return [
         [
@@ -432,6 +465,21 @@ def _html(project: Any, report: Any, labels: dict[str, str]) -> str:
             )
             + "</table>"
         )
+    brace_connections_html = ""
+    if report.gussets:
+        brace_connections_html = (
+            f"<h2>{labels['brace_connections']}</h2><table><tr>"
+            f"<th>{labels['gusset']}</th><th>{labels['brace']}</th>"
+            f"<th>{labels['tension']}</th><th>{labels['compression']}</th>"
+            f"<th>{labels['flexure']}</th><th>{labels['weld_leg']}</th>"
+            f"<th>{labels['required_leg']}</th><th>{labels['weld_ratio']}</th>"
+            f"<th>{labels['weld_status']}</th></tr>"
+            + "".join(
+                "<tr>" + "".join(f"<td>{_e(cell)}</td>" for cell in row) + "</tr>"
+                for row in _brace_connection_rows(report)
+            )
+            + "</table>"
+        )
     capacity_html = ""
     if report.capacity_design:
         capacity_html = (
@@ -468,6 +516,7 @@ def _html(project: Any, report: Any, labels: dict[str, str]) -> str:
         + connections_html
         + zones_html
         + gussets_html
+        + brace_connections_html
         + capacity_html
         + "".join(members)
         + f"<p class='note'>{_e(labels['disclaimer'])}</p></body></html>"
@@ -537,6 +586,17 @@ def _markdown(project: Any, report: Any, labels: dict[str, str]) -> str:
             "|---|---|---|---|---|---|---|---|---|---|",
         ]
         lines += ["| " + " | ".join(row) + " |" for row in _gusset_rows(report)]
+    if report.gussets:
+        lines += [
+            "",
+            f"## {labels['brace_connections']}",
+            "",
+            f"| {labels['gusset']} | {labels['brace']} | {labels['tension']} | "
+            f"{labels['compression']} | {labels['flexure']} | {labels['weld_leg']} | "
+            f"{labels['required_leg']} | {labels['weld_ratio']} | {labels['weld_status']} |",
+            "|---|---|---|---|---|---|---|---|---|",
+        ]
+        lines += ["| " + " | ".join(row) + " |" for row in _brace_connection_rows(report)]
     if report.capacity_design:
         lines += [
             "",
@@ -727,6 +787,23 @@ def _latex(project: Any, report: Any, labels: dict[str, str]) -> str:
             " & ".join(_tex_escape(cell) for cell in row) + r" \\" for row in _gusset_rows(report)
         ]
         lines.append(r"\end{longtable}")
+    if report.gussets:
+        lines += [
+            rf"\subsection*{{{_tex_escape(labels['brace_connections'])}}}",
+            r"\begin{longtable}{lllllllll}",
+        ]
+        lines.append(
+            rf"{_tex_escape(labels['gusset'])} & {_tex_escape(labels['brace'])} & "
+            rf"{_tex_escape(labels['tension'])} & {_tex_escape(labels['compression'])} & "
+            rf"{_tex_escape(labels['flexure'])} & {_tex_escape(labels['weld_leg'])} & "
+            rf"{_tex_escape(labels['required_leg'])} & {_tex_escape(labels['weld_ratio'])} & "
+            rf"{_tex_escape(labels['weld_status'])} \\ \toprule"
+        )
+        lines += [
+            " & ".join(_tex_escape(cell) for cell in row) + r" \\"
+            for row in _brace_connection_rows(report)
+        ]
+        lines.append(r"\end{longtable}")
     if report.capacity_design:
         lines += [
             rf"\subsection*{{{_tex_escape(labels['capacity_design'])}}}",
@@ -906,6 +983,32 @@ def odt_bytes(project: Any, report: Any, *, language: Language = "en") -> bytes:
             labels["status"],
         ]
         for row in [header, *_gusset_rows(report)]:
+            body.append(
+                "<table:table-row>"
+                + "".join(
+                    f"<table:table-cell><text:p>{_odt_text(c)}</text:p></table:table-cell>"
+                    for c in row
+                )
+                + "</table:table-row>"
+            )
+        body.append("</table:table>")
+    if report.gussets:
+        body.append(
+            f"<text:h text:outline-level='2'>{_odt_text(labels['brace_connections'])}</text:h>"
+        )
+        body.append("<table:table table:name='BraceConnections'>")
+        header = [
+            labels["gusset"],
+            labels["brace"],
+            labels["tension"],
+            labels["compression"],
+            labels["flexure"],
+            labels["weld_leg"],
+            labels["required_leg"],
+            labels["weld_ratio"],
+            labels["weld_status"],
+        ]
+        for row in [header, *_brace_connection_rows(report)]:
             body.append(
                 "<table:table-row>"
                 + "".join(

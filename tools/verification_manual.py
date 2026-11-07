@@ -936,6 +936,57 @@ def _aisc_expected_brace() -> list[Check]:
     ]
 
 
+def _aisc_brace_connection() -> list[Check]:
+    """F2.6c: the required strengths of the W18X50 brace connection and weld."""
+    from opensees_studio.core.design.aisc341 import expected_brace_strength
+    from opensees_studio.core.design.brace_connections import (
+        brace_connection_demands,
+        gusset_weld_required_leg,
+    )
+
+    shape = _aisc("W18X50")
+    steel = _a992()
+    expected = expected_brace_strength(shape, steel, ry=1.1, length_x=280.0, length_y=280.0)
+    demands = brace_connection_demands(
+        ry=1.1,
+        fy=50.0,
+        ag=shape.A,
+        expected_compression=expected.compression,
+        plastic_modulus=shape.Zy,
+    )
+    fe = math.pi**2 * steel.E / (280.0 / shape.ry) ** 2
+    return [
+        Check(
+            "Required tension Ry Fy Ag / alpha_s",
+            "kip",
+            demands.tension,
+            1.1 * 50.0 * shape.A,
+            1e-9,
+        ),
+        Check(
+            "Required compression P_expected / alpha_s",
+            "kip",
+            demands.compression,
+            fe * shape.A,
+            2e-3,
+        ),
+        Check(
+            "Required flexure 1.1 Ry Fy Z / alpha_s",
+            "kip-in",
+            demands.flexure,
+            1.1 * 1.1 * 50.0 * shape.Zy,
+            2e-3,
+        ),
+        Check(
+            "Required weld leg, tp = 0.5 in, E70, both sides",
+            "in",
+            gusset_weld_required_leg(ry=1.1, fy=50.0, thickness=0.5, fexx=70.0),
+            0.3704,
+            2e-3,
+        ),
+    ]
+
+
 # ──────────────────────────── catalogue ────────────────────────────
 CASES: list[Case] = [
     Case(
@@ -1143,6 +1194,16 @@ CASES: list[Case] = [
         "AISC 360 E3 using RyFy.",
         "W18X50 brace, Ry = 1.1, Fy = 50 ksi, Lc = 280 in about both axes.",
         _aisc_expected_brace,
+    ),
+    Case(
+        "D-08",
+        "AISC 341: SCBF brace connection demands",
+        "Design, AISC 341-22",
+        "F2.6c: RyFyAg/alpha_s, P_expected/alpha_s, 1.1RyFyZ/alpha_s and the "
+        "F2.6c.4 weld leg for 0.6RyFytp/alpha_s with E70 fillets.",
+        "W18X50 brace, Ry = 1.1, Fy = 50 ksi, Lc = 280 in; gusset tp = 0.5 in, "
+        "double-sided E70 fillet welds.",
+        _aisc_brace_connection,
     ),
 ]
 
