@@ -7,6 +7,17 @@ that this is pre-alpha: minor and patch releases may change the `.osmodel`
 schema (it carries a `schema_version`, and a file from a newer build is now
 refused instead of silently downgraded).
 
+## [Unreleased]
+
+### Added
+
+- **AISC 341-22 OCBF brace slenderness (F1.5b).** With the OCBF system,
+  diagonal braces check `Lc/r <= 4 sqrt(E/Fy)` and the member notes state
+  that the limit is for V and inverted-V configurations, that the check
+  applies it to every OCBF brace (conservative), and that beams (F1.5c) and
+  brace connections (F1.6a) use the overstrength seismic load. The report
+  carries the same scope note.
+
 ## [0.0.43] - 2026-11-07
 
 ### Added

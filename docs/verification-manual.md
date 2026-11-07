@@ -14,7 +14,7 @@ Units are SI (m, N, kg, s) for the V cases and kip-inch for the D (design)
 cases, as in the AISC examples. Errors below 1e-6 are floating-point noise
 and are printed as `< 1e-6`.
 
-**27 of 27 cases pass.**
+**28 of 28 cases pass.**
 
 | Case | Title | Group | Max. error | Verdict |
 |---|---|---|---|---|
@@ -45,6 +45,7 @@ and are printed as `< 1e-6`.
 | [D-08](#d-08) | AISC 341: SCBF brace connection demands | Design, AISC 341-22 | 2.9e-05 | ✅ pass |
 | [D-09](#d-09) | AISC 341: SCBF beam-to-column connection moment | Design, AISC 341-22 | < 1e-06 | ✅ pass |
 | [D-10](#d-10) | AISC 341: SCBF column splice demand | Design, AISC 341-22 | < 1e-06 | ✅ pass |
+| [D-11](#d-11) | AISC 341: OCBF brace slenderness | Design, AISC 341-22 | < 1e-06 | ✅ pass |
 
 <a id="v-01"></a>
 
@@ -411,3 +412,17 @@ and are printed as `< 1e-6`.
 |---|---|---|---|---|---|---|
 | Required splice moment 0.5 Mp / alpha_s | kip-in | 4325 | 4325 | < 1e-06 | 1e-09 | ✅ |
 | Required splice shear (Mp_top + Mp_bottom) / (alpha_s Hc) | kip | 120.139 | 120.139 | < 1e-06 | 1e-09 | ✅ |
+
+<a id="d-11"></a>
+
+## D-11 — AISC 341: OCBF brace slenderness
+
+**Model.** W18X50 brace, Fy = 50 ksi, Lc = 280 in about the minor axis.
+
+**Reference.** F1.5b: Lc/r <= 4 sqrt(E/Fy) for V and inverted-V braces.
+
+| Quantity | Unit | OpenSees Studio | Reference | Rel. error | Tolerance | |
+|---|---|---|---|---|---|---|
+| OCBF slenderness limit 4 sqrt(E/Fy) | - | 96.3328 | 96.3328 | < 1e-06 | 1e-09 | ✅ |
+| Brace Lc/r | - | 169.697 | 169.697 | < 1e-06 | 1e-09 | ✅ |
+| Brace Lc/r over the limit | - | 1.76157 | 1.76157 | < 1e-06 | 1e-09 | ✅ |

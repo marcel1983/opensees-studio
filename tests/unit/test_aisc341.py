@@ -320,3 +320,11 @@ def test_the_expected_brace_strength_follows_f2_3() -> None:
     assert slender.post_buckling == pytest.approx(0.3 * slender.compression)
     with pytest.raises(ValueError, match="positive"):
         expected_brace_strength(shape, steel, ry=0.0, length_x=10.0, length_y=10.0)
+
+
+def test_the_ocbf_brace_slenderness_limit_is_f1_1() -> None:
+    from opensees_studio.core.design.aisc341 import ocbf_brace_slenderness_limit
+
+    assert ocbf_brace_slenderness_limit(E, FY) == pytest.approx(4.0 * math.sqrt(E / FY))
+    with pytest.raises(ValueError, match="positive"):
+        ocbf_brace_slenderness_limit(0.0, FY)

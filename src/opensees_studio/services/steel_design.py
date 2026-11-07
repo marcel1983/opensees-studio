@@ -51,6 +51,7 @@ from opensees_studio.core.design.aisc341 import (
     expected_brace_strength,
     joint_scwb,
     member_limits,
+    ocbf_brace_slenderness_limit,
     panel_zone_demand,
     panel_zone_strength,
 )
@@ -841,6 +842,12 @@ def steel_frame_check(
         (label, alt, "") for label, alt in alternatives
     ]
     evaluations += [(label, alt, "SCBF capacity ") for label, alt in capacity]
+    if settings.seismic_system == "OCBF":
+        report.notes.append(
+            "OCBF F1.5b limits V/inverted-V brace slenderness to 4 sqrt(E/Fy); "
+            "F1.5c and F1.6a require the overstrength seismic load for beams and "
+            "brace connections."
+        )
 
     sections = {s.id: s for s in project.sections}
     for element in project.elements:
@@ -1041,6 +1048,62 @@ def steel_frame_check(
                     note = (
                         f"SCBF expected brace yield strength Ry Fy Ag = {expected:.6g}; "
                         "use it for the brace connections."
+                    )
+                    if note not in check.notes:
+                        check.notes.append(note)
+                elif settings.seismic_system == "OCBF" and role == "brace":
+                    radius = min(
+                        float(getattr(shape, "rx", math.inf)),
+                        float(getattr(shape, "ry", math.inf)),
+                        float(getattr(shape, "rz", math.inf)),
+                    )
+                    if radius > 0.0 and math.isfinite(radius):
+                        lc = max(
+                            overrides.k_major * (overrides.length_major or length),
+                            overrides.k_minor * (overrides.length_minor or length),
+                        )
+                        slenderness = lc / radius
+                        limit = ocbf_brace_slenderness_limit(steel.E, steel.Fy)
+                        key = "OCBF brace slenderness (F1.5b)"
+                        check.ratios[key] = slenderness / limit
+                        check.equations[key] = "AISC 341-22 F1.5b"
+                        check.checks.append(
+                            LimitStateCheck(
+                                key,
+                                "AISC 341-22 F1.5b",
+                                slenderness,
+                                limit,
+                                slenderness / limit,
+                                (
+                                    CalcStep(
+                                        "Brace slenderness",
+                                        "Lc/r <= 4 sqrt(E/Fy)",
+                                        f"{slenderness:.6g}",
+                                        slenderness,
+                                    ),
+                                    CalcStep(
+                                        "OCBF limit",
+                                        "4 sqrt(E/Fy)",
+                                        f"{limit:.6g}",
+                                        limit,
+                                    ),
+                                ),
+                            )
+                        )
+                    note = (
+                        "OCBF F1.5b applies to braces in V or inverted-V "
+                        "configurations; this check applies it to every OCBF brace "
+                        "(conservative). F1.6a: brace connections shall use the "
+                        "overstrength seismic load; the exception caps tension at "
+                        "Ry Fy Ag/alpha_s and compression at the expected "
+                        "compression/alpha_s."
+                    )
+                    if note not in check.notes:
+                        check.notes.append(note)
+                elif settings.seismic_system == "OCBF" and role == "beam":
+                    note = (
+                        "OCBF F1.5c: beams and their connections shall be designed "
+                        "with the overstrength seismic load."
                     )
                     if note not in check.notes:
                         check.notes.append(note)

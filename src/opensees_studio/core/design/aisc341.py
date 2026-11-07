@@ -152,6 +152,13 @@ def admissible(
     return ratio <= limit(case, e, ry, fy, ductility=ductility, ca_value=ca_value) + 1e-9
 
 
+def ocbf_brace_slenderness_limit(e: float, fy: float) -> float:
+    """F1-1: ``4 sqrt(E/Fy)`` for OCBF braces in V or inverted-V frames."""
+    if e <= 0.0 or fy <= 0.0:
+        raise ValueError("E and Fy must be positive for the OCBF slenderness limit.")
+    return 4.0 * math.sqrt(e / fy)
+
+
 # ─────────────────── SCBF F2.3: expected brace strengths ───────────────────
 @dataclass(frozen=True)
 class BraceStrength:

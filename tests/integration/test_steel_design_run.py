@@ -626,3 +626,20 @@ def test_a_column_splice_reports_f2_6d() -> None:
     assert splice.moment == pytest.approx(0.5 * 50.0 * column.Zx)
     assert splice.shear == pytest.approx(2.0 * 50.0 * column.Zx / 144.0)
     assert splice.status == "checked"
+
+
+def test_ocbf_brace_slenderness_uses_f1_1() -> None:
+    project = _portal()
+    project.elements.append(ElasticBeamColumn(id=5, nodes=(1, 3), section_id=2))
+    report = steel_frame_check(project, _results(project), DesignSettings(seismic_system="OCBF"))
+    brace = next(member for member in report.members if member.element_id == 5)
+    limit = 4.0 * math.sqrt(29000.0 / 50.0)
+    brace_shape = ishape_in_units("W18X50", project.meta.units)
+    brace_length = math.sqrt(240.0**2 + 144.0**2)
+    assert brace.ratios["OCBF brace slenderness (F1.5b)"] == pytest.approx(
+        (brace_length / min(brace_shape.rx, brace_shape.ry)) / limit
+    )
+    assert any("F1.6a" in note for note in brace.notes)
+    beam = next(member for member in report.members if member.element_id == 2)
+    assert any("F1.5c" in note for note in beam.notes)
+    assert any("F1.5b" in note for note in report.notes)

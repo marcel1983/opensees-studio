@@ -1643,6 +1643,14 @@ cantilever**: F1-1 assumes both ends braced.
   is modelled at the joint its `φd Mpe` gives the ratio; otherwise the joint
   is reported as a simple connection to verify (0.025 rad rotation, B3.4a).
   The connection design of Chapter J and AISC 358 is not implied.
+  With **OCBF**, diagonal braces check `Lc/r <= 4 sqrt(E/Fy)` (F1.5b); the
+  member notes state that the limit is for V and inverted-V configurations
+  and that the check applies it to every OCBF brace (conservative for other
+  layouts). The notes also state that beams (F1.5c) and brace connections
+  (F1.6a) shall use the overstrength seismic load; the F1.6a exception caps
+  tension at `Ry Fy Ag/alpha_s` and compression at the expected
+  compression/`alpha_s`. The check does not create the overstrength
+  combinations or verify the beam bracing of F1.4a.
 
 Results: one row per member with its governing ratio, the check and equation
 that govern and the load set that produced them; **Select failing members**
