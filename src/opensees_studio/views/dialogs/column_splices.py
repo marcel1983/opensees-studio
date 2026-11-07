@@ -102,7 +102,7 @@ class ColumnSplicesDialog(FittedDialog):
         start = self._coords[element.nodes[0]]
         end = self._coords[element.nodes[1]]
         delta = [float(end[k]) - float(start[k]) for k in range(3)]
-        length = math.sqrt(sum(value * value for value in delta))
+        length = math.hypot(*delta)
         return length > 0.0 and abs(delta[2]) / length >= 0.8
 
     def _section_name(self, element_id: int) -> str:
@@ -131,9 +131,7 @@ class ColumnSplicesDialog(FittedDialog):
             element = self._elements[candidates[0]]
             start = self._coords[element.nodes[0]]
             end = self._coords[element.nodes[1]]
-            self._height.setValue(
-                math.sqrt(sum((float(end[k]) - float(start[k])) ** 2 for k in range(3)))
-            )
+            self._height.setValue(math.dist(start, end))
 
     def _next_id(self) -> int:
         used = {item.id for item in self._items}

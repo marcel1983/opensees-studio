@@ -1057,6 +1057,38 @@ def _aisc_column_splice() -> list[Check]:
     ]
 
 
+def _aisc_ocbf_brace() -> list[Check]:
+    """F1.5b: the OCBF V-brace slenderness limit and one brace ratio."""
+    from opensees_studio.core.design.aisc341 import ocbf_brace_slenderness_limit
+
+    shape = _aisc("W18X50")
+    limit = ocbf_brace_slenderness_limit(29000.0, 50.0)
+    slenderness = 280.0 / min(shape.rx, shape.ry)
+    return [
+        Check(
+            "OCBF slenderness limit 4 sqrt(E/Fy)",
+            "-",
+            limit,
+            4.0 * math.sqrt(29000.0 / 50.0),
+            1e-9,
+        ),
+        Check(
+            "Brace Lc/r",
+            "-",
+            slenderness,
+            280.0 / min(shape.rx, shape.ry),
+            1e-9,
+        ),
+        Check(
+            "Brace Lc/r over the limit",
+            "-",
+            slenderness / limit,
+            (280.0 / min(shape.rx, shape.ry)) / limit,
+            1e-9,
+        ),
+    ]
+
+
 # ──────────────────────────── catalogue ────────────────────────────
 CASES: list[Case] = [
     Case(
@@ -1290,6 +1322,14 @@ CASES: list[Case] = [
         "F2.6d: 0.5 min(Mp_top, Mp_bottom)/alpha_s and (Mp_top + Mp_bottom)/(alpha_s Hc).",
         "W14X99 column, Fy = 50 ksi, clear height Hc = 144 in.",
         _aisc_column_splice,
+    ),
+    Case(
+        "D-11",
+        "AISC 341: OCBF brace slenderness",
+        "Design, AISC 341-22",
+        "F1.5b: Lc/r <= 4 sqrt(E/Fy) for V and inverted-V braces.",
+        "W18X50 brace, Fy = 50 ksi, Lc = 280 in about the minor axis.",
+        _aisc_ocbf_brace,
     ),
 ]
 
