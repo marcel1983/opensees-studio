@@ -987,6 +987,46 @@ def _aisc_brace_connection() -> list[Check]:
     ]
 
 
+def _aisc_scbf_joint() -> list[Check]:
+    """F2.6b: the required moment of the W18X50/W14X99 beam-to-column joint."""
+    from opensees_studio.core.design.scbf_joints import scbf_beam_column_moment
+
+    beam = _aisc("W18X50")
+    column = _aisc("W14X99")
+    moment = scbf_beam_column_moment(
+        ry=1.1,
+        beam_fy=50.0,
+        beam_z=beam.Zx,
+        columns=[(50.0, column.Zx)],
+    )
+    return [
+        Check(
+            "Beam expected moment 1.1 Ry Fy Zb / alpha_s",
+            "kip-in",
+            moment.beam_moment,
+            1.1 * 1.1 * 50.0 * beam.Zx,
+            1e-9,
+        ),
+        Check(
+            "Column expected moment 1.1 Ry Fy Zc / alpha_s",
+            "kip-in",
+            moment.column_moment,
+            1.1 * 1.1 * 50.0 * column.Zx,
+            1e-9,
+        ),
+        Check(
+            "Required moment min(beam, column)",
+            "kip-in",
+            moment.required,
+            min(
+                1.1 * 1.1 * 50.0 * beam.Zx,
+                1.1 * 1.1 * 50.0 * column.Zx,
+            ),
+            1e-9,
+        ),
+    ]
+
+
 # ──────────────────────────── catalogue ────────────────────────────
 CASES: list[Case] = [
     Case(
@@ -1204,6 +1244,14 @@ CASES: list[Case] = [
         "W18X50 brace, Ry = 1.1, Fy = 50 ksi, Lc = 280 in; gusset tp = 0.5 in, "
         "double-sided E70 fillet welds.",
         _aisc_brace_connection,
+    ),
+    Case(
+        "D-09",
+        "AISC 341: SCBF beam-to-column connection moment",
+        "Design, AISC 341-22",
+        "F2.6b: min(1.1RyFybZb/alpha_s, 1.1RyΣFycZc/alpha_s).",
+        "W18X50 beam and W14X99 column, Ry = 1.1, Fy = 50 ksi.",
+        _aisc_scbf_joint,
     ),
 ]
 

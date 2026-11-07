@@ -51,6 +51,12 @@ _LABELS: dict[Language, dict[str, str]] = {
         "required_leg": "Required leg",
         "weld_ratio": "Weld ratio",
         "weld_status": "Weld status",
+        "scbf_joints": "SCBF beam-to-column connections (AISC 341-22 F2.6b)",
+        "columns": "Columns",
+        "beam_moment": "Beam moment",
+        "column_moment": "Column moment",
+        "required_moment": "Required moment",
+        "available_moment": "Available moment",
         "capacity_design": "SCBF capacity design (AISC 341-22 F2.3)",
         "state": "State",
         "analysis_force": "Analysis force",
@@ -120,6 +126,12 @@ _LABELS: dict[Language, dict[str, str]] = {
         "required_leg": "Pierna requerida",
         "weld_ratio": "Relación soldadura",
         "weld_status": "Estado soldadura",
+        "scbf_joints": "Conexiones viga-columna SCBF (AISC 341-22 F2.6b)",
+        "columns": "Columnas",
+        "beam_moment": "Momento viga",
+        "column_moment": "Momento columna",
+        "required_moment": "Momento requerido",
+        "available_moment": "Momento disponible",
         "capacity_design": "Diseño por capacidad SCBF (AISC 341-22 F2.3)",
         "state": "Estado",
         "analysis_force": "Fuerza de análisis",
@@ -318,6 +330,24 @@ def _brace_connection_rows(report: Any) -> list[list[str]]:
     ]
 
 
+def _scbf_joint_rows(report: Any) -> list[list[str]]:
+    return [
+        [
+            str(j.node_id),
+            str(j.beam_element_id),
+            ", ".join(str(c) for c in j.column_element_ids),
+            str(j.brace_element_id),
+            _fmt(j.beam_moment),
+            _fmt(j.column_moment),
+            _fmt(j.required_moment),
+            _fmt(j.available_moment) if j.available_moment else "-",
+            _fmt(j.ratio) if j.available_moment else "-",
+            j.status,
+        ]
+        for j in report.scbf_joints
+    ]
+
+
 def _capacity_rows(report: Any) -> list[list[str]]:
     return [
         [
@@ -480,6 +510,21 @@ def _html(project: Any, report: Any, labels: dict[str, str]) -> str:
             )
             + "</table>"
         )
+    scbf_joints_html = ""
+    if report.scbf_joints:
+        scbf_joints_html = (
+            f"<h2>{labels['scbf_joints']}</h2><table><tr>"
+            f"<th>{labels['joint']}</th><th>{labels['beam']}</th>"
+            f"<th>{labels['columns']}</th><th>{labels['brace']}</th>"
+            f"<th>{labels['beam_moment']}</th><th>{labels['column_moment']}</th>"
+            f"<th>{labels['required_moment']}</th><th>{labels['available_moment']}</th>"
+            f"<th>{labels['ratio']}</th><th>{labels['status']}</th></tr>"
+            + "".join(
+                "<tr>" + "".join(f"<td>{_e(cell)}</td>" for cell in row) + "</tr>"
+                for row in _scbf_joint_rows(report)
+            )
+            + "</table>"
+        )
     capacity_html = ""
     if report.capacity_design:
         capacity_html = (
@@ -517,6 +562,7 @@ def _html(project: Any, report: Any, labels: dict[str, str]) -> str:
         + zones_html
         + gussets_html
         + brace_connections_html
+        + scbf_joints_html
         + capacity_html
         + "".join(members)
         + f"<p class='note'>{_e(labels['disclaimer'])}</p></body></html>"
@@ -597,6 +643,18 @@ def _markdown(project: Any, report: Any, labels: dict[str, str]) -> str:
             "|---|---|---|---|---|---|---|---|---|",
         ]
         lines += ["| " + " | ".join(row) + " |" for row in _brace_connection_rows(report)]
+    if report.scbf_joints:
+        lines += [
+            "",
+            f"## {labels['scbf_joints']}",
+            "",
+            f"| {labels['joint']} | {labels['beam']} | {labels['columns']} | "
+            f"{labels['brace']} | {labels['beam_moment']} | {labels['column_moment']} | "
+            f"{labels['required_moment']} | {labels['available_moment']} | "
+            f"{labels['ratio']} | {labels['status']} |",
+            "|---|---|---|---|---|---|---|---|---|---|",
+        ]
+        lines += ["| " + " | ".join(row) + " |" for row in _scbf_joint_rows(report)]
     if report.capacity_design:
         lines += [
             "",
@@ -804,6 +862,23 @@ def _latex(project: Any, report: Any, labels: dict[str, str]) -> str:
             for row in _brace_connection_rows(report)
         ]
         lines.append(r"\end{longtable}")
+    if report.scbf_joints:
+        lines += [
+            rf"\subsection*{{{_tex_escape(labels['scbf_joints'])}}}",
+            r"\begin{longtable}{llllllllll}",
+        ]
+        lines.append(
+            rf"{_tex_escape(labels['joint'])} & {_tex_escape(labels['beam'])} & "
+            rf"{_tex_escape(labels['columns'])} & {_tex_escape(labels['brace'])} & "
+            rf"{_tex_escape(labels['beam_moment'])} & {_tex_escape(labels['column_moment'])} & "
+            rf"{_tex_escape(labels['required_moment'])} & {_tex_escape(labels['available_moment'])} & "
+            rf"{_tex_escape(labels['ratio'])} & {_tex_escape(labels['status'])} \\ \toprule"
+        )
+        lines += [
+            " & ".join(_tex_escape(cell) for cell in row) + r" \\"
+            for row in _scbf_joint_rows(report)
+        ]
+        lines.append(r"\end{longtable}")
     if report.capacity_design:
         lines += [
             rf"\subsection*{{{_tex_escape(labels['capacity_design'])}}}",
@@ -1009,6 +1084,31 @@ def odt_bytes(project: Any, report: Any, *, language: Language = "en") -> bytes:
             labels["weld_status"],
         ]
         for row in [header, *_brace_connection_rows(report)]:
+            body.append(
+                "<table:table-row>"
+                + "".join(
+                    f"<table:table-cell><text:p>{_odt_text(c)}</text:p></table:table-cell>"
+                    for c in row
+                )
+                + "</table:table-row>"
+            )
+        body.append("</table:table>")
+    if report.scbf_joints:
+        body.append(f"<text:h text:outline-level='2'>{_odt_text(labels['scbf_joints'])}</text:h>")
+        body.append("<table:table table:name='ScbfJoints'>")
+        header = [
+            labels["joint"],
+            labels["beam"],
+            labels["columns"],
+            labels["brace"],
+            labels["beam_moment"],
+            labels["column_moment"],
+            labels["required_moment"],
+            labels["available_moment"],
+            labels["ratio"],
+            labels["status"],
+        ]
+        for row in [header, *_scbf_joint_rows(report)]:
             body.append(
                 "<table:table-row>"
                 + "".join(

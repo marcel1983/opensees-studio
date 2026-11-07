@@ -14,7 +14,7 @@ Units are SI (m, N, kg, s) for the V cases and kip-inch for the D (design)
 cases, as in the AISC examples. Errors below 1e-6 are floating-point noise
 and are printed as `< 1e-6`.
 
-**25 of 25 cases pass.**
+**26 of 26 cases pass.**
 
 | Case | Title | Group | Max. error | Verdict |
 |---|---|---|---|---|
@@ -43,6 +43,7 @@ and are printed as `< 1e-6`.
 | [D-06](#d-06) | Calculation memory of the D-05 beam | Design, AISC 360-16 | < 1e-06 | ✅ pass |
 | [D-07](#d-07) | AISC 341: expected SCBF brace strength | Design, AISC 341-22 | < 1e-06 | ✅ pass |
 | [D-08](#d-08) | AISC 341: SCBF brace connection demands | Design, AISC 341-22 | 2.9e-05 | ✅ pass |
+| [D-09](#d-09) | AISC 341: SCBF beam-to-column connection moment | Design, AISC 341-22 | < 1e-06 | ✅ pass |
 
 <a id="v-01"></a>
 
@@ -382,3 +383,17 @@ and are printed as `< 1e-6`.
 | Required compression P_expected / alpha_s | kip | 146.106 | 146.106 | < 1e-06 | 2e-03 | ✅ |
 | Required flexure 1.1 Ry Fy Z / alpha_s | kip-in | 1004.3 | 1004.3 | < 1e-06 | 2e-03 | ✅ |
 | Required weld leg, tp = 0.5 in, E70, both sides | in | 0.370389 | 0.3704 | 2.9e-05 | 2e-03 | ✅ |
+
+<a id="d-09"></a>
+
+## D-09 — AISC 341: SCBF beam-to-column connection moment
+
+**Model.** W18X50 beam and W14X99 column, Ry = 1.1, Fy = 50 ksi.
+
+**Reference.** F2.6b: min(1.1RyFybZb/alpha_s, 1.1RyΣFycZc/alpha_s).
+
+| Quantity | Unit | OpenSees Studio | Reference | Rel. error | Tolerance | |
+|---|---|---|---|---|---|---|
+| Beam expected moment 1.1 Ry Fy Zb / alpha_s | kip-in | 6110.5 | 6110.5 | < 1e-06 | 1e-09 | ✅ |
+| Column expected moment 1.1 Ry Fy Zc / alpha_s | kip-in | 10466.5 | 10466.5 | < 1e-06 | 1e-09 | ✅ |
+| Required moment min(beam, column) | kip-in | 6110.5 | 6110.5 | < 1e-06 | 1e-09 | ✅ |

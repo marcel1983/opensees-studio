@@ -11,6 +11,15 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **AISC 341-22 SCBF beam-to-column connections (F2.6b).** Every joint where
+  a brace ends and a beam and a column frame in reports the required moment
+  `min(1.1 Ry Fyb Zb / alpha_s, 1.1 Ry sum(Fyc Zc) / alpha_s)`. When an RBS
+  connection is modelled at the joint, its `phi_d Mpe` gives the ratio and
+  status; otherwise the joint is reported as a simple connection to verify
+  (0.025 rad rotation, B3.4a). The report and the calculation memory list the
+  joint, the members, both candidate moments, the required moment and the
+  RBS ratio when available.
+
 - **AISC 341-22 SCBF brace connections (F2.6c).** Each gusset reports the
   required tension `Ry Fy Ag / alpha_s`, the expected compression divided by
   `alpha_s` and the flexure `1.1 Ry Mp / alpha_s` about the critical buckling

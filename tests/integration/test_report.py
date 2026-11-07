@@ -63,3 +63,16 @@ def test_report_carries_the_scbf_capacity_design() -> None:
     page = build_report(project, _results(project))
     assert "SCBF capacity design (AISC 341-22 F2.3)" in page
     assert "SCBF capacity" in page
+
+
+def test_report_carries_the_scbf_beam_column_joint() -> None:
+    from opensees_studio.core import ElasticBeamColumn
+    from opensees_studio.core.design.settings import DesignSettings
+    from tests.integration.test_steel_design_run import _portal, _results
+
+    project = _portal()
+    project.elements.append(ElasticBeamColumn(id=5, nodes=(1, 3), section_id=2))
+    project.design = DesignSettings(seismic_system="SCBF")
+    page = build_report(project, _results(project))
+    assert "SCBF beam-to-column connections (AISC 341-22 F2.6b)" in page
+    assert "simple / not checked" in page
