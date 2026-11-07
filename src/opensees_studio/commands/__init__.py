@@ -14,6 +14,7 @@ from opensees_studio.commands.buildings import (
     SetMassSourceCommand,
     SetStoreysCommand,
 )
+from opensees_studio.commands.column_splices import SetColumnSplicesCommand
 from opensees_studio.commands.combinations import (
     AddCombinationsCommand,
     DeleteCombinationsCommand,
@@ -147,6 +148,7 @@ __all__ = [
     "ReplaceElementsCommand",
     "ReplaceTimeSeriesCommand",
     "ReplicateCommand",
+    "SetColumnSplicesCommand",
     "SetConnectionsCommand",
     "SetCoordSystemsCommand",
     "SetCustomCommandsCommand",

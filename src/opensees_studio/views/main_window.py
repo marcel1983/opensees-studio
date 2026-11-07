@@ -63,6 +63,7 @@ from opensees_studio.commands import (
     MoveNodesCommand,
     ReplaceElementsCommand,
     ReplicateCommand,
+    SetColumnSplicesCommand,
     SetConnectionsCommand,
     SetCoordSystemsCommand,
     SetGussetsCommand,
@@ -229,6 +230,7 @@ from opensees_studio.views.dialogs.buildings import (
     MassSourceDialog,
     StoreysDialog,
 )
+from opensees_studio.views.dialogs.column_splices import ColumnSplicesDialog
 from opensees_studio.views.dialogs.connect_joints import DivideFramesDialog, MergeJointsDialog
 from opensees_studio.views.dialogs.connections import ConnectionsDialog
 from opensees_studio.views.dialogs.grid_line_view import GridLineViewDialog
@@ -611,6 +613,7 @@ class MainWindow(QMainWindow):
         self._act_steel_check = QAction("&Steel Frame Check (AISC 360-16)…", self)
         self._act_connections = QAction("&Connections (AISC 358-22)…", self)
         self._act_gussets = QAction("&Gussets (AISC 341-22)…", self)
+        self._act_column_splices = QAction("&Column Splices (AISC 341-22)…", self)
         self._act_drift_check = QAction("Storey &Drift Check…", self)
         self._act_steel_ratios = QAction("Display Steel &Ratios on Model", self)
         self._act_notional_loads = QAction("Generate &Notional Loads (DAM).", self)
@@ -907,6 +910,7 @@ class MainWindow(QMainWindow):
         m_design.addAction(self._act_steel_check)
         m_design.addAction(self._act_connections)
         m_design.addAction(self._act_gussets)
+        m_design.addAction(self._act_column_splices)
         m_design.addAction(self._act_notional_loads)
         m_design.addAction(self._act_steel_ratios)
         m_design.addAction(self._act_drift_check)
@@ -1364,6 +1368,7 @@ class MainWindow(QMainWindow):
         self._act_steel_check.triggered.connect(self._on_steel_check)
         self._act_connections.triggered.connect(self._on_connections)
         self._act_gussets.triggered.connect(self._on_gussets)
+        self._act_column_splices.triggered.connect(self._on_column_splices)
         self._act_notional_loads.triggered.connect(self._on_notional_loads)
         self._act_drift_check.triggered.connect(self._on_drift_check)
         self._act_steel_ratios.triggered.connect(self._on_steel_ratios)
@@ -2752,6 +2757,19 @@ class MainWindow(QMainWindow):
         if gussets != project.gussets:
             self._vm.apply_command(SetGussetsCommand(self._vm, gussets))
         self._log(f"{len(gussets)} gusset plate(s).")
+
+    def _on_column_splices(self) -> None:
+        """Design → Column Splices: edit the AISC 341 SCBF column splices."""
+        project = self._vm.project
+        if project is None:
+            return
+        dialog = ColumnSplicesDialog(project, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        splices = dialog.splices()
+        if splices != project.column_splices:
+            self._vm.apply_command(SetColumnSplicesCommand(self._vm, splices))
+        self._log(f"{len(splices)} column splice(s).")
 
     def _on_steel_check(self) -> None:
         """Design → Steel Frame Check: AISC 360-16 ratios over this session's results.
@@ -6546,6 +6564,7 @@ class MainWindow(QMainWindow):
         self._act_steel_check.setEnabled(has_project)
         self._act_connections.setEnabled(has_project)
         self._act_gussets.setEnabled(has_project)
+        self._act_column_splices.setEnabled(has_project)
         self._act_notional_loads.setEnabled(has_project)
         self._act_drift_check.setEnabled(has_project)
         self._act_steel_ratios.setEnabled(has_project)

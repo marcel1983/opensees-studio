@@ -26,6 +26,7 @@ from opensees_studio.core.analysis import AnalysisCase
 from opensees_studio.core.combinations import LoadCombination
 from opensees_studio.core.constraints import EqualDOFConstraint, RigidDiaphragm, RigidLink
 from opensees_studio.core.custom_commands import CustomCommandBlock
+from opensees_studio.core.design.column_splice_model import ColumnSplice
 from opensees_studio.core.design.connections import RbsConnection
 from opensees_studio.core.design.gusset_model import Gusset
 from opensees_studio.core.design.settings import DesignSettings
@@ -114,6 +115,7 @@ class Project(BaseModel):
         "combinations",
         "connections",
         "gussets",
+        "column_splices",
         "groups",
         "section_cuts",
         "custom_commands",
@@ -243,6 +245,10 @@ class Project(BaseModel):
         default_factory=list,
         description="AISC 341-22 SCBF gusset plates at brace ends (additive).",
     )
+    column_splices: list[ColumnSplice] = Field(
+        default_factory=list,
+        description="AISC 341-22 SCBF column splices (additive).",
+    )
     groups: list[Group] = Field(
         default_factory=list,
         description="Named sets of joints and elements (Define → Groups; additive).",
@@ -365,6 +371,9 @@ class Project(BaseModel):
 
     def next_gusset_id(self) -> int:
         return self._next_id(self.gussets)
+
+    def next_column_splice_id(self) -> int:
+        return self._next_id(self.column_splices)
 
     def next_storey_id(self) -> int:
         return self._next_id(self.storeys)
@@ -505,6 +514,27 @@ class Project(BaseModel):
                 problems.append(
                     f"Gusset {gusset.id}: brace element {gusset.brace_element_id} does not exist."
                 )
+
+        splice_ids = {s.id for s in self.column_splices}
+        if len(splice_ids) != len(self.column_splices):
+            problems.append("Duplicate column splice ids.")
+        for splice in self.column_splices:
+            if splice.node_id not in node_ids:
+                problems.append(f"Column splice {splice.id}: node {splice.node_id} does not exist.")
+            for label, element_id in (
+                ("top", splice.top_element_id),
+                ("bottom", splice.bottom_element_id),
+            ):
+                element = elements_by_id.get(element_id)
+                if element is None:
+                    problems.append(
+                        f"Column splice {splice.id}: {label} element {element_id} does not exist."
+                    )
+                elif splice.node_id not in element.nodes:
+                    problems.append(
+                        f"Column splice {splice.id}: {label} element {element_id} "
+                        f"does not meet node {splice.node_id}."
+                    )
 
         if self.ndm == 2:
             # A 2D model lives in the X-Z plane (core.plane): OpenSees never sees y.
