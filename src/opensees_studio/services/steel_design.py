@@ -848,6 +848,25 @@ def steel_frame_check(
             "F1.5c and F1.6a require the overstrength seismic load for beams and "
             "brace connections."
         )
+        report.notes.append(
+            "OCBF F1.5c: "
+            + (
+                "the O0 overstrength combinations are included in the envelope."
+                if any("O0:" in label for label in report.load_sets)
+                else "no O0 overstrength combination is selected; add it to design "
+                "the beams and their connections."
+            )
+        )
+
+    frame_elements = [
+        element for element in project.elements if isinstance(element, FRAME_ELEMENT_CLASSES)
+    ]
+    element_roles = {element.id: _member_role(project, element) for element in frame_elements}
+    elements_at_node: dict[int, list[Any]] = {}
+    for element in frame_elements:
+        for node_id in element.nodes:
+            elements_at_node.setdefault(int(node_id), []).append(element)
+    overstrength = any("O0:" in label for label in report.load_sets)
 
     sections = {s.id: s for s in project.sections}
     for element in project.elements:
@@ -1103,10 +1122,39 @@ def steel_frame_check(
                 elif settings.seismic_system == "OCBF" and role == "beam":
                     note = (
                         "OCBF F1.5c: beams and their connections shall be designed "
-                        "with the overstrength seismic load."
+                        "with the overstrength seismic load. "
+                        + (
+                            "The O0 overstrength combinations are included in the envelope."
+                            if overstrength
+                            else "No O0 overstrength combination is selected; the "
+                            "beam is not checked for F1.5c."
+                        )
                     )
                     if note not in check.notes:
                         check.notes.append(note)
+                    intersections = [
+                        node_id
+                        for node_id in element.nodes
+                        if any(
+                            element_roles[other.id] == "brace"
+                            for other in elements_at_node.get(int(node_id), [])
+                        )
+                        and not any(
+                            element_roles[other.id] == "column"
+                            for other in elements_at_node.get(int(node_id), [])
+                        )
+                    ]
+                    if intersections:
+                        note = (
+                            "OCBF F1.4a: a brace intersects this beam away from a "
+                            f"beam-column connection at node(s) {intersections}; the "
+                            "beam must be continuous between columns and braced at "
+                            "the intersection (one set of lateral braces) to D1.2a. "
+                            "The model does not check the continuity or the lateral "
+                            "brace."
+                        )
+                        if note not in check.notes:
+                            check.notes.append(note)
                 if prefix:
                     _prefix_check(check, prefix)
                 ratio = check.governing[1]
@@ -1837,6 +1885,13 @@ def _gusset_results(
         result.compression_demand = demands.compression
         result.flexure_demand = demands.flexure
         result.notes.extend(demands.notes)
+        if settings.seismic_system == "OCBF":
+            result.notes.append(
+                "OCBF F1.6a: the connection demands shown are the exception caps "
+                "(Ry Fy Ag/alpha_s and expected compression/alpha_s); the "
+                "overstrength seismic load may govern. The F2.6c.4 weld check is "
+                "an SCBF requirement."
+            )
         if gusset.weld_leg is not None:
             fexx = gusset.weld_fexx or 70.0 * stress_scale(SOURCE_UNITS, units)
             weld = gusset_weld_check(
