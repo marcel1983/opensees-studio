@@ -93,6 +93,7 @@ from opensees_studio.core.design.connections import (
     rbs_protected_zone,
 )
 from opensees_studio.core.design.gussets import gusset_checks
+from opensees_studio.core.design.rbs_web import web_connection_checks
 from opensees_studio.core.design.scbf_joints import (
     column_splice_demand,
     scbf_beam_column_moment,
@@ -489,6 +490,9 @@ class ConnectionResult:
     shear_capacity: float = 0.0
     shear_ratio: float = 0.0
     shear_status: str = ""
+    web_ratio: float = 0.0
+    web_status: str = ""
+    web_checks: list[LimitStateCheck] = field(default_factory=list)
     status: str = "not checked"
     notes: list[str] = field(default_factory=list)
 
@@ -1627,10 +1631,53 @@ def _connection_results(
                 "shear between the hinge and the face is included in the analysis "
                 "term."
             )
-            result.notes.append(
-                "AISC 358 5.5: design the beam web-to-column connection for Vu; "
-                "the plate, bolts and welds are not checked here."
-            )
+            if connection.web_plate_thickness is not None:
+                plate_height = connection.web_plate_height
+                bolted = connection.web_connection_type == "bolted"
+                missing = bolted and (
+                    plate_height is None
+                    or connection.web_bolt_count is None
+                    or connection.web_bolt_diameter is None
+                )
+                if missing:
+                    result.notes.append(
+                        "AISC 358 5.5: the web connection is not checked; complete "
+                        "the plate height and the bolt data."
+                    )
+                else:
+                    min_thickness = 0.375 * length_scale(SOURCE_UNITS, units)
+                    hole_allowance = 0.0625 * length_scale(SOURCE_UNITS, units)
+                    bolt_fnv = connection.web_bolt_fnv or 54.0 * stress_scale(SOURCE_UNITS, units)
+                    weld_fexx = connection.web_weld_fexx or 70.0 * stress_scale(SOURCE_UNITS, units)
+                    checks, web_notes = web_connection_checks(
+                        vu=result.shear_demand,
+                        plate_thickness=connection.web_plate_thickness,
+                        plate_height=plate_height or 1.0,
+                        bolt_count=connection.web_bolt_count or 1,
+                        bolt_diameter=connection.web_bolt_diameter or 1.0,
+                        bolt_fnv=bolt_fnv,
+                        hole_allowance=hole_allowance,
+                        weld_leg=connection.web_weld_leg,
+                        weld_fexx=weld_fexx,
+                        fy=fy,
+                        fu=fu,
+                        min_thickness=min_thickness,
+                        method=settings.method,
+                        connection_type=connection.web_connection_type,
+                    )
+                    result.web_checks = checks
+                    result.web_ratio = max(check.ratio for check in checks)
+                    result.web_status = "OK" if result.web_ratio <= 1.0 else "NG"
+                    result.notes.extend(web_notes)
+                    result.notes.append(
+                        "AISC 358 5.5: the web connection is checked for the "
+                        "provided plate, bolts and weld."
+                    )
+            else:
+                result.notes.append(
+                    "AISC 358 5.5: the web connection is not checked; set the "
+                    "plate thickness/height and the bolt data."
+                )
             result.notes.append(
                 "AISC 358 5.3(7): supplemental lateral bracing near the RBS is "
                 "required; the model does not check it."

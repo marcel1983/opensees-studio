@@ -710,3 +710,37 @@ def test_the_rbs_beam_shear_and_span_are_checked() -> None:
 
     plain = steel_frame_check(project, _results(project), DesignSettings())
     assert any("SMF and IMF" in note for note in plain.connections[0].notes)
+
+
+def test_the_rbs_web_connection_checks_5_5() -> None:
+    from opensees_studio.core.design.connections import RbsConnection
+
+    project = _portal()
+    connection = RbsConnection(
+        id=1,
+        beam_element_id=2,
+        column_element_id=1,
+        a=4.5,
+        b=13.0,
+        c=1.0,
+        web_connection_type="bolted",
+        web_plate_thickness=0.5,
+        web_plate_height=12.0,
+        web_bolt_count=4,
+        web_bolt_diameter=0.75,
+        web_weld_leg=0.375,
+    )
+    project.connections = [connection]
+    report = steel_frame_check(project, _results(project), DesignSettings(seismic_system="SMF"))
+    result = report.connections[0]
+    assert result.web_checks
+    assert result.web_ratio > 0.0
+    assert result.web_status in ("OK", "NG")
+    assert any("5.5" in check.name for check in result.web_checks)
+    assert any("bearing" in note for note in result.notes)
+
+    connection.web_connection_type = "cjp"
+    report = steel_frame_check(project, _results(project), DesignSettings(seismic_system="SMF"))
+    result = report.connections[0]
+    assert [check.name for check in result.web_checks] == ["Web plate thickness (5.5)"]
+    assert any("CJP" in note for note in result.notes)

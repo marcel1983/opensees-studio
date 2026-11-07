@@ -373,6 +373,8 @@ def _design_section(project: Project, results: Mapping[int, Any]) -> str:
                 c.shear_capacity if c.shear_capacity else "-",
                 c.shear_ratio if c.shear_capacity else "-",
                 c.shear_status or "not checked",
+                c.web_ratio if c.web_status else "-",
+                c.web_status or "not checked",
             ]
             for c in report.connections
         ]
@@ -388,10 +390,32 @@ def _design_section(project: Project, results: Mapping[int, Any]) -> str:
                     "phi Vn",
                     "Vh / phi Vn",
                     "Shear",
+                    "Web ratio",
+                    "Web status",
                 ],
                 rbs_check_rows,
             )
         )
+        web_rows = [
+            [
+                c.connection_id,
+                check.name,
+                check.equation,
+                check.demand,
+                check.capacity,
+                check.ratio,
+            ]
+            for c in report.connections
+            for check in c.web_checks
+        ]
+        if web_rows:
+            out.append("<h3>RBS web connection (AISC 358-22 5.5)</h3>")
+            out.append(
+                _table(
+                    ["Connection", "Check", "Equation", "Demand", "Capacity", "Ratio"],
+                    web_rows,
+                )
+            )
     if report.protected_zones:
         zone_rows = [
             [

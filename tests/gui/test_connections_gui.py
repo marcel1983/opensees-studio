@@ -60,3 +60,29 @@ def test_the_action_stores_and_undoes_the_connections(qtbot, monkeypatch) -> Non
     assert project.connections == [connection]
     window._vm.undo_stack.undo()
     assert project.connections == []
+
+
+@pytest.mark.gui
+def test_the_dialog_stores_the_web_connection(qtbot) -> None:  # type: ignore[no-untyped-def]
+    project = _portal()
+    dialog = ConnectionsDialog(project)
+    qtbot.addWidget(dialog)
+    dialog._beam.setCurrentIndex(dialog._beam.findData(2))
+    dialog._column.setCurrentIndex(dialog._column.findData(1))
+    dialog._a.setValue(4.5)
+    dialog._b.setValue(13.0)
+    dialog._c.setValue(1.0)
+    dialog._web_check.setChecked(True)
+    dialog._web_type.setCurrentIndex(dialog._web_type.findData("bolted"))
+    dialog._web_t.setValue(0.5)
+    dialog._web_h.setValue(12.0)
+    dialog._web_n.setValue(4.0)
+    dialog._web_db.setValue(0.75)
+    dialog._web_leg.setValue(0.375)
+    dialog._add()
+    connection = dialog.connections()[0]
+    assert connection.web_connection_type == "bolted"
+    assert connection.web_plate_thickness == pytest.approx(0.5)
+    assert connection.web_plate_height == pytest.approx(12.0)
+    assert connection.web_bolt_count == 4
+    assert connection.web_weld_leg == pytest.approx(0.375)
