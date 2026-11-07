@@ -7,6 +7,16 @@ that this is pre-alpha: minor and patch releases may change the `.osmodel`
 schema (it carries a `schema_version`, and a file from a newer build is now
 refused instead of silently downgraded).
 
+## [0.0.49] - 2026-11-07
+
+### Added
+
+- **AISC 360 Chapter J connection engine.** `core.design.chapter_j` computes
+  the J2.4 fillet weld, J3.1 bolt shear/tension, J3.6 bearing and tearout,
+  J3.4 slip-critical, J4.3/J4.4 plate shear and J4.5 block shear with their
+  nominal and available strengths, equations and calculation steps in LRFD
+  and ASD. Verification manual D-12.
+
 ## [0.0.48] - 2026-11-07
 
 ### Added
