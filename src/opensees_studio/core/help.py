@@ -1462,8 +1462,14 @@ Lists, adds, edits and removes RBS connections of the project.
 - OK stores the list as one undoable step; the report and the calculation
   memory show each connection with its `Z_RBS`, `Sh`, `Mpr` and protected zone.
 
-The connection check (probable moment at the face, shear at the hinge, welds)
-and the full AISC 358 design procedure are not part of this dialog yet.
+The connection check reports the AISC 358 5.7 steps: the face moment
+`Mf <= phi_d Mpe` (step 8), the beam shear `Vh <= phi Vn` (step 9) and the
+clear span-to-depth prequalification (step 1, 7 for SMF and 5 for IMF). The
+report notes the web-to-column connection of Section 5.5, the supplemental
+lateral bracing of 5.3(7), and the beam weight and flange-thickness limits
+that the shape table does not carry. The dialog does not design the web
+plate, bolts or welds; continuity plates and panel zones are in the SMF joint
+table.
 """,
             "design.steel_check",
             "file.calc_memory",

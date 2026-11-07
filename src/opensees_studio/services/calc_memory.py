@@ -69,6 +69,14 @@ _LABELS: dict[Language, dict[str, str]] = {
         "expected_strength": "Expected strength",
         "factor": "Factor",
         "connection": "Connection",
+        "rbs_checks": "RBS beam checks (AISC 358-22 5.7 steps 1 and 9)",
+        "span_ratio": "Clear span / d",
+        "limit": "Limit",
+        "span": "Span",
+        "shear_demand": "Vh",
+        "shear_capacity": "phi Vn",
+        "shear_ratio": "Vh / phi Vn",
+        "shear": "Shear",
         "beam": "Beam",
         "column": "Column",
         "protected": "Protected zone",
@@ -150,6 +158,14 @@ _LABELS: dict[Language, dict[str, str]] = {
         "expected_strength": "Resistencia esperada",
         "factor": "Factor",
         "connection": "Conexión",
+        "rbs_checks": "Chequeos de viga RBS (AISC 358-22 5.7 pasos 1 y 9)",
+        "span_ratio": "Luz libre / d",
+        "limit": "Límite",
+        "span": "Luz",
+        "shear_demand": "Vh",
+        "shear_capacity": "phi Vn",
+        "shear_ratio": "Vh / phi Vn",
+        "shear": "Corte",
         "beam": "Viga",
         "column": "Columna",
         "protected": "Zona protegida",
@@ -291,6 +307,22 @@ def _connection_rows(report: Any) -> list[list[str]]:
             f"{c.flexure_ratio:.3f}" if c.flexure_status else "-",
             c.flexure_status or "-",
             c.status,
+        ]
+        for c in report.connections
+    ]
+
+
+def _rbs_check_rows(report: Any) -> list[list[str]]:
+    return [
+        [
+            str(c.connection_id),
+            _fmt(c.span_ratio) if c.span_limit else "-",
+            _fmt(c.span_limit) if c.span_limit else "-",
+            c.span_status or "not checked",
+            _fmt(c.shear_demand) if c.shear_capacity else "-",
+            _fmt(c.shear_capacity) if c.shear_capacity else "-",
+            _fmt(c.shear_ratio) if c.shear_capacity else "-",
+            c.shear_status or "not checked",
         ]
         for c in report.connections
     ]
@@ -497,6 +529,20 @@ def _html(project: Any, report: Any, labels: dict[str, str]) -> str:
             )
             + "</table>"
         )
+    rbs_checks_html = ""
+    if report.connections:
+        rbs_checks_html = (
+            f"<h2>{labels['rbs_checks']}</h2><table><tr>"
+            f"<th>{labels['connection']}</th><th>{labels['span_ratio']}</th>"
+            f"<th>{labels['limit']}</th><th>{labels['span']}</th>"
+            f"<th>{labels['shear_demand']}</th><th>{labels['shear_capacity']}</th>"
+            f"<th>{labels['shear_ratio']}</th><th>{labels['shear']}</th></tr>"
+            + "".join(
+                "<tr>" + "".join(f"<td>{_e(cell)}</td>" for cell in row) + "</tr>"
+                for row in _rbs_check_rows(report)
+            )
+            + "</table>"
+        )
     zones_html = ""
     if report.protected_zones:
         zones_html = (
@@ -601,6 +647,7 @@ def _html(project: Any, report: Any, labels: dict[str, str]) -> str:
         f"<th>{labels['ratio']}</th><th>{labels['status']}</th></tr>{index}</table>"
         + joints
         + connections_html
+        + rbs_checks_html
         + zones_html
         + gussets_html
         + brace_connections_html
@@ -656,6 +703,17 @@ def _markdown(project: Any, report: Any, labels: dict[str, str]) -> str:
             "|---|---|---|---|---|---|---|---|---|---|",
         ]
         lines += ["| " + " | ".join(row) + " |" for row in _connection_rows(report)]
+    if report.connections:
+        lines += [
+            "",
+            f"## {labels['rbs_checks']}",
+            "",
+            f"| {labels['connection']} | {labels['span_ratio']} | {labels['limit']} | "
+            f"{labels['span']} | {labels['shear_demand']} | {labels['shear_capacity']} | "
+            f"{labels['shear_ratio']} | {labels['shear']} |",
+            "|---|---|---|---|---|---|---|---|",
+        ]
+        lines += ["| " + " | ".join(row) + " |" for row in _rbs_check_rows(report)]
     if report.protected_zones:
         lines += [
             "",
@@ -869,6 +927,22 @@ def _latex(project: Any, report: Any, labels: dict[str, str]) -> str:
         lines += [
             " & ".join(_tex_escape(cell) for cell in row) + r" \\"
             for row in _connection_rows(report)
+        ]
+        lines.append(r"\end{longtable}")
+    if report.connections:
+        lines += [
+            rf"\subsection*{{{_tex_escape(labels['rbs_checks'])}}}",
+            r"\begin{longtable}{llllllll}",
+        ]
+        lines.append(
+            rf"{_tex_escape(labels['connection'])} & {_tex_escape(labels['span_ratio'])} & "
+            rf"{_tex_escape(labels['limit'])} & {_tex_escape(labels['span'])} & "
+            rf"{_tex_escape(labels['shear_demand'])} & {_tex_escape(labels['shear_capacity'])} & "
+            rf"{_tex_escape(labels['shear_ratio'])} & {_tex_escape(labels['shear'])} \\ \toprule"
+        )
+        lines += [
+            " & ".join(_tex_escape(cell) for cell in row) + r" \\"
+            for row in _rbs_check_rows(report)
         ]
         lines.append(r"\end{longtable}")
     if report.protected_zones:
@@ -1090,6 +1164,29 @@ def odt_bytes(project: Any, report: Any, *, language: Language = "en") -> bytes:
             labels["status"],
         ]
         for row in [header, *_connection_rows(report)]:
+            body.append(
+                "<table:table-row>"
+                + "".join(
+                    f"<table:table-cell><text:p>{_odt_text(c)}</text:p></table:table-cell>"
+                    for c in row
+                )
+                + "</table:table-row>"
+            )
+        body.append("</table:table>")
+    if report.connections:
+        body.append(f"<text:h text:outline-level='2'>{_odt_text(labels['rbs_checks'])}</text:h>")
+        body.append("<table:table table:name='RbsChecks'>")
+        header = [
+            labels["connection"],
+            labels["span_ratio"],
+            labels["limit"],
+            labels["span"],
+            labels["shear_demand"],
+            labels["shear_capacity"],
+            labels["shear_ratio"],
+            labels["shear"],
+        ]
+        for row in [header, *_rbs_check_rows(report)]:
             body.append(
                 "<table:table-row>"
                 + "".join(

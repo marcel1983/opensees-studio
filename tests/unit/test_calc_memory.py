@@ -133,14 +133,23 @@ def test_the_memory_carries_the_rbs_connections() -> None:
             mpr=5000.0,
             protected_from=0.0,
             protected_to=17.5,
+            span_ratio=12.5,
+            span_limit=7.0,
+            span_status="OK",
+            shear_demand=120.0,
+            shear_capacity=200.0,
+            shear_ratio=0.6,
+            shear_status="OK",
             status="checked",
         )
     ]
     english = build_member_memory(_project(), report, language="en", fmt="html")
     assert "Connections (AISC 358-22)" in english
     assert "17.5" in english
+    assert "RBS beam checks" in english and "Vh / phi Vn" in english
     spanish = build_member_memory(_project(), report, language="es", fmt="markdown")
     assert "Conexiones (AISC 358-22)" in spanish
+    assert "Chequeos de viga RBS" in spanish
 
 
 def test_the_memory_carries_the_scbf_protected_zones() -> None:

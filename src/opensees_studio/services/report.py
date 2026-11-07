@@ -363,6 +363,35 @@ def _design_section(project: Project, results: Mapping[int, Any]) -> str:
                 connection_rows,
             )
         )
+        rbs_check_rows = [
+            [
+                c.connection_id,
+                c.span_ratio if c.span_limit else "-",
+                c.span_limit if c.span_limit else "-",
+                c.span_status or "not checked",
+                c.shear_demand if c.shear_capacity else "-",
+                c.shear_capacity if c.shear_capacity else "-",
+                c.shear_ratio if c.shear_capacity else "-",
+                c.shear_status or "not checked",
+            ]
+            for c in report.connections
+        ]
+        out.append("<h3>RBS beam checks (AISC 358-22 5.7 steps 1 and 9)</h3>")
+        out.append(
+            _table(
+                [
+                    "Connection",
+                    "Clear span / d",
+                    "Limit",
+                    "Span",
+                    "Vh",
+                    "phi Vn",
+                    "Vh / phi Vn",
+                    "Shear",
+                ],
+                rbs_check_rows,
+            )
+        )
     if report.protected_zones:
         zone_rows = [
             [

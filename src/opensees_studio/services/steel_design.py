@@ -482,6 +482,13 @@ class ConnectionResult:
     mpe: float = 0.0
     flexure_ratio: float = 0.0
     flexure_status: str = ""
+    span_ratio: float = 0.0
+    span_limit: float = 0.0
+    span_status: str = ""
+    shear_demand: float = 0.0
+    shear_capacity: float = 0.0
+    shear_ratio: float = 0.0
+    shear_status: str = ""
     status: str = "not checked"
     notes: list[str] = field(default_factory=list)
 
@@ -1564,6 +1571,9 @@ def _connection_results(
                                 f"Node {node.id} lies inside the protected zone{support}."
                             )
         result.mpe = rbs_mpe(settings.ry, fy, shape.Zx)
+        e = float(getattr(section, "E", 0.0) or 0.0) or 29000.0 * stress_scale(SOURCE_UNITS, units)
+        g = float(getattr(section, "G", 0.0) or 0.0) or e / 2.6
+        steel = Steel(Fy=fy, E=e, G=g, Fu=fu or None)
         if joint and beam_length > 0.0 and alternatives:
             index = _joint_station(beam, joint)
             for _label, alt in alternatives:
@@ -1583,6 +1593,58 @@ def _connection_results(
                     result.mf = mf
                     result.flexure_ratio = ratio
             result.flexure_status = "OK" if result.flexure_ratio <= 1.0 else "NG"
+            result.shear_demand = result.vh
+            result.shear_capacity = shape.shear_major(
+                steel, settings.method, length=beam_length
+            ).available
+            result.shear_ratio = (
+                result.shear_demand / result.shear_capacity
+                if result.shear_capacity > 0.0
+                else math.inf
+            )
+            result.shear_status = "OK" if result.shear_ratio <= 1.0 else "NG"
+            if settings.seismic_system in ("SMF", "IMF"):
+                result.span_limit = 7.0 if settings.seismic_system == "SMF" else 5.0
+                if column is not None:
+                    column_section = sections.get(getattr(column, "section_id", -1))
+                    column_name = getattr(column_section, "name", "") or ""
+                    try:
+                        column_shape = shape_in_units(column_name, units)
+                    except (KeyError, ValueError):
+                        column_shape = None
+                    column_depth = float(getattr(column_shape, "d", 0.0) or 0.0)
+                    if column_depth > 0.0 and shape.d > 0.0:
+                        clear_span = max(0.0, beam_length - column_depth)
+                        result.span_ratio = clear_span / shape.d
+                        result.span_status = (
+                            "OK" if result.span_ratio >= result.span_limit else "NG"
+                        )
+            else:
+                result.notes.append("AISC 358 RBS is prequalified for SMF and IMF systems only.")
+            result.notes.append(
+                "AISC 358 2.5: Vu is taken as Vh, which envelopes the mechanism "
+                "shear and the analysis shear at the column face; the gravity "
+                "shear between the hinge and the face is included in the analysis "
+                "term."
+            )
+            result.notes.append(
+                "AISC 358 5.5: design the beam web-to-column connection for Vu; "
+                "the plate, bolts and welds are not checked here."
+            )
+            result.notes.append(
+                "AISC 358 5.3(7): supplemental lateral bracing near the RBS is "
+                "required; the model does not check it."
+            )
+            depth_limit = 44.0 * length_scale(SOURCE_UNITS, units)
+            if shape.d > depth_limit:
+                result.notes.append(
+                    f"AISC 358 5.3(2): the beam depth {shape.d:g} exceeds the W44 "
+                    f"limit {depth_limit:g}."
+                )
+            result.notes.append(
+                "AISC 358 5.3: the beam weight (408 lb/ft), flange thickness and "
+                "built-up-member limits are not in the shape table."
+            )
         result.status = "checked"
         out.append(result)
     return out

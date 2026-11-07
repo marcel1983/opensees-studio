@@ -100,3 +100,18 @@ def test_report_carries_the_column_splices() -> None:
     page = build_report(project, _results(project))
     assert "SCBF column splices (AISC 341-22 F2.6d)" in page
     assert "W14X99" in page
+
+
+def test_report_carries_the_rbs_beam_checks() -> None:
+    from opensees_studio.core.design.connections import RbsConnection
+    from opensees_studio.core.design.settings import DesignSettings
+    from tests.integration.test_steel_design_run import _portal, _results
+
+    project = _portal()
+    project.connections = [
+        RbsConnection(id=1, beam_element_id=2, column_element_id=1, a=4.5, b=13.0, c=1.0)
+    ]
+    project.design = DesignSettings(seismic_system="SMF")
+    page = build_report(project, _results(project))
+    assert "RBS beam checks (AISC 358-22 5.7 steps 1 and 9)" in page
+    assert "Vh / phi Vn" in page
