@@ -1027,6 +1027,36 @@ def _aisc_scbf_joint() -> list[Check]:
     ]
 
 
+def _aisc_column_splice() -> list[Check]:
+    """F2.6d: required moment and shear of a W14X99 column splice."""
+    from opensees_studio.core.design.scbf_joints import column_splice_demand
+
+    shape = _aisc("W14X99")
+    splice = column_splice_demand(
+        top_fy=50.0,
+        top_z=shape.Zx,
+        bottom_fy=50.0,
+        bottom_z=shape.Zx,
+        clear_height=144.0,
+    )
+    return [
+        Check(
+            "Required splice moment 0.5 Mp / alpha_s",
+            "kip-in",
+            splice.moment,
+            0.5 * 50.0 * shape.Zx,
+            1e-9,
+        ),
+        Check(
+            "Required splice shear (Mp_top + Mp_bottom) / (alpha_s Hc)",
+            "kip",
+            splice.shear,
+            2.0 * 50.0 * shape.Zx / 144.0,
+            1e-9,
+        ),
+    ]
+
+
 # ──────────────────────────── catalogue ────────────────────────────
 CASES: list[Case] = [
     Case(
@@ -1252,6 +1282,14 @@ CASES: list[Case] = [
         "F2.6b: min(1.1RyFybZb/alpha_s, 1.1RyΣFycZc/alpha_s).",
         "W18X50 beam and W14X99 column, Ry = 1.1, Fy = 50 ksi.",
         _aisc_scbf_joint,
+    ),
+    Case(
+        "D-10",
+        "AISC 341: SCBF column splice demand",
+        "Design, AISC 341-22",
+        "F2.6d: 0.5 min(Mp_top, Mp_bottom)/alpha_s and (Mp_top + Mp_bottom)/(alpha_s Hc).",
+        "W14X99 column, Fy = 50 ksi, clear height Hc = 144 in.",
+        _aisc_column_splice,
     ),
 ]
 

@@ -14,7 +14,7 @@ Units are SI (m, N, kg, s) for the V cases and kip-inch for the D (design)
 cases, as in the AISC examples. Errors below 1e-6 are floating-point noise
 and are printed as `< 1e-6`.
 
-**26 of 26 cases pass.**
+**27 of 27 cases pass.**
 
 | Case | Title | Group | Max. error | Verdict |
 |---|---|---|---|---|
@@ -44,6 +44,7 @@ and are printed as `< 1e-6`.
 | [D-07](#d-07) | AISC 341: expected SCBF brace strength | Design, AISC 341-22 | < 1e-06 | ✅ pass |
 | [D-08](#d-08) | AISC 341: SCBF brace connection demands | Design, AISC 341-22 | 2.9e-05 | ✅ pass |
 | [D-09](#d-09) | AISC 341: SCBF beam-to-column connection moment | Design, AISC 341-22 | < 1e-06 | ✅ pass |
+| [D-10](#d-10) | AISC 341: SCBF column splice demand | Design, AISC 341-22 | < 1e-06 | ✅ pass |
 
 <a id="v-01"></a>
 
@@ -397,3 +398,16 @@ and are printed as `< 1e-6`.
 | Beam expected moment 1.1 Ry Fy Zb / alpha_s | kip-in | 6110.5 | 6110.5 | < 1e-06 | 1e-09 | ✅ |
 | Column expected moment 1.1 Ry Fy Zc / alpha_s | kip-in | 10466.5 | 10466.5 | < 1e-06 | 1e-09 | ✅ |
 | Required moment min(beam, column) | kip-in | 6110.5 | 6110.5 | < 1e-06 | 1e-09 | ✅ |
+
+<a id="d-10"></a>
+
+## D-10 — AISC 341: SCBF column splice demand
+
+**Model.** W14X99 column, Fy = 50 ksi, clear height Hc = 144 in.
+
+**Reference.** F2.6d: 0.5 min(Mp_top, Mp_bottom)/alpha_s and (Mp_top + Mp_bottom)/(alpha_s Hc).
+
+| Quantity | Unit | OpenSees Studio | Reference | Rel. error | Tolerance | |
+|---|---|---|---|---|---|---|
+| Required splice moment 0.5 Mp / alpha_s | kip-in | 4325 | 4325 | < 1e-06 | 1e-09 | ✅ |
+| Required splice shear (Mp_top + Mp_bottom) / (alpha_s Hc) | kip | 120.139 | 120.139 | < 1e-06 | 1e-09 | ✅ |
