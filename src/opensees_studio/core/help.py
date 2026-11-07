@@ -1646,11 +1646,16 @@ cantilever**: F1-1 assumes both ends braced.
   With **OCBF**, diagonal braces check `Lc/r <= 4 sqrt(E/Fy)` (F1.5b); the
   member notes state that the limit is for V and inverted-V configurations
   and that the check applies it to every OCBF brace (conservative for other
-  layouts). The notes also state that beams (F1.5c) and brace connections
-  (F1.6a) shall use the overstrength seismic load; the F1.6a exception caps
-  tension at `Ry Fy Ag/alpha_s` and compression at the expected
-  compression/`alpha_s`. The check does not create the overstrength
-  combinations or verify the beam bracing of F1.4a.
+  layouts). The check also reports whether the **O0 overstrength
+  combinations** are among the selected load sets (F1.5c): when they are, the
+  beam and connection ratios envelope them; when they are not, the note says
+  the beam is not checked for F1.5c. Beams with a brace framing in away from
+  a beam-column connection are flagged with the F1.4a continuity and lateral
+  bracing requirement. The gusset notes state that the connection demands
+  are the F1.6a exception caps (`Ry Fy Ag/alpha_s` tension and expected
+  compression/`alpha_s`) and that the overstrength seismic load may govern.
+  The check does not create the overstrength combinations and does not
+  verify the beam continuity or the lateral brace of F1.4a.
 
 Results: one row per member with its governing ratio, the check and equation
 that govern and the load set that produced them; **Select failing members**

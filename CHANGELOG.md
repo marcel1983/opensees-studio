@@ -7,6 +7,17 @@ that this is pre-alpha: minor and patch releases may change the `.osmodel`
 schema (it carries a `schema_version`, and a file from a newer build is now
 refused instead of silently downgraded).
 
+## [Unreleased]
+
+### Added
+
+- **OCBF F1.4a, F1.5c and F1.6a scope checks.** The steel check now reports
+  whether the O0 overstrength combinations are among the selected load sets
+  (F1.5c), flags beams where a brace intersects away from a beam-column
+  connection with the F1.4a continuity and lateral-bracing requirement, and
+  states in the gusset notes that the connection demands are the F1.6a
+  exception caps and that the overstrength seismic load may govern.
+
 ## [0.0.44] - 2026-11-07
 
 ### Added

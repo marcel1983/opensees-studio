@@ -643,3 +643,42 @@ def test_ocbf_brace_slenderness_uses_f1_1() -> None:
     beam = next(member for member in report.members if member.element_id == 2)
     assert any("F1.5c" in note for note in beam.notes)
     assert any("F1.5b" in note for note in report.notes)
+
+
+def test_ocbf_beam_reports_the_overstrength_combinations() -> None:
+    project = _portal()
+    project.elements.append(ElasticBeamColumn(id=5, nodes=(1, 3), section_id=2))
+    project.combinations = [
+        LoadCombination(
+            id=1,
+            name="O0: 1.2D+2.5E",
+            terms=[CombinationTerm(ref_id=1, factor=2.5)],
+        )
+    ]
+    report = steel_frame_check(project, _results(project), DesignSettings(seismic_system="OCBF"))
+    beam = next(member for member in report.members if member.element_id == 2)
+    assert any("included in the envelope" in note for note in beam.notes)
+    assert any("O0 overstrength combinations are included" in note for note in report.notes)
+
+
+def test_ocbf_flags_a_brace_intersecting_a_beam() -> None:
+    project = _portal()
+    project.nodes.append(Node(id=5, coords=(120.0, 0.0, 144.0)))
+    project.elements[1] = ElasticBeamColumn(id=2, nodes=(2, 5), section_id=2)
+    project.elements.append(ElasticBeamColumn(id=6, nodes=(5, 3), section_id=2))
+    project.elements.append(ElasticBeamColumn(id=7, nodes=(1, 5), section_id=2))
+    report = steel_frame_check(project, _results(project), DesignSettings(seismic_system="OCBF"))
+    beam = next(member for member in report.members if member.element_id == 2)
+    assert any("F1.4a" in note for note in beam.notes)
+    assert any("node(s) [5]" in note for note in beam.notes)
+
+
+def test_ocbf_gusset_connection_reports_f1_6a() -> None:
+    from opensees_studio.core.design.gusset_model import Gusset
+
+    project = _portal()
+    project.elements.append(ElasticBeamColumn(id=5, nodes=(1, 3), section_id=2))
+    project.gussets = [Gusset(id=1, brace_element_id=5, t=0.5, b=12.0, lw=10.0, free_length=10.0)]
+    report = steel_frame_check(project, _results(project), DesignSettings(seismic_system="OCBF"))
+    gusset = report.gussets[0]
+    assert any("F1.6a" in note for note in gusset.notes)
