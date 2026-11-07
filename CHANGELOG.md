@@ -7,6 +7,19 @@ that this is pre-alpha: minor and patch releases may change the `.osmodel`
 schema (it carries a `schema_version`, and a file from a newer build is now
 refused instead of silently downgraded).
 
+## [Unreleased]
+
+### Added
+
+- **AISC 358-22 RBS web connection (5.5).** The RBS entity stores the CJP or
+  bolted single-plate web connection: plate thickness and height, bolt count,
+  diameter and `Fnv`, and fillet weld leg and `Fexx`. The check covers the
+  3/8 in. minimum plate, plate shear yielding and rupture, bolt shear, the
+  `5/8 tp` minimum leg and the fillet weld; a CJP connection checks the
+  backing plate and notes the demand-critical weld. The report and the
+  calculation memory show the detailed checks and the remaining scope notes
+  (one vertical bolt line, bearing, block shear and slip resistance).
+
 ## [0.0.47] - 2026-11-07
 
 ### Added

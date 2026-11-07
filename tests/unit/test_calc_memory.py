@@ -140,6 +140,17 @@ def test_the_memory_carries_the_rbs_connections() -> None:
             shear_capacity=200.0,
             shear_ratio=0.6,
             shear_status="OK",
+            web_ratio=0.5,
+            web_status="OK",
+            web_checks=[
+                LimitStateCheck(
+                    "Web plate shear yielding (5.5)",
+                    "Vu <= phi 0.60 Fy tp hp",
+                    120.0,
+                    240.0,
+                    0.5,
+                )
+            ],
             status="checked",
         )
     ]
@@ -147,9 +158,11 @@ def test_the_memory_carries_the_rbs_connections() -> None:
     assert "Connections (AISC 358-22)" in english
     assert "17.5" in english
     assert "RBS beam checks" in english and "Vh / phi Vn" in english
+    assert "Web connection (AISC 358-22 5.5)" in english
     spanish = build_member_memory(_project(), report, language="es", fmt="markdown")
     assert "Conexiones (AISC 358-22)" in spanish
     assert "Chequeos de viga RBS" in spanish
+    assert "Conexión del alma (AISC 358-22 5.5)" in spanish
 
 
 def test_the_memory_carries_the_scbf_protected_zones() -> None:

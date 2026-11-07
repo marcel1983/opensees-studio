@@ -77,6 +77,9 @@ _LABELS: dict[Language, dict[str, str]] = {
         "shear_capacity": "phi Vn",
         "shear_ratio": "Vh / phi Vn",
         "shear": "Shear",
+        "web_ratio": "Web ratio",
+        "web_status": "Web status",
+        "web_connection": "Web connection (AISC 358-22 5.5)",
         "beam": "Beam",
         "column": "Column",
         "protected": "Protected zone",
@@ -166,6 +169,9 @@ _LABELS: dict[Language, dict[str, str]] = {
         "shear_capacity": "phi Vn",
         "shear_ratio": "Vh / phi Vn",
         "shear": "Corte",
+        "web_ratio": "Relación alma",
+        "web_status": "Estado alma",
+        "web_connection": "Conexión del alma (AISC 358-22 5.5)",
         "beam": "Viga",
         "column": "Columna",
         "protected": "Zona protegida",
@@ -323,8 +329,17 @@ def _rbs_check_rows(report: Any) -> list[list[str]]:
             _fmt(c.shear_capacity) if c.shear_capacity else "-",
             _fmt(c.shear_ratio) if c.shear_capacity else "-",
             c.shear_status or "not checked",
+            _fmt(c.web_ratio) if c.web_status else "-",
+            c.web_status or "not checked",
         ]
         for c in report.connections
+    ]
+
+
+def _web_check_rows(connection: Any) -> list[list[str]]:
+    return [
+        [c.name, c.equation, _fmt(c.demand), _fmt(c.capacity), _fmt(c.ratio)]
+        for c in connection.web_checks
     ]
 
 
@@ -536,12 +551,29 @@ def _html(project: Any, report: Any, labels: dict[str, str]) -> str:
             f"<th>{labels['connection']}</th><th>{labels['span_ratio']}</th>"
             f"<th>{labels['limit']}</th><th>{labels['span']}</th>"
             f"<th>{labels['shear_demand']}</th><th>{labels['shear_capacity']}</th>"
-            f"<th>{labels['shear_ratio']}</th><th>{labels['shear']}</th></tr>"
+            f"<th>{labels['shear_ratio']}</th><th>{labels['shear']}</th>"
+            f"<th>{labels['web_ratio']}</th><th>{labels['web_status']}</th></tr>"
             + "".join(
                 "<tr>" + "".join(f"<td>{_e(cell)}</td>" for cell in row) + "</tr>"
                 for row in _rbs_check_rows(report)
             )
             + "</table>"
+        )
+    web_checks_html = ""
+    if report.connections:
+        web_checks_html = "".join(
+            f"<h3>{labels['connection']} {c.connection_id} - "
+            f"{labels['web_connection']}</h3><table><tr>"
+            f"<th>{labels['check']}</th><th>{labels['equation']}</th>"
+            f"<th>{labels['demand']}</th><th>{labels['capacity']}</th>"
+            f"<th>{labels['ratio']}</th></tr>"
+            + "".join(
+                "<tr>" + "".join(f"<td>{_e(cell)}</td>" for cell in row) + "</tr>"
+                for row in _web_check_rows(c)
+            )
+            + "</table>"
+            for c in report.connections
+            if c.web_checks
         )
     zones_html = ""
     if report.protected_zones:
@@ -648,6 +680,7 @@ def _html(project: Any, report: Any, labels: dict[str, str]) -> str:
         + joints
         + connections_html
         + rbs_checks_html
+        + web_checks_html
         + zones_html
         + gussets_html
         + brace_connections_html
@@ -710,10 +743,23 @@ def _markdown(project: Any, report: Any, labels: dict[str, str]) -> str:
             "",
             f"| {labels['connection']} | {labels['span_ratio']} | {labels['limit']} | "
             f"{labels['span']} | {labels['shear_demand']} | {labels['shear_capacity']} | "
-            f"{labels['shear_ratio']} | {labels['shear']} |",
-            "|---|---|---|---|---|---|---|---|",
+            f"{labels['shear_ratio']} | {labels['shear']} | "
+            f"{labels['web_ratio']} | {labels['web_status']} |",
+            "|---|---|---|---|---|---|---|---|---|---|",
         ]
         lines += ["| " + " | ".join(row) + " |" for row in _rbs_check_rows(report)]
+    for connection in report.connections:
+        if not connection.web_checks:
+            continue
+        lines += [
+            "",
+            f"### {labels['connection']} {connection.connection_id} - {labels['web_connection']}",
+            "",
+            f"| {labels['check']} | {labels['equation']} | {labels['demand']} | "
+            f"{labels['capacity']} | {labels['ratio']} |",
+            "|---|---|---|---|---|",
+        ]
+        lines += ["| " + " | ".join(row) + " |" for row in _web_check_rows(connection)]
     if report.protected_zones:
         lines += [
             "",
@@ -932,17 +978,36 @@ def _latex(project: Any, report: Any, labels: dict[str, str]) -> str:
     if report.connections:
         lines += [
             rf"\subsection*{{{_tex_escape(labels['rbs_checks'])}}}",
-            r"\begin{longtable}{llllllll}",
+            r"\begin{longtable}{llllllllll}",
         ]
         lines.append(
             rf"{_tex_escape(labels['connection'])} & {_tex_escape(labels['span_ratio'])} & "
             rf"{_tex_escape(labels['limit'])} & {_tex_escape(labels['span'])} & "
             rf"{_tex_escape(labels['shear_demand'])} & {_tex_escape(labels['shear_capacity'])} & "
-            rf"{_tex_escape(labels['shear_ratio'])} & {_tex_escape(labels['shear'])} \\ \toprule"
+            rf"{_tex_escape(labels['shear_ratio'])} & {_tex_escape(labels['shear'])} & "
+            rf"{_tex_escape(labels['web_ratio'])} & {_tex_escape(labels['web_status'])} \\ \toprule"
         )
         lines += [
             " & ".join(_tex_escape(cell) for cell in row) + r" \\"
             for row in _rbs_check_rows(report)
+        ]
+        lines.append(r"\end{longtable}")
+    for connection in report.connections:
+        if not connection.web_checks:
+            continue
+        lines += [
+            rf"\subsection*{{{_tex_escape(labels['connection'])} "
+            rf"{connection.connection_id} - {_tex_escape(labels['web_connection'])}}}",
+            r"\begin{longtable}{lllll}",
+        ]
+        lines.append(
+            rf"{_tex_escape(labels['check'])} & {_tex_escape(labels['equation'])} & "
+            rf"{_tex_escape(labels['demand'])} & {_tex_escape(labels['capacity'])} & "
+            rf"{_tex_escape(labels['ratio'])} \\ \toprule"
+        )
+        lines += [
+            " & ".join(_tex_escape(cell) for cell in row) + r" \\"
+            for row in _web_check_rows(connection)
         ]
         lines.append(r"\end{longtable}")
     if report.protected_zones:
@@ -1185,8 +1250,36 @@ def odt_bytes(project: Any, report: Any, *, language: Language = "en") -> bytes:
             labels["shear_capacity"],
             labels["shear_ratio"],
             labels["shear"],
+            labels["web_ratio"],
+            labels["web_status"],
         ]
         for row in [header, *_rbs_check_rows(report)]:
+            body.append(
+                "<table:table-row>"
+                + "".join(
+                    f"<table:table-cell><text:p>{_odt_text(c)}</text:p></table:table-cell>"
+                    for c in row
+                )
+                + "</table:table-row>"
+            )
+        body.append("</table:table>")
+    for connection in report.connections:
+        if not connection.web_checks:
+            continue
+        body.append(
+            f"<text:h text:outline-level='2'>{_odt_text(labels['connection'])} "
+            f"{connection.connection_id} - "
+            f"{_odt_text(labels['web_connection'])}</text:h>"
+        )
+        body.append("<table:table table:name='WebChecks'>")
+        header = [
+            labels["check"],
+            labels["equation"],
+            labels["demand"],
+            labels["capacity"],
+            labels["ratio"],
+        ]
+        for row in [header, *_web_check_rows(connection)]:
             body.append(
                 "<table:table-row>"
                 + "".join(

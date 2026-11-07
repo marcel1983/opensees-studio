@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDialogButtonBox,
     QFormLayout,
@@ -18,9 +19,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from opensees_studio.core.aisc import SOURCE_UNITS
 from opensees_studio.core.design.connections import RbsConnection, rbs_geometry
 from opensees_studio.core.geometry.elements import FRAME_ELEMENT_CLASSES
 from opensees_studio.core.help import TOPIC_PROPERTY
+from opensees_studio.core.units import length_scale, stress_scale
 from opensees_studio.services.steel_design import shape_in_units
 from opensees_studio.views.float_field import FloatField
 from opensees_studio.views.screen_fit import FittedDialog
@@ -42,11 +45,14 @@ class ConnectionsDialog(FittedDialog):
             QLabel(
                 "A reduced beam section (RBS) moves the plastic hinge away from the "
                 "column face. The cut is checked against AISC 358-22 Section 5.7: "
-                "0.5bf <= a <= 0.75bf, 0.65d <= b <= 0.85d and 0.1bf <= c <= 0.25bf."
+                "0.5bf <= a <= 0.75bf, 0.65d <= b <= 0.85d and 0.1bf <= c <= 0.25bf. "
+                "The optional web connection checks the 5.5 plate, bolts and weld."
             )
         )
-        self._table = QTableWidget(0, 6)
-        self._table.setHorizontalHeaderLabels(["Connection", "Beam", "Column", "a", "b", "c"])
+        self._table = QTableWidget(0, 7)
+        self._table.setHorizontalHeaderLabels(
+            ["Connection", "Beam", "Column", "a", "b", "c", "Web"]
+        )
         self._table.horizontalHeader().setStretchLastSection(True)
         self._table.setMinimumHeight(130)
         self._table.itemSelectionChanged.connect(self._load_selected)
@@ -71,6 +77,35 @@ class ConnectionsDialog(FittedDialog):
         self._c = FloatField()
         self._c.setRange(1e-6, 1e9)
         form.addRow("c (cut depth):", self._c)
+        self._web_check = QCheckBox("Check web connection (AISC 358-22 5.5)")
+        form.addRow("Web connection:", self._web_check)
+        self._web_type = QComboBox()
+        self._web_type.addItem("CJP groove weld (SMF)", "cjp")
+        self._web_type.addItem("Bolted single plate (IMF)", "bolted")
+        form.addRow("Web type:", self._web_type)
+        self._web_t = FloatField()
+        self._web_t.setRange(1e-6, 1e9)
+        form.addRow("Plate thickness tp:", self._web_t)
+        self._web_h = FloatField()
+        self._web_h.setRange(1e-6, 1e9)
+        form.addRow("Plate height hp:", self._web_h)
+        self._web_n = FloatField()
+        self._web_n.setRange(1.0, 1e6)
+        form.addRow("Bolt count:", self._web_n)
+        self._web_db = FloatField()
+        self._web_db.setRange(1e-6, 1e9)
+        form.addRow("Bolt diameter:", self._web_db)
+        self._web_fnv = FloatField()
+        self._web_fnv.setRange(1e-6, 1e9)
+        self._web_fnv.setValue(54.0 * stress_scale(SOURCE_UNITS, project.meta.units))
+        form.addRow("Bolt Fnv:", self._web_fnv)
+        self._web_leg = FloatField()
+        self._web_leg.setRange(1e-6, 1e9)
+        form.addRow("Weld leg:", self._web_leg)
+        self._web_fexx = FloatField()
+        self._web_fexx.setRange(1e-6, 1e9)
+        self._web_fexx.setValue(70.0 * stress_scale(SOURCE_UNITS, project.meta.units))
+        form.addRow("Electrode Fexx:", self._web_fexx)
         layout.addLayout(form)
 
         row = QHBoxLayout()
@@ -126,6 +161,19 @@ class ConnectionsDialog(FittedDialog):
         self._a.setValue(0.625 * shape.bf)
         self._b.setValue(0.75 * shape.d)
         self._c.setValue(0.175 * shape.bf)
+        unit = length_scale(SOURCE_UNITS, self._project.meta.units)
+        if self._web_t.value() <= 1e-6 * 1.001:
+            self._web_t.setValue(0.375 * unit)
+        if self._web_h.value() <= 1e-6 * 1.001:
+            depth = float(getattr(shape, "d", getattr(shape, "H", getattr(shape, "D", 10.0))))
+            flange = float(getattr(shape, "tf", 0.0) or 0.0)
+            self._web_h.setValue(max(depth - 2.0 * flange, 0.1 * depth))
+        if self._web_n.value() <= 1.0:
+            self._web_n.setValue(4.0)
+        if self._web_db.value() <= 1e-6 * 1.001:
+            self._web_db.setValue(0.75 * unit)
+        if self._web_leg.value() <= 1e-6 * 1.001:
+            self._web_leg.setValue(0.625 * self._web_t.value())
 
     def _candidate(self) -> RbsConnection | None:
         if not self._beam.count() or not self._column.count():
@@ -136,19 +184,28 @@ class ConnectionsDialog(FittedDialog):
         if beam_id == column_id:
             QMessageBox.warning(self, "Connections", "Beam and column are the same element.")
             return None
-        connection = RbsConnection(
-            id=self._next_id(),
-            beam_element_id=beam_id,
-            column_element_id=column_id,
-            a=self._a.value(),
-            b=self._b.value(),
-            c=self._c.value(),
-        )
         shape = self._shape(beam_id)
         if shape is None:
             QMessageBox.warning(self, "Connections", "The beam section is not an AISC shape.")
             return None
+        web = self._web_check.isChecked()
         try:
+            connection = RbsConnection(
+                id=self._next_id(),
+                beam_element_id=beam_id,
+                column_element_id=column_id,
+                a=self._a.value(),
+                b=self._b.value(),
+                c=self._c.value(),
+                web_connection_type=self._web_type.currentData(),
+                web_plate_thickness=self._web_t.value() if web else None,
+                web_plate_height=self._web_h.value() if web else None,
+                web_bolt_count=int(self._web_n.value()) if web else None,
+                web_bolt_diameter=self._web_db.value() if web else None,
+                web_bolt_fnv=self._web_fnv.value() if web else None,
+                web_weld_leg=self._web_leg.value() if web else None,
+                web_weld_fexx=self._web_fexx.value() if web else None,
+            )
             rbs_geometry(connection, shape)
         except ValueError as exc:
             QMessageBox.warning(self, "Connections", str(exc))
@@ -189,11 +246,14 @@ class ConnectionsDialog(FittedDialog):
                 item.a,
                 item.b,
                 item.c,
+                item.web_connection_type if item.web_plate_thickness is not None else "-",
             )
             for column, value in enumerate(values):
                 self._table.setItem(row, column, QTableWidgetItem(str(value)))
+        webs = sum(1 for item in self._items if item.web_plate_thickness is not None)
         self._summary.setText(
-            f"{len(self._items)} connection(s). Invalid cuts are refused when added."
+            f"{len(self._items)} connection(s), {webs} web check(s). "
+            "Invalid cuts are refused when added."
         )
 
     def _load_selected(self) -> None:
@@ -211,6 +271,22 @@ class ConnectionsDialog(FittedDialog):
         self._a.setValue(item.a)
         self._b.setValue(item.b)
         self._c.setValue(item.c)
+        unit = length_scale(SOURCE_UNITS, self._project.meta.units)
+        self._web_check.setChecked(item.web_plate_thickness is not None)
+        index = self._web_type.findData(item.web_connection_type)
+        if index >= 0:
+            self._web_type.setCurrentIndex(index)
+        self._web_t.setValue(item.web_plate_thickness or 0.375 * unit)
+        self._web_h.setValue(item.web_plate_height or 1.0)
+        self._web_n.setValue(float(item.web_bolt_count or 4))
+        self._web_db.setValue(item.web_bolt_diameter or 0.75 * unit)
+        self._web_fnv.setValue(
+            item.web_bolt_fnv or 54.0 * stress_scale(SOURCE_UNITS, self._project.meta.units)
+        )
+        self._web_leg.setValue(item.web_weld_leg or 0.625 * self._web_t.value())
+        self._web_fexx.setValue(
+            item.web_weld_fexx or 70.0 * stress_scale(SOURCE_UNITS, self._project.meta.units)
+        )
 
     def connections(self) -> list[RbsConnection]:
         """The connections as the dialog shows them."""

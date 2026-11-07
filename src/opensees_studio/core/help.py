@@ -1465,11 +1465,15 @@ Lists, adds, edits and removes RBS connections of the project.
 The connection check reports the AISC 358 5.7 steps: the face moment
 `Mf <= phi_d Mpe` (step 8), the beam shear `Vh <= phi Vn` (step 9) and the
 clear span-to-depth prequalification (step 1, 7 for SMF and 5 for IMF). The
-report notes the web-to-column connection of Section 5.5, the supplemental
-lateral bracing of 5.3(7), and the beam weight and flange-thickness limits
-that the shape table does not carry. The dialog does not design the web
-plate, bolts or welds; continuity plates and panel zones are in the SMF joint
-table.
+optional **web connection (5.5)** stores the CJP or bolted single-plate type,
+the plate thickness and height, the bolt count, diameter and `Fnv`, and the
+fillet weld leg and `Fexx`. For a bolted plate it checks the 3/8 in. minimum
+thickness, plate shear yielding and rupture, bolt shear, the `5/8 tp` minimum
+leg and the fillet weld; for a CJP it checks the backing-plate thickness and
+notes that the demand-critical CJP capacity is not computed. The net area
+assumes one vertical bolt line; bolt bearing, block shear and slip resistance
+are reported as not checked. Continuity plates and panel zones are in the SMF
+joint table.
 """,
             "design.steel_check",
             "file.calc_memory",
