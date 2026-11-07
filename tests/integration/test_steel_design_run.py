@@ -685,3 +685,28 @@ def test_ocbf_gusset_connection_reports_f1_6a() -> None:
     report = steel_frame_check(project, _results(project), DesignSettings(seismic_system="OCBF"))
     gusset = report.gussets[0]
     assert any("F1.6a" in note for note in gusset.notes)
+
+
+def test_the_rbs_beam_shear_and_span_are_checked() -> None:
+    from opensees_studio.core.design.connections import RbsConnection
+
+    project = _portal()
+    project.connections = [
+        RbsConnection(id=1, beam_element_id=2, column_element_id=1, a=4.5, b=13.0, c=1.0)
+    ]
+    report = steel_frame_check(project, _results(project), DesignSettings(seismic_system="SMF"))
+    connection = report.connections[0]
+    assert connection.shear_demand == pytest.approx(connection.vh)
+    assert connection.shear_capacity > 0.0
+    assert connection.shear_ratio == pytest.approx(
+        connection.shear_demand / connection.shear_capacity
+    )
+    assert connection.shear_status in ("OK", "NG")
+    assert connection.span_limit == pytest.approx(7.0)
+    assert connection.span_ratio > 0.0
+    assert connection.span_status in ("OK", "NG")
+    assert any("5.5" in note for note in connection.notes)
+    assert any("5.3(7)" in note for note in connection.notes)
+
+    plain = steel_frame_check(project, _results(project), DesignSettings())
+    assert any("SMF and IMF" in note for note in plain.connections[0].notes)

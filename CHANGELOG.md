@@ -7,6 +7,16 @@ that this is pre-alpha: minor and patch releases may change the `.osmodel`
 schema (it carries a `schema_version`, and a file from a newer build is now
 refused instead of silently downgraded).
 
+## [Unreleased]
+
+### Added
+
+- **AISC 358-22 RBS beam checks.** Each connection reports the beam shear
+  `Vh / (phi Vn)` of 5.7 step 9 and the clear span-to-depth prequalification
+  of step 1 (7 for SMF, 5 for IMF), with notes for the Section 5.5 web
+  connection, the 5.3(7) supplemental lateral bracing and the beam weight and
+  flange-thickness limits that the shape table does not carry.
+
 ## [0.0.46] - 2026-11-07
 
 ### Added
