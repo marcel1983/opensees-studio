@@ -1655,7 +1655,9 @@ cantilever**: F1-1 assumes both ends braced.
   are the F1.6a exception caps (`Ry Fy Ag/alpha_s` tension and expected
   compression/`alpha_s`) and that the overstrength seismic load may govern.
   The check does not create the overstrength combinations and does not
-  verify the beam continuity or the lateral brace of F1.4a.
+  verify the beam continuity or the lateral brace of F1.4a. K-braced frames
+  are not permitted (F1.4b) and the multi-tiered OCBF rules of F1.4c are not
+  checked; the braces use the moderately ductile D1.1 limits of F1.5a.
 
 Results: one row per member with its governing ratio, the check and equation
 that govern and the load set that produced them; **Select failing members**
