@@ -857,6 +857,17 @@ def steel_frame_check(
                 "the beams and their connections."
             )
         )
+        report.notes.append(
+            "OCBF F1.4b: K-braced frames are not permitted; the model does not identify K-bracing."
+        )
+        report.notes.append(
+            "OCBF F1.4c: the multi-tiered OCBF requirements (opposing brace pairs, "
+            "struts, column torsional bracing, 1.5Emh connections/struts/columns "
+            "and notional loads) are not checked."
+        )
+        report.notes.append(
+            "OCBF F1.5a: braces are checked as moderately ductile members per D1.1."
+        )
 
     frame_elements = [
         element for element in project.elements if isinstance(element, FRAME_ELEMENT_CLASSES)

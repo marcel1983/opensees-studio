@@ -643,6 +643,9 @@ def test_ocbf_brace_slenderness_uses_f1_1() -> None:
     beam = next(member for member in report.members if member.element_id == 2)
     assert any("F1.5c" in note for note in beam.notes)
     assert any("F1.5b" in note for note in report.notes)
+    assert any("F1.4b" in note for note in report.notes)
+    assert any("F1.4c" in note for note in report.notes)
+    assert any("F1.5a" in note for note in report.notes)
 
 
 def test_ocbf_beam_reports_the_overstrength_combinations() -> None:
