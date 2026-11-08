@@ -7,6 +7,21 @@ that this is pre-alpha: minor and patch releases may change the `.osmodel`
 schema (it carries a `schema_version`, and a file from a newer build is now
 refused instead of silently downgraded).
 
+## [Unreleased]
+
+### Added
+
+- **AISC 360 Chapter J, J10.1–J10.5.** Flange local bending (`6.25 Fyf tf²`),
+  web local yielding, web local crippling, web sidesway buckling and web
+  compression buckling, with the 50% end reductions and the J10.4
+  applicability limits. The Chapter J editor adds the five check types and
+  the loaded flange/web dimensions; the report and the calculation memory
+  show the nominal, available and ratio. J10.1/J10.4 cases that the
+  Specification says need not be checked are reported as **not required**.
+  J10.6 panel zone remains in the SMF joint table; J10.7–J10.9 stiffener and
+  doubler-plate design is not modeled. The J10.4 `Cr` constants are converted
+  for US, SI (mm) and SI (m) projects.
+
 ## [0.0.51] - 2026-11-08
 
 ### Added

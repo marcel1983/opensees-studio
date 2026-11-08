@@ -14,7 +14,7 @@ Units are SI (m, N, kg, s) for the V cases and kip-inch for the D (design)
 cases, as in the AISC examples. Errors below 1e-6 are floating-point noise
 and are printed as `< 1e-6`.
 
-**29 of 29 cases pass.**
+**30 of 30 cases pass.**
 
 | Case | Title | Group | Max. error | Verdict |
 |---|---|---|---|---|
@@ -47,6 +47,7 @@ and are printed as `< 1e-6`.
 | [D-10](#d-10) | AISC 341: SCBF column splice demand | Design, AISC 341-22 | < 1e-06 | ✅ pass |
 | [D-11](#d-11) | AISC 341: OCBF brace slenderness | Design, AISC 341-22 | < 1e-06 | ✅ pass |
 | [D-12](#d-12) | AISC 360 Chapter J: weld, bolts and block shear | Design, AISC 360-16 | 1.1e-05 | ✅ pass |
+| [D-13](#d-13) | AISC 360 Chapter J: concentrated forces | Design, AISC 360-16 | 2.2e-06 | ✅ pass |
 
 <a id="v-01"></a>
 
@@ -442,3 +443,22 @@ and are printed as `< 1e-6`.
 | Bolt shear nominal J3-1 | kip | 95.4259 | 95.426 | 1.3e-06 | 2e-03 | ✅ |
 | Bolt bearing/tearout nominal J3-6 | kip | 170.625 | 170.625 | < 1e-06 | 2e-03 | ✅ |
 | Block shear nominal J4-5 | kip | 235.625 | 235.625 | < 1e-06 | 2e-03 | ✅ |
+
+<a id="d-13"></a>
+
+## D-13 — AISC 360 Chapter J: concentrated forces
+
+**Model.** W-shape web with Fy = 50 ksi, tf = 1/2 in., tw = 0.3 in., bf = 6 in., h = 12 in., d = 14 in., lb = 2 in.; sidesway with tw = 1 in., h = 10 in., bf = 8 in., Lb = 100 in.
+
+**Reference.** J10-1 to J10-8 with the AISC 360 factors and the 50% end reductions.
+
+| Quantity | Unit | OpenSees Studio | Reference | Rel. error | Tolerance | |
+|---|---|---|---|---|---|---|
+| Flange local bending nominal J10-1 | kip | 78.125 | 78.125 | < 1e-06 | 2e-03 | ✅ |
+| Web local yielding nominal J10-2 | kip | 105 | 105 | < 1e-06 | 2e-03 | ✅ |
+| Web local yielding nominal J10-3 | kip | 67.5 | 67.5 | < 1e-06 | 2e-03 | ✅ |
+| Web local crippling nominal J10-4 | kip | 134.223 | 134.223 | 2.2e-06 | 2e-03 | ✅ |
+| Web local crippling nominal J10-5b | kip | 80.4878 | 80.488 | 2.0e-06 | 2e-03 | ✅ |
+| Web sidesway nominal J10-6 | kip | 5783.04 | 5783.04 | < 1e-06 | 2e-03 | ✅ |
+| Web sidesway nominal J10-7 | kip | 983.04 | 983.04 | < 1e-06 | 2e-03 | ✅ |
+| Web compression nominal J10-8 | kip | 301.04 | 301.04 | < 1e-06 | 2e-03 | ✅ |

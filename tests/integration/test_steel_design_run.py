@@ -815,3 +815,123 @@ def test_chapter_j_j5_to_j8_checks_are_reported() -> None:
     assert report.chapter_j[2].nominal == pytest.approx(1000.0)
     assert report.chapter_j[3].nominal == pytest.approx(95.426 * 0.9, rel=2e-3)
     assert any("J5.2" in note for note in report.chapter_j[3].notes)
+
+
+def test_chapter_j_j10_concentrated_force_checks_are_reported() -> None:
+    from opensees_studio.core.design.chapter_j_model import ChapterJCheck
+    from opensees_studio.services.calc_memory import build_member_memory
+
+    project = _portal()
+    project.chapter_j_checks = [
+        ChapterJCheck(
+            id=1,
+            name="Flange bending",
+            check_type="flange_local_bending",
+            demand=50.0,
+            fy=50.0,
+            flange_thickness=0.5,
+            flange_width=6.0,
+            bearing_length=2.0,
+            distance_to_end=20.0,
+        ),
+        ChapterJCheck(
+            id=2,
+            name="Web yielding",
+            check_type="web_local_yielding",
+            demand=80.0,
+            fy=50.0,
+            web_thickness=0.3,
+            fillet_k=1.0,
+            bearing_length=2.0,
+            member_depth=14.0,
+            distance_to_end=20.0,
+        ),
+        ChapterJCheck(
+            id=3,
+            name="Web crippling",
+            check_type="web_local_crippling",
+            demand=100.0,
+            fy=50.0,
+            elastic_modulus=29000.0,
+            web_thickness=0.3,
+            flange_thickness=0.5,
+            member_depth=14.0,
+            bearing_length=2.0,
+            distance_to_end=10.0,
+        ),
+        ChapterJCheck(
+            id=4,
+            name="Web sidesway",
+            check_type="web_sidesway_buckling",
+            demand=4000.0,
+            fy=50.0,
+            section_modulus=100.0,
+            required_moment=1000.0,
+            web_thickness=1.0,
+            flange_thickness=0.5,
+            clear_web_height=10.0,
+            flange_width=8.0,
+            bearing_length=100.0,
+        ),
+        ChapterJCheck(
+            id=5,
+            name="Web compression",
+            check_type="web_compression_buckling",
+            demand=200.0,
+            fy=50.0,
+            elastic_modulus=29000.0,
+            web_thickness=0.5,
+            clear_web_height=12.0,
+            distance_to_end=10.0,
+            member_depth=14.0,
+        ),
+    ]
+    report = steel_frame_check(project, _results(project), DesignSettings())
+    assert [item.status for item in report.chapter_j] == ["OK"] * 5
+    assert report.chapter_j[0].nominal == pytest.approx(78.125)
+    assert report.chapter_j[1].nominal == pytest.approx(105.0)
+    assert report.chapter_j[2].nominal == pytest.approx(134.2227, rel=1e-5)
+    assert report.chapter_j[3].nominal == pytest.approx(5783.04, rel=1e-6)
+    assert report.chapter_j[4].nominal == pytest.approx(301.0399, rel=1e-5)
+    page = build_member_memory(project, report, language="en", fmt="html")
+    assert "Connection checks (AISC 360 Chapter J)" in page
+    assert "flange_local_bending" in page
+    assert "6.25 Fyf tf^2" in page
+    assert "24 tw^3 sqrt(E Fyw)/h Qf" in page
+
+
+def test_chapter_j_j10_not_required_cases_are_reported() -> None:
+    from opensees_studio.core.design.chapter_j_model import ChapterJCheck
+
+    project = _portal()
+    project.chapter_j_checks = [
+        ChapterJCheck(
+            id=1,
+            check_type="flange_local_bending",
+            demand=10.0,
+            fy=50.0,
+            flange_thickness=0.5,
+            flange_width=6.0,
+            bearing_length=0.5,
+            distance_to_end=20.0,
+        ),
+        ChapterJCheck(
+            id=2,
+            check_type="web_sidesway_buckling",
+            demand=10.0,
+            fy=50.0,
+            section_modulus=100.0,
+            required_moment=1000.0,
+            web_thickness=0.3,
+            flange_thickness=0.5,
+            clear_web_height=12.0,
+            flange_width=6.0,
+            bearing_length=100.0,
+        ),
+    ]
+    report = steel_frame_check(project, _results(project), DesignSettings())
+    assert [item.status for item in report.chapter_j] == ["not required", "not required"]
+    assert report.chapter_j[0].nominal == pytest.approx(0.0)
+    assert report.chapter_j[1].nominal == pytest.approx(0.0)
+    assert any("0.15 bf" in note for note in report.chapter_j[0].notes)
+    assert any("does not apply" in note for note in report.chapter_j[1].notes)

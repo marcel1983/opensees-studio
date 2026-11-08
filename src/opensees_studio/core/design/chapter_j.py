@@ -14,7 +14,19 @@ Implemented limit states:
 * J4.3 plate shear yielding, ``0.60 Fy Agv``;
 * J4.4 plate shear rupture, ``0.60 Fu Anv``;
 * J4.5 block shear, the lesser of ``0.60 Fu Anv + Ubs Fu Ant`` and
-  ``0.60 Fy Agv + Ubs Fu Ant``.
+  ``0.60 Fy Agv + Ubs Fu Ant``;
+* J5.1/J5.2 fillers, the weld leg increase and the bolt shear factor;
+* J6 groove-welded splices;
+* J7.1 bearing strength, ``1.8 Fy Apb``;
+* J8 concrete bearing, ``0.85 f'c A1`` and the ``sqrt(A2/A1)`` increase;
+* J10.1 flange local bending, ``6.25 Fyf tf^2``;
+* J10.2/J10.3 web local yielding, ``Fyw tw (5k + lb)`` / ``(2.5k + lb)``;
+* J10.4/J10.5 web local crippling;
+* J10.6/J10.7 web sidesway buckling;
+* J10.8 web compression buckling, ``24 tw^3 sqrt(E Fyw)/h Qf``.
+
+The J10.6 web panel-zone shear strength lives with the AISC 341 SMF joint
+table, because it is the seismic check that consumes it.
 
 The caller supplies consistent units; no Qt, no OpenSees.
 """
@@ -69,15 +81,26 @@ def _strength(
     return Strength(nominal, available, equation, notes, steps)
 
 
-def filler_bolt_factor(thickness: float, *, metric: bool = False) -> float:
-    """J5.2: bolt shear reduction for fillers thicker than 1/4 in. (6 mm)."""
+def filler_bolt_factor(
+    thickness: float,
+    *,
+    threshold: float = 0.25,
+    slope: float = 0.4,
+) -> float:
+    """J5.2: bolt shear reduction for fillers thicker than ``threshold``.
+
+    The default is the US customary form (1/4 in. and 0.4 per inch). The
+    caller passes the SI equivalents when the project is in SI units, because
+    the AISC 360 metric form is written with a 6 mm threshold and 0.0154 per
+    millimetre.
+    """
     if thickness <= 0.0:
         raise ValueError("The filler thickness must be positive.")
-    limit = 6.0 if metric else 0.25
-    if thickness <= limit:
+    if threshold <= 0.0 or slope <= 0.0:
+        raise ValueError("The filler threshold and slope must be positive.")
+    if thickness <= threshold:
         return 1.0
-    factor = 1.0 - 0.0154 * (thickness - 6.0) if metric else 1.0 - 0.4 * (thickness - 0.25)
-    return max(0.85, factor)
+    return max(0.85, 1.0 - slope * (thickness - threshold))
 
 
 def filler_weld_required_leg(
@@ -146,7 +169,8 @@ def bolt_shear_strength(
     diameter: float,
     count: int,
     filler_thickness: float | None = None,
-    metric: bool = False,
+    filler_threshold: float = 0.25,
+    filler_slope: float = 0.4,
     method: Method = "LRFD",
 ) -> Strength:
     """J3.1: bolt shear, ``Rn = n Fnv Ab``, with the J5.2 filler factor."""
@@ -156,7 +180,9 @@ def bolt_shear_strength(
     nominal = count * fnv * area
     notes: tuple[str, ...] = ()
     if filler_thickness is not None:
-        factor = filler_bolt_factor(filler_thickness, metric=metric)
+        factor = filler_bolt_factor(
+            filler_thickness, threshold=filler_threshold, slope=filler_slope
+        )
         nominal *= factor
         notes = (f"J5.2: filler factor {factor:.3g} on the bolt shear strength.",)
     available = _available(nominal, BOLT_PHI, BOLT_OMEGA, method)
@@ -442,4 +468,212 @@ def splice_strength(*, nominal: float, method: Method = "LRFD") -> Strength:
                 nominal,
             ),
         ),
+    )
+
+
+def flange_local_bending(
+    *,
+    fyf: float,
+    tf: float,
+    bf: float,
+    lb: float,
+    distance_to_end: float,
+    method: Method = "LRFD",
+) -> Strength:
+    """J10-1: flange local bending under a tensile concentrated force."""
+    if min(fyf, tf, bf, lb, distance_to_end) <= 0.0:
+        raise ValueError("Fyf, tf, bf, lb and the distance to the end must be positive.")
+    if lb < 0.15 * bf:
+        return _strength(
+            0.0,
+            0.0,
+            "J10-1 not required",
+            (),
+            ("J10.1: the loaded length is less than 0.15 bf; the check is not required.",),
+        )
+    nominal = 6.25 * fyf * tf**2
+    notes: tuple[str, ...] = ()
+    if distance_to_end < 10.0 * tf:
+        nominal *= 0.5
+        notes = ("J10.1: the force is within 10 tf of the member end; Rn is reduced by 50%.",)
+    available = _available(nominal, 0.90, 1.67, method)
+    return _strength(
+        nominal,
+        available,
+        "J10-1 flange local bending",
+        (
+            CalcStep("Loaded flange thickness", "tf", f"{tf:g}", tf),
+            CalcStep("Nominal strength", "6.25 Fyf tf^2", f"{nominal:.6g}", nominal),
+        ),
+        notes,
+    )
+
+
+def web_local_yielding(
+    *,
+    fyw: float,
+    tw: float,
+    k: float,
+    lb: float,
+    d: float,
+    distance_to_end: float,
+    method: Method = "LRFD",
+) -> Strength:
+    """J10-2/J10-3: web local yielding under a concentrated force."""
+    if min(fyw, tw, k, lb, d, distance_to_end) <= 0.0:
+        raise ValueError("Fyw, tw, k, lb, d and the distance to the end must be positive.")
+    if distance_to_end > d:
+        nominal = fyw * tw * (5.0 * k + lb)
+        equation = "J10-2 web local yielding (end distance > d)"
+    else:
+        nominal = fyw * tw * (2.5 * k + lb)
+        equation = "J10-3 web local yielding (end distance <= d)"
+    available = _available(nominal, 1.00, 1.50, method)
+    return _strength(
+        nominal,
+        available,
+        equation,
+        (
+            CalcStep("Bearing length", "lb", f"{lb:g}", lb),
+            CalcStep(
+                "Nominal strength",
+                "Fyw tw (5k + lb) or Fyw tw (2.5k + lb)",
+                f"{nominal:.6g}",
+                nominal,
+            ),
+        ),
+    )
+
+
+def web_local_crippling(
+    *,
+    fyw: float,
+    e: float,
+    tw: float,
+    tf: float,
+    d: float,
+    lb: float,
+    distance_to_end: float,
+    qf: float = 1.0,
+    method: Method = "LRFD",
+) -> Strength:
+    """J10-4/J10-5: web local crippling under a compressive concentrated force."""
+    if min(fyw, e, tw, tf, d, lb, distance_to_end, qf) <= 0.0:
+        raise ValueError("Fyw, E, tw, tf, d, lb, distance and Qf must be positive.")
+    ratio = lb / d
+    thickness = tw / tf
+    root = math.sqrt(e * fyw * tf / tw)
+    if distance_to_end >= d / 2.0:
+        nominal = 0.80 * tw**2 * (1.0 + 3.0 * ratio * thickness**1.5) * root * qf
+        equation = "J10-4 web local crippling (end distance >= d/2)"
+    elif ratio <= 0.2:
+        nominal = 0.40 * tw**2 * (1.0 + 3.0 * ratio * thickness**1.5) * root * qf
+        equation = "J10-5a web local crippling (end distance < d/2, lb/d <= 0.2)"
+    else:
+        nominal = 0.40 * tw**2 * (1.0 + (4.0 * ratio - 0.2) * thickness**1.5) * root * qf
+        equation = "J10-5b web local crippling (end distance < d/2, lb/d > 0.2)"
+    available = _available(nominal, 0.75, 2.00, method)
+    return _strength(
+        nominal,
+        available,
+        equation,
+        (
+            CalcStep("lb / d", "lb / d", f"{ratio:.6g}", ratio),
+            CalcStep("tw / tf", "tw / tf", f"{thickness:.6g}", thickness),
+            CalcStep(
+                "Nominal strength",
+                "0.80 or 0.40 tw^2 [..] sqrt(E Fyw tf/tw) Qf",
+                f"{nominal:.6g}",
+                nominal,
+            ),
+        ),
+    )
+
+
+def web_sidesway_buckling(
+    *,
+    fy: float,
+    sx: float,
+    mr: float,
+    tw: float,
+    tf: float,
+    h: float,
+    bf: float,
+    lb: float,
+    cr_low: float = 480_000.0,
+    cr_high: float = 960_000.0,
+    restrained: bool = True,
+    method: Method = "LRFD",
+) -> Strength:
+    """J10-6/J10-7: web sidesway buckling under a compressive single force.
+
+    ``cr_low`` and ``cr_high`` are the J10.4 constants in the caller's stress
+    units: 480,000 ksi and 960,000 ksi in US customary units, 3.3e6 MPa and
+    6.6e6 MPa in SI (mm, N), or the same values in Pa for SI (m, N). The
+    ``(h/tw)/(Lb/bf)`` ratio and the 2.3/1.7 limits are dimensionless.
+    """
+    if min(fy, sx, mr, tw, tf, h, bf, lb, cr_low, cr_high) <= 0.0:
+        raise ValueError("Fy, Sx, Mr, tw, tf, h, bf, Lb and Cr must be positive.")
+    alpha = 1.0 if method == "LRFD" else 1.5
+    my = fy * sx
+    cr = cr_high if alpha * mr < my else cr_low
+    ratio = (h / tw) / (lb / bf)
+    limit = 2.3 if restrained else 1.7
+    if ratio > limit:
+        return _strength(
+            0.0,
+            0.0,
+            "J10-6/7 not applicable",
+            (),
+            (
+                f"J10.4: (h/tw)/(Lb/bf) = {ratio:.6g} exceeds {limit:g}; "
+                "the sidesway buckling limit state does not apply.",
+            ),
+        )
+    base = cr * tw**3 * tf / h**2
+    nominal = base * (1.0 + 0.4 * ratio**3) if restrained else base * (0.4 * ratio**3)
+    available = _available(nominal, 0.85, 1.76, method)
+    return _strength(
+        nominal,
+        available,
+        "J10-6 web sidesway buckling" if restrained else "J10-7 web sidesway buckling",
+        (
+            CalcStep("(h/tw)/(Lb/bf)", "(h/tw)/(Lb/bf)", f"{ratio:.6g}", ratio),
+            CalcStep("Cr", "960,000 or 480,000 ksi", f"{cr:g}", cr),
+            CalcStep(
+                "Nominal strength",
+                "Cr tw^3 tf/h^2 [1 + 0.4 ((h/tw)/(Lb/bf))^3]",
+                f"{nominal:.6g}",
+                nominal,
+            ),
+        ),
+    )
+
+
+def web_compression_buckling(
+    *,
+    e: float,
+    fyw: float,
+    tw: float,
+    h: float,
+    qf: float = 1.0,
+    distance_to_end: float,
+    d: float,
+    method: Method = "LRFD",
+) -> Strength:
+    """J10-8: web compression buckling under a pair of compressive forces."""
+    if min(e, fyw, tw, h, qf, distance_to_end, d) <= 0.0:
+        raise ValueError("E, Fyw, tw, h, Qf, distance and d must be positive.")
+    nominal = 24.0 * tw**3 * math.sqrt(e * fyw) / h * qf
+    notes: tuple[str, ...] = ()
+    if distance_to_end < d / 2.0:
+        nominal *= 0.5
+        notes = ("J10.5: the force is within d/2 of the member end; Rn is reduced by 50%.",)
+    available = _available(nominal, 0.90, 1.67, method)
+    return _strength(
+        nominal,
+        available,
+        "J10-8 web compression buckling",
+        (CalcStep("Nominal strength", "24 tw^3 sqrt(E Fyw)/h Qf", f"{nominal:.6g}", nominal),),
+        notes,
     )

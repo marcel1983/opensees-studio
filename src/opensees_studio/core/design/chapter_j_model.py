@@ -20,6 +20,11 @@ ChapterJType = Literal[
     "bearing_strength",
     "concrete_bearing",
     "splice",
+    "flange_local_bending",
+    "web_local_yielding",
+    "web_local_crippling",
+    "web_sidesway_buckling",
+    "web_compression_buckling",
 ]
 
 
@@ -57,6 +62,19 @@ class ChapterJCheck(BaseModel):
         "a1",
         "a2",
         "splice_nominal",
+        "flange_thickness",
+        "web_thickness",
+        "flange_width",
+        "clear_web_height",
+        "member_depth",
+        "fillet_k",
+        "bearing_length",
+        "distance_to_end",
+        "elastic_modulus",
+        "chord_factor",
+        "required_moment",
+        "section_modulus",
+        "flange_restrained",
     )
 
     id: PositiveInt
@@ -104,4 +122,28 @@ class ChapterJCheck(BaseModel):
     a2: PositiveFloat | None = Field(default=None, description="Concentric supporting area A2.")
     splice_nominal: PositiveFloat | None = Field(
         default=None, description="Nominal strength of the smaller spliced section."
+    )
+    # J10 concentrated forces
+    flange_thickness: PositiveFloat | None = None
+    web_thickness: PositiveFloat | None = None
+    flange_width: PositiveFloat | None = None
+    clear_web_height: PositiveFloat | None = None
+    member_depth: PositiveFloat | None = None
+    fillet_k: PositiveFloat | None = Field(
+        default=None, description="Distance from the flange face to the web toe of the fillet."
+    )
+    bearing_length: PositiveFloat | None = Field(default=None, description="Length of bearing lb.")
+    distance_to_end: PositiveFloat | None = Field(
+        default=None, description="Distance from the concentrated force to the member end."
+    )
+    elastic_modulus: PositiveFloat | None = None
+    chord_factor: PositiveFloat = Field(default=1.0, description="Chord-stress interaction Qf.")
+    required_moment: PositiveFloat | None = Field(
+        default=None, description="Required flexural strength Mr at the force."
+    )
+    section_modulus: PositiveFloat | None = Field(
+        default=None, description="Elastic section modulus Sx for My = Fy Sx."
+    )
+    flange_restrained: bool = Field(
+        default=True, description="Compression flange restrained against rotation."
     )
