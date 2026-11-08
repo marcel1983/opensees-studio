@@ -1560,6 +1560,12 @@ Lists, adds, edits and removes AISC 360 Chapter J connection checks.
   **not required** when `(h/tw)/(Lb/bf)` exceeds 2.3 (restrained) or 1.7
   (unrestrained). The 50% reductions near the member end are applied and
   shown in the notes.
+- **J10 fields by check**: J10.1 uses `Fyf`, `tf`, `bf`, `lb` and the distance
+  to the end. J10.2 uses `Fyw`, `tw`, `k`, `lb`, `d` and the distance. J10.3
+  (crippling) uses `Fyw`, `E`, `tw`, `tf`, `d`, `lb`, the distance and `Qf`.
+  J10.4 uses `Fy`, `Sx`, `Mr`, `tw`, `tf`, `h`, `bf`, the unbraced length `Lb`
+  (the **Bearing length lb / unbraced Lb** field) and the restraint. J10.5
+  uses `E`, `Fyw`, `tw`, `h`, `Qf`, the distance and `d`.
 - Enter the demand `Vu` or `Tu` and the fields the check uses. The dialog
   enables the relevant group; the other fields are not read.
 - OK stores the list as one undoable step; the report and the calculation
@@ -1572,6 +1578,8 @@ for you. J10.6 panel zone is in the SMF joint table; the J10.7-J10.9
 stiffener and doubler-plate design is not modeled.
 """,
             "design.connections",
+            "design.gussets",
+            "design.column_splices",
             "design.steel_check",
         ),
         "design.steel_check": _t(
@@ -1615,8 +1623,10 @@ The other families use their own sections of the Specification:
 
 HSS walls use the design thickness 0.93 tnom. The default Fy is 50 ksi and Fu
 65 ksi: set them for the material (A500 Grade C round HSS 46 ksi, A53 pipe 35
-ksi). Torsion is not checked. The seismic provisions of AISC 341 and the
-connection provisions of Chapter J are not part of this check.
+ksi). Torsion is not checked. The base member check does not by itself satisfy
+the seismic provisions of AISC 341 or the connection provisions of Chapter J:
+the **Seismic system** field adds the AISC 341 checks described below, and the
+connection checks live in their own dialogs.
 
 The clear web height is taken as `d - 2 tf` (the table has no `k`), which is
 slightly conservative.
@@ -1710,11 +1720,15 @@ Results: one row per member with its governing ratio, the check and equation
 that govern and the load set that produced them; **Select failing members**
 closes the dialog with them selected, and **Show ratios on the model** closes it
 and paints every member by its ratio (Design → Display Steel Ratios on Model).
-The settings are saved with the project, and File → Export → Report prints the
-check when they are.
+The settings are saved with the project, and File → Export → Report and File →
+Export → Calculation Memory print the check when they are.
 """,
             "design.steel_ratios",
             "design.drift_check",
+            "design.connections",
+            "design.gussets",
+            "design.column_splices",
+            "design.chapter_j",
             "define.load_combinations",
         ),
         "design.steel_ratios": _t(
@@ -1778,16 +1792,16 @@ The calculation report starts with a cover built from these fields:
   Empty revision codes are ignored when the project is saved.
 
 The values are stored in `Project.meta` in the `.osmodel`, are undoable as one
-step, and are used by the report and by any future calculation-memory export.
+step, and are used by the report and by the calculation memory.
 """,
             "file.export_report",
         ),
         "file.calc_memory": _t(
             "File → Export → Calculation Memory",
             "File",
-            "Member-by-member calculation memory with formulas and numbers.",
+            "Calculation memory of the steel checks with formulas and numbers.",
             """
-Exports the AISC 360-16 member checks as a document:
+Exports the steel design as a document:
 
 - **Cover**: project, author, company, date, program version and revisions
   (File → Project Information).
@@ -1795,15 +1809,25 @@ Exports the AISC 360-16 member checks as a document:
 - **One sheet per member**: governing check, load set and station; the
   geometric properties of its shape; every limit state with demand, capacity
   and ratio; and the calculation steps (formula, substitution, value).
+- **Seismic joints and connections**: the SMF joint table (E3.4a, panel zone
+  J10.6 and continuity plates E3.6f), the AISC 358-22 RBS connections and
+  their 5.5 web connection checks, the SCBF protected zones, gussets and
+  F2.6c brace connections, the F2.6b beam-to-column joints, the F2.6d column
+  splices, the AISC 360 Chapter J checks and the F2.3 capacity design, each
+  with its demand, capacity, ratio and status; the Chapter J checks also carry
+  their calculation steps.
 - **Language**: English or Spanish, chosen in the dialog.
 - **Formats**: HTML, Markdown, LaTeX, OpenDocument text (ODT) and PDF.
 - **Members**: all designed, the current selection, or only the NG members.
 
 The memory reproduces the checks run in this session; run the load sets first.
-The seismic joint checks and connections join the document in a later version.
 """,
             "file.export_report",
             "design.steel_check",
+            "design.connections",
+            "design.gussets",
+            "design.column_splices",
+            "design.chapter_j",
         ),
         "file.export_report": _t(
             "File → Export → Report (HTML / PDF)",
@@ -1830,6 +1854,11 @@ browser and pastes into Word).
   Design → Steel Frame Check): the method, Fy, Fu, ratio limit and load sets, every
   checked member with its governing ratio, check, equation and load set, and the
   amplified storey drifts against the limit. Its values are in the project's units.
+- **Seismic and connection checks** — when the project has them: the SMF joint
+  table (E3.4a, panel zone J10.6 and continuity plates E3.6f), the AISC 358-22
+  RBS connections and 5.5 web checks, the SCBF protected zones, gussets and
+  F2.6c brace connections, the F2.6b joints, the F2.6d column splices, the
+  F2.3 capacity design and the AISC 360 Chapter J checks, with their notes.
 
 # Notes
 - Results computed before the last model change are left out; run the cases again
@@ -1839,6 +1868,9 @@ browser and pastes into Word).
   round-off).
 """,
             "file.export_ifc",
+            "design.steel_check",
+            "design.connections",
+            "design.chapter_j",
             "display.select_results",
         ),
         "file.export_ifc": _t(

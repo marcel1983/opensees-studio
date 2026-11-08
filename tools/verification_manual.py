@@ -1215,6 +1215,30 @@ def _aisc_chapter_j_concentrated() -> list[Check]:
     ]
 
 
+def _aisc_chapter_j_fillers() -> list[Check]:
+    """AISC 360 J5-J8: fillers, splices, bearing and concrete bearing."""
+    from opensees_studio.core.design.chapter_j import (
+        bearing_strength,
+        concrete_bearing_strength,
+        filler_bolt_factor,
+        filler_weld_required_leg,
+        splice_strength,
+    )
+
+    factor = filler_bolt_factor(0.5)
+    leg = filler_weld_required_leg(0.25, 0.125)
+    splice = splice_strength(nominal=1000.0)
+    bearing = bearing_strength(fy=50.0, apb=2.0)
+    concrete = concrete_bearing_strength(fc=4.0, a1=100.0, a2=400.0)
+    return [
+        Check("Filler bolt factor J5.2", "-", factor, 0.9, 1e-9),
+        Check("Filler weld leg J5.1a", "in", leg, 0.375, 1e-9),
+        Check("Groove-welded splice nominal J6", "kip", splice.nominal, 1000.0, 1e-9),
+        Check("Bearing nominal J7-1", "kip", bearing.nominal, 180.0, 1e-9),
+        Check("Concrete bearing nominal J8-2", "kip", concrete.nominal, 680.0, 1e-9),
+    ]
+
+
 # ──────────────────────────── catalogue ────────────────────────────
 CASES: list[Case] = [
     Case(
@@ -1476,6 +1500,16 @@ CASES: list[Case] = [
         "bf = 6 in., h = 12 in., d = 14 in., lb = 2 in.; sidesway with "
         "tw = 1 in., h = 10 in., bf = 8 in., Lb = 100 in.",
         _aisc_chapter_j_concentrated,
+    ),
+    Case(
+        "D-14",
+        "AISC 360 Chapter J: fillers, splices and bearing",
+        "Design, AISC 360-16",
+        "J5.1/J5.2, J6, J7-1 and J8-2 with the AISC 360 factors; J9 uses the J3 bolt checks.",
+        "1/2 in. filler; 1/4 in. weld leg with a 1/8 in. filler; 1000 kip "
+        "splice; 50 ksi bearing on 2 in.2; f'c = 4 ksi, A1 = 100 in.2 and "
+        "A2 = 400 in.2.",
+        _aisc_chapter_j_fillers,
     ),
 ]
 
