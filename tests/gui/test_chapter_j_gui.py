@@ -57,3 +57,18 @@ def test_the_action_stores_and_undoes_the_chapter_j_checks(qtbot, monkeypatch) -
     assert project.chapter_j_checks == [check]
     window._vm.undo_stack.undo()
     assert project.chapter_j_checks == []
+
+
+@pytest.mark.gui
+def test_the_dialog_adds_a_concrete_bearing_check(qtbot) -> None:  # type: ignore[no-untyped-def]
+    dialog = ChapterJDialog(_project())
+    qtbot.addWidget(dialog)
+    dialog._type.setCurrentIndex(dialog._type.findData("concrete_bearing"))
+    dialog._demand.setValue(200.0)
+    dialog._fc.setValue(4.0)
+    dialog._a1.setValue(100.0)
+    dialog._add()
+    check = dialog.checks()[0]
+    assert check.check_type == "concrete_bearing"
+    assert check.fc == pytest.approx(4.0)
+    assert check.a1 == pytest.approx(100.0)

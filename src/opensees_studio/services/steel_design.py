@@ -86,14 +86,17 @@ from opensees_studio.core.design.brace_connections import (
 )
 from opensees_studio.core.design.calc import CalcStep, LimitStateCheck
 from opensees_studio.core.design.chapter_j import (
+    bearing_strength,
     block_shear_strength,
     bolt_bearing_strength,
     bolt_shear_strength,
     bolt_tension_strength,
+    concrete_bearing_strength,
     fillet_weld_strength,
     plate_shear_rupture,
     plate_shear_yielding,
     slip_critical_strength,
+    splice_strength,
 )
 from opensees_studio.core.design.connections import (
     rbs_flexure_ratio,
@@ -827,7 +830,7 @@ def _value(value: float | int | None, name: str) -> float:
     return float(value)
 
 
-def _chapter_j_strength(check: Any, method: Any) -> Any:
+def _chapter_j_strength(check: Any, method: Any, *, metric: bool = False) -> Any:
     """Dispatch one saved Chapter J check to its strength function."""
     kind = check.check_type
     if kind == "fillet_weld":
@@ -836,6 +839,8 @@ def _chapter_j_strength(check: Any, method: Any) -> Any:
             leg=_value(check.weld_leg, "weld_leg"),
             length=_value(check.weld_length, "weld_length"),
             both_sides=check.weld_both_sides,
+            filler_thickness=check.filler_thickness,
+            filler_transfers_force=check.filler_transfers_force,
             method=method,
         )
     if kind == "bolt_shear":
@@ -843,6 +848,8 @@ def _chapter_j_strength(check: Any, method: Any) -> Any:
             fnv=_value(check.fn, "fn"),
             diameter=_value(check.bolt_diameter, "bolt_diameter"),
             count=int(_value(check.bolt_count, "bolt_count")),
+            filler_thickness=check.filler_thickness,
+            metric=metric,
             method=method,
         )
     if kind == "bolt_tension":
@@ -890,6 +897,24 @@ def _chapter_j_strength(check: Any, method: Any) -> Any:
             uniform_tension=check.uniform_tension,
             method=method,
         )
+    if kind == "bearing_strength":
+        return bearing_strength(
+            fy=_value(check.fy, "fy"),
+            apb=_value(check.apb, "apb"),
+            method=method,
+        )
+    if kind == "concrete_bearing":
+        return concrete_bearing_strength(
+            fc=_value(check.fc, "fc"),
+            a1=_value(check.a1, "a1"),
+            a2=check.a2,
+            method=method,
+        )
+    if kind == "splice":
+        return splice_strength(
+            nominal=_value(check.splice_nominal, "splice_nominal"),
+            method=method,
+        )
     raise ValueError(f"Unknown Chapter J check type {kind!r}.")
 
 
@@ -904,7 +929,11 @@ def _chapter_j_results(project: Any, settings: DesignSettings) -> list[ChapterJR
             demand=check.demand,
         )
         try:
-            strength = _chapter_j_strength(check, settings.method)
+            strength = _chapter_j_strength(
+                check,
+                settings.method,
+                metric="SI" in str(project.meta.units),
+            )
         except ValueError as exc:
             result.status = "invalid"
             result.notes.append(str(exc))

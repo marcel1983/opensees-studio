@@ -64,8 +64,32 @@ def _strength(
     available: float,
     equation: str,
     steps: tuple[CalcStep, ...],
+    notes: tuple[str, ...] = (),
 ) -> Strength:
-    return Strength(nominal, available, equation, (), steps)
+    return Strength(nominal, available, equation, notes, steps)
+
+
+def filler_bolt_factor(thickness: float, *, metric: bool = False) -> float:
+    """J5.2: bolt shear reduction for fillers thicker than 1/4 in. (6 mm)."""
+    if thickness <= 0.0:
+        raise ValueError("The filler thickness must be positive.")
+    limit = 6.0 if metric else 0.25
+    if thickness <= limit:
+        return 1.0
+    factor = 1.0 - 0.0154 * (thickness - 6.0) if metric else 1.0 - 0.4 * (thickness - 0.25)
+    return max(0.85, factor)
+
+
+def filler_weld_required_leg(
+    required_leg: float,
+    thickness: float,
+    *,
+    transfers_force: bool = False,
+) -> float:
+    """J5.1a: the weld leg required with a filler that does not transfer force."""
+    if required_leg <= 0.0 or thickness <= 0.0:
+        raise ValueError("The weld leg and filler thickness must be positive.")
+    return required_leg if transfers_force else required_leg + thickness
 
 
 def fillet_weld_strength(
@@ -74,9 +98,16 @@ def fillet_weld_strength(
     leg: float,
     length: float,
     both_sides: bool = True,
+    filler_thickness: float | None = None,
+    filler_transfers_force: bool = False,
     method: Method = "LRFD",
 ) -> Strength:
-    """J2.4: fillet-weld shear strength, ``Rn = 0.60 Fexx (0.707 w) l``."""
+    """J2.4: fillet-weld shear strength, ``Rn = 0.60 Fexx (0.707 w) l``.
+
+    A filler that does not transfer force is reported under J5.1a; the caller
+    must increase the leg by the filler thickness (the provided leg is what is
+    checked).
+    """
     if min(fexx, leg, length) <= 0.0:
         raise ValueError("Fexx, the weld leg and the length must be positive.")
     sides = 2.0 if both_sides else 1.0
@@ -84,6 +115,13 @@ def fillet_weld_strength(
     area = throat * length * sides
     nominal = 0.60 * fexx * area
     available = _available(nominal, FILLET_PHI, FILLET_OMEGA, method)
+    notes: tuple[str, ...] = ()
+    if filler_thickness is not None and not filler_transfers_force:
+        required = filler_weld_required_leg(leg, filler_thickness, transfers_force=False)
+        notes = (
+            f"J5.1a: the filler does not transfer force; increase the weld leg "
+            f"from {leg:g} to at least {required:g}.",
+        )
     return _strength(
         nominal,
         available,
@@ -98,6 +136,7 @@ def fillet_weld_strength(
             ),
             CalcStep("Nominal strength", "0.60 Fexx Awe", f"{nominal:.6g}", nominal),
         ),
+        notes,
     )
 
 
@@ -106,13 +145,20 @@ def bolt_shear_strength(
     fnv: float,
     diameter: float,
     count: int,
+    filler_thickness: float | None = None,
+    metric: bool = False,
     method: Method = "LRFD",
 ) -> Strength:
-    """J3.1: bolt shear, ``Rn = n Fnv Ab``."""
+    """J3.1: bolt shear, ``Rn = n Fnv Ab``, with the J5.2 filler factor."""
     if min(fnv, diameter) <= 0.0 or count < 1:
         raise ValueError("Fnv and the bolt diameter must be positive, and n >= 1.")
     area = math.pi * diameter**2 / 4.0
     nominal = count * fnv * area
+    notes: tuple[str, ...] = ()
+    if filler_thickness is not None:
+        factor = filler_bolt_factor(filler_thickness, metric=metric)
+        nominal *= factor
+        notes = (f"J5.2: filler factor {factor:.3g} on the bolt shear strength.",)
     available = _available(nominal, BOLT_PHI, BOLT_OMEGA, method)
     return _strength(
         nominal,
@@ -127,6 +173,7 @@ def bolt_shear_strength(
                 nominal,
             ),
         ),
+        notes,
     )
 
 
@@ -319,6 +366,79 @@ def block_shear_strength(
                 "Nominal strength",
                 "min(rupture, yield)",
                 f"{nominal:.6g}",
+                nominal,
+            ),
+        ),
+    )
+
+
+def bearing_strength(*, fy: float, apb: float, method: Method = "LRFD") -> Strength:
+    """J7-1: bearing strength of a finished surface or a pin, ``1.8 Fy Apb``."""
+    if min(fy, apb) <= 0.0:
+        raise ValueError("Fy and Apb must be positive.")
+    nominal = 1.8 * fy * apb
+    available = _available(nominal, 0.75, 2.00, method)
+    return _strength(
+        nominal,
+        available,
+        "J7-1 bearing",
+        (
+            CalcStep("Projected bearing area", "Apb", f"{apb:g}", apb),
+            CalcStep("Nominal strength", "1.8 Fy Apb", f"{nominal:.6g}", nominal),
+        ),
+    )
+
+
+def concrete_bearing_strength(
+    *,
+    fc: float,
+    a1: float,
+    a2: float | None = None,
+    method: Method = "LRFD",
+) -> Strength:
+    """J8: concrete bearing under a column base, full or partial area."""
+    if min(fc, a1) <= 0.0:
+        raise ValueError("f'c and A1 must be positive.")
+    steps: tuple[CalcStep, ...]
+    if a2 is None or a2 <= a1:
+        nominal = 0.85 * fc * a1
+        equation = "J8-1 concrete bearing (full area)"
+        steps = (
+            CalcStep("Loaded area", "A1", f"{a1:g}", a1),
+            CalcStep("Nominal strength", "0.85 f'c A1", f"{nominal:.6g}", nominal),
+        )
+    else:
+        ratio = math.sqrt(a2 / a1)
+        nominal = min(0.85 * fc * a1 * ratio, 1.7 * fc * a1)
+        equation = "J8-2 concrete bearing (partial area)"
+        steps = (
+            CalcStep("Loaded area", "A1", f"{a1:g}", a1),
+            CalcStep("Support area", "A2", f"{a2:g}", a2),
+            CalcStep("Area ratio", "sqrt(A2/A1)", f"{ratio:.6g}", ratio),
+            CalcStep(
+                "Nominal strength",
+                "min(0.85 f'c A1 sqrt(A2/A1), 1.7 f'c A1)",
+                f"{nominal:.6g}",
+                nominal,
+            ),
+        )
+    available = _available(nominal, 0.65, 2.31, method)
+    return _strength(nominal, available, equation, steps)
+
+
+def splice_strength(*, nominal: float, method: Method = "LRFD") -> Strength:
+    """J6: a groove-welded beam splice develops the smaller section's nominal strength."""
+    if nominal <= 0.0:
+        raise ValueError("The splice nominal strength must be positive.")
+    return _strength(
+        nominal,
+        nominal,
+        "J6 groove-welded splice",
+        (
+            CalcStep(
+                "Nominal strength of the smaller section",
+                "Rn",
+                f"{nominal:g}",
                 nominal,
             ),
         ),

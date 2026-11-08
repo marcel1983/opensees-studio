@@ -788,3 +788,30 @@ def test_a_chapter_j_check_with_missing_data_is_invalid() -> None:
     report = steel_frame_check(project, _results(project), DesignSettings())
     assert report.chapter_j[0].status == "invalid"
     assert any("Missing fexx" in note for note in report.chapter_j[0].notes)
+
+
+def test_chapter_j_j5_to_j8_checks_are_reported() -> None:
+    from opensees_studio.core.design.chapter_j_model import ChapterJCheck
+
+    project = _portal()
+    project.chapter_j_checks = [
+        ChapterJCheck(id=1, check_type="bearing_strength", demand=100.0, fy=50.0, apb=2.0),
+        ChapterJCheck(id=2, check_type="concrete_bearing", demand=200.0, fc=4.0, a1=100.0),
+        ChapterJCheck(id=3, check_type="splice", demand=800.0, splice_nominal=1000.0),
+        ChapterJCheck(
+            id=4,
+            check_type="bolt_shear",
+            demand=50.0,
+            fn=54.0,
+            bolt_diameter=0.75,
+            bolt_count=4,
+            filler_thickness=0.5,
+        ),
+    ]
+    report = steel_frame_check(project, _results(project), DesignSettings())
+    assert [item.status for item in report.chapter_j] == ["OK", "OK", "OK", "OK"]
+    assert report.chapter_j[0].nominal == pytest.approx(180.0)
+    assert report.chapter_j[1].nominal == pytest.approx(340.0)
+    assert report.chapter_j[2].nominal == pytest.approx(1000.0)
+    assert report.chapter_j[3].nominal == pytest.approx(95.426 * 0.9, rel=2e-3)
+    assert any("J5.2" in note for note in report.chapter_j[3].notes)
