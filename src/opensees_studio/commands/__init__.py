@@ -14,6 +14,7 @@ from opensees_studio.commands.buildings import (
     SetMassSourceCommand,
     SetStoreysCommand,
 )
+from opensees_studio.commands.chapter_j import SetChapterJChecksCommand
 from opensees_studio.commands.column_splices import SetColumnSplicesCommand
 from opensees_studio.commands.combinations import (
     AddCombinationsCommand,
@@ -148,6 +149,7 @@ __all__ = [
     "ReplaceElementsCommand",
     "ReplaceTimeSeriesCommand",
     "ReplicateCommand",
+    "SetChapterJChecksCommand",
     "SetColumnSplicesCommand",
     "SetConnectionsCommand",
     "SetCoordSystemsCommand",

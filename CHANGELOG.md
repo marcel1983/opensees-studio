@@ -7,6 +7,17 @@ that this is pre-alpha: minor and patch releases may change the `.osmodel`
 schema (it carries a `schema_version`, and a file from a newer build is now
 refused instead of silently downgraded).
 
+## [Unreleased]
+
+### Added
+
+- **Design → Connection Checks (AISC 360 Chapter J).** A dialog lists, adds,
+  edits and removes user-defined weld, bolt, bearing, slip-critical, plate
+  shear and block-shear checks. The checks are stored in
+  `Project.chapter_j_checks`, run with the project's LRFD/ASD method, and
+  shown in the report and the calculation memory with nominal and available
+  strengths, ratio, status and calculation steps.
+
 ## [0.0.49] - 2026-11-07
 
 ### Added

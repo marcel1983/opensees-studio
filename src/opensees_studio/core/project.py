@@ -26,6 +26,7 @@ from opensees_studio.core.analysis import AnalysisCase
 from opensees_studio.core.combinations import LoadCombination
 from opensees_studio.core.constraints import EqualDOFConstraint, RigidDiaphragm, RigidLink
 from opensees_studio.core.custom_commands import CustomCommandBlock
+from opensees_studio.core.design.chapter_j_model import ChapterJCheck
 from opensees_studio.core.design.column_splice_model import ColumnSplice
 from opensees_studio.core.design.connections import RbsConnection
 from opensees_studio.core.design.gusset_model import Gusset
@@ -116,6 +117,7 @@ class Project(BaseModel):
         "connections",
         "gussets",
         "column_splices",
+        "chapter_j_checks",
         "groups",
         "section_cuts",
         "custom_commands",
@@ -249,6 +251,10 @@ class Project(BaseModel):
         default_factory=list,
         description="AISC 341-22 SCBF column splices (additive).",
     )
+    chapter_j_checks: list[ChapterJCheck] = Field(
+        default_factory=list,
+        description="User-defined AISC 360 Chapter J connection checks (additive).",
+    )
     groups: list[Group] = Field(
         default_factory=list,
         description="Named sets of joints and elements (Define → Groups; additive).",
@@ -374,6 +380,9 @@ class Project(BaseModel):
 
     def next_column_splice_id(self) -> int:
         return self._next_id(self.column_splices)
+
+    def next_chapter_j_check_id(self) -> int:
+        return self._next_id(self.chapter_j_checks)
 
     def next_storey_id(self) -> int:
         return self._next_id(self.storeys)
@@ -535,6 +544,10 @@ class Project(BaseModel):
                         f"Column splice {splice.id}: {label} element {element_id} "
                         f"does not meet node {splice.node_id}."
                     )
+
+        chapter_ids = {check.id for check in self.chapter_j_checks}
+        if len(chapter_ids) != len(self.chapter_j_checks):
+            problems.append("Duplicate Chapter J check ids.")
 
         if self.ndm == 2:
             # A 2D model lives in the X-Z plane (core.plane): OpenSees never sees y.

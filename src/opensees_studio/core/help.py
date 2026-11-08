@@ -1537,6 +1537,28 @@ dialog reports the required strengths for its design.
             "design.steel_check",
             "design.gussets",
         ),
+        "design.chapter_j": _t(
+            "Design → Connection Checks (AISC 360 Chapter J)",
+            "Design",
+            "User-defined weld, bolt, plate and block-shear checks.",
+            """
+Lists, adds, edits and removes AISC 360 Chapter J connection checks.
+
+- Choose the limit state: **fillet weld** J2.4, **bolt shear/tension** J3.1,
+  **bearing/tearout** J3.6, **slip-critical** J3.4, **plate shear**
+  J4.3/J4.4 or **block shear** J4.5.
+- Enter the demand `Vu` or `Tu` and the fields the check uses. The dialog
+  enables the relevant group; the other fields are not read.
+- OK stores the list as one undoable step; the report and the calculation
+  memory show the nominal and available strengths, the ratio, the status and
+  the calculation steps.
+
+The dialog is a design aid: it checks the limit state from the values you
+enter, but it does not choose the plate, the bolts or the weld for you.
+""",
+            "design.connections",
+            "design.steel_check",
+        ),
         "design.steel_check": _t(
             "Design → Steel Frame Check (AISC 360-16)",
             "Design",
@@ -5520,6 +5542,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_connections": "design.connections",
     "_act_gussets": "design.gussets",
     "_act_column_splices": "design.column_splices",
+    "_act_chapter_j": "design.chapter_j",
     "_act_notional_loads": "design.notional_loads",
     "_act_influence_line": "display.influence_line",
     "_act_drift_check": "design.drift_check",
