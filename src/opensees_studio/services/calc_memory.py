@@ -80,6 +80,10 @@ _LABELS: dict[Language, dict[str, str]] = {
         "web_ratio": "Web ratio",
         "web_status": "Web status",
         "web_connection": "Web connection (AISC 358-22 5.5)",
+        "chapter_j": "Connection checks (AISC 360 Chapter J)",
+        "name": "Name",
+        "type": "Type",
+        "nominal": "Nominal",
         "beam": "Beam",
         "column": "Column",
         "protected": "Protected zone",
@@ -172,6 +176,10 @@ _LABELS: dict[Language, dict[str, str]] = {
         "web_ratio": "Relación alma",
         "web_status": "Estado alma",
         "web_connection": "Conexión del alma (AISC 358-22 5.5)",
+        "chapter_j": "Chequeos de conexión (AISC 360 Capítulo J)",
+        "name": "Nombre",
+        "type": "Tipo",
+        "nominal": "Nominal",
         "beam": "Viga",
         "column": "Columna",
         "protected": "Zona protegida",
@@ -340,6 +348,22 @@ def _web_check_rows(connection: Any) -> list[list[str]]:
     return [
         [c.name, c.equation, _fmt(c.demand), _fmt(c.capacity), _fmt(c.ratio)]
         for c in connection.web_checks
+    ]
+
+
+def _chapter_j_rows(report: Any) -> list[list[str]]:
+    return [
+        [
+            str(item.check_id),
+            item.name or item.check_type,
+            item.check_type,
+            _fmt(item.demand),
+            _fmt(item.nominal),
+            _fmt(item.available),
+            _fmt(item.ratio),
+            item.status,
+        ]
+        for item in report.chapter_j
     ]
 
 
@@ -645,6 +669,36 @@ def _html(project: Any, report: Any, labels: dict[str, str]) -> str:
             )
             + "</table>"
         )
+    chapter_j_html = ""
+    if report.chapter_j:
+        chapter_j_html = (
+            f"<h2>{labels['chapter_j']}</h2><table><tr>"
+            f"<th>{labels['check']}</th><th>{labels['name']}</th>"
+            f"<th>{labels['type']}</th><th>{labels['demand']}</th>"
+            f"<th>{labels['nominal']}</th><th>{labels['capacity']}</th>"
+            f"<th>{labels['ratio']}</th><th>{labels['status']}</th></tr>"
+            + "".join(
+                "<tr>" + "".join(f"<td>{_e(cell)}</td>" for cell in row) + "</tr>"
+                for row in _chapter_j_rows(report)
+            )
+            + "</table>"
+        )
+        for item in report.chapter_j:
+            if not item.steps:
+                continue
+            chapter_j_html += (
+                f"<h3>{labels['check']} {item.check_id} - "
+                f"{_e(item.name or item.check_type)}</h3><table><tr>"
+                f"<th>{labels['label']}</th><th>{labels['formula']}</th>"
+                f"<th>{labels['substitution']}</th><th>{labels['value']}</th></tr>"
+                + "".join(
+                    f"<tr><td>{_e(step.label)}</td><td>{_e(step.formula)}</td>"
+                    f"<td>{_e(step.substitution)}</td>"
+                    f"<td>{_fmt(step.value) if step.value is not None else ''}</td></tr>"
+                    for step in item.steps
+                )
+                + "</table>"
+            )
     capacity_html = ""
     if report.capacity_design:
         capacity_html = (
@@ -686,6 +740,7 @@ def _html(project: Any, report: Any, labels: dict[str, str]) -> str:
         + brace_connections_html
         + scbf_joints_html
         + column_splices_html
+        + chapter_j_html
         + capacity_html
         + "".join(members)
         + f"<p class='note'>{_e(labels['disclaimer'])}</p></body></html>"
@@ -814,6 +869,33 @@ def _markdown(project: Any, report: Any, labels: dict[str, str]) -> str:
             "|---|---|---|---|---|---|---|---|",
         ]
         lines += ["| " + " | ".join(row) + " |" for row in _column_splice_rows(report)]
+    if report.chapter_j:
+        lines += [
+            "",
+            f"## {labels['chapter_j']}",
+            "",
+            f"| {labels['check']} | {labels['name']} | {labels['type']} | "
+            f"{labels['demand']} | {labels['nominal']} | {labels['capacity']} | "
+            f"{labels['ratio']} | {labels['status']} |",
+            "|---|---|---|---|---|---|---|---|",
+        ]
+        lines += ["| " + " | ".join(row) + " |" for row in _chapter_j_rows(report)]
+        for item in report.chapter_j:
+            if not item.steps:
+                continue
+            lines += [
+                "",
+                f"### {labels['check']} {item.check_id} - {item.name or item.check_type}",
+                "",
+                f"| {labels['label']} | {labels['formula']} | "
+                f"{labels['substitution']} | {labels['value']} |",
+                "|---|---|---|---|",
+            ]
+            lines += [
+                f"| {step.label} | {step.formula} | {step.substitution} | "
+                f"{_fmt(step.value) if step.value is not None else ''} |"
+                for step in item.steps
+            ]
     if report.capacity_design:
         lines += [
             "",
@@ -1089,6 +1171,48 @@ def _latex(project: Any, report: Any, labels: dict[str, str]) -> str:
             for row in _column_splice_rows(report)
         ]
         lines.append(r"\end{longtable}")
+    if report.chapter_j:
+        lines += [
+            rf"\subsection*{{{_tex_escape(labels['chapter_j'])}}}",
+            r"\begin{longtable}{llllllll}",
+        ]
+        lines.append(
+            rf"{_tex_escape(labels['check'])} & {_tex_escape(labels['name'])} & "
+            rf"{_tex_escape(labels['type'])} & {_tex_escape(labels['demand'])} & "
+            rf"{_tex_escape(labels['nominal'])} & {_tex_escape(labels['capacity'])} & "
+            rf"{_tex_escape(labels['ratio'])} & {_tex_escape(labels['status'])} \\ \toprule"
+        )
+        lines += [
+            " & ".join(_tex_escape(cell) for cell in row) + r" \\"
+            for row in _chapter_j_rows(report)
+        ]
+        lines.append(r"\end{longtable}")
+        for item in report.chapter_j:
+            if not item.steps:
+                continue
+            lines += [
+                rf"\subsection*{{{_tex_escape(labels['check'])} {item.check_id} - "
+                rf"{_tex_escape(item.name or item.check_type)}}}",
+                r"\begin{longtable}{llll}",
+            ]
+            lines.append(
+                rf"{_tex_escape(labels['label'])} & {_tex_escape(labels['formula'])} & "
+                rf"{_tex_escape(labels['substitution'])} & "
+                rf"{_tex_escape(labels['value'])} \\ \toprule"
+            )
+            lines += [
+                " & ".join(_tex_escape(str(cell)) for cell in row) + r" \\"
+                for row in (
+                    [
+                        step.label,
+                        step.formula,
+                        step.substitution,
+                        _fmt(step.value) if step.value is not None else "",
+                    ]
+                    for step in item.steps
+                )
+            ]
+            lines.append(r"\end{longtable}")
     if report.capacity_design:
         lines += [
             rf"\subsection*{{{_tex_escape(labels['capacity_design'])}}}",
@@ -1404,6 +1528,62 @@ def odt_bytes(project: Any, report: Any, *, language: Language = "en") -> bytes:
                 + "</table:table-row>"
             )
         body.append("</table:table>")
+    if report.chapter_j:
+        body.append(f"<text:h text:outline-level='2'>{_odt_text(labels['chapter_j'])}</text:h>")
+        body.append("<table:table table:name='ChapterJ'>")
+        header = [
+            labels["check"],
+            labels["name"],
+            labels["type"],
+            labels["demand"],
+            labels["nominal"],
+            labels["capacity"],
+            labels["ratio"],
+            labels["status"],
+        ]
+        for row in [header, *_chapter_j_rows(report)]:
+            body.append(
+                "<table:table-row>"
+                + "".join(
+                    f"<table:table-cell><text:p>{_odt_text(c)}</text:p></table:table-cell>"
+                    for c in row
+                )
+                + "</table:table-row>"
+            )
+        body.append("</table:table>")
+        for item in report.chapter_j:
+            if not item.steps:
+                continue
+            body.append(
+                f"<text:h text:outline-level='2'>{_odt_text(labels['check'])} "
+                f"{item.check_id} - {_odt_text(item.name or item.check_type)}</text:h>"
+            )
+            body.append("<table:table table:name='ChapterJSteps'>")
+            header = [
+                labels["label"],
+                labels["formula"],
+                labels["substitution"],
+                labels["value"],
+            ]
+            rows = [
+                [
+                    step.label,
+                    step.formula,
+                    step.substitution,
+                    _fmt(step.value) if step.value is not None else "",
+                ]
+                for step in item.steps
+            ]
+            for row in [header, *rows]:
+                body.append(
+                    "<table:table-row>"
+                    + "".join(
+                        f"<table:table-cell><text:p>{_odt_text(c)}</text:p></table:table-cell>"
+                        for c in row
+                    )
+                    + "</table:table-row>"
+                )
+            body.append("</table:table>")
     if report.capacity_design:
         body.append(
             f"<text:h text:outline-level='2'>{_odt_text(labels['capacity_design'])}</text:h>"

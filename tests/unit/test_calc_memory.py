@@ -291,3 +291,35 @@ def test_the_memory_carries_the_column_splices() -> None:
     assert "SCBF column splices" in english and "W14X99" in english
     spanish = build_member_memory(_project(), report, language="es", fmt="markdown")
     assert "Empalmes de columna SCBF" in spanish
+
+
+def test_the_memory_carries_the_chapter_j_checks() -> None:
+    from opensees_studio.services.steel_design import ChapterJResult
+
+    report = _report()
+    report.chapter_j = [
+        ChapterJResult(
+            check_id=1,
+            name="Fillet weld",
+            check_type="fillet_weld",
+            demand=40.0,
+            nominal=74.0,
+            available=55.0,
+            ratio=0.72,
+            status="OK",
+            equation="J2-4 fillet weld shear",
+            steps=[
+                CalcStep(
+                    "Effective throat",
+                    "0.707 w",
+                    "0.707 x 0.25",
+                    0.1768,
+                )
+            ],
+        )
+    ]
+    english = build_member_memory(_project(), report, language="en", fmt="html")
+    assert "Connection checks (AISC 360 Chapter J)" in english
+    assert "Effective throat" in english
+    spanish = build_member_memory(_project(), report, language="es", fmt="markdown")
+    assert "Chequeos de conexión (AISC 360 Capítulo J)" in spanish

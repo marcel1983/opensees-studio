@@ -614,6 +614,41 @@ def _design_section(project: Project, results: Mapping[int, Any]) -> str:
                 splice_rows,
             )
         )
+    if report.chapter_j:
+        chapter_rows = [
+            [
+                item.check_id,
+                item.name or item.check_type,
+                item.check_type,
+                item.demand,
+                item.nominal,
+                item.available,
+                item.ratio,
+                item.status,
+            ]
+            for item in report.chapter_j
+        ]
+        out.append("<h3>Connection checks (AISC 360 Chapter J)</h3>")
+        out += [
+            f"<p class='note'>Check {item.check_id}: {_e(note)}</p>"
+            for item in report.chapter_j
+            for note in item.notes
+        ]
+        out.append(
+            _table(
+                [
+                    "Check",
+                    "Name",
+                    "Type",
+                    "Demand",
+                    "Nominal",
+                    "Available",
+                    "Ratio",
+                    "Status",
+                ],
+                chapter_rows,
+            )
+        )
 
     drift_rows: list[list[Any]] = []
     for result in sorted(results.values(), key=lambda r: getattr(r, "case_id", 0)):

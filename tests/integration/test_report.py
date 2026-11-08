@@ -143,3 +143,26 @@ def test_report_carries_the_rbs_web_connection() -> None:
     page = build_report(project, _results(project))
     assert "RBS web connection (AISC 358-22 5.5)" in page
     assert "Web plate shear yielding" in page
+
+
+def test_report_carries_the_chapter_j_checks() -> None:
+    from opensees_studio.core.design.chapter_j_model import ChapterJCheck
+    from opensees_studio.core.design.settings import DesignSettings
+    from tests.integration.test_steel_design_run import _portal, _results
+
+    project = _portal()
+    project.chapter_j_checks = [
+        ChapterJCheck(
+            id=1,
+            name="Fillet weld",
+            check_type="fillet_weld",
+            demand=40.0,
+            fexx=70.0,
+            weld_leg=0.25,
+            weld_length=10.0,
+        )
+    ]
+    project.design = DesignSettings()
+    page = build_report(project, _results(project))
+    assert "Connection checks (AISC 360 Chapter J)" in page
+    assert "Fillet weld" in page

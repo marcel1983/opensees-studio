@@ -744,3 +744,47 @@ def test_the_rbs_web_connection_checks_5_5() -> None:
     result = report.connections[0]
     assert [check.name for check in result.web_checks] == ["Web plate thickness (5.5)"]
     assert any("CJP" in note for note in result.notes)
+
+
+def test_chapter_j_checks_are_reported() -> None:
+    from opensees_studio.core.design.chapter_j_model import ChapterJCheck
+
+    project = _portal()
+    project.chapter_j_checks = [
+        ChapterJCheck(
+            id=1,
+            name="Fillet weld",
+            check_type="fillet_weld",
+            demand=40.0,
+            fexx=70.0,
+            weld_leg=0.25,
+            weld_length=10.0,
+            weld_both_sides=False,
+        ),
+        ChapterJCheck(
+            id=2,
+            name="Bolts",
+            check_type="bolt_shear",
+            demand=50.0,
+            fn=54.0,
+            bolt_diameter=0.75,
+            bolt_count=4,
+        ),
+    ]
+    report = steel_frame_check(project, _results(project), DesignSettings())
+    assert len(report.chapter_j) == 2
+    weld = report.chapter_j[0]
+    assert weld.nominal == pytest.approx(74.247, rel=2e-3)
+    assert weld.status in ("OK", "NG")
+    bolts = report.chapter_j[1]
+    assert bolts.nominal == pytest.approx(95.426, rel=2e-3)
+
+
+def test_a_chapter_j_check_with_missing_data_is_invalid() -> None:
+    from opensees_studio.core.design.chapter_j_model import ChapterJCheck
+
+    project = _portal()
+    project.chapter_j_checks = [ChapterJCheck(id=1, check_type="fillet_weld", demand=10.0)]
+    report = steel_frame_check(project, _results(project), DesignSettings())
+    assert report.chapter_j[0].status == "invalid"
+    assert any("Missing fexx" in note for note in report.chapter_j[0].notes)

@@ -85,6 +85,16 @@ from opensees_studio.core.design.brace_connections import (
     gusset_weld_required_leg,
 )
 from opensees_studio.core.design.calc import CalcStep, LimitStateCheck
+from opensees_studio.core.design.chapter_j import (
+    block_shear_strength,
+    bolt_bearing_strength,
+    bolt_shear_strength,
+    bolt_tension_strength,
+    fillet_weld_strength,
+    plate_shear_rupture,
+    plate_shear_yielding,
+    slip_critical_strength,
+)
 from opensees_studio.core.design.connections import (
     rbs_flexure_ratio,
     rbs_geometry,
@@ -589,6 +599,23 @@ class ColumnSpliceResult:
 
 
 @dataclass
+class ChapterJResult:
+    """One saved AISC 360 Chapter J check and its outcome."""
+
+    check_id: int
+    name: str
+    check_type: str
+    demand: float = 0.0
+    nominal: float = 0.0
+    available: float = 0.0
+    ratio: float = 0.0
+    status: str = "not checked"
+    equation: str = ""
+    steps: list[CalcStep] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+
+@dataclass
 class DesignReport:
     members: list[MemberResult] = field(default_factory=list)
     joints: list[JointResult] = field(default_factory=list)
@@ -598,6 +625,7 @@ class DesignReport:
     capacity_design: list[CapacityDesign] = field(default_factory=list)
     scbf_joints: list[ScbfJointResult] = field(default_factory=list)
     column_splices: list[ColumnSpliceResult] = field(default_factory=list)
+    chapter_j: list[ChapterJResult] = field(default_factory=list)
     load_sets: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
 
@@ -791,6 +819,106 @@ def _prefix_check(check: MemberCheck, prefix: str) -> None:
     check.ratios = {prefix + key: value for key, value in check.ratios.items()}
     check.equations = {prefix + key: value for key, value in check.equations.items()}
     check.checks = [replace(item, name=prefix + item.name) for item in check.checks]
+
+
+def _value(value: float | int | None, name: str) -> float:
+    if value is None:
+        raise ValueError(f"Missing {name} for this Chapter J check.")
+    return float(value)
+
+
+def _chapter_j_strength(check: Any, method: Any) -> Any:
+    """Dispatch one saved Chapter J check to its strength function."""
+    kind = check.check_type
+    if kind == "fillet_weld":
+        return fillet_weld_strength(
+            fexx=_value(check.fexx, "fexx"),
+            leg=_value(check.weld_leg, "weld_leg"),
+            length=_value(check.weld_length, "weld_length"),
+            both_sides=check.weld_both_sides,
+            method=method,
+        )
+    if kind == "bolt_shear":
+        return bolt_shear_strength(
+            fnv=_value(check.fn, "fn"),
+            diameter=_value(check.bolt_diameter, "bolt_diameter"),
+            count=int(_value(check.bolt_count, "bolt_count")),
+            method=method,
+        )
+    if kind == "bolt_tension":
+        return bolt_tension_strength(
+            fnt=_value(check.fn, "fn"),
+            diameter=_value(check.bolt_diameter, "bolt_diameter"),
+            count=int(_value(check.bolt_count, "bolt_count")),
+            method=method,
+        )
+    if kind == "bolt_bearing":
+        return bolt_bearing_strength(
+            fu=_value(check.fu, "fu"),
+            thickness=_value(check.thickness, "thickness"),
+            diameter=_value(check.bolt_diameter, "bolt_diameter"),
+            count=int(_value(check.bolt_count, "bolt_count")),
+            edge_distance=_value(check.edge_distance, "edge_distance"),
+            hole_diameter=check.hole_diameter,
+            deformation=check.deformation,
+            method=method,
+        )
+    if kind == "slip_critical":
+        return slip_critical_strength(
+            mu=_value(check.mu, "mu"),
+            tb=_value(check.tb, "tb"),
+            ns=int(_value(check.slip_planes, "slip_planes")),
+            count=int(_value(check.bolt_count, "bolt_count")),
+            hole_type=check.hole_type,
+            method=method,
+        )
+    if kind == "plate_shear_yielding":
+        return plate_shear_yielding(
+            fy=_value(check.fy, "fy"), agv=_value(check.agv, "agv"), method=method
+        )
+    if kind == "plate_shear_rupture":
+        return plate_shear_rupture(
+            fu=_value(check.fu, "fu"), anv=_value(check.anv, "anv"), method=method
+        )
+    if kind == "block_shear":
+        return block_shear_strength(
+            fy=_value(check.fy, "fy"),
+            fu=_value(check.fu, "fu"),
+            agv=_value(check.agv, "agv"),
+            anv=_value(check.anv, "anv"),
+            ant=float(check.ant or 0.0),
+            uniform_tension=check.uniform_tension,
+            method=method,
+        )
+    raise ValueError(f"Unknown Chapter J check type {kind!r}.")
+
+
+def _chapter_j_results(project: Any, settings: DesignSettings) -> list[ChapterJResult]:
+    """Run every saved Chapter J check with the design method."""
+    out: list[ChapterJResult] = []
+    for check in project.chapter_j_checks:
+        result = ChapterJResult(
+            check_id=check.id,
+            name=check.name,
+            check_type=check.check_type,
+            demand=check.demand,
+        )
+        try:
+            strength = _chapter_j_strength(check, settings.method)
+        except ValueError as exc:
+            result.status = "invalid"
+            result.notes.append(str(exc))
+            out.append(result)
+            continue
+        result.nominal = strength.nominal
+        result.available = strength.available
+        result.ratio = check.demand / strength.available if strength.available > 0.0 else math.inf
+        result.status = "OK" if result.ratio <= 1.0 else "NG"
+        result.equation = strength.equation
+        result.steps = list(strength.steps)
+        result.notes = list(strength.notes)
+        out.append(result)
+    return out
 
 
 def steel_frame_check(
@@ -1227,6 +1355,8 @@ def steel_frame_check(
         report.gussets = _gusset_results(project, settings, units, fy=fy)
     if project.column_splices:
         report.column_splices = _column_splice_results(project, settings, units, fy=fy)
+    if project.chapter_j_checks:
+        report.chapter_j = _chapter_j_results(project, settings)
     return report
 
 
