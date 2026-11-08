@@ -1540,18 +1540,26 @@ dialog reports the required strengths for its design.
         "design.chapter_j": _t(
             "Design → Connection Checks (AISC 360 Chapter J)",
             "Design",
-            "User-defined weld, bolt, plate and block-shear checks.",
+            "User-defined weld, bolt, plate, block-shear and concentrated-force checks.",
             """
 Lists, adds, edits and removes AISC 360 Chapter J connection checks.
 
 - Choose the limit state: **fillet weld** J2.4, **bolt shear/tension** J3.1,
   **bearing/tearout** J3.6, **slip-critical** J3.4, **plate shear**
   J4.3/J4.4, **block shear** J4.5, **bearing strength** J7.1,
-  **concrete bearing** J8 or **groove-welded splice** J6.
+  **concrete bearing** J8, **groove-welded splice** J6, **flange local
+  bending** J10.1, **web local yielding** J10.2, **web local crippling**
+  J10.3, **web sidesway buckling** J10.4 or **web compression buckling**
+  J10.5.
 - **Fillers** J5: the weld check reports the J5.1a leg increase and the bolt
   shear check applies the J5.2 factor when a filler thickness is given.
 - **Anchor rods** J9 use the J3 bolt tension/shear checks; the concrete
   embedment design follows ACI 318 and is out of scope.
+- **Concentrated forces** J10 use the loaded flange and web dimensions. J10.1
+  is reported as **not required** when `lb < 0.15 bf`; J10.4 is reported as
+  **not required** when `(h/tw)/(Lb/bf)` exceeds 2.3 (restrained) or 1.7
+  (unrestrained). The 50% reductions near the member end are applied and
+  shown in the notes.
 - Enter the demand `Vu` or `Tu` and the fields the check uses. The dialog
   enables the relevant group; the other fields are not read.
 - OK stores the list as one undoable step; the report and the calculation
@@ -1559,9 +1567,9 @@ Lists, adds, edits and removes AISC 360 Chapter J connection checks.
   the calculation steps.
 
 The dialog is a design aid: it checks the limit state from the values you
-enter, but it does not choose the plate, the bolts or the weld for you.
-J10.6 panel zone is in the SMF joint table; the other J10 concentrated-force
-checks are not part of this dialog.
+enter, but it does not choose the plate, the bolts, the weld or the stiffener
+for you. J10.6 panel zone is in the SMF joint table; the J10.7-J10.9
+stiffener and doubler-plate design is not modeled.
 """,
             "design.connections",
             "design.steel_check",

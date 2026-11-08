@@ -1123,6 +1123,98 @@ def _aisc_chapter_j() -> list[Check]:
     ]
 
 
+def _aisc_chapter_j_concentrated() -> list[Check]:
+    """AISC 360 J10.1-J10.5: concentrated forces on flanges and webs."""
+    from opensees_studio.core.design.chapter_j import (
+        flange_local_bending,
+        web_compression_buckling,
+        web_local_crippling,
+        web_local_yielding,
+        web_sidesway_buckling,
+    )
+
+    flange = flange_local_bending(fyf=50.0, tf=0.5, bf=6.0, lb=2.0, distance_to_end=20.0)
+    yielding_far = web_local_yielding(fyw=50.0, tw=0.3, k=1.0, lb=2.0, d=14.0, distance_to_end=20.0)
+    yielding_near = web_local_yielding(
+        fyw=50.0, tw=0.3, k=1.0, lb=2.0, d=14.0, distance_to_end=10.0
+    )
+    crippling_far = web_local_crippling(
+        fyw=50.0, e=29000.0, tw=0.3, tf=0.5, d=14.0, lb=2.0, distance_to_end=10.0
+    )
+    crippling_near = web_local_crippling(
+        fyw=50.0, e=29000.0, tw=0.3, tf=0.5, d=14.0, lb=4.0, distance_to_end=5.0
+    )
+    sidesway_restrained = web_sidesway_buckling(
+        fy=50.0, sx=100.0, mr=1000.0, tw=1.0, tf=0.5, h=10.0, bf=8.0, lb=100.0
+    )
+    sidesway_unrestrained = web_sidesway_buckling(
+        fy=50.0,
+        sx=100.0,
+        mr=1000.0,
+        tw=1.0,
+        tf=0.5,
+        h=10.0,
+        bf=8.0,
+        lb=100.0,
+        restrained=False,
+    )
+    compression = web_compression_buckling(
+        e=29000.0, fyw=50.0, tw=0.5, h=12.0, distance_to_end=10.0, d=14.0
+    )
+    return [
+        Check("Flange local bending nominal J10-1", "kip", flange.nominal, 78.125, 2e-3),
+        Check(
+            "Web local yielding nominal J10-2",
+            "kip",
+            yielding_far.nominal,
+            105.0,
+            2e-3,
+        ),
+        Check(
+            "Web local yielding nominal J10-3",
+            "kip",
+            yielding_near.nominal,
+            67.5,
+            2e-3,
+        ),
+        Check(
+            "Web local crippling nominal J10-4",
+            "kip",
+            crippling_far.nominal,
+            134.223,
+            2e-3,
+        ),
+        Check(
+            "Web local crippling nominal J10-5b",
+            "kip",
+            crippling_near.nominal,
+            80.488,
+            2e-3,
+        ),
+        Check(
+            "Web sidesway nominal J10-6",
+            "kip",
+            sidesway_restrained.nominal,
+            5783.04,
+            2e-3,
+        ),
+        Check(
+            "Web sidesway nominal J10-7",
+            "kip",
+            sidesway_unrestrained.nominal,
+            983.04,
+            2e-3,
+        ),
+        Check(
+            "Web compression nominal J10-8",
+            "kip",
+            compression.nominal,
+            301.04,
+            2e-3,
+        ),
+    ]
+
+
 # ──────────────────────────── catalogue ────────────────────────────
 CASES: list[Case] = [
     Case(
@@ -1374,6 +1466,16 @@ CASES: list[Case] = [
         "1/2 in. plate, 1.5 in. edge distance; block shear with Agv = 6, "
         "Anv = 4.375 and Ant = 1 in.2.",
         _aisc_chapter_j,
+    ),
+    Case(
+        "D-13",
+        "AISC 360 Chapter J: concentrated forces",
+        "Design, AISC 360-16",
+        "J10-1 to J10-8 with the AISC 360 factors and the 50% end reductions.",
+        "W-shape web with Fy = 50 ksi, tf = 1/2 in., tw = 0.3 in., "
+        "bf = 6 in., h = 12 in., d = 14 in., lb = 2 in.; sidesway with "
+        "tw = 1 in., h = 10 in., bf = 8 in., Lb = 100 in.",
+        _aisc_chapter_j_concentrated,
     ),
 ]
 

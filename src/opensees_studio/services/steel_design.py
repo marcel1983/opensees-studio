@@ -93,10 +93,15 @@ from opensees_studio.core.design.chapter_j import (
     bolt_tension_strength,
     concrete_bearing_strength,
     fillet_weld_strength,
+    flange_local_bending,
     plate_shear_rupture,
     plate_shear_yielding,
     slip_critical_strength,
     splice_strength,
+    web_compression_buckling,
+    web_local_crippling,
+    web_local_yielding,
+    web_sidesway_buckling,
 )
 from opensees_studio.core.design.connections import (
     rbs_flexure_ratio,
@@ -114,7 +119,7 @@ from opensees_studio.core.design.scbf_joints import (
 from opensees_studio.core.design.settings import DesignLoadSet, DesignSettings
 from opensees_studio.core.geometry.elements import FRAME_ELEMENT_CLASSES
 from opensees_studio.core.sections import ElasticSection
-from opensees_studio.core.units import length_scale, stress_scale
+from opensees_studio.core.units import UnitSystem, length_scale, stress_scale
 from opensees_studio.services.element_forces import ForceComponent, extract_diagram_data
 from opensees_studio.services.results import ResponseSpectrumResults, StaticResults
 
@@ -830,9 +835,32 @@ def _value(value: float | int | None, name: str) -> float:
     return float(value)
 
 
-def _chapter_j_strength(check: Any, method: Any, *, metric: bool = False) -> Any:
+def _filler_constants(units: Any) -> tuple[float, float]:
+    """J5.2 threshold and slope in the project's length units."""
+    if units == UnitSystem.SI_MM_N:
+        return 6.0, 0.0154
+    if units == UnitSystem.SI_M_N:
+        return 0.006, 15.4
+    if units == UnitSystem.US_FT_KIP:
+        return 0.25 / 12.0, 4.8
+    return 0.25, 0.4
+
+
+def _sidesway_cr(units: Any) -> tuple[float, float]:
+    """J10.4 Cr (low, high) in the project's stress unit."""
+    if units == UnitSystem.SI_MM_N:
+        return 3.3e6, 6.6e6
+    if units == UnitSystem.SI_M_N:
+        return 3.3e12, 6.6e12
+    if units == UnitSystem.US_FT_KIP:
+        return 480_000.0 * 144.0, 960_000.0 * 144.0
+    return 480_000.0, 960_000.0
+
+
+def _chapter_j_strength(check: Any, method: Any, *, units: Any) -> Any:
     """Dispatch one saved Chapter J check to its strength function."""
     kind = check.check_type
+    filler_threshold, filler_slope = _filler_constants(units)
     if kind == "fillet_weld":
         return fillet_weld_strength(
             fexx=_value(check.fexx, "fexx"),
@@ -849,7 +877,8 @@ def _chapter_j_strength(check: Any, method: Any, *, metric: bool = False) -> Any
             diameter=_value(check.bolt_diameter, "bolt_diameter"),
             count=int(_value(check.bolt_count, "bolt_count")),
             filler_thickness=check.filler_thickness,
-            metric=metric,
+            filler_threshold=filler_threshold,
+            filler_slope=filler_slope,
             method=method,
         )
     if kind == "bolt_tension":
@@ -915,6 +944,64 @@ def _chapter_j_strength(check: Any, method: Any, *, metric: bool = False) -> Any
             nominal=_value(check.splice_nominal, "splice_nominal"),
             method=method,
         )
+    if kind == "flange_local_bending":
+        return flange_local_bending(
+            fyf=_value(check.fy, "fy"),
+            tf=_value(check.flange_thickness, "flange_thickness"),
+            bf=_value(check.flange_width, "flange_width"),
+            lb=_value(check.bearing_length, "bearing_length"),
+            distance_to_end=_value(check.distance_to_end, "distance_to_end"),
+            method=method,
+        )
+    if kind == "web_local_yielding":
+        return web_local_yielding(
+            fyw=_value(check.fy, "fy"),
+            tw=_value(check.web_thickness, "web_thickness"),
+            k=_value(check.fillet_k, "fillet_k"),
+            lb=_value(check.bearing_length, "bearing_length"),
+            d=_value(check.member_depth, "member_depth"),
+            distance_to_end=_value(check.distance_to_end, "distance_to_end"),
+            method=method,
+        )
+    if kind == "web_local_crippling":
+        return web_local_crippling(
+            fyw=_value(check.fy, "fy"),
+            e=_value(check.elastic_modulus, "elastic_modulus"),
+            tw=_value(check.web_thickness, "web_thickness"),
+            tf=_value(check.flange_thickness, "flange_thickness"),
+            d=_value(check.member_depth, "member_depth"),
+            lb=_value(check.bearing_length, "bearing_length"),
+            distance_to_end=_value(check.distance_to_end, "distance_to_end"),
+            qf=check.chord_factor,
+            method=method,
+        )
+    if kind == "web_sidesway_buckling":
+        cr_low, cr_high = _sidesway_cr(units)
+        return web_sidesway_buckling(
+            fy=_value(check.fy, "fy"),
+            sx=_value(check.section_modulus, "section_modulus"),
+            mr=_value(check.required_moment, "required_moment"),
+            tw=_value(check.web_thickness, "web_thickness"),
+            tf=_value(check.flange_thickness, "flange_thickness"),
+            h=_value(check.clear_web_height, "clear_web_height"),
+            bf=_value(check.flange_width, "flange_width"),
+            lb=_value(check.bearing_length, "bearing_length"),
+            restrained=check.flange_restrained,
+            cr_low=cr_low,
+            cr_high=cr_high,
+            method=method,
+        )
+    if kind == "web_compression_buckling":
+        return web_compression_buckling(
+            e=_value(check.elastic_modulus, "elastic_modulus"),
+            fyw=_value(check.fy, "fy"),
+            tw=_value(check.web_thickness, "web_thickness"),
+            h=_value(check.clear_web_height, "clear_web_height"),
+            qf=check.chord_factor,
+            distance_to_end=_value(check.distance_to_end, "distance_to_end"),
+            d=_value(check.member_depth, "member_depth"),
+            method=method,
+        )
     raise ValueError(f"Unknown Chapter J check type {kind!r}.")
 
 
@@ -932,7 +1019,7 @@ def _chapter_j_results(project: Any, settings: DesignSettings) -> list[ChapterJR
             strength = _chapter_j_strength(
                 check,
                 settings.method,
-                metric="SI" in str(project.meta.units),
+                units=project.meta.units,
             )
         except ValueError as exc:
             result.status = "invalid"
@@ -941,8 +1028,14 @@ def _chapter_j_results(project: Any, settings: DesignSettings) -> list[ChapterJR
             continue
         result.nominal = strength.nominal
         result.available = strength.available
-        result.ratio = check.demand / strength.available if strength.available > 0.0 else math.inf
-        result.status = "OK" if result.ratio <= 1.0 else "NG"
+        if strength.available <= 0.0 and strength.nominal <= 0.0:
+            result.status = "not required"
+            result.ratio = 0.0
+        else:
+            result.ratio = (
+                check.demand / strength.available if strength.available > 0.0 else math.inf
+            )
+            result.status = "OK" if result.ratio <= 1.0 else "NG"
         result.equation = strength.equation
         result.steps = list(strength.steps)
         result.notes = list(strength.notes)

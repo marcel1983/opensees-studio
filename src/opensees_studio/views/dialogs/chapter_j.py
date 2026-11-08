@@ -25,7 +25,7 @@ from opensees_studio.core.design.chapter_j_model import ChapterJCheck
 from opensees_studio.core.help import TOPIC_PROPERTY
 from opensees_studio.core.units import force_scale, length_scale, stress_scale
 from opensees_studio.views.float_field import FloatField
-from opensees_studio.views.screen_fit import FittedDialog
+from opensees_studio.views.screen_fit import FittedDialog, scroll_area
 
 _TYPES = (
     ("Fillet weld (J2.4)", "fillet_weld"),
@@ -39,6 +39,19 @@ _TYPES = (
     ("Bearing strength (J7.1)", "bearing_strength"),
     ("Concrete bearing (J8)", "concrete_bearing"),
     ("Groove-welded splice (J6)", "splice"),
+    ("Flange local bending (J10.1)", "flange_local_bending"),
+    ("Web local yielding (J10.2)", "web_local_yielding"),
+    ("Web local crippling (J10.3)", "web_local_crippling"),
+    ("Web sidesway buckling (J10.4)", "web_sidesway_buckling"),
+    ("Web compression buckling (J10.5)", "web_compression_buckling"),
+)
+
+_J10_TYPES = (
+    "flange_local_bending",
+    "web_local_yielding",
+    "web_local_crippling",
+    "web_sidesway_buckling",
+    "web_compression_buckling",
 )
 
 
@@ -81,6 +94,10 @@ class ChapterJDialog(FittedDialog):
         form.addRow("Demand Vu / Tu:", self._demand)
         layout.addLayout(form)
 
+        groups = QWidget()
+        groups_layout = QVBoxLayout(groups)
+        groups_layout.setContentsMargins(0, 0, 0, 0)
+
         self._weld_group = QGroupBox("Fillet weld (J2.4)")
         weld = QFormLayout(self._weld_group)
         self._fexx = FloatField()
@@ -104,7 +121,7 @@ class ChapterJDialog(FittedDialog):
         weld.addRow("Filler thickness (J5):", self._filler_thickness)
         self._filler_transfers = QCheckBox("The filler transfers force")
         weld.addRow("Filler:", self._filler_transfers)
-        layout.addWidget(self._weld_group)
+        groups_layout.addWidget(self._weld_group)
 
         self._bolt_group = QGroupBox("Bolts (J3.1 / J3.6)")
         bolt = QFormLayout(self._bolt_group)
@@ -143,7 +160,7 @@ class ChapterJDialog(FittedDialog):
         self._bolt_filler.setRange(1e-9, 1e9)
         self._bolt_filler.setValue(0.0)
         bolt.addRow("Filler thickness (J5.2):", self._bolt_filler)
-        layout.addWidget(self._bolt_group)
+        groups_layout.addWidget(self._bolt_group)
 
         self._slip_group = QGroupBox("Slip-critical (J3.4)")
         slip = QFormLayout(self._slip_group)
@@ -164,7 +181,7 @@ class ChapterJDialog(FittedDialog):
         self._hole_type.addItem("Oversized", "oversized")
         self._hole_type.addItem("Long-slotted", "long_slotted")
         slip.addRow("Hole type:", self._hole_type)
-        layout.addWidget(self._slip_group)
+        groups_layout.addWidget(self._slip_group)
 
         self._plate_group = QGroupBox("Plate and block shear (J4.3 / J4.4 / J4.5)")
         plate = QFormLayout(self._plate_group)
@@ -207,7 +224,68 @@ class ChapterJDialog(FittedDialog):
         self._splice_nominal.setRange(1e-9, 1e12)
         self._splice_nominal.setValue(1000.0 * self._unit_f)
         plate.addRow("Splice nominal strength:", self._splice_nominal)
-        layout.addWidget(self._plate_group)
+        groups_layout.addWidget(self._plate_group)
+
+        self._j10_group = QGroupBox("Concentrated forces (J10.1 / J10.2 / J10.3 / J10.4 / J10.5)")
+        j10 = QFormLayout(self._j10_group)
+        self._j10_fy = FloatField()
+        self._j10_fy.setRange(1e-6, 1e9)
+        self._j10_fy.setValue(50.0 * self._unit_s)
+        j10.addRow("Fyf / Fyw:", self._j10_fy)
+        self._j10_tf = FloatField()
+        self._j10_tf.setRange(1e-6, 1e9)
+        self._j10_tf.setValue(0.5 * self._unit_l)
+        j10.addRow("Flange thickness tf:", self._j10_tf)
+        self._j10_tw = FloatField()
+        self._j10_tw.setRange(1e-6, 1e9)
+        self._j10_tw.setValue(0.3 * self._unit_l)
+        j10.addRow("Web thickness tw:", self._j10_tw)
+        self._j10_bf = FloatField()
+        self._j10_bf.setRange(1e-6, 1e9)
+        self._j10_bf.setValue(6.0 * self._unit_l)
+        j10.addRow("Flange width bf:", self._j10_bf)
+        self._j10_h = FloatField()
+        self._j10_h.setRange(1e-6, 1e9)
+        self._j10_h.setValue(12.0 * self._unit_l)
+        j10.addRow("Clear web height h:", self._j10_h)
+        self._j10_d = FloatField()
+        self._j10_d.setRange(1e-6, 1e9)
+        self._j10_d.setValue(14.0 * self._unit_l)
+        j10.addRow("Member depth d:", self._j10_d)
+        self._j10_k = FloatField()
+        self._j10_k.setRange(1e-6, 1e9)
+        self._j10_k.setValue(1.0 * self._unit_l)
+        j10.addRow("Fillet k:", self._j10_k)
+        self._j10_lb = FloatField()
+        self._j10_lb.setRange(1e-6, 1e9)
+        self._j10_lb.setValue(2.0 * self._unit_l)
+        j10.addRow("Bearing length lb:", self._j10_lb)
+        self._j10_end = FloatField()
+        self._j10_end.setRange(1e-6, 1e9)
+        self._j10_end.setValue(20.0 * self._unit_l)
+        j10.addRow("Distance to end:", self._j10_end)
+        self._j10_e = FloatField()
+        self._j10_e.setRange(1e-6, 1e12)
+        self._j10_e.setValue(29000.0 * self._unit_s)
+        j10.addRow("Elastic modulus E:", self._j10_e)
+        self._j10_qf = FloatField()
+        self._j10_qf.setRange(1e-6, 1e6)
+        self._j10_qf.setValue(1.0)
+        j10.addRow("Chord-stress Qf:", self._j10_qf)
+        self._j10_mr = FloatField()
+        self._j10_mr.setRange(1e-9, 1e18)
+        self._j10_mr.setValue(1000.0 * self._unit_f * self._unit_l)
+        j10.addRow("Required moment Mr:", self._j10_mr)
+        self._j10_sx = FloatField()
+        self._j10_sx.setRange(1e-9, 1e18)
+        self._j10_sx.setValue(100.0 * self._unit_l**3)
+        j10.addRow("Section modulus Sx:", self._j10_sx)
+        self._j10_restrained = QCheckBox("Compression flange restrained against rotation")
+        self._j10_restrained.setChecked(True)
+        j10.addRow("Sidesway:", self._j10_restrained)
+        groups_layout.addWidget(self._j10_group)
+        groups_layout.addStretch(1)
+        layout.addWidget(scroll_area(groups, vertical_only=True), 1)
 
         row = QHBoxLayout()
         add = QPushButton("Add")
@@ -250,6 +328,7 @@ class ChapterJDialog(FittedDialog):
                 "splice",
             )
         )
+        self._j10_group.setEnabled(kind in _J10_TYPES)
         self._summary.setText(
             "Only the fields used by the selected check are read. "
             "The report shows the nominal, available and ratio."
@@ -261,6 +340,7 @@ class ChapterJDialog(FittedDialog):
 
     def _candidate(self) -> ChapterJCheck:
         kind = str(self._type.currentData())
+        is_j10 = kind in _J10_TYPES
         filler = (
             self._filler_thickness.value()
             if kind == "fillet_weld"
@@ -291,7 +371,7 @@ class ChapterJDialog(FittedDialog):
             tb=self._tb.value(),
             slip_planes=int(self._slip_planes.value()),
             hole_type=self._hole_type.currentData(),
-            fy=self._fy.value(),
+            fy=self._j10_fy.value() if is_j10 else self._fy.value(),
             agv=self._agv.value(),
             anv=self._anv.value(),
             ant=self._ant.value(),
@@ -301,6 +381,19 @@ class ChapterJDialog(FittedDialog):
             a1=self._a1.value(),
             a2=self._a2.value() or None,
             splice_nominal=self._splice_nominal.value(),
+            flange_thickness=self._j10_tf.value() if is_j10 else None,
+            web_thickness=self._j10_tw.value() if is_j10 else None,
+            flange_width=self._j10_bf.value() if is_j10 else None,
+            clear_web_height=self._j10_h.value() if is_j10 else None,
+            member_depth=self._j10_d.value() if is_j10 else None,
+            fillet_k=self._j10_k.value() if is_j10 else None,
+            bearing_length=self._j10_lb.value() if is_j10 else None,
+            distance_to_end=self._j10_end.value() if is_j10 else None,
+            elastic_modulus=self._j10_e.value() if is_j10 else None,
+            chord_factor=self._j10_qf.value() if is_j10 else 1.0,
+            required_moment=self._j10_mr.value() if is_j10 else None,
+            section_modulus=self._j10_sx.value() if is_j10 else None,
+            flange_restrained=self._j10_restrained.isChecked() if is_j10 else True,
         )
 
     def _add(self) -> None:
@@ -371,6 +464,20 @@ class ChapterJDialog(FittedDialog):
         self._a1.setValue(item.a1 or 100.0 * self._unit_l**2)
         self._a2.setValue(item.a2 or 0.0)
         self._splice_nominal.setValue(item.splice_nominal or 1000.0 * self._unit_f)
+        self._j10_fy.setValue(item.fy or 50.0 * self._unit_s)
+        self._j10_tf.setValue(item.flange_thickness or 0.5 * self._unit_l)
+        self._j10_tw.setValue(item.web_thickness or 0.3 * self._unit_l)
+        self._j10_bf.setValue(item.flange_width or 6.0 * self._unit_l)
+        self._j10_h.setValue(item.clear_web_height or 12.0 * self._unit_l)
+        self._j10_d.setValue(item.member_depth or 14.0 * self._unit_l)
+        self._j10_k.setValue(item.fillet_k or 1.0 * self._unit_l)
+        self._j10_lb.setValue(item.bearing_length or 2.0 * self._unit_l)
+        self._j10_end.setValue(item.distance_to_end or 20.0 * self._unit_l)
+        self._j10_e.setValue(item.elastic_modulus or 29000.0 * self._unit_s)
+        self._j10_qf.setValue(item.chord_factor)
+        self._j10_mr.setValue(item.required_moment or 1000.0 * self._unit_f * self._unit_l)
+        self._j10_sx.setValue(item.section_modulus or 100.0 * self._unit_l**3)
+        self._j10_restrained.setChecked(item.flange_restrained)
         self._update_fields()
 
     def checks(self) -> list[ChapterJCheck]:
