@@ -1546,7 +1546,12 @@ Lists, adds, edits and removes AISC 360 Chapter J connection checks.
 
 - Choose the limit state: **fillet weld** J2.4, **bolt shear/tension** J3.1,
   **bearing/tearout** J3.6, **slip-critical** J3.4, **plate shear**
-  J4.3/J4.4 or **block shear** J4.5.
+  J4.3/J4.4, **block shear** J4.5, **bearing strength** J7.1,
+  **concrete bearing** J8 or **groove-welded splice** J6.
+- **Fillers** J5: the weld check reports the J5.1a leg increase and the bolt
+  shear check applies the J5.2 factor when a filler thickness is given.
+- **Anchor rods** J9 use the J3 bolt tension/shear checks; the concrete
+  embedment design follows ACI 318 and is out of scope.
 - Enter the demand `Vu` or `Tu` and the fields the check uses. The dialog
   enables the relevant group; the other fields are not read.
 - OK stores the list as one undoable step; the report and the calculation
@@ -1555,6 +1560,8 @@ Lists, adds, edits and removes AISC 360 Chapter J connection checks.
 
 The dialog is a design aid: it checks the limit state from the values you
 enter, but it does not choose the plate, the bolts or the weld for you.
+J10.6 panel zone is in the SMF joint table; the other J10 concentrated-force
+checks are not part of this dialog.
 """,
             "design.connections",
             "design.steel_check",

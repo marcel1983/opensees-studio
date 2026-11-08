@@ -110,3 +110,47 @@ def test_chapter_j_inputs_are_guarded() -> None:
             count=1,
             hole_type="round",  # type: ignore[arg-type]
         )
+
+
+def test_fillers_follow_j5() -> None:
+    from opensees_studio.core.design.chapter_j import (
+        filler_bolt_factor,
+        filler_weld_required_leg,
+    )
+
+    assert filler_bolt_factor(0.25) == pytest.approx(1.0)
+    assert filler_bolt_factor(0.5) == pytest.approx(0.9)
+    assert filler_bolt_factor(1.0) == pytest.approx(0.85)
+    assert filler_bolt_factor(6.0, metric=True) == pytest.approx(1.0)
+    assert filler_bolt_factor(10.0, metric=True) == pytest.approx(1.0 - 0.0154 * 4.0)
+    assert filler_weld_required_leg(0.25, 0.125) == pytest.approx(0.375)
+    assert filler_weld_required_leg(0.25, 0.125, transfers_force=True) == pytest.approx(0.25)
+
+
+def test_the_filler_reduces_the_bolt_shear() -> None:
+    plain = bolt_shear_strength(fnv=54.0, diameter=0.75, count=4)
+    filled = bolt_shear_strength(fnv=54.0, diameter=0.75, count=4, filler_thickness=0.5)
+    assert filled.nominal == pytest.approx(plain.nominal * 0.9)
+    assert any("J5.2" in note for note in filled.notes)
+
+
+def test_bearing_concrete_and_splice_j6_to_j8() -> None:
+    from opensees_studio.core.design.chapter_j import (
+        bearing_strength,
+        concrete_bearing_strength,
+        splice_strength,
+    )
+
+    bearing = bearing_strength(fy=50.0, apb=2.0)
+    assert bearing.nominal == pytest.approx(180.0)
+    assert bearing.available == pytest.approx(0.75 * 180.0)
+
+    full = concrete_bearing_strength(fc=4.0, a1=100.0)
+    assert full.nominal == pytest.approx(0.85 * 4.0 * 100.0)
+    assert full.available == pytest.approx(0.65 * full.nominal)
+    partial = concrete_bearing_strength(fc=4.0, a1=100.0, a2=400.0)
+    assert partial.nominal == pytest.approx(1.7 * 4.0 * 100.0)
+
+    splice = splice_strength(nominal=1000.0)
+    assert splice.nominal == pytest.approx(1000.0)
+    assert splice.available == pytest.approx(1000.0)

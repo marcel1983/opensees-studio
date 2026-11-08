@@ -17,6 +17,9 @@ ChapterJType = Literal[
     "plate_shear_yielding",
     "plate_shear_rupture",
     "block_shear",
+    "bearing_strength",
+    "concrete_bearing",
+    "splice",
 ]
 
 
@@ -30,6 +33,8 @@ class ChapterJCheck(BaseModel):
         "weld_leg",
         "weld_length",
         "weld_both_sides",
+        "filler_thickness",
+        "filler_transfers_force",
         "fn",
         "bolt_diameter",
         "bolt_count",
@@ -47,6 +52,11 @@ class ChapterJCheck(BaseModel):
         "anv",
         "ant",
         "uniform_tension",
+        "apb",
+        "fc",
+        "a1",
+        "a2",
+        "splice_nominal",
     )
 
     id: PositiveInt
@@ -58,6 +68,8 @@ class ChapterJCheck(BaseModel):
     weld_leg: PositiveFloat | None = None
     weld_length: PositiveFloat | None = None
     weld_both_sides: bool = True
+    filler_thickness: PositiveFloat | None = None
+    filler_transfers_force: bool = False
     # J3.1 / J3.6 bolts
     fn: PositiveFloat | None = Field(default=None, description="Nominal bolt stress Fnv or Fnt.")
     bolt_diameter: PositiveFloat | None = None
@@ -84,3 +96,12 @@ class ChapterJCheck(BaseModel):
     anv: PositiveFloat | None = None
     ant: PositiveFloat | None = None
     uniform_tension: bool = True
+    apb: PositiveFloat | None = Field(default=None, description="Projected bearing area for J7-1.")
+    fc: PositiveFloat | None = Field(default=None, description="Concrete compressive strength f'c.")
+    a1: PositiveFloat | None = Field(
+        default=None, description="Steel area bearing on the concrete."
+    )
+    a2: PositiveFloat | None = Field(default=None, description="Concentric supporting area A2.")
+    splice_nominal: PositiveFloat | None = Field(
+        default=None, description="Nominal strength of the smaller spliced section."
+    )

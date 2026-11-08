@@ -36,6 +36,9 @@ _TYPES = (
     ("Plate shear yielding (J4.3)", "plate_shear_yielding"),
     ("Plate shear rupture (J4.4)", "plate_shear_rupture"),
     ("Block shear (J4.5)", "block_shear"),
+    ("Bearing strength (J7.1)", "bearing_strength"),
+    ("Concrete bearing (J8)", "concrete_bearing"),
+    ("Groove-welded splice (J6)", "splice"),
 )
 
 
@@ -95,6 +98,12 @@ class ChapterJDialog(FittedDialog):
         self._weld_both = QCheckBox("Both sides")
         self._weld_both.setChecked(True)
         weld.addRow("Sides:", self._weld_both)
+        self._filler_thickness = FloatField()
+        self._filler_thickness.setRange(1e-9, 1e9)
+        self._filler_thickness.setValue(0.0)
+        weld.addRow("Filler thickness (J5):", self._filler_thickness)
+        self._filler_transfers = QCheckBox("The filler transfers force")
+        weld.addRow("Filler:", self._filler_transfers)
         layout.addWidget(self._weld_group)
 
         self._bolt_group = QGroupBox("Bolts (J3.1 / J3.6)")
@@ -130,6 +139,10 @@ class ChapterJDialog(FittedDialog):
         self._deformation = QCheckBox("Deformation is a design consideration")
         self._deformation.setChecked(True)
         bolt.addRow("Bearing:", self._deformation)
+        self._bolt_filler = FloatField()
+        self._bolt_filler.setRange(1e-9, 1e9)
+        self._bolt_filler.setValue(0.0)
+        bolt.addRow("Filler thickness (J5.2):", self._bolt_filler)
         layout.addWidget(self._bolt_group)
 
         self._slip_group = QGroupBox("Slip-critical (J3.4)")
@@ -174,6 +187,26 @@ class ChapterJDialog(FittedDialog):
         self._uniform = QCheckBox("Uniform tension (Ubs = 1.0)")
         self._uniform.setChecked(True)
         plate.addRow("Block shear:", self._uniform)
+        self._apb = FloatField()
+        self._apb.setRange(1e-9, 1e12)
+        self._apb.setValue(2.0 * self._unit_l**2)
+        plate.addRow("Projected bearing area Apb:", self._apb)
+        self._fc = FloatField()
+        self._fc.setRange(1e-9, 1e12)
+        self._fc.setValue(4.0 * self._unit_s)
+        plate.addRow("Concrete f'c:", self._fc)
+        self._a1 = FloatField()
+        self._a1.setRange(1e-9, 1e12)
+        self._a1.setValue(100.0 * self._unit_l**2)
+        plate.addRow("Concrete A1:", self._a1)
+        self._a2 = FloatField()
+        self._a2.setRange(1e-9, 1e12)
+        self._a2.setValue(0.0)
+        plate.addRow("Concrete A2 (0 = full area):", self._a2)
+        self._splice_nominal = FloatField()
+        self._splice_nominal.setRange(1e-9, 1e12)
+        self._splice_nominal.setValue(1000.0 * self._unit_f)
+        plate.addRow("Splice nominal strength:", self._splice_nominal)
         layout.addWidget(self._plate_group)
 
         row = QHBoxLayout()
@@ -207,7 +240,15 @@ class ChapterJDialog(FittedDialog):
         self._bolt_group.setEnabled(kind in ("bolt_shear", "bolt_tension", "bolt_bearing"))
         self._slip_group.setEnabled(kind == "slip_critical")
         self._plate_group.setEnabled(
-            kind in ("plate_shear_yielding", "plate_shear_rupture", "block_shear")
+            kind
+            in (
+                "plate_shear_yielding",
+                "plate_shear_rupture",
+                "block_shear",
+                "bearing_strength",
+                "concrete_bearing",
+                "splice",
+            )
         )
         self._summary.setText(
             "Only the fields used by the selected check are read. "
@@ -219,6 +260,14 @@ class ChapterJDialog(FittedDialog):
         return max(used, default=0) + 1
 
     def _candidate(self) -> ChapterJCheck:
+        kind = str(self._type.currentData())
+        filler = (
+            self._filler_thickness.value()
+            if kind == "fillet_weld"
+            else self._bolt_filler.value()
+            if kind == "bolt_shear"
+            else 0.0
+        )
         return ChapterJCheck(
             id=self._next_id(),
             name=self._name.text().strip(),
@@ -228,6 +277,8 @@ class ChapterJDialog(FittedDialog):
             weld_leg=self._weld_leg.value(),
             weld_length=self._weld_length.value(),
             weld_both_sides=self._weld_both.isChecked(),
+            filler_thickness=filler or None,
+            filler_transfers_force=self._filler_transfers.isChecked(),
             fn=self._fn.value(),
             bolt_diameter=self._bolt_diameter.value(),
             bolt_count=int(self._bolt_count.value()),
@@ -245,6 +296,11 @@ class ChapterJDialog(FittedDialog):
             anv=self._anv.value(),
             ant=self._ant.value(),
             uniform_tension=self._uniform.isChecked(),
+            apb=self._apb.value(),
+            fc=self._fc.value(),
+            a1=self._a1.value(),
+            a2=self._a2.value() or None,
+            splice_nominal=self._splice_nominal.value(),
         )
 
     def _add(self) -> None:
@@ -288,6 +344,8 @@ class ChapterJDialog(FittedDialog):
         self._weld_leg.setValue(item.weld_leg or 0.25 * self._unit_l)
         self._weld_length.setValue(item.weld_length or 10.0 * self._unit_l)
         self._weld_both.setChecked(item.weld_both_sides)
+        self._filler_thickness.setValue(item.filler_thickness or 0.0)
+        self._filler_transfers.setChecked(item.filler_transfers_force)
         self._fn.setValue(item.fn or 54.0 * self._unit_s)
         self._bolt_diameter.setValue(item.bolt_diameter or 0.75 * self._unit_l)
         self._bolt_count.setValue(float(item.bolt_count or 4))
@@ -296,6 +354,7 @@ class ChapterJDialog(FittedDialog):
         self._edge.setValue(item.edge_distance or 1.5 * self._unit_l)
         self._hole.setValue(item.hole_diameter or 0.8125 * self._unit_l)
         self._deformation.setChecked(item.deformation)
+        self._bolt_filler.setValue(item.filler_thickness or 0.0)
         self._mu.setValue(item.mu or 0.3)
         self._tb.setValue(item.tb or 28.0 * self._unit_f)
         self._slip_planes.setValue(float(item.slip_planes or 1))
@@ -307,6 +366,11 @@ class ChapterJDialog(FittedDialog):
         self._anv.setValue(item.anv or 4.375 * self._unit_l**2)
         self._ant.setValue(item.ant or 1.0 * self._unit_l**2)
         self._uniform.setChecked(item.uniform_tension)
+        self._apb.setValue(item.apb or 2.0 * self._unit_l**2)
+        self._fc.setValue(item.fc or 4.0 * self._unit_s)
+        self._a1.setValue(item.a1 or 100.0 * self._unit_l**2)
+        self._a2.setValue(item.a2 or 0.0)
+        self._splice_nominal.setValue(item.splice_nominal or 1000.0 * self._unit_f)
         self._update_fields()
 
     def checks(self) -> list[ChapterJCheck]:

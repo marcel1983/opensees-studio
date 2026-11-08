@@ -7,6 +7,17 @@ that this is pre-alpha: minor and patch releases may change the `.osmodel`
 schema (it carries a `schema_version`, and a file from a newer build is now
 refused instead of silently downgraded).
 
+## [Unreleased]
+
+### Added
+
+- **AISC 360 Chapter J, J5–J9.** Fillers (J5.1 weld leg increase and J5.2
+  bolt shear factor), groove-welded splices (J6), bearing strength (J7-1) and
+  concrete bearing under a column base (J8-1/J8-2). The Chapter J editor adds
+  the bearing, concrete and splice check types and the filler fields; anchor
+  rods use the J3 bolt tension/shear checks and the ACI 318 embedment design
+  is noted as out of scope. J10.6 panel zone remains in the SMF joint table.
+
 ## [0.0.50] - 2026-11-07
 
 ### Added
