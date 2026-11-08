@@ -319,26 +319,26 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   density and yield stress come from the material property sets, and every
   value is converted from the file's declared units. A file written by File →
   Export → IFC imports back to the same model.
-- **Design** — Design → Steel Frame Check (AISC 360-16, LRFD or ASD): every
-  frame member whose section is a W, M, S or HP shape gets its tension (D2-1,
-  and D2-2 when a net area and shear-lag factor are given), compression (E3, E4,
-  E7), flexure (F2, F3, F4 or F5 by web slenderness, F6), shear (G2, G6) and H1
-  interaction ratios — channels (E4, F2), tees (F9), equal-leg angles (F10),
-  rectangular HSS (F7, G4) and round HSS and pipes (F8, G5) too — over the
-  combinations already run, checked at 25 stations with each station's own
-  axial force, moments and shears, with `Cb`
+- **Design** — AISC 360-16 member check (LRFD or ASD) for W, M, S, HP,
+  channels, tees, equal-leg angles, rectangular and round HSS and pipes:
+  tension (D2), compression (E3, E4, E7), flexure (F2–F10), shear (G2–G6) and
+  H1 interaction over the combinations already run, at 25 stations, with `Cb`
   from the moment diagram and per-member K, Lb, Cb, net area and shear-lag
   overrides; an optional **B1 P-δ amplification** (AISC 360-16 C2.1b) covers
-  the member curvature a first-order analysis leaves out; a **seismic system**
-  (AISC 341-22) adds the Table D1.1 width-to-thickness check for its ductility
-  class, with `Ry` (1.1 default) and `Ca`; failing members can be
-  selected in the model, and Design →
-  Display Steel Ratios on Model paints every member by its ratio (blue to red,
-  grey when not designed). The report prints the check. Design → Generate
-  Notional Loads (DAM) writes the AISC 360 C2-1 `0.002 α Yi` pattern (α = 1.0
-  LRFD, 1.6 ASD) for the Direct Analysis Method. Design → Storey
-  Drift Check compares amplified storey drifts with ASCE 7, NCh433 or Eurocode 8
-  limits. The settings are saved with the project.
+  the member curvature a first-order analysis leaves out. A **seismic system**
+  (AISC 341-22) adds the Table D1.1 width-to-thickness check with `Ry` and
+  `Ca`, the SMF joint checks (E3.4a, panel zone J10.6 and continuity plates
+  E3.6f), the SCBF F2.3 capacity design and F2.5b brace limits, and the OCBF
+  F1.4/F1.5/F1.6 coverage. Separate dialogs edit the **AISC 358-22 RBS
+  connections** (5.7 and 5.5 web connection), the **SCBF gusset plates**
+  (Whitmore, yielding, buckling, F2.6c demands and weld), the **SCBF column
+  splices** (F2.6d) and the **AISC 360 Chapter J connection checks** (J2–J10).
+  Design → Display Steel Ratios paints every member by its ratio; Design →
+  Generate Notional Loads writes the AISC 360 C2-1 `0.002 α Yi` pattern
+  (α = 1.0 LRFD, 1.6 ASD); Design → Storey Drift Check compares amplified
+  storey drifts with ASCE 7, NCh433 or Eurocode 8. The report and the
+  calculation memory print the member, joint, connection, gusset, splice and
+  Chapter J checks. The settings are saved with the project.
 - **Export** — the model, with or without one analysis case, as a plain
   OpenSeesPy script generated from the same command sequence the solver
   receives, so it reproduces the application's numbers; or as **IFC4** (File →

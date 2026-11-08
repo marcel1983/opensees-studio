@@ -259,7 +259,7 @@ class ChapterJDialog(FittedDialog):
         self._j10_lb = FloatField()
         self._j10_lb.setRange(1e-6, 1e9)
         self._j10_lb.setValue(2.0 * self._unit_l)
-        j10.addRow("Bearing length lb:", self._j10_lb)
+        j10.addRow("Bearing length lb / unbraced Lb:", self._j10_lb)
         self._j10_end = FloatField()
         self._j10_end.setRange(1e-6, 1e9)
         self._j10_end.setValue(20.0 * self._unit_l)

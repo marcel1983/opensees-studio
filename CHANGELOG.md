@@ -7,6 +7,16 @@ that this is pre-alpha: minor and patch releases may change the `.osmodel`
 schema (it carries a `schema_version`, and a file from a newer build is now
 refused instead of silently downgraded).
 
+## [Unreleased]
+
+### Changed
+
+- Documentation: the in-app help for the calculation memory, report, steel
+  check and Chapter J now lists the seismic joints, connections, gussets,
+  splices and J10 records; the README, ADR-0004 and the tutorial index point
+  to the AISC 341/358/Chapter J dialogs; the verification manual adds D-14 for
+  J5-J8.
+
 ## [0.0.52] - 2026-11-08
 
 ### Added

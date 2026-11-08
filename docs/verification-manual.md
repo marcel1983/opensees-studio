@@ -14,7 +14,7 @@ Units are SI (m, N, kg, s) for the V cases and kip-inch for the D (design)
 cases, as in the AISC examples. Errors below 1e-6 are floating-point noise
 and are printed as `< 1e-6`.
 
-**30 of 30 cases pass.**
+**31 of 31 cases pass.**
 
 | Case | Title | Group | Max. error | Verdict |
 |---|---|---|---|---|
@@ -48,6 +48,7 @@ and are printed as `< 1e-6`.
 | [D-11](#d-11) | AISC 341: OCBF brace slenderness | Design, AISC 341-22 | < 1e-06 | ✅ pass |
 | [D-12](#d-12) | AISC 360 Chapter J: weld, bolts and block shear | Design, AISC 360-16 | 1.1e-05 | ✅ pass |
 | [D-13](#d-13) | AISC 360 Chapter J: concentrated forces | Design, AISC 360-16 | 2.2e-06 | ✅ pass |
+| [D-14](#d-14) | AISC 360 Chapter J: fillers, splices and bearing | Design, AISC 360-16 | < 1e-06 | ✅ pass |
 
 <a id="v-01"></a>
 
@@ -462,3 +463,19 @@ and are printed as `< 1e-6`.
 | Web sidesway nominal J10-6 | kip | 5783.04 | 5783.04 | < 1e-06 | 2e-03 | ✅ |
 | Web sidesway nominal J10-7 | kip | 983.04 | 983.04 | < 1e-06 | 2e-03 | ✅ |
 | Web compression nominal J10-8 | kip | 301.04 | 301.04 | < 1e-06 | 2e-03 | ✅ |
+
+<a id="d-14"></a>
+
+## D-14 — AISC 360 Chapter J: fillers, splices and bearing
+
+**Model.** 1/2 in. filler; 1/4 in. weld leg with a 1/8 in. filler; 1000 kip splice; 50 ksi bearing on 2 in.2; f'c = 4 ksi, A1 = 100 in.2 and A2 = 400 in.2.
+
+**Reference.** J5.1/J5.2, J6, J7-1 and J8-2 with the AISC 360 factors; J9 uses the J3 bolt checks.
+
+| Quantity | Unit | OpenSees Studio | Reference | Rel. error | Tolerance | |
+|---|---|---|---|---|---|---|
+| Filler bolt factor J5.2 | - | 0.9 | 0.9 | < 1e-06 | 1e-09 | ✅ |
+| Filler weld leg J5.1a | in | 0.375 | 0.375 | < 1e-06 | 1e-09 | ✅ |
+| Groove-welded splice nominal J6 | kip | 1000 | 1000 | < 1e-06 | 1e-09 | ✅ |
+| Bearing nominal J7-1 | kip | 180 | 180 | < 1e-06 | 1e-09 | ✅ |
+| Concrete bearing nominal J8-2 | kip | 680 | 680 | < 1e-06 | 1e-09 | ✅ |

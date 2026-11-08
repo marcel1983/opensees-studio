@@ -132,7 +132,13 @@ class ChapterJCheck(BaseModel):
     fillet_k: PositiveFloat | None = Field(
         default=None, description="Distance from the flange face to the web toe of the fillet."
     )
-    bearing_length: PositiveFloat | None = Field(default=None, description="Length of bearing lb.")
+    bearing_length: PositiveFloat | None = Field(
+        default=None,
+        description=(
+            "Length of bearing lb (J10.1-J10.3 and J10.5) or the unbraced "
+            "length Lb of the compression flange (J10.4)."
+        ),
+    )
     distance_to_end: PositiveFloat | None = Field(
         default=None, description="Distance from the concentrated force to the member end."
     )
