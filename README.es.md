@@ -121,6 +121,9 @@ script o un notebook de Jupyter: la interfaz es una forma de usarlo, no la únic
   se interpretan variables, `expr`, `foreach`, `if`, `proc`, `source` y `for`,
   nunca se ejecutan), IFC y un reporte de cálculo HTML/PDF.
 
+El giro de ejes locales se escribe en la exportación S2K; la importación S2K lo
+aproxima a la orientación de sección más cercana (IFC lo conserva exacto).
+
 **La importación de S2K está en proceso:** las tablas que lee, las
 aproximaciones y lo que no soporta están en
 [docs/sap2000-import-status.md](docs/sap2000-import-status.md).

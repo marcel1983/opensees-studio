@@ -1170,10 +1170,10 @@ dimension. The log names both systems. A file without units is read as kN-m.
   only the in-plane components and reports the rest.
 - **Grid lines** of the global system, with their labels.
 - **Frames** as elastic beam-columns: the section and material assigned to each
-  (a frame's own material overrides the section's), the local-axis angle, the
-  mass (unit mass × area) and the weight (unit weight × area, read by a load
-  pattern's self weight). Shear areas make a Timoshenko member, as SAP2000
-  includes shear deformation.
+  (a frame's own material overrides the section's), the local-axis angle (used
+  to map the section orientation), the mass (unit mass × area) and the weight
+  (unit weight × area, read by a load pattern's self weight). Shear areas make a
+  Timoshenko member, as SAP2000 includes shear deformation.
 - **Frame sections**: rectangular, I, pipe, box/tube and general by their
   property columns (the dimensions give closed-form values when those are
   missing), with the property modifiers applied to the values; other shapes by
@@ -1263,6 +1263,8 @@ never dropped silently:
   condition;
 - frame end offsets, length offsets, insertion points, P-Delta/Corotational
   transformations, axial/shear releases and curved frames (imported straight);
+- an exact local-axis angle: the SAP2000 angle maps the section orientation and
+  is not stored as this program's `local_axis_angle` (IFC carries it exactly);
 - rigid links, equalDOF and body constraints; storeys, groups and section cuts;
   a 2D or multi-level diaphragm;
 - gravity loads, moment loads on frames, some point-load directions, a
@@ -1350,8 +1352,8 @@ been checked by CSI or in SAP2000.
 - Elastic beam-columns on elastic sections, with their end releases,
   partial-fixity springs and per-frame property modifiers. Each section is
   written with SAP2000's local 2 on this program's local z (local y in 2D), and
-  a member whose axes differ from
-  SAP2000's default gets the local-axis angle that makes them match. A section
+  a member whose axes differ from SAP2000's default gets the local-axis angle
+  that makes them match, including the member's `local_axis_angle`. A section
   with a shape (rectangle, I, pipe, tube) is written as that shape, any other as
   a general section; every one carries its area, inertias, torsion constant and
   shear areas (0 when the member has no shear deformation).
@@ -3707,6 +3709,8 @@ of a diagram follows from it. A member's own rotation about local x is set in
 - IFC export writes the rotation in the member placement and the
   `OpenSeesStudio_Frame` / `OpenSeesStudio_Member` property sets, so the
   section comes back turned.
+- **SAP2000** — the S2K export writes the angle; the S2K import still maps it to
+  the nearest section orientation, so the exact round-trip is IFC-only for now.
 
 # Mechanics
 The local x axis always runs from end i to end j. The angle turns the local y
