@@ -102,7 +102,9 @@ script o un notebook de Jupyter: la interfaz es una forma de usarlo, no la únic
   conexión de alma 5.5), las **placas de unión de SCBF** (Whitmore, fluencia,
   pandeo, demandas F2.6c y soldadura), los **empalmes de columna de SCBF**
   (F2.6d) y los **chequeos de conexión del Capítulo J de AISC 360** (J2–J10).
-  Design → Display Steel Ratios pinta cada miembro según su razón; Design →
+  Assign → Frame → Local Axes gira la sección de un miembro 3D alrededor de su
+  eje; la exportación e importación IFC conservan el giro. Design → Display
+  Steel Ratios pinta cada miembro según su razón; Design →
   Generate Notional Loads genera el patrón `0.002 α Yi` de AISC 360 C2-1
   (α = 1,0 LRFD y 1,6 ASD); Design → Storey Drift Check compara las derivas
   amplificadas con ASCE 7, NCh433 o Eurocódigo 8. El reporte y la memoria de

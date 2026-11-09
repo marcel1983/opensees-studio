@@ -333,7 +333,9 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   connections** (5.7 and 5.5 web connection), the **SCBF gusset plates**
   (Whitmore, yielding, buckling, F2.6c demands and weld), the **SCBF column
   splices** (F2.6d) and the **AISC 360 Chapter J connection checks** (J2–J10).
-  Design → Display Steel Ratios paints every member by its ratio; Design →
+  Assign → Frame → Local Axes rotates a 3D member's section about its axis;
+  IFC export and import preserve it. Design → Display Steel Ratios paints every
+  member by its ratio; Design →
   Generate Notional Loads writes the AISC 360 C2-1 `0.002 α Yi` pattern
   (α = 1.0 LRFD, 1.6 ASD); Design → Storey Drift Check compares amplified
   storey drifts with ASCE 7, NCh433 or Eurocode 8. The report and the

@@ -174,6 +174,7 @@ from opensees_studio.views.dialogs import (
     AssignGeomTransfDialog,
     AssignHingeDialog,
     AssignLoadDialog,
+    AssignLocalAxesDialog,
     AssignMassesDialog,
     AssignMaterialDialog,
     AssignPointElementLoadDialog,
@@ -575,6 +576,7 @@ class MainWindow(QMainWindow):
         self._act_assign_section = QAction("S&ection…", self)
         self._act_assign_material = QAction("&Material…", self)
         self._act_assign_geom_transf = QAction("&Geometric Transformation…", self)
+        self._act_assign_local_axes = QAction("&Local Axes…", self)
         self._act_assign_integration = QAction("Beam &Integration…", self)
         self._act_assign_releases = QAction("&Releases/Partial Fixity…", self)
         self._act_assign_end_offsets = QAction("&End (Length) Offsets…", self)
@@ -844,6 +846,7 @@ class MainWindow(QMainWindow):
             self._act_assign_section,
             self._act_assign_material,
             self._act_assign_geom_transf,
+            self._act_assign_local_axes,
             self._act_assign_integration,
             None,
             self._act_assign_releases,
@@ -1353,6 +1356,7 @@ class MainWindow(QMainWindow):
         self._act_assign_section.triggered.connect(self._on_assign_section)
         self._act_assign_material.triggered.connect(self._on_assign_material)
         self._act_assign_geom_transf.triggered.connect(self._on_assign_geom_transf)
+        self._act_assign_local_axes.triggered.connect(self._on_assign_local_axes)
         self._act_assign_integration.triggered.connect(self._on_assign_integration)
         self._act_assign_releases.triggered.connect(self._on_assign_releases)
         self._act_assign_end_offsets.triggered.connect(self._on_assign_end_offsets)
@@ -4778,6 +4782,24 @@ class MainWindow(QMainWindow):
             "Geometric Transformation", ids, {"geom_transf": dlg.transf_type()}
         )
 
+    def _on_assign_local_axes(self) -> None:
+        """Assign > Frame > Local Axes: rotate the member's section about its axis."""
+        project = self._vm.project
+        ids = self._selected_accepting({"local_axis_angle": 0.0})
+        if project is None or not ids:
+            QMessageBox.information(self, "Local Axes", "Select one or more frame elements first.")
+            return
+        current = {float(getattr(project.element(i), "local_axis_angle", 0.0) or 0.0) for i in ids}
+        dlg = AssignLocalAxesDialog(
+            len(ids),
+            project.ndm,
+            current.pop() if len(current) == 1 else None,
+            self,
+        )
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        self._assign_element_fields("Local Axes", ids, {"local_axis_angle": dlg.angle()})
+
     def _on_assign_integration(self) -> None:
         """Assign > Frame > Beam Integration: rule and points of force/disp beam-columns."""
         project = self._vm.project
@@ -6640,6 +6662,7 @@ class MainWindow(QMainWindow):
         self._act_assign_frame_point_load.setEnabled(has_project and has_selected_elements)
         self._act_assign_hinge.setEnabled(has_project and has_selected_elements)
         self._act_assign_geom_transf.setEnabled(has_project and has_selected_elements)
+        self._act_assign_local_axes.setEnabled(has_project and has_selected_elements)
         self._act_assign_integration.setEnabled(has_project and has_selected_elements)
         for action in (
             self._act_assign_releases,

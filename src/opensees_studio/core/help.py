@@ -1236,7 +1236,9 @@ plane (global +X for a vertical member), turned by its local-axis angle; OpenSee
 gives a 3D beam its local z up. Per member the importer finds where local 2
 lies and maps `I33`/`I22`, `AS2`/`AS3` and the M2/M3 releases onto this
 program's axes (a section then used turned ends in "(axes 2-3)"). Loads are
-re-projected, so they keep their direction.
+re-projected, so they keep their direction. The SAP2000 angle is used for that
+mapping; it is not stored as this program's own local-axis rotation (the IFC
+round-trip carries that one).
 
 # Damaged files
 Every error names the table and the line it came from ("Frame 3 (CONNECTIVITY -
@@ -1969,9 +1971,11 @@ and a density without one in kg/m³.
   angle, rectangle, round and rectangular hollow, or any closed polygon), or
   from Pset_ProfileMechanical. A member with no profile at all gets a 300 mm
   square placeholder, which the log reports.
-- A member whose profile is turned 90° from this application's local axes gets a
-  section with Iy and Iz exchanged ("… (rotated 90°)"), since frames here have no
-  roll angle.
+- A member whose profile is turned 90° in a file without the local-axis
+  property gets a section with Iy and Iz exchanged ("… (rotated 90°)"). A file
+  written by this version carries the exact angle in `OpenSeesStudio_Frame` /
+  `OpenSeesStudio_Member`, so the section keeps its Iy and Iz and the member
+  turns instead.
 - E, G and ν come from Pset_MaterialMechanical and the density (for self
   weight) from Pset_MaterialCommon. A material with no modulus gets the
   defaults of its kind (steel or concrete, from its category or name). Steel
@@ -3677,10 +3681,39 @@ proportion to the axial force. The **critical load** is where the two cancel; a
 model that becomes singular as the load rises is telling you it has reached it.
 The transformation also defines the local axes: for a member whose axis is
 vertical, the local x/y orientation comes from the transformation, and the sign
-of a diagram follows from it.
+of a diagram follows from it. A member's own rotation about local x is set in
+**Assign → Frame → Local Axes**.
 """,
+            "assign.local_axes",
             "assign.integration",
             "mechanics.static",
+        ),
+        "assign.local_axes": _t(
+            "Assign → Frame → Local Axes",
+            "Assign — frame",
+            "Rotate a member's local y/z axes about its longitudinal axis.",
+            """
+# Values
+- **Angle about local x** — degrees, positive by the right-hand rule about
+  local x (from end i to end j). 0° keeps the default orientation from the
+  member geometry.
+- **2D models** — a 2D frame has one in-plane bending axis, so the angle is 0°.
+  Use a 3D model when the section must turn.
+- The rotation changes the axes that carry distributed and point loads, the
+  force diagrams, the self weight, the end releases and the section extrusion;
+  it does not change the section's A, Iy, Iz or J.
+- **Inspect it** — turn on **View → Show Extruded Sections**: each member's
+  section is drawn in its local axes.
+- IFC export writes the rotation in the member placement and the
+  `OpenSeesStudio_Frame` / `OpenSeesStudio_Member` property sets, so the
+  section comes back turned.
+
+# Mechanics
+The local x axis always runs from end i to end j. The angle turns the local y
+and z axes about it; the section, its loads and its diagrams turn with them.
+""",
+            "assign.geom_transf",
+            "assign.insertion_point",
         ),
         "assign.integration": _t(
             "Assign → Frame → Beam Integration",
@@ -3967,7 +4000,8 @@ pressure under them.
   X / Y**, or the **shell normal** (local 3: the right-hand turn of its nodes
   1-2-3-4, so a pressure on a wall, a tank or a sloped roof). A pressure that
   should push *outward* from a tank needs the shells' normals to point outward:
-  check them with the local axes display.
+  check them with **View → Show Extruded Sections**, which draws each section in
+  its local axes.
 """,
             "define.joint_patterns",
             "assign.joint_pattern",
@@ -5692,6 +5726,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_assign_section": "assign.section",
     "_act_assign_material": "assign.material",
     "_act_assign_geom_transf": "assign.geom_transf",
+    "_act_assign_local_axes": "assign.local_axes",
     "_act_assign_integration": "assign.integration",
     "_act_assign_distributed_load": "assign.distributed_load",
     "_act_assign_frame_point_load": "assign.frame_point_load",
