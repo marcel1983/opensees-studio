@@ -286,14 +286,17 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   SAP2000 model as a new project: joints, restraints, added joint masses and
   support springs, grid lines, frames with their sections (rectangular, I, pipe,
   tube, general; a nonprismatic one is subdivided into elastic pieces, 12 by
-  default, from its segment table), materials, local-axis
-  angles, end releases, per-frame property modifiers and rigid diaphragms
+  default, from its segment table), materials, local-axis angles (mapped to the
+  nearest section orientation), end releases, per-frame property modifiers and
+  rigid diaphragms
   (with their floating centre-of-mass master), load patterns
   with joint, distributed and point frame loads, temperature loads, support
   settlements and frame added mass, linear static, eigen modal and
   response-spectrum cases, combinations and four-node shells, scaled from the
   file's `CurrUnits` to the nearest unit system. SAP2000's local 2 and 3 are mapped onto OpenSees'
   axes member by member, and every table it does not read is named in the log.
+  The exact local-axis rotation is written on S2K export; the S2K import maps
+  it to the nearest section orientation (IFC carries it exactly).
   Written from the text format alone (SAP2000 is a trademark of Computers and
   Structures, Inc.; no CSI software is used). **The S2K import is a work in
   progress:** the tables it reads, the approximations and the unsupported
@@ -351,8 +354,8 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   values in an `OpenSeesStudio_Section` property set so the file imports back
   unchanged. Uses `ifcopenshell`, which the desktop install brings.
   File → Export → SAP2000 Text writes the frame model back as SAP2000 text
-  tables (what the import reads, so the file imports back to the same model)
-  and reports what it leaves out.
+  tables (what the import reads, so the file imports back to the same model),
+  including each member's local-axis angle, and reports what it leaves out.
 - **Meshing** — Edit → Mesh: split members into pieces no longer than a target
   size (their section, material and distributed loads follow them), subdivide
   shells `m x n` in their own natural coordinates (a general quadrilateral meshes

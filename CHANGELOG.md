@@ -7,6 +7,15 @@ that this is pre-alpha: minor and patch releases may change the `.osmodel`
 schema (it carries a `schema_version`, and a file from a newer build is now
 refused instead of silently downgraded).
 
+## [Unreleased]
+
+### Changed
+
+- Documentation: the SAP2000 import status, README and in-app help now state
+  that the S2K import maps the local-axis angle to the nearest section
+  orientation and does not set `local_axis_angle`; the S2K export does write
+  it, and IFC carries the exact angle.
+
 ## [0.0.54] - 2026-11-09
 
 ### Added
