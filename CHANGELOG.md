@@ -7,6 +7,17 @@ that this is pre-alpha: minor and patch releases may change the `.osmodel`
 schema (it carries a `schema_version`, and a file from a newer build is now
 refused instead of silently downgraded).
 
+## [Unreleased]
+
+### Added
+
+- **Frame local axes.** Assign → Frame → Local Axes rotates a 3D member's
+  section about its longitudinal axis (degrees, right-hand rule about local
+  x). The rotation is used by the runner, loads, diagrams, self weight,
+  releases and IFC export/import; IFC writes it in the member placement and
+  the `OpenSeesStudio_Frame` / `OpenSeesStudio_Member` property sets. 2D models
+  keep their single in-plane bending axis and only allow 0°.
+
 ## [0.0.53] - 2026-11-08
 
 ### Changed

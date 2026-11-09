@@ -9,6 +9,7 @@ from opensees_studio.views.dialogs.assign_masses import AssignMassesDialog
 from opensees_studio.views.dialogs.assign_property import (
     AssignBeamIntegrationDialog,
     AssignGeomTransfDialog,
+    AssignLocalAxesDialog,
     AssignMaterialDialog,
     AssignSectionDialog,
 )
@@ -81,6 +82,7 @@ __all__ = [
     "AssignGeomTransfDialog",
     "AssignHingeDialog",
     "AssignLoadDialog",
+    "AssignLocalAxesDialog",
     "AssignMassesDialog",
     "AssignMaterialDialog",
     "AssignPointElementLoadDialog",

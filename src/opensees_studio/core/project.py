@@ -591,6 +591,14 @@ class Project(BaseModel):
                         f"Element {el.id} ({el.type}) needs t_material_id and my_material_id "
                         "in a 3D model."
                     )
+            if (
+                isinstance(el, FRAME_ELEMENT_CLASSES)
+                and self.ndm == 2
+                and abs(float(getattr(el, "local_axis_angle", 0.0) or 0.0)) > 1e-9
+            ):
+                problems.append(
+                    f"Element {el.id} has a local-axis rotation: that needs a 3D model."
+                )
             if isinstance(el, MVLEMElement):
                 if self.ndm != 2 or self.ndf != 3:
                     problems.append(
