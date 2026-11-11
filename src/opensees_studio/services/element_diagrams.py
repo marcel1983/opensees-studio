@@ -325,6 +325,7 @@ def element_diagram_bundle(
     step: int = -1,
     stations: bool = True,
     label: str = "",
+    case_name: str | None = None,
 ) -> ElementDiagramBundle:
     """Build every curve of one member for the element window."""
     element = _element(project, element_id)
@@ -370,7 +371,7 @@ def element_diagram_bundle(
         element_name=element.name,
         element_type=type(element).__name__,
         length=length,
-        case_name=results.case_name,
+        case_name=case_name or results.case_name,
         bound=label,
         forces=forces,
         absolute=absolute,
@@ -396,6 +397,7 @@ def combine_element_bundles(
             notes.append(note)
     return replace(
         upper,
+        bound="",
         forces=(*upper.forces, *lower.forces),
         notes=tuple(notes),
     )

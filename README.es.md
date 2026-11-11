@@ -43,7 +43,9 @@ agrega una interfaz visual para:
   historias en el tiempo, lazos de histéresis, tablas de pisos.
 - Con un diagrama de fuerzas o la deformada en pantalla, el clic derecho sobre
   un miembro abre sus diagramas de axial, cortante, momento, deformación
-  absoluta/relativa y cargas aplicadas, uno al lado del otro.
+  absoluta/relativa y cargas aplicadas en una cuadrícula 2 x 3, con los valores
+  extremos etiquetados, un selector de resultados y un cursor de distancia que
+  informa el valor en cualquier sección.
 - Correr muchos archivos en lote (**File → Run Batch…**, o
   `python -m opensees_studio.batch carpeta/ --jobs 4`): cada proyecto guarda
   sus resultados al lado y, al abrirlo después, se pueden ver sin volver a

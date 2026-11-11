@@ -133,6 +133,7 @@ from opensees_studio.services.deformation import (
     static_to_deformation,
 )
 from opensees_studio.services.element_diagrams import (
+    ElementDiagramBundle,
     combine_element_bundles,
     element_diagram_bundle,
 )
@@ -3464,37 +3465,27 @@ class MainWindow(QMainWindow):
 
     def _show_element_diagrams(self, element_id: int) -> None:
         """Build and show the diagram window of one frame member."""
+        bundle = self._element_diagram_bundle(element_id)
         project = self._vm.project
-        if project is None:
+        if bundle is None or project is None:
             return
-        results = self._latest_results
-        if isinstance(results, CombinationResults) and self._is_envelope():
-            bundle = combine_element_bundles(
-                element_diagram_bundle(project, results.max, element_id, label="Max"),
-                element_diagram_bundle(project, results.min, element_id, label="Min"),
-            )
-        else:
-            static = self._static_result()
-            if static is None:
-                return
-            # Stations read a static case's loads back; a combination bound has
-            # no single load pattern, so its curves stay linear.
-            bundle = element_diagram_bundle(
-                project,
-                static,
-                element_id,
-                stations=isinstance(results, StaticResults),
-            )
         converter = UnitConverter.of(project.meta)
+        choices = self._element_diagram_result_choices()
+        current = self._current_result_key()
         for window in self._element_diagram_windows:
             if window.bundle.element_id == element_id:
                 window.set_bundle(bundle, converter)
+                window.set_result_choices(choices, current)
                 window.show()
                 window.raise_()
                 window.activateWindow()
                 return
         window = ElementDiagramWindow(bundle, converter, self)
         self._element_diagram_windows.append(window)
+        window.set_result_choices(choices, current)
+        window.resultChanged.connect(
+            lambda key, opened=window: self._on_element_diagram_result_changed(opened, key)
+        )
         window.destroyed.connect(
             lambda _object=None, opened=window: self._forget_element_diagram_window(opened)
         )
@@ -3502,6 +3493,63 @@ class MainWindow(QMainWindow):
         window.raise_()
         window.activateWindow()
         self._log(f"Element {element_id}: opened its diagram window.")
+
+    def _element_diagram_bundle(self, element_id: int) -> ElementDiagramBundle | None:
+        """The current result's bundle for one member, or None when it has none."""
+        project = self._vm.project
+        if project is None:
+            return None
+        results = self._latest_results
+        case_name = results.combination_name if isinstance(results, CombinationResults) else None
+        if isinstance(results, CombinationResults) and self._is_envelope():
+            return combine_element_bundles(
+                element_diagram_bundle(
+                    project,
+                    results.max,
+                    element_id,
+                    label="Max",
+                    case_name=case_name,
+                ),
+                element_diagram_bundle(
+                    project,
+                    results.min,
+                    element_id,
+                    label="Min",
+                    case_name=case_name,
+                ),
+            )
+        static = self._static_result()
+        if static is None:
+            return None
+        # Stations read a static case's loads back; a combination bound has no
+        # single load pattern, so its curves stay linear.
+        return element_diagram_bundle(
+            project,
+            static,
+            element_id,
+            stations=isinstance(results, StaticResults),
+            case_name=case_name,
+        )
+
+    def _on_element_diagram_result_changed(self, window: ElementDiagramWindow, key: str) -> None:
+        """Switch the result from the member window, keeping that window open."""
+        results = self._results_for_key(key)
+        if results is None or not isinstance(results, StaticResults | CombinationResults):
+            window.set_result_choices(
+                self._element_diagram_result_choices(), self._current_result_key()
+            )
+            return
+        self._display_results(results)
+        if self._post_units_refresh is not None:
+            self._post_units_refresh()
+        bundle = self._element_diagram_bundle(window.bundle.element_id)
+        project = self._vm.project
+        if bundle is None or project is None:
+            return
+        window.set_bundle(bundle, UnitConverter.of(project.meta))
+        window.set_result_choices(
+            self._element_diagram_result_choices(), self._current_result_key()
+        )
 
     def _forget_element_diagram_window(self, window: ElementDiagramWindow) -> None:
         """Drop a closed window from the references that keep it alive."""
@@ -5564,30 +5612,68 @@ class MainWindow(QMainWindow):
         A combination is combined from the current case results; when some of its
         cases have none, the message says to run it from Analyze → Run.
         """
+        results = self._results_for_key(key)
+        if results is None:
+            return False
+        self._on_back_to_model()
+        self._on_analysis_finished(results)
+        return True
+
+    def _results_for_key(self, key: str) -> object | None:
+        """Resolve a ``case:<id>`` / ``combination:<id>`` key, or explain why not."""
         project = self._vm.project
         if project is None:
-            return False
+            return None
         kind, _, raw_id = key.partition(":")
-        ref_id = int(raw_id)
+        try:
+            ref_id = int(raw_id)
+        except ValueError:
+            return None
         if kind == "case":
             results = self._case_results.current(project).get(ref_id)
             if results is None:
                 self._log(f"Case {ref_id} has no current results: run it first.")
-                return False
-        else:
-            try:
-                results = self._case_results.combine(project, ref_id)
-            except (MissingCaseResultsError, ValueError, KeyError) as exc:
-                QMessageBox.information(
-                    self,
-                    "Show Results Of",
-                    f"{exc}\n\nAnalyze → Run, then pick the combination: it runs only the "
-                    "cases without current results.",
-                )
-                return False
-        self._on_back_to_model()
-        self._on_analysis_finished(results)
-        return True
+                return None
+            return cast(object, results)
+        try:
+            return cast(object, self._case_results.combine(project, ref_id))
+        except (MissingCaseResultsError, ValueError, KeyError) as exc:
+            QMessageBox.information(
+                self,
+                "Show Results Of",
+                f"{exc}\n\nAnalyze → Run, then pick the combination: it runs only the "
+                "cases without current results.",
+            )
+            return None
+
+    def _element_diagram_result_choices(self) -> list[tuple[str, str]]:
+        """Cases and combinations the member window can draw.
+
+        Modal, pushover and transient cases are left out: the window shows
+        static element forces and deformations, so offering them would only
+        replace the curves with an empty panel.
+        """
+        project = self._vm.project
+        if project is None:
+            return []
+        current = self._case_results.current(project)
+        names = {c.id: c.name for c in project.analyses}
+        choices = [
+            (f"Case: {names.get(cid, cid)}  [Static]", f"case:{cid}")
+            for cid, result in sorted(current.items())
+            if isinstance(result, StaticResults)
+        ]
+        choices += [(f"Combination: {c.name}", f"combination:{c.id}") for c in project.combinations]
+        return choices
+
+    def _current_result_key(self) -> str:
+        """The key of the result Display is showing, for the member window picker."""
+        results = self._latest_results
+        if isinstance(results, CombinationResults):
+            return f"combination:{results.case_id}"
+        if isinstance(results, StaticResults):
+            return f"case:{results.case_id}"
+        return ""
 
     def _on_select_results(self) -> None:
         """Display → Show Results Of…: switch between stored case and combination results."""

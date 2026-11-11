@@ -261,8 +261,9 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   units), time-history plots, hysteresis loops, response-spectrum SRSS / CQC,
   snapshot and video export, full-precision CSV of the result tables.
   Right-click a frame member while a force diagram or a deformed shape is on
-  screen to open that member's axial, shear, moment, absolute/relative
-  deformation and applied-load diagrams side by side.
+  screen to open its axial, shear, moment, absolute/relative deformation and
+  applied-load diagrams in a 2 x 3 grid, with the extreme values labelled, a
+  result picker and a distance cursor that reports the value at any section.
 - **A reference triad at the origin** — small red / green / blue arrows
   labelled X, Y and Z, sized from the model, so the direction the elements run
   in is never in doubt in an isometric view.

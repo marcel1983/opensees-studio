@@ -13,14 +13,16 @@ from PySide6.QtWidgets import QMenu
 
 from opensees_studio.commands import AddElementsCommand, AddNodesCommand, AddSectionsCommand
 from opensees_studio.core import (
+    CombinationTerm,
     ElasticBeamColumn,
     ElasticSection,
     LinearTimeSeries,
+    LoadCombination,
     Node,
     PlainLoadPattern,
     StaticCase,
 )
-from opensees_studio.services.results import StaticResults
+from opensees_studio.services.results import CombinationResults, StaticResults
 
 
 class _NoExecMenu(QMenu):
@@ -108,6 +110,11 @@ def test_a_right_click_on_a_member_with_a_force_diagram_opens_its_window(
     assert window.bundle.element_id == 10
     assert "Element 10" in window._header.text()
     assert window._axial.plot.listDataItems()  # the axial curve is drawn
+    assert len(window._panels) == 6  # 2 rows x 3 columns
+    assert window._axial._max_labels  # the maximum is labelled
+    window._distance.setValue(1.5)
+    assert window._axial._query_line is not None
+    assert "100" in window._axial.value.text()
     assert window._deformation._legend is not None
     assert len(window._deformation._legend.items) == 2  # absolute and relative
 
@@ -167,6 +174,35 @@ def test_a_right_click_with_a_deformed_shape_opens_the_window(qtbot, monkeypatch
 
     assert calls == []
     assert len(mw._element_diagram_windows) == 1
+
+
+@pytest.mark.gui
+def test_the_result_picker_switches_to_a_combination(qtbot) -> None:  # type: ignore[no-untyped-def]
+    mw = _window(qtbot)
+    results = _results()
+    mw._latest_results = results
+    mw._vm.project.combinations.append(
+        LoadCombination(
+            id=1,
+            name="ULS",
+            terms=[CombinationTerm(ref_id=1, factor=1.0)],
+        )
+    )
+    mw._case_results.put(mw._vm.project, results)
+    mw._on_show_force_diagram()
+    mw._show_element_diagrams(10)
+
+    window = mw._element_diagram_windows[0]
+    assert window._results.count() == 2
+    assert window._results.currentData() == "case:1"
+
+    index = window._results.findData("combination:1")
+    assert index >= 0
+    window._results.setCurrentIndex(index)
+
+    assert isinstance(mw._latest_results, CombinationResults)
+    assert window.bundle.case_name.startswith("ULS")
+    assert window._results.currentData() == "combination:1"
 
 
 @pytest.mark.gui
