@@ -7,6 +7,17 @@ that this is pre-alpha: minor and patch releases may change the `.osmodel`
 schema (it carries a `schema_version`, and a file from a newer build is now
 refused instead of silently downgraded).
 
+## [Unreleased]
+
+### Added
+
+- **Member diagram window.** With a force diagram or a deformed shape on
+  screen, right-clicking a frame member opens a window with its axial force,
+  shears, moments and torsion, absolute and relative deformations, and applied
+  span loads side by side. Without those views the right-click keeps its usual
+  menu. An envelope combination draws both bounds; the relative deformation
+  integrates the moment diagram with the section's EI when available.
+
 ## [0.0.55] - 2026-11-09
 
 ### Changed

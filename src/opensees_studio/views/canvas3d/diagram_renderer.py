@@ -71,6 +71,11 @@ class DiagramRenderer:
         self._label_actor: Any = None
 
     # ── public ──────────────────────────────────────────────────────
+    @property
+    def is_drawn(self) -> bool:
+        """True while a diagram overlay is on the plotter."""
+        return self._actor is not None
+
     def render(self, project: Project, data: DiagramData, scale: float) -> None:
         """Build and display the diagram for ``data`` at ``scale``."""
         self.clear()

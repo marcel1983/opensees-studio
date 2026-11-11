@@ -42,4 +42,6 @@
 # series have none) and typing the signature materials' discriminator: 205 -> 192.
 # Linux CI reports one more than a Windows checkout: `ctypes.WinDLL` and
 # `ctypes.get_last_error` are Windows-only in typeshed. The enforced count is 186.
-186
+# The per-element diagram window is fully typed and removed one error from the
+# backlog: 186 -> 185.
+185
