@@ -4579,6 +4579,8 @@ invisible next to the structure's size.
 - The deformed shape is what actually happened; a shape that looks wrong (a member
   straightening, a joint separating) is usually a modelling error, not a plotting
   one.
+- Right-click a member while the shape is on screen to open its member diagram
+  window (see Display → Force Diagram).
 - Display → Back to Model returns to the undeformed view.
 """,
             "display.mode_shape",
@@ -4693,6 +4695,26 @@ along each member, at the analysis step you pick.
   than drawn wrongly; if no line element returned forces the log says so.
 - The values come from the analysis results, not from a hand calculation: what
   you see is what the solver computed.
+
+# A member in detail
+- With a force diagram or a deformed shape on screen, **right-click a frame
+  member**: a window opens with nine panels in a **3 x 3 grid** (three rows,
+  three columns): axial force; shear V2; shear V3; torsion T; moment M2; moment
+  M3; absolute and relative deformations; distributed loads wx/wy/wz; and point
+  loads. The force panels draw both bounds of an envelope.
+- Each panel **labels its extreme values**, the **Results** picker switches
+  between the stored static cases and the load combinations without leaving the
+  window, and the **Units** picker changes the display system.
+- The **Distance** box places a vertical cursor on every panel and reports the
+  value of every curve at that section.
+- Without one of those views the right-click keeps its usual menu, as it does
+  on empty space or on a shell.
+- The **relative** deformation is the departure from the straight chord. For a
+  linear-elastic section it integrates the member's moment diagram with its EI;
+  otherwise it interpolates the end rotations.
+- Applied loads are the span loads of the active static case (distributed,
+  point and self weight). A combination bound has no single load pattern and
+  says so.
 """,
             "display.deformed",
             "assign.distributed_load",

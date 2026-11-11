@@ -256,10 +256,15 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   Arias / D5-95 metadata; scaling by PGA, Sa(T1) or a period range;
   TBDY-2018 design spectra (horizontal and vertical) and user target spectra;
   sine and sine-beat generators.
-- **Post-processing** — deformed shape (with scale slider), animated mode
+- **Post-processing** - deformed shape (with scale slider), animated mode
   shapes, axial / shear / moment diagrams, pushover curves (in display
   units), time-history plots, hysteresis loops, response-spectrum SRSS / CQC,
   snapshot and video export, full-precision CSV of the result tables.
+  Right-click a frame member while a force diagram or a deformed shape is on
+  screen to open its axial, shear V2/V3, torsion, moment M2/M3,
+  absolute/relative deformation and applied-load diagrams in a 3 x 3 grid, with
+  the extreme values labelled, result and units pickers, and a distance cursor
+  that reports the value at any section.
 - **A reference triad at the origin** — small red / green / blue arrows
   labelled X, Y and Z, sized from the model, so the direction the elements run
   in is never in doubt in an isometric view.
