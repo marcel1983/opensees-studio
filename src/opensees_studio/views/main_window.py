@@ -3486,6 +3486,7 @@ class MainWindow(QMainWindow):
         window.resultChanged.connect(
             lambda key, opened=window: self._on_element_diagram_result_changed(opened, key)
         )
+        window.unitsChanged.connect(self._on_element_diagram_units_changed)
         window.destroyed.connect(
             lambda _object=None, opened=window: self._forget_element_diagram_window(opened)
         )
@@ -3555,6 +3556,16 @@ class MainWindow(QMainWindow):
         """Drop a closed window from the references that keep it alive."""
         if window in self._element_diagram_windows:
             self._element_diagram_windows.remove(window)
+
+    def _on_element_diagram_units_changed(self, value: str) -> None:
+        """Change the display units from the member window's picker."""
+        try:
+            chosen = UnitSystem(value)
+        except ValueError:
+            return
+        if chosen is self._current_display_units():
+            return
+        self._set_display_units(chosen)
 
     def _canvas_context_menu(self) -> QMenu:
         """What the right-click shows: the selection's options, or grids and view."""

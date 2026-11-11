@@ -1,16 +1,17 @@
-"""Non-modal window with one member's diagrams in a 2 x 3 grid.
+"""Non-modal window with one member's diagrams in a 3 x 3 grid.
 
 Opened by right-clicking a frame element while a force diagram or a deformed
-shape is on screen. The six panels are:
+shape is on screen. The nine panels are:
 
-* row 1: axial force N; shear V2/V3; moments M2/M3 and torsion T;
-* row 2: absolute/relative deformation; distributed loads wx/wy/wz; point loads
+* row 1: axial force N; shear V2; shear V3;
+* row 2: torsion T; moment M2; moment M3;
+* row 3: absolute/relative deformation; distributed loads wx/wy/wz; point loads
   Px/Py/Pz.
 
 Each panel labels its extreme values. A result picker switches between the
-stored cases and the load combinations without leaving the window, and a
-distance box places a vertical cursor on every panel and reports the value at
-that section.
+stored cases and the load combinations without leaving the window, a units
+picker changes the display system, and a distance box places a vertical cursor
+on every panel and reports the value at that section.
 
 The data comes from :mod:`opensees_studio.services.element_diagrams`; this
 module only draws it and converts model units to the display units.
@@ -35,7 +36,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from opensees_studio.core import UnitConverter
+from opensees_studio.core import UnitConverter, UnitSystem
 from opensees_studio.services.element_diagrams import (
     ElementDiagramBundle,
     LoadSegment,
@@ -60,7 +61,7 @@ _QUERY_PEN = pg.mkPen("#ffffff", width=1, style=Qt.PenStyle.DotLine)
 
 def _unit_text(text: str) -> str:
     """Unit labels without symbols the application font cannot draw."""
-    return text.replace("·", "*").replace("×", "x")
+    return text.replace("·", "*").replace("×", "x").replace("²", "^2").replace("³", "^3")
 
 
 class _DiagramPanel(QWidget):
@@ -112,6 +113,12 @@ class _DiagramPanel(QWidget):
 
     def set_note(self, text: str) -> None:
         self.note.setText(text)
+
+    def show_empty(self, text: str) -> None:
+        """Show a reason instead of a plot with default axes."""
+        self.set_note(text)
+        self.plot.setXRange(0.0, 1.0, padding=0.0)
+        self.plot.setYRange(-1.0, 1.0, padding=0.0)
 
     def legend(self) -> Any:
         if self._legend is None:
@@ -255,6 +262,7 @@ class ElementDiagramWindow(QWidget):
     """A top-level, non-modal window for one frame element."""
 
     resultChanged = Signal(str)
+    unitsChanged = Signal(str)
 
     def __init__(
         self,
@@ -264,8 +272,8 @@ class ElementDiagramWindow(QWidget):
     ) -> None:
         super().__init__(parent, Qt.WindowType.Window)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
-        self.resize(1600, 920)
-        self.setMinimumSize(1200, 680)
+        self.resize(1700, 1000)
+        self.setMinimumSize(1300, 760)
         self._bundle = bundle
         self._converter = converter
         self._query_fraction = 0.5
@@ -314,6 +322,13 @@ class ElementDiagramWindow(QWidget):
         self._results.setMinimumWidth(360)
         self._results.currentIndexChanged.connect(self._emit_result_changed)
         controls.addWidget(self._results, 1)
+        controls.addWidget(QLabel("Units:"))
+        self._units = QComboBox()
+        self._units.setMinimumWidth(230)
+        for unit in UnitSystem:
+            self._units.addItem(_unit_text(unit.value), unit.value)
+        self._units.currentIndexChanged.connect(self._emit_units_changed)
+        controls.addWidget(self._units)
         controls.addWidget(QLabel("Distance:"))
         self._distance = QDoubleSpinBox()
         self._distance.setDecimals(4)
@@ -330,20 +345,26 @@ class ElementDiagramWindow(QWidget):
         grid.setSpacing(6)
 
         self._axial = _DiagramPanel("Axial force N")
-        self._shear = _DiagramPanel("Shear V2 / V3")
-        self._moments = _DiagramPanel("Moments M2 / M3 and torsion T")
+        self._v2 = _DiagramPanel("Shear V2")
+        self._v3 = _DiagramPanel("Shear V3")
+        self._torsion = _DiagramPanel("Torsion T")
+        self._m2 = _DiagramPanel("Moment M2")
+        self._m3 = _DiagramPanel("Moment M3")
         self._deformation = _DiagramPanel("Deformation absolute / relative")
         self._distributed = _DiagramPanel("Distributed loads wx / wy / wz")
         self._points = _DiagramPanel("Point loads Px / Py / Pz")
         self._panels = [
             self._axial,
-            self._shear,
-            self._moments,
+            self._v2,
+            self._v3,
+            self._torsion,
+            self._m2,
+            self._m3,
             self._deformation,
             self._distributed,
             self._points,
         ]
-        # 2 rows x 3 columns: row 1 axial/shear/moments, row 2 the rest.
+        # 3 rows x 3 columns: forces, then moments, then deformation and loads.
         for index, panel in enumerate(self._panels):
             row, column = divmod(index, 3)
             grid.addWidget(panel, row, column)
@@ -365,6 +386,18 @@ class ElementDiagramWindow(QWidget):
         if key:
             self.resultChanged.emit(str(key))
 
+    def _emit_units_changed(self, _index: int) -> None:
+        value = self._units.currentData()
+        if value:
+            self.unitsChanged.emit(str(value))
+
+    def _sync_units_combo(self, target: UnitSystem) -> None:
+        index = self._units.findData(target.value)
+        if index >= 0 and index != self._units.currentIndex():
+            self._units.blockSignals(True)
+            self._units.setCurrentIndex(index)
+            self._units.blockSignals(False)
+
     def _on_distance_changed(self, value: float) -> None:
         length = self._bundle.length * self._converter.length
         if length > 0.0:
@@ -378,6 +411,7 @@ class ElementDiagramWindow(QWidget):
         labels = converter.labels
         length_unit = _unit_text(labels.length)
         length = bundle.length * converter.length
+        self._sync_units_combo(converter.target)
 
         name = f" - {bundle.element_name}" if bundle.element_name else ""
         case = f" - {bundle.case_name}" if bundle.case_name else ""
@@ -402,19 +436,37 @@ class ElementDiagramWindow(QWidget):
         self._plot_force_panel(
             self._axial,
             (ForceComponent.N,),
-            "Axial force",
+            "Axial force N",
             "force",
         )
         self._plot_force_panel(
-            self._shear,
-            (ForceComponent.V2, ForceComponent.V3),
-            "Shear",
+            self._v2,
+            (ForceComponent.V2,),
+            "Shear V2",
             "force",
         )
         self._plot_force_panel(
-            self._moments,
-            (ForceComponent.T, ForceComponent.M2, ForceComponent.M3),
-            "Moment",
+            self._v3,
+            (ForceComponent.V3,),
+            "Shear V3",
+            "force",
+        )
+        self._plot_force_panel(
+            self._torsion,
+            (ForceComponent.T,),
+            "Torsion T",
+            "moment",
+        )
+        self._plot_force_panel(
+            self._m2,
+            (ForceComponent.M2,),
+            "Moment M2",
+            "moment",
+        )
+        self._plot_force_panel(
+            self._m3,
+            (ForceComponent.M3,),
+            "Moment M3",
             "moment",
         )
         self._plot_deformation()
@@ -442,7 +494,7 @@ class ElementDiagramWindow(QWidget):
         panel.reset()
         series = [item for item in self._bundle.forces if item.component in components]
         if not series:
-            panel.set_note("Not reported for this element.")
+            panel.show_empty("Not reported for this element.")
             return
 
         converter = self._converter
@@ -500,7 +552,7 @@ class ElementDiagramWindow(QWidget):
         panel.reset()
         bundle = self._bundle
         if bundle.absolute is None or bundle.relative is None:
-            panel.set_note("No nodal displacements in this result.")
+            panel.show_empty("No nodal displacements in this result.")
             return
 
         converter = self._converter
@@ -551,7 +603,7 @@ class ElementDiagramWindow(QWidget):
         panel.reset()
         segments = self._bundle.segments
         if not segments:
-            panel.set_note("No distributed load or self weight on this member.")
+            panel.show_empty("No distributed load or self weight on this member.")
             return
 
         converter = self._converter
@@ -577,7 +629,7 @@ class ElementDiagramWindow(QWidget):
             np.isfinite(y).any() and float(np.max(np.abs(y[np.isfinite(y)]))) > 0.0
             for y in y_values
         ):
-            panel.set_note("The distributed loads are zero on this member.")
+            panel.show_empty("The distributed loads are zero on this member.")
             return
 
         low, high, span = _y_extent(y_values)
@@ -623,7 +675,7 @@ class ElementDiagramWindow(QWidget):
         panel.reset()
         points = self._bundle.points
         if not points:
-            panel.set_note("No point load on this member.")
+            panel.show_empty("No point load on this member.")
             return
 
         converter = self._converter
@@ -653,7 +705,7 @@ class ElementDiagramWindow(QWidget):
             and float(np.max(np.abs(y_curve[np.isfinite(y_curve)]))) > 0.0
             for y_curve in y_values
         ):
-            panel.set_note("The point loads are zero on this member.")
+            panel.show_empty("The point loads are zero on this member.")
             return
 
         low, high, span = _y_extent(y_values)

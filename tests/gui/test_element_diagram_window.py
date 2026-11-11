@@ -21,6 +21,7 @@ from opensees_studio.core import (
     Node,
     PlainLoadPattern,
     StaticCase,
+    UnitSystem,
 )
 from opensees_studio.services.results import CombinationResults, StaticResults
 
@@ -110,7 +111,7 @@ def test_a_right_click_on_a_member_with_a_force_diagram_opens_its_window(
     assert window.bundle.element_id == 10
     assert "Element 10" in window._header.text()
     assert window._axial.plot.listDataItems()  # the axial curve is drawn
-    assert len(window._panels) == 6  # 2 rows x 3 columns
+    assert len(window._panels) == 9  # 3 rows x 3 columns
     assert window._axial._max_labels  # the maximum is labelled
     window._distance.setValue(1.5)
     assert window._axial._query_line is not None
@@ -203,6 +204,25 @@ def test_the_result_picker_switches_to_a_combination(qtbot) -> None:  # type: ig
     assert isinstance(mw._latest_results, CombinationResults)
     assert window.bundle.case_name.startswith("ULS")
     assert window._results.currentData() == "combination:1"
+
+
+@pytest.mark.gui
+def test_the_units_picker_rewrites_the_window(qtbot) -> None:  # type: ignore[no-untyped-def]
+    mw = _window(qtbot)
+    mw._latest_results = _results()
+    mw._on_show_force_diagram()
+    mw._show_element_diagrams(10)
+
+    window = mw._element_diagram_windows[0]
+    assert mw._current_display_units() is UnitSystem.SI_M_N
+
+    index = window._units.findData(UnitSystem.US_IN_KIP.value)
+    assert index >= 0
+    window._units.setCurrentIndex(index)
+
+    assert mw._current_display_units() is UnitSystem.US_IN_KIP
+    assert "kip" in window._axial.value.text()
+    assert "in" in window._distance.suffix()
 
 
 @pytest.mark.gui

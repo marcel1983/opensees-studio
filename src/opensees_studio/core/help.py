@@ -4698,13 +4698,13 @@ along each member, at the analysis step you pick.
 
 # A member in detail
 - With a force diagram or a deformed shape on screen, **right-click a frame
-  member**: a window opens with six panels in a **2 x 3 grid** (two rows, three
-  columns): axial force; shear V2/V3; moments M2/M3 and torsion; absolute and
-  relative deformations; distributed loads wx/wy/wz; and point loads. The force
-  panels draw both bounds of an envelope.
-- Each panel **labels its extreme values**, and the **Results** picker switches
+  member**: a window opens with nine panels in a **3 x 3 grid** (three rows,
+  three columns): axial force; shear V2; shear V3; torsion T; moment M2; moment
+  M3; absolute and relative deformations; distributed loads wx/wy/wz; and point
+  loads. The force panels draw both bounds of an envelope.
+- Each panel **labels its extreme values**, the **Results** picker switches
   between the stored static cases and the load combinations without leaving the
-  window.
+  window, and the **Units** picker changes the display system.
 - The **Distance** box places a vertical cursor on every panel and reports the
   value of every curve at that section.
 - Without one of those views the right-click keeps its usual menu, as it does
