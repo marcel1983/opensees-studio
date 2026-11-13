@@ -264,7 +264,7 @@ Weight; Joints of Selected Elements, Elements between Selected Joints.
 
 # Define
 - Geometry and building: Coordinate System/Grids, Grid Wizard, Add Node, Storeys, Groups,
-Section Cuts, Mass Source, Seismic Loads (ELF), Create Shell from 4 Nodes,
+Section Cuts, Mass Source, Seismic Loads (ELF), Create Shell from 3 or 4 Nodes,
 Create Portal Frame, Create Truss.
 - Properties: Material Library (40 materials, Material Tester to check one),
 Friction Models, Ground Motions, Section Library (elastic, nonprismatic, fibre
