@@ -7,6 +7,24 @@ that this is pre-alpha: minor and patch releases may change the `.osmodel`
 schema (it carries a `schema_version`, and a file from a newer build is now
 refused instead of silently downgraded).
 
+## [Unreleased]
+
+### Added
+
+- **Base plates of every column base.** Design → Base Plates lists each support
+  with a column on it (AISC I-shape, rectangular HSS or round HSS / pipe) and
+  checks its plate and anchor rods (AISC Design Guide 1, ACI 318-19 Chapter 17)
+  over every alternative of the design load sets: the direct analysis cases when
+  they exist, else the combinations, so the largest compression, M / P, uplift
+  and shear are all checked. The **support type** comes from the restraint: a
+  pinned base is checked concentric, a fixed one with its reaction moment about
+  the column's major axis (a minor-axis moment is reported, not combined). The
+  plate's cantilevers follow the column kind (0.95 d / 0.8 bf for an I-shape,
+  0.95 B for an HSS, 0.8 D for a round one). Plates are edited per base or for
+  a selection, and **Size tp** picks the thinnest standard plate that passes.
+  Anchor rods in F1554 Gr. 36, 55 or 105. `.osmodel`: `design.base_plates`.
+  The single-plate calculator (Design → Base Plate & Anchors) stays.
+
 ## [0.0.60] - 2026-11-13
 
 ### Added
