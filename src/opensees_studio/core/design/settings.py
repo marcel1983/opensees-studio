@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt
 
 from opensees_studio.core._base import omit_when_default
 from opensees_studio.core.design.base_plate import BasePlateDesign
-from opensees_studio.core.design.shear_tab import ShearTabDesign
+from opensees_studio.core.design.shear_tab_model import ShearTabDesign
 
 #: ASCE 7-22 Table 12.12-1 and other common allowable storey drift ratios.
 DRIFT_PRESETS: dict[str, tuple[float, float]] = {
