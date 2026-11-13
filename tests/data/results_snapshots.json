@@ -614,22 +614,22 @@
    },
    "3": {
     "final_disp_max": [
-     0.199038,
-     0.0892168,
-     0.000693452
+     0.199125,
+     0.0892164,
+     0.000693755
     ],
-    "final_disp_norm": 0.2181197921,
+    "final_disp_norm": 0.2181990214,
     "kind": "TransientResults",
     "n_steps": 1000,
     "n_steps_requested": 1000,
     "peak_disp_max": [
-     0.594721,
-     0.0892168,
-     0.00206077
+     0.594637,
+     0.0892164,
+     0.00206048
     ],
-    "peak_disp_norm": 5.658021466,
-    "peak_force_max": 30628.9,
-    "peak_force_norm": 271803.4183,
+    "peak_disp_norm": 5.65756733,
+    "peak_force_max": 30624.7,
+    "peak_force_norm": 271778.2667,
     "time_final": 10.0
    }
   },
@@ -723,21 +723,21 @@
    "3": {
     "final_disp_max": [
      0.278973,
-     0.0733618,
-     0.000969169
+     0.0733612,
+     0.000969167
     ],
-    "final_disp_norm": 0.2884594039,
+    "final_disp_norm": 0.2884592513,
     "kind": "TransientResults",
     "n_steps": 1000,
     "n_steps_requested": 1000,
     "peak_disp_max": [
-     0.402587,
-     0.0733618,
-     0.00139713
+     0.40257,
+     0.0733612,
+     0.00139707
     ],
-    "peak_disp_norm": 4.456766671,
-    "peak_force_max": 28827.7,
-    "peak_force_norm": 289380.6141,
+    "peak_disp_norm": 4.456621431,
+    "peak_force_max": 28826.3,
+    "peak_force_norm": 289368.8514,
     "time_final": 10.0
    }
   },
@@ -884,23 +884,23 @@
    },
    "3": {
     "final_disp_max": [
-     1.49039,
-     0.00905251,
-     0.00158789
+     0.378417,
+     0.0383472,
+     0.0011438
     ],
-    "final_disp_norm": 2.10666012,
+    "final_disp_norm": 0.5362974911,
     "kind": "TransientResults",
-    "n_steps": 37,
+    "n_steps": 1000,
     "n_steps_requested": 1000,
     "peak_disp_max": [
-     1.52205,
-     0.0471922,
-     0.0016006
+     2.29176,
+     0.0799158,
+     0.00174551
     ],
-    "peak_disp_norm": 8.097402943,
-    "peak_force_max": 112228.0,
-    "peak_force_norm": 1005564.422,
-    "time_final": 0.37
+    "peak_disp_norm": 29.65740708,
+    "peak_force_max": 112607.0,
+    "peak_force_norm": 3050969.758,
+    "time_final": 10.0
    }
   },
   "ex4_portal2d_inelastic_section": {
@@ -938,22 +938,22 @@
    },
    "3": {
     "final_disp_max": [
-     0.60892,
-     0.0852234,
-     0.00243956
+     0.607367,
+     0.0852164,
+     0.00243866
     ],
-    "final_disp_norm": 0.8683113966,
+    "final_disp_norm": 0.866132644,
     "kind": "TransientResults",
     "n_steps": 1000,
     "n_steps_requested": 1000,
     "peak_disp_max": [
-     2.36725,
-     0.102047,
-     0.00304298
+     2.36568,
+     0.102039,
+     0.00304208
     ],
-    "peak_disp_norm": 31.76701578,
-    "peak_force_max": 132561.0,
-    "peak_force_norm": 3039682.254,
+    "peak_disp_norm": 31.73500854,
+    "peak_force_max": 135138.0,
+    "peak_force_norm": 3039623.484,
     "time_final": 10.0
    }
   },

@@ -7,6 +7,31 @@ that this is pre-alpha: minor and patch releases may change the `.osmodel`
 schema (it carries a `schema_version`, and a file from a newer build is now
 refused instead of silently downgraded).
 
+## [0.0.59] - 2026-11-13
+
+### Fixed
+
+- **Mode-1 damping goes on the committed stiffness.** A transient case with a
+  *Mode-1 damping ratio* computed βK = 2ζ/ω₁ correctly but applied it to the
+  current tangent stiffness, not the committed one of the OpenSees idiom
+  `rayleigh 0 0 0 [expr 2*ζ/sqrt([eigen 1])]` it is documented to follow. On a
+  softening non-linear model that damping changes inside every iteration: the
+  Example 4 portal with fibre sections stopped at step 37 of 1000. **Projects
+  that use mode-1 damping on a non-linear model give slightly different results
+  after this update** (on the examples at most 0.1 % in displacement), and runs
+  that stopped early may now complete.
+
+### Results changed
+
+- `ex4_portal2d_inelastic_fiber_section`, case 3: 1000 steps instead of 37,
+  peak drift 2.29 in instead of 1.52 in (the old run had stopped before the
+  peak).
+- `ex4_portal2d_inelastic_section`, `ex2c_canti2d_inelastic_fiber_section`,
+  `ex3_canti2d_inelastic_fiber_section`, case 3: displacements change by at most
+  0.1 %; the peak element force of `ex4_portal2d_inelastic_section` by 1.9 %.
+  Linear examples and the isolated portals do not change. See
+  `docs/results-changes.md`.
+
 ## [0.0.58] - 2026-11-13
 
 ### Fixed
