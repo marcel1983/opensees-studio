@@ -92,6 +92,7 @@ script o un notebook de Jupyter: la interfaz es una forma de usarlo, no la únic
   *InfluenceLine* recorre una carga unitaria por una cadena de miembros, y
   Display → Influence Line pasa un vehículo, p. ej. el camión HL-93, en ambos
   sentidos).
+- **Flujo de diseño de acero**: Design → Steel Design Workflow recorre siete etapas: base de diseño AISC/ASCE, modelo y cargas, demandas, chequeo de miembros AISC 360, chequeo sísmico AISC 341, conexiones AISC 358/Capítulo J y detallado. Cada etapa muestra OK, PENDIENTE o REVISAR y abre el diálogo existente que la edita o ejecuta.
 - **Diseño**: Design → Steel Frame Check verifica según **AISC 360-16** (LRFD o
   ASD) los miembros de perfiles W, M, S y HP —y canales, tees, ángulos de alas
   iguales, HSS rectangulares y circulares y tubos—: tracción (D2), compresión

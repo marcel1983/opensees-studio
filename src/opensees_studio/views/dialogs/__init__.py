@@ -66,6 +66,7 @@ from opensees_studio.views.dialogs.run_analysis import RunAnalysisDialog
 from opensees_studio.views.dialogs.s3d_import import S3dImportDialog
 from opensees_studio.views.dialogs.section_library import SectionLibraryDialog
 from opensees_studio.views.dialogs.steel_design import DriftCheckDialog, SteelDesignDialog
+from opensees_studio.views.dialogs.steel_workflow import SteelWorkflowDialog
 from opensees_studio.views.dialogs.tcl_import import TclImportDialog
 from opensees_studio.views.dialogs.temperature_load import AssignTemperatureLoadDialog
 from opensees_studio.views.dialogs.truss_wizard import TrussWizard
@@ -131,6 +132,7 @@ __all__ = [
     "S3dImportDialog",
     "SectionLibraryDialog",
     "SteelDesignDialog",
+    "SteelWorkflowDialog",
     "TclImportDialog",
     "TrapezoidalLoadDialog",
     "TrussWizard",

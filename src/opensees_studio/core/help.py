@@ -1586,6 +1586,41 @@ stiffener and doubler-plate design is not modeled.
             "design.column_splices",
             "design.steel_check",
         ),
+        "design.steel_workflow": _t(
+            "Design → Steel Design Workflow",
+            "Design",
+            "A guided seven-stage path from the AISC design basis to connection detailing.",
+            """
+The workflow is a guide, not a second engine. It shows the state of the project
+at each stage and opens the existing dialog that edits or runs it:
+
+1. **Base de diseño AISC/ASCE** - code edition, LRFD/ASD, Fy/Fu, seismic system,
+   SDC/Ry/Ca, analysis method, DAM/B1, notional loads and storey drift.
+2. **Modelo de análisis y cargas** - frame members, AISC shapes, local axes,
+   releases, loads, cases and combinations.
+3. **Demandas por estación** - 25 stations, N/V2/V3/M2/M3, envelopes and load sets.
+4. **Chequeo de miembros AISC 360** - D2, E3/E4/E7, F2-F10, G2/G6 and H1.
+5. **Chequeo sísmico AISC 341** - D1.1, SMF/IMF, SCBF/OCBF and capacity design.
+6. **Conexiones AISC 358 + Chapter J** - RBS, gussets, column splices and J2-J10.
+7. **Detallado y entrega** - ratios on the model, report, calculation memory and QA.
+
+Each stage shows **OK**, **PENDIENTE** or **REVISAR**. A failing member, joint or
+connection marks the stage REVISAR and the flow returns to the stage that can fix
+it: section or overrides, seismic system, or connection geometry. The dialog does
+not save anything by itself: the member check dialog stores the design settings,
+and the connection dialogs store their own entities.
+""",
+            "design.steel_check",
+            "design.connections",
+            "design.gussets",
+            "design.column_splices",
+            "design.chapter_j",
+            "design.notional_loads",
+            "design.drift_check",
+            "design.steel_ratios",
+            "file.export_report",
+            "file.calc_memory",
+        ),
         "design.steel_check": _t(
             "Design → Steel Frame Check (AISC 360-16)",
             "Design",
@@ -5646,6 +5681,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_import_s2k": "file.import_s2k",
     "_act_import_tcl": "file.import_tcl",
     "_act_steel_check": "design.steel_check",
+    "_act_steel_workflow": "design.steel_workflow",
     "_act_connections": "design.connections",
     "_act_gussets": "design.gussets",
     "_act_column_splices": "design.column_splices",

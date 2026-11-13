@@ -220,6 +220,7 @@ from opensees_studio.views.dialogs import (
     S3dImportDialog,
     SectionLibraryDialog,
     SteelDesignDialog,
+    SteelWorkflowDialog,
     TclImportDialog,
     TrapezoidalLoadDialog,
     UniformExcitationDialog,
@@ -622,6 +623,7 @@ class MainWindow(QMainWindow):
         self._act_run_all = QAction("Run &All Cases", self, shortcut=QKeySequence("Shift+F5"))
         self._act_run_selected = QAction("Run Se&lected Cases…", self)
         self._act_clear_results = QAction("Delete &All Results…", self)
+        self._act_steel_workflow = QAction("Steel Design &Workflow.", self)
         self._act_steel_check = QAction("&Steel Frame Check (AISC 360-16)…", self)
         self._act_connections = QAction("&Connections (AISC 358-22)…", self)
         self._act_gussets = QAction("&Gussets (AISC 341-22)…", self)
@@ -921,6 +923,8 @@ class MainWindow(QMainWindow):
         m_display.addAction(self._act_back_to_model)
 
         m_design = mb.addMenu("Desi&gn")
+        m_design.addAction(self._act_steel_workflow)
+        m_design.addSeparator()
         m_design.addAction(self._act_steel_check)
         m_design.addAction(self._act_connections)
         m_design.addAction(self._act_gussets)
@@ -1384,6 +1388,7 @@ class MainWindow(QMainWindow):
         self._act_run_selected.triggered.connect(self._on_run_selected_cases)
         self._act_clear_results.triggered.connect(self._on_clear_results)
         self._act_steel_check.triggered.connect(self._on_steel_check)
+        self._act_steel_workflow.triggered.connect(self._on_steel_workflow)
         self._act_connections.triggered.connect(self._on_connections)
         self._act_gussets.triggered.connect(self._on_gussets)
         self._act_column_splices.triggered.connect(self._on_column_splices)
@@ -2834,6 +2839,61 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(f"Selected {len(failing)} failing member(s).", 4000)
         if dialog.show_ratios_requested and report is not None:
             self._show_design_ratios(report, settings)
+
+    def _on_steel_workflow(self) -> None:
+        """Design → Steel Design Workflow: the guided seven-stage path."""
+        project = self._vm.project
+        if project is None:
+            return
+        dialog = SteelWorkflowDialog(
+            project,
+            lambda: dict(self._case_results.current(project)),
+            self,
+            self,
+        )
+        dialog.exec()
+        self._refresh_action_enablement()
+
+    # Controller methods used by SteelWorkflowDialog. They keep the guided
+    # flow on the existing dialogs instead of duplicating their logic.
+    def edit_steel_settings(self) -> None:
+        self._on_steel_check()
+
+    def open_analysis_cases(self) -> None:
+        self._on_case_manager()
+
+    def run_analysis(self) -> None:
+        self._on_run_analysis()
+
+    def open_member_check(self) -> None:
+        self._on_steel_check()
+
+    def open_connections(self) -> None:
+        self._on_connections()
+
+    def open_gussets(self) -> None:
+        self._on_gussets()
+
+    def open_column_splices(self) -> None:
+        self._on_column_splices()
+
+    def open_chapter_j(self) -> None:
+        self._on_chapter_j()
+
+    def show_steel_ratios(self) -> None:
+        self._on_steel_ratios()
+
+    def export_report(self) -> None:
+        self._on_export_report()
+
+    def open_calc_memory(self) -> None:
+        self._on_calc_memory()
+
+    def open_drift_check(self) -> None:
+        self._on_drift_check()
+
+    def open_notional_loads(self) -> None:
+        self._on_notional_loads()
 
     def _on_steel_ratios(self) -> None:
         """Design → Display Steel Ratios: paint the members by the stored check's ratios.
@@ -6802,6 +6862,7 @@ class MainWindow(QMainWindow):
         db_there = has_project and database_path(self._vm.path).exists()
         self._act_clear_results.setEnabled(bool(has_project and (stored or db_there)))
         self._act_steel_check.setEnabled(has_project)
+        self._act_steel_workflow.setEnabled(has_project)
         self._act_connections.setEnabled(has_project)
         self._act_gussets.setEnabled(has_project)
         self._act_column_splices.setEnabled(has_project)
