@@ -27,15 +27,12 @@ from typing import Any
 
 from PySide6.QtCore import QObject, QProcess, QProcessEnvironment, QThread, QTimer, Signal
 
-from opensees_studio.child_cli import analysis_cli_command, is_frozen
+from opensees_studio.child_cli import analysis_cli_command, in_process_mode, is_frozen
 from opensees_studio.core import Project
 from opensees_studio.diagnostics.performance import perf
 from opensees_studio.services import engines, write_run_snapshot
 from opensees_studio.services.qt_workers import AnalysisWorker
 from opensees_studio.services.result_store import load_results
-
-IN_PROCESS_ENV = "OPENSEES_STUDIO_IN_PROCESS"
-"""Set to ``1`` to run analyses on a thread of the GUI process instead of a child."""
 
 CREATE_NO_WINDOW = 0x08000000
 """Windows process creation flag: no console window for the child."""
@@ -71,11 +68,6 @@ stay in the raw stderr capture, which the failure report shows only when a run f
 def is_solver_banner(line: str) -> bool:
     """True for an OpenSees solver-speed banner line."""
     return any(marker in line for marker in SOLVER_BANNERS)
-
-
-def in_process_mode() -> bool:
-    """True when ``OPENSEES_STUDIO_IN_PROCESS`` asks for the in-process runner."""
-    return os.environ.get(IN_PROCESS_ENV, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 class AnalysisRunner(QObject):

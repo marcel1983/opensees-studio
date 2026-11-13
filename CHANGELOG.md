@@ -11,6 +11,13 @@ refused instead of silently downgraded).
 
 ### Fixed
 
+- **The Material Tester can no longer close the application.** It ran OpenSees
+  in the application's own process, so an input that makes OpenSees end its
+  process instead of raising took OpenSees Studio down with it. The test now
+  runs in a child process like an analysis (the analysis CLI gained
+  `--material-test ID --material-protocol JSON`); a dead child shows its exit
+  code and the solver's last output in the dialog. Starting the process adds
+  about a second per test.
 - **The RC Frame Earthquake example runs to the end of its record.** It stopped
   at t = 0.99 s, 98 of 400 steps. Its Rayleigh damping was proportional to the
   current tangent stiffness instead of the committed one the OpenSees example
