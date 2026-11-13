@@ -122,6 +122,7 @@ def stage_plan(project: Any, case: Any) -> StagePlan:
                 "distributed_loads",
                 "surface_loads",
                 "temperature_loads",
+                "tendon_loads",
             ):
                 for load in getattr(pattern, attr, []) or []:
                     eid = getattr(load, "element_id", None)

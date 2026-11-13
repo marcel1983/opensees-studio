@@ -34,6 +34,7 @@ Command order (enforced; reordering is a runtime error in OpenSees):
 
 from __future__ import annotations
 
+import itertools
 import os
 import tempfile
 from collections.abc import Callable
@@ -121,6 +122,7 @@ from opensees_studio.core.modal import (
 )
 from opensees_studio.core.modal_combination import DEFAULT_MODAL_DAMPING, closely_spaced_pairs
 from opensees_studio.core.plane import dof_signs, to_solver_coords, to_solver_vector3
+from opensees_studio.core.prestress import tendon_equivalent_loads
 from opensees_studio.core.section_cuts import cut_resultant, section_cuts
 from opensees_studio.core.self_weight import nodal_self_weight_loads, self_weight_loads
 from opensees_studio.core.storey_results import cut_force, storey_cuts
@@ -1068,6 +1070,16 @@ class OpenSeesRunner:
                     node_i, load_i, node_j, load_j = equivalent_nodal_loads(self.project, thermal)
                     ops.load(node_i, *self._solver_dofs(load_i))
                     ops.load(node_j, *self._solver_dofs(load_j))
+                # Tendons: the anchorage forces at the member ends (their pressure along
+                # the curve joins the uniform loads below).
+                tendon_uniform = []
+                for tendon in pat.tendon_loads:
+                    node_i, load_i, node_j, load_j, along = tendon_equivalent_loads(
+                        self.project, tendon
+                    )
+                    ops.load(node_i, *self._solver_dofs(load_i))
+                    ops.load(node_j, *self._solver_dofs(load_j))
+                    tendon_uniform.append(along)
                 # Shells and trusses: their self weight as nodal forces (translations only).
                 for node_id, force in nodal_self_weight_loads(
                     self.project, pat.self_weight, self._self_weight_scope
@@ -1101,6 +1113,7 @@ class OpenSeesRunner:
                 uniform = [
                     *pat.element_loads,
                     *self_weight_loads(self.project, pat.self_weight, self._self_weight_scope),
+                    *tendon_uniform,
                 ]
                 for el in uniform:
                     # eleLoad -ele N -type -beamUniform wy wz wx
@@ -1830,6 +1843,14 @@ class OpenSeesRunner:
         hold(set(node_ids) - touched(active) & touched(set(elements)))
 
         n_stages = len(case.stages)
+        timed = case.time_dependent
+        constant_tag = 0
+        if timed:
+            # Time is the concrete's age: loads act at once (a constant series)
+            # and stay while the stage's duration passes with creep on.
+            constant_tag = max((ts.id for ts in self.project.time_series), default=0) + 1
+            ops.timeSeries("Constant", constant_tag)
+            ops.setTime(case.start_time)
         node_disp = {nid: np.zeros((n_stages, ndf)) for nid in node_ids}
         node_reaction = {nid: np.zeros((n_stages, ndf)) for nid in node_ids}
         element_forces: dict[int, np.ndarray] = {}
@@ -1867,24 +1888,39 @@ class OpenSeesRunner:
             ids = [pid for pid in stage.pattern_ids if pid not in done_patterns]
             self._self_weight_scope = set(new) | (set(plan.initial) if k == 0 else set())
             try:
-                if ids:
+                if ids and timed:
+                    patterns = {p.id: p for p in self.project.load_patterns}
+                    for pid in ids:
+                        self._emit_pattern(
+                            patterns[pid].model_copy(update={"time_series_id": constant_tag})
+                        )
+                elif ids:
                     self._emit_patterns_for_case(ids)
             finally:
                 self._self_weight_scope = None
             done_patterns |= set(ids)
             ops.wipeAnalysis()
-            self._setup_staged_analysis(case, 1.0 / stage.n_steps if ids else 0.0)
-            steps = stage.n_steps if ids else 1
-            for step in range(steps):
-                status = ops.analyze(1)
-                if status != 0:
-                    raise RuntimeError(
-                        f"Staged analysis failed in {label}, step {step + 1}/{steps} "
-                        f"(ops.analyze returned {status})."
-                    )
+            if timed:
+                ops.setCreep(0)
+                self._setup_staged_analysis(case, 0.0)
+                self._staged_step(label, 1, 1)
                 completed += 1
+                if stage.duration > 0.0:
+                    ops.setCreep(1)
+                    times = np.geomspace(1.0, stage.duration + 1.0, stage.time_steps + 1) - 1.0
+                    for step, (t0, t1) in enumerate(itertools.pairwise(times)):
+                        ops.integrator(case.integrator, float(t1 - t0))
+                        self._staged_step(label, step + 1, stage.time_steps)
+                    ops.setCreep(0)
                 self._progress(min(completed, total_steps), total_steps)
-            ops.loadConst("-time", 0.0)
+            else:
+                self._setup_staged_analysis(case, 1.0 / stage.n_steps if ids else 0.0)
+                steps = stage.n_steps if ids else 1
+                for step in range(steps):
+                    self._staged_step(label, step + 1, steps)
+                    completed += 1
+                    self._progress(min(completed, total_steps), total_steps)
+                ops.loadConst("-time", 0.0)
             ops.reactions()
             for nid in node_ids:
                 if nid in held:
@@ -1914,6 +1950,14 @@ class OpenSeesRunner:
             element_stresses=element_stresses,
             warnings=notes,
         )
+
+    def _staged_step(self, label: str, step: int, steps: int) -> None:
+        status = self._ops.analyze(1)
+        if status != 0:
+            raise RuntimeError(
+                f"Staged analysis failed in {label}, step {step}/{steps} "
+                f"(ops.analyze returned {status})."
+            )
 
     def _setup_staged_analysis(self, case: StagedCase, increment: float) -> None:
         """The case's solver objects, with a load increment for this stage."""

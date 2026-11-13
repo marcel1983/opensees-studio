@@ -639,6 +639,69 @@ def _staged_column() -> list[Check]:
     ]
 
 
+def _creep_column() -> list[Check]:
+    from opensees_studio.core import (
+        ConstructionStage,
+        LinearTimeSeries,
+        NodalLoad,
+        Node,
+        PlainLoadPattern,
+        Project,
+        StagedCase,
+        TrussElement,
+    )
+    from opensees_studio.core.mc2010 import Mc2010Concrete, tdconcrete_material
+
+    mix = Mc2010Concrete(fcm=38.0, relative_humidity=60.0, h0=200.0, cement="42.5R/52.5N/R")
+    area, stress, height = 0.09, -10e6, 3.0
+    checks: list[Check] = []
+    for label, shrinks in (("creep only", False), ("creep and shrinkage", True)):
+        material = tdconcrete_material(mix, 1, name="C30/37")
+        if not shrinks:
+            material = material.model_copy(update={"epsba": 0.0, "epsda": 0.0})
+        project = Project(
+            ndm=2,
+            ndf=2,
+            nodes=[
+                Node(id=1, coords=(0.0, 0.0, 0.0), restraint=(True,) * 6),
+                Node(id=2, coords=(0.0, 0.0, height), restraint=(True,) + (False,) * 5),
+            ],
+            materials=[material],
+            elements=[TrussElement(id=1, nodes=(1, 2), area=area, material_id=1)],
+            time_series=[LinearTimeSeries(id=1, name="Ramp")],
+            load_patterns=[
+                PlainLoadPattern(
+                    id=1,
+                    name="Sustained",
+                    time_series_id=1,
+                    nodal_loads=[NodalLoad(node_id=2, forces=(0, 0, stress * area, 0, 0, 0))],
+                )
+            ],
+        )
+        case = StagedCase(
+            id=1,
+            name="Sustained",
+            time_dependent=True,
+            start_time=28.0,
+            algorithm="Newton",
+            tolerance=1e-12,
+            stages=[
+                ConstructionStage(
+                    name="Loaded at 28 days", pattern_ids=[1], duration=9972.0, time_steps=400
+                )
+            ],
+        )
+        project.analyses.append(case)
+        r = _run(project, case)
+        strain = -float(r.node_disp[2][-1][1]) / height
+        elastic = stress / (mix.elastic_modulus * 1e6)
+        expected = elastic * (1.0 + mix.creep_coefficient(10000.0, 28.0))
+        if shrinks:
+            expected += mix.shrinkage(10000.0)
+        checks.append(Check(f"Strain at 10 000 days, {label}", "-", strain, -expected, 2e-2))
+    return checks
+
+
 def _scordelis_lo() -> list[Check]:
     from opensees_studio.core import (
         QUAD_SHELL_CLASSES,
@@ -1576,6 +1639,18 @@ CASES: list[Case] = [
         "finished; one stage per storey. The 1e-3 tolerance covers each storey being cast "
         "h + Δ long to meet its design level.",
         _staged_column,
+    ),
+    Case(
+        "V-21",
+        "Creep and shrinkage of a concrete column",
+        "Staged construction",
+        "fib Model Code 2010, 5.1.9.4: ε(t) = σ / Eci · (1 + φ(t, t0)) + εcs(t), with "
+        "basic and drying creep and shrinkage counted from casting.",
+        "A bar of C30/37 (fcm = 38 MPa, RH 60 %, h0 = 200 mm, cement 42.5R) cast at day 0, "
+        "10 MPa of compression at 28 days held to 10 000 days in a time-dependent staged "
+        "case, 400 geometric time steps (`TDConcreteMC10`). The 2 % tolerance covers the "
+        "explicit time integration of the material.",
+        _creep_column,
     ),
     Case(
         "D-01",

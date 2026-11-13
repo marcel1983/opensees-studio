@@ -513,7 +513,9 @@
           "pattern_ids": [
             1
           ],
-          "n_steps": 1
+          "n_steps": 1,
+          "duration": 0.0,
+          "time_steps": 20
         },
         {
           "name": "Storey 2",
@@ -524,7 +526,9 @@
           "pattern_ids": [
             2
           ],
-          "n_steps": 1
+          "n_steps": 1,
+          "duration": 0.0,
+          "time_steps": 20
         },
         {
           "name": "Finishes",
@@ -533,7 +537,9 @@
           "pattern_ids": [
             3
           ],
-          "n_steps": 1
+          "n_steps": 1,
+          "duration": 0.0,
+          "time_steps": 20
         }
       ],
       "system": "BandGeneral",

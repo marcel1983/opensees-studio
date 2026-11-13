@@ -533,6 +533,14 @@ class ConstructionStage(BaseModel):
     remove_group_ids: list[PositiveInt] = Field(default_factory=list)
     pattern_ids: list[PositiveInt] = Field(default_factory=list)
     n_steps: PositiveInt = 1
+    duration: float = Field(
+        default=0.0,
+        ge=0.0,
+        description="Days the stage's state is held after its loads (time-dependent case).",
+    )
+    time_steps: PositiveInt = Field(
+        default=20, description="Time steps over the duration, geometrically spaced."
+    )
 
 
 class StagedCase(_SolverOptions):
@@ -556,6 +564,10 @@ class StagedCase(_SolverOptions):
     type: Literal["Staged"] = "Staged"
     stages: list[ConstructionStage] = Field(..., min_length=1)
     new_joints: Literal["design", "follow"] = "design"
+    time_dependent: bool = False
+    """Creep and shrinkage: time is the concrete age in days, each stage's loads
+    act at once and are then held for its ``duration`` (``TDConcreteMC10``)."""
+    start_time: float = Field(default=28.0, ge=0.0, description="Time of the first stage, days.")
     system: str = "BandGeneral"
     constraints: str = "Plain"
     integrator: str = "LoadControl"
@@ -565,7 +577,7 @@ class StagedCase(_SolverOptions):
     max_iter: PositiveInt = 25
 
     serialize_without_defaults = omit_when_default(
-        "numberer", "system_args", "algorithm_args", "new_joints"
+        "numberer", "system_args", "algorithm_args", "new_joints", "time_dependent", "start_time"
     )
 
     @property

@@ -97,7 +97,12 @@ script o un notebook de Jupyter: la interfaz es una forma de usarlo, no la únic
   sentidos); construcción por etapas (un caso *Staged construction* construye
   grupos etapa a etapa, retira puntales y encofrados y aplica las cargas de cada
   etapa sobre el estado deformado de las anteriores; los nudos nuevos se
-  construyen en su posición de diseño o siguiendo la estructura deformada).
+  construyen en su posición de diseño o siguiendo la estructura deformada; con
+  la opción *time-dependent* el tiempo es la edad del hormigón en días y hay
+  fluencia y retracción según el fib Model Code 2010, con el material
+  `TDConcreteMC10` de Define → Concrete Creep & Shrinkage); cables de
+  postensado (Assign → Frame → Tendon) como cargas equivalentes, con trazado
+  parabólico y pérdidas por fricción, curvatura parásita y diferidas.
 - **Diseño**: Design → Steel Frame Check verifica según **AISC 360-16** (LRFD o
   ASD) los miembros de perfiles W, M, S y HP —y canales, tees, ángulos de alas
   iguales, HSS rectangulares y circulares y tubos—: tracción (D2), compresión

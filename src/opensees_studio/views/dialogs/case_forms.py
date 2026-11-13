@@ -10,6 +10,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QComboBox,
     QFormLayout,
     QHBoxLayout,
@@ -731,7 +732,15 @@ class InfluenceLineCaseForm(CaseFormBase):
 class StagedCaseForm(CaseFormBase):
     type_label = "Staged construction — groups built and removed stage by stage"
 
-    _COLUMNS = ("Stage name", "Build groups", "Remove groups", "Load patterns", "Steps")
+    _COLUMNS = (
+        "Stage name",
+        "Build groups",
+        "Remove groups",
+        "Load patterns",
+        "Steps",
+        "Duration (days)",
+        "Time steps",
+    )
 
     def __init__(
         self,
@@ -759,10 +768,14 @@ class StagedCaseForm(CaseFormBase):
         self._new_joints.addItem("Following the deformed structure", "follow")
         self._algorithm = QComboBox()
         self._algorithm.addItems(["Linear", "Newton", "ModifiedNewton"])
+        self._timed = QCheckBox("Time-dependent (creep and shrinkage, time in days)")
+        self._start = _spin(28.0, minimum=0.0, maximum=1e6, step=1.0)
         self._layout.addRow(self._table)
         self._layout.addRow(buttons)
         self._layout.addRow("New joints are built:", self._new_joints)
         self._layout.addRow("Algorithm:", self._algorithm)
+        self._layout.addRow(self._timed)
+        self._layout.addRow("Time of the first stage (days):", self._start)
         self._layout.addRow(
             _note(
                 "<i>Ids separated by commas. Elements of a group some stage builds do not "
@@ -786,6 +799,8 @@ class StagedCaseForm(CaseFormBase):
             ", ".join(map(str, stage.remove_group_ids)),
             ", ".join(map(str, stage.pattern_ids)),
             str(stage.n_steps),
+            f"{stage.duration:g}",
+            str(stage.time_steps),
         )
         for column, value in enumerate(values):
             self._table.setItem(row, column, QTableWidgetItem(value))
@@ -802,6 +817,8 @@ class StagedCaseForm(CaseFormBase):
             self._append(stage)
         self._new_joints.setCurrentIndex(max(0, self._new_joints.findData(c.new_joints)))
         self._algorithm.setCurrentText(c.algorithm)
+        self._timed.setChecked(c.time_dependent)
+        self._start.setValue(c.start_time)
 
     def _cell(self, row: int, column: int) -> str:
         item = self._table.item(row, column)
@@ -815,6 +832,8 @@ class StagedCaseForm(CaseFormBase):
                 remove_group_ids=self._ids(self._cell(row, 2)),
                 pattern_ids=self._ids(self._cell(row, 3)),
                 n_steps=int(self._cell(row, 4) or 1),
+                duration=float(self._cell(row, 5) or 0.0),
+                time_steps=int(self._cell(row, 6) or 20),
             )
             for row in range(self._table.rowCount())
         ]
@@ -824,6 +843,8 @@ class StagedCaseForm(CaseFormBase):
             stages=stages,
             new_joints=self._new_joints.currentData(),
             algorithm=self._algorithm.currentText(),
+            time_dependent=self._timed.isChecked(),
+            start_time=self._start.value(),
         )
 
 

@@ -550,6 +550,7 @@ class MainWindow(QMainWindow):
         self._act_ground_motions = QAction("&Ground Motions…", self, shortcut="Ctrl+Shift+G")
         self._act_section_library = QAction("&Section Library…", self, shortcut="Ctrl+Shift+S")
         self._act_concrete_section = QAction("&Concrete Section Wizard…", self)
+        self._act_mc2010 = QAction("Concrete Creep && Shrin&kage (fib MC2010)…", self)
         self._act_section_designer = QAction("Section &Designer…", self)
         self._act_add_linear_ts = QAction("Add &Linear TimeSeries…", self)
         self._act_add_path_ts = QAction("Add &Path TimeSeries…", self)
@@ -598,6 +599,7 @@ class MainWindow(QMainWindow):
         self._act_assign_trapezoidal_load = QAction("&Trapezoidal Load…", self)
         self._act_assign_temperature_load = QAction("Te&mperature Load…", self)
         self._act_assign_wall = QAction("RC &Wall (MVLEM)…", self)
+        self._act_assign_tendon = QAction("Te&ndon (Post-Tensioning)…", self)
 
         # Display (post-processing)
         self._act_select_results = QAction("Show Results &Of…", self)
@@ -814,6 +816,7 @@ class MainWindow(QMainWindow):
         m_define.addActions(
             [
                 self._act_material_library,
+                self._act_mc2010,
                 self._act_friction_library,
                 self._act_material_tester,
                 self._act_ground_motions,
@@ -871,6 +874,7 @@ class MainWindow(QMainWindow):
             self._act_assign_trapezoidal_load,
             self._act_assign_frame_point_load,
             self._act_assign_temperature_load,
+            self._act_assign_tendon,
             self._act_assign_hinge,
             self._act_assign_wall,
             None,
@@ -1327,6 +1331,7 @@ class MainWindow(QMainWindow):
         self._act_ground_motions.triggered.connect(self._on_ground_motions)
         self._act_section_library.triggered.connect(self._on_section_library)
         self._act_concrete_section.triggered.connect(self._on_concrete_section)
+        self._act_mc2010.triggered.connect(self._on_mc2010_concrete)
         self._act_section_designer.triggered.connect(self._on_section_designer)
         self._act_add_linear_ts.triggered.connect(self._on_add_linear_ts)
         self._act_add_path_ts.triggered.connect(self._on_add_path_ts)
@@ -1358,6 +1363,7 @@ class MainWindow(QMainWindow):
             self._on_assign_imposed_displacement
         )
         self._act_assign_surface_load.triggered.connect(self._on_assign_surface_load)
+        self._act_assign_tendon.triggered.connect(self._on_assign_tendon)
         self._act_assign_area_springs.triggered.connect(lambda: self._on_assign_springs_of("area"))
         self._act_assign_edge_springs.triggered.connect(lambda: self._on_assign_springs_of("edge"))
         self._act_assign_line_springs.triggered.connect(lambda: self._on_assign_springs_of("line"))
@@ -2478,6 +2484,22 @@ class MainWindow(QMainWindow):
             f"Shell {element_id}: nodes {nodes}, plate section {section.id} "
             f"(winding ordered counter-clockwise)."
         )
+
+    def _on_mc2010_concrete(self) -> None:
+        """Define → Concrete Creep & Shrinkage: a TDConcreteMC10 material from the mix."""
+        from opensees_studio.views.dialogs.mc2010_concrete import Mc2010ConcreteDialog
+
+        if self._vm.project is None:
+            self._on_new()
+        project = self._vm.project
+        if project is None:
+            return
+        dialog = Mc2010ConcreteDialog(project, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        material = dialog.material()
+        self._vm.apply_command(AddMaterialsCommand(self._vm, [material]))
+        self._log(f"Material {material.id} ({material.name}): TDConcreteMC10 after fib MC2010.")
 
     def _on_shell_formulation(self) -> None:
         """Assign → Area → Shell Formulation: MITC4, DKGQ or NLDKGQ (quads), DKGT or NLDKGT."""
@@ -5093,6 +5115,27 @@ class MainWindow(QMainWindow):
             f"Surface load {values['value']:g}{by} ({values['direction']}) on "
             f"{len(shells)} shell(s)."
         )
+
+    def _on_assign_tendon(self) -> None:
+        """Assign → Frame → Tendon (Post-Tensioning): a tendon in each selected member."""
+        from opensees_studio.core import TendonLoad
+        from opensees_studio.views.dialogs.tendon_load import TendonLoadDialog
+
+        project = self._vm.project
+        if project is None:
+            return
+        selected = set(self._canvas.selection.elements)
+        members = sorted(e.id for e in project.elements if e.id in selected and len(e.nodes) == 2)
+        if not members:
+            QMessageBox.information(self, "Tendon", "Select one or more frame members first.")
+            return
+        dlg = TendonLoadDialog(len(members), project, self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        values = dlg.values()
+        loads = [TendonLoad(element_id=eid, **values) for eid in members]  # type: ignore[arg-type]
+        self._apply_pattern_loads("tendon_loads", loads, dlg.pattern_id(), "Tendon")
+        self._log(f"Tendon of {values['force']:g} in {len(members)} member(s).")
 
     def _on_assign_springs_of(self, kind: str) -> None:
         """Assign → Area → Area/Edge Springs, Assign → Frame → Line Springs."""

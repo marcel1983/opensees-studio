@@ -11,6 +11,23 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **Creep and shrinkage (fib Model Code 2010).** Define → Concrete Creep &
+  Shrinkage builds a `TDConcreteMC10` material from fcm, humidity, notional
+  size, cement class and casting time, previewing φ(t, t0) and εcs. A staged
+  construction case marked *time-dependent* runs in concrete age (days): each
+  stage applies its loads at once and holds them for its duration with creep
+  on. A column under sustained stress follows the Model Code within 2 % over
+  10 000 days (Verification Manual V-21). `.osmodel`: material
+  `TDConcreteMC10`; stage `duration`, `time_steps`; case `time_dependent`,
+  `start_time`.
+- **Post-tensioning tendons.** Assign → Frame → Tendon (Post-Tensioning)
+  applies a tendon to each selected member as its equivalent loads: a
+  parabola through three eccentricities, the jacking force from end i, end j
+  or both, friction and wobble losses and a long-term loss fraction. The
+  member carries the anchorage forces and the tendon's pressure along its
+  curve. A straight tendon gives the camber `P e L² / 8EI` and a parabolic one
+  balances `8 P f / L²` exactly (integration tests). `.osmodel`:
+  `tendon_loads` in Plain patterns.
 - **Staged construction.** A new analysis case type, *Staged construction*
   (Analyze → Cases): a table of stages, each building groups of elements,
   removing groups (shoring, formwork) and applying load patterns that then

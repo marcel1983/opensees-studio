@@ -209,7 +209,11 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   elements appear stress-free, new joints at their design position (column
   shortening since built) or following the deformed structure; a stage's self
   weight weighs only what it builds. One result step per stage
-  (`examples/staged_frame.osmodel`).
+  (`examples/staged_frame.osmodel`). Marked time-dependent, the case runs in
+  concrete age (days) with creep and shrinkage after the fib Model Code 2010
+  (`TDConcreteMC10`, Define → Concrete Creep & Shrinkage). Post-tensioning
+  tendons (Assign → Frame → Tendon) act as their equivalent loads: a parabolic
+  profile, friction and wobble losses and a long-term loss.
 - **Load combinations and envelopes** (Define → Load Combinations…) — Linear
   Add, Envelope (max/min), Absolute Add and SRSS of static and response spectrum
   cases, or of other combinations, each with a scale factor. Combining is

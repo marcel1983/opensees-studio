@@ -4218,6 +4218,81 @@ reaction 6 E I d / L³ — the application matches it.
             "assign.support",
             "assign.load",
         ),
+        "define.mc2010": _t(
+            "Define → Concrete Creep & Shrinkage (fib MC2010)",
+            "Define",
+            "A time-dependent concrete material from the mix, the exposure and the cement.",
+            """
+Builds a `TDConcreteMC10` material (OpenSees, after Tosic): creep by
+superposition of the stress history and shrinkage, both with the equations of
+the fib Model Code 2010 (5.1.9.4). Enter, in the Model Code's units:
+
+- **fcm** — mean compressive strength at 28 days, MPa;
+- **relative humidity** (40 to 99 %) and the **notional size h0 = 2·Ac/u** in mm
+  (Ac the section area, u the perimeter exposed to drying);
+- the **cement class** (32.5N; 32.5R/42.5N; 42.5R/52.5N/R) and the age at which
+  **drying starts** (end of curing);
+- the **analysis time of casting**: give each pour its own material, cast when
+  its stage builds it.
+
+The window previews the creep coefficient φ(t, t0) and the shrinkage εcs at a
+few ages. Stresses are stored in the project's unit; the modulus is
+Eci = 21500·(fcm/10)^(1/3) MPa.
+
+# Using it
+Use the material in fibre sections or bars, and run a **staged construction**
+case marked **time-dependent**: its time is the concrete age in days, each stage
+applies its loads at once and then holds them for its duration (creep on), with
+geometrically spaced time steps. Elastic sections do not creep. A column loaded
+at 28 days follows the Model Code's eps = stress/Eci·(1 + phi) + eps_cs within 2 % over
+ten thousand days (integration test). A member that only shrinks, with nothing
+compressing it, cracks in this material as it would in reality: give the
+analysis enough time steps (the creep and shrinkage of a step are computed from
+the state at its start).
+""",
+            "analyze.cases",
+            "define.material_library",
+        ),
+        "assign.tendon": _t(
+            "Assign → Frame → Tendon (Post-Tensioning)",
+            "Assign — frame",
+            "A post-tensioning tendon in each selected member, as its equivalent loads.",
+            """
+The tendon is not a member of the model: it is the push it exerts on the
+concrete (load balancing), placed in a Plain load pattern.
+
+# Profile
+A parabola through three eccentricities measured along the member's **local
+y**: at end i, at midspan and at end j. A horizontal 2D beam's local y is up, so
+a tendon below the centroid has a negative eccentricity. For a continuous
+draped tendon, give each member its own piece of the curve (the eccentricities
+at a shared joint must match).
+
+# What the member carries
+- At each anchorage: the force P along the tendon at its eccentricity — an
+  axial compression P, a shear P·de/dx and a moment -P·e about the centroid.
+- Along the curve: the upward pressure 8·P·f/L² of a parabola of sag
+  f = (e_i + e_j)/2 - e_mid (positive when the tendon dips towards -y), and the
+  friction along the member.
+
+A simply supported beam with a straight tendon below its centroid gets a
+uniform moment P·e and the camber P·e·L²/(8EI); a parabolic one balances a
+uniform load of 8·P·f/L². Both are pinned by the integration tests.
+
+# Losses
+- **Friction and wobble**: P(x) = P0·exp(-(μα + k·d)) from the stressing end
+  (α the angle change, d the distance), the larger of the two values when
+  stressed from both ends.
+- **Long-term loss**: a fraction applied everywhere — creep, shrinkage,
+  relaxation, and the elastic shortening of the concrete (the tendon is not
+  modelled, so that loss is not computed).
+
+Combine the pattern like any other; in a staged construction case, put it in
+the stage where the tendon is stressed.
+""",
+            "assign.temperature_load",
+            "analyze.cases",
+        ),
         "assign.wall": _t(
             "Assign → Frame → RC Wall (MVLEM)",
             "Assign — frame",
@@ -4312,6 +4387,11 @@ case, a modal case and a pushover, for instance — each with its own settings.
   group removed before it is built, and members with end releases or rigid end
   zones in a staged group are refused before the run. Verified on a column built
   storey by storey (Verification Manual V-20); see `examples/staged_frame.osmodel`.
+  Mark the case **time-dependent** for creep and shrinkage: its time is then the
+  concrete age in days (starting at the case's start time), each stage applies
+  its loads at once and holds them for its **duration**, in geometrically spaced
+  time steps; the concrete must be a `TDConcreteMC10` material (Define →
+  Concrete Creep & Shrinkage).
 - **Modal** — eigenvalues and mode shapes; needs mass. See **Modal analysis**.
 - **Pushover** — displacement-controlled monotonic push to a target. See
   **Pushover**.
@@ -5840,6 +5920,8 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_assign_temperature_load": "assign.temperature_load",
     "_act_assign_hinge": "assign.hinge",
     "_act_assign_wall": "assign.wall",
+    "_act_assign_tendon": "assign.tendon",
+    "_act_mc2010": "define.mc2010",
     # ── Analyze ─────────────────────────────────────────────────────
     "_act_case_manager": "analyze.cases",
     "_act_check_model": "analyze.check_model",

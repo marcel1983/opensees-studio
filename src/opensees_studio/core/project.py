@@ -698,6 +698,13 @@ class Project(BaseModel):
                         f"Pattern {pat.id} has a temperature load on missing element "
                         f"{tl.element_id}."
                     )
+            for tendon in getattr(pat, "tendon_loads", []):
+                element = elements_by_id.get(tendon.element_id)
+                if element is None or len(getattr(element, "nodes", ())) != 2:
+                    problems.append(
+                        f"Pattern {pat.id} has a tendon on element {tendon.element_id}, "
+                        "which is not a frame member."
+                    )
             for dl in getattr(pat, "distributed_loads", []):
                 if dl.element_id not in element_ids:
                     problems.append(
