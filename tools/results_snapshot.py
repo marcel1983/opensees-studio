@@ -108,18 +108,20 @@ def fingerprint(result: Any) -> Fingerprint:
     )
 
     out: Fingerprint = {"kind": type(result).__name__}
-    if isinstance(result, StaticResults | InfluenceLineResults):
+    if isinstance(result, InfluenceLineResults):
+        # Every stop counts; the last one alone (the load over a support) is noise.
+        out["n_steps"] = int(result.n_steps)
+        out |= _field("line_disp", _all_rows(result.node_disp))
+        out |= _field("line_reaction", _all_rows(result.node_reaction))
+        out |= _field("line_force", _all_rows(result.element_forces), per_column=False)
+    elif isinstance(result, StaticResults):
         out["n_steps"] = int(result.n_steps)
         out |= _field("disp", _last_rows(result.node_disp))
         reactions = _last_rows(result.node_reaction)
         if reactions.size:
             out["reaction_sum"] = _rounded(reactions.sum(axis=0))
         out |= _field("force", _last_rows(result.element_forces), per_column=False)
-        if isinstance(result, StaticResults):
-            out |= _field("shell", _last_rows(result.element_stresses))
-        else:
-            out |= _field("line_disp", _all_rows(result.node_disp))
-            out |= _field("line_force", _all_rows(result.element_forces), per_column=False)
+        out |= _field("shell", _last_rows(result.element_stresses))
     elif isinstance(result, PushoverResults):
         out["n_steps"] = int(result.n_steps)
         out["control_disp_final"] = _round(float(np.asarray(result.control_disp)[-1]))
@@ -325,13 +327,15 @@ def main(argv: list[str] | None = None) -> int:
     changes = compare(scope, current)
 
     if args.write:
-        if changes and pinned and not args.reason.strip():
+        # A new example has nothing to compare with: pinning it needs no reason.
+        changes = [c for c in changes if c.example in pinned]
+        if changes and not args.reason.strip():
             print("Results changed; pin them with --reason saying why:\n" + _report(changes))
             return 1
         merged = {**pinned, **current}
         SNAPSHOTS.parent.mkdir(parents=True, exist_ok=True)
         SNAPSHOTS.write_text(dump(merged), encoding="utf-8")
-        if changes and pinned:
+        if changes:
             today = _dt.date.today().isoformat()
             text = CHANGES.read_text(encoding="utf-8")
             CHANGES.write_text(

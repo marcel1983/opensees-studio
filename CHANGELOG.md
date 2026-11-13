@@ -29,6 +29,24 @@ refused instead of silently downgraded).
   before and after to `docs/results-changes.md`; from now on such changes are
   announced in a **Results changed** section of these notes.
 
+### Fixed
+
+- **SRSS response spectra no longer depend on the platform.** Inside a group
+  of repeated modes (a symmetric building's two sway modes) the eigen solver
+  returns an arbitrary basis, and SRSS, unlike CQC, changed with it: the
+  `space_frame_3d` largest Y displacement under an X spectrum was 0.0024 m on
+  Linux and 0.00036 m on macOS, where the symmetric frame gives none. Each repeated group is now turned so one mode carries all of its
+  participation in the spectrum's direction, which makes SRSS and CQC
+  basis-independent. The SRSS warning for closely spaced modes stays.
+
+### Results changed
+
+- `space_frame_3d`, case 4 (response spectrum, SRSS, X direction): the values
+  move to the basis-independent result, the same on every platform. Largest Y
+  displacement 0.0024 m → 0 (the frame is symmetric), largest X displacement
+  0.01383 → 0.01403 m, largest base moment 97.1 → 98.6 kN·m. See
+  `docs/results-changes.md`.
+
 ## [0.0.56] - 2026-11-11
 
 ### Added

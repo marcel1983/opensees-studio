@@ -37,6 +37,7 @@ from __future__ import annotations
 import os
 import tempfile
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import Any
@@ -109,6 +110,7 @@ from opensees_studio.core.mass_source import effective_nodal_masses
 from opensees_studio.core.materials.library import materials_in_emission_order
 from opensees_studio.core.modal import (
     SOLVER_AUTO,
+    align_degenerate_modes,
     dof_indices,
     free_dof_count,
     normalize_mode_sign,
@@ -2153,6 +2155,21 @@ class OpenSeesRunner:
             )
 
         modal_results = self._run_modal(modal_case)
+        # A repeated eigenvalue has no unique basis; turn each such group so one
+        # mode carries its participation in this direction, which makes SRSS,
+        # CQC and the per-mode table independent of the basis LAPACK returned.
+        modal_results = replace(
+            modal_results,
+            mode_shapes={
+                mode: normalize_mode_sign(shape)
+                for mode, shape in align_degenerate_modes(
+                    modal_results.eigenvalues,
+                    modal_results.mode_shapes,
+                    self._node_mass_by_dof(),
+                    case.direction,
+                ).items()
+            },
+        )
 
         warnings: list[str] = []
         damping: float | None = None
@@ -2200,8 +2217,8 @@ class OpenSeesRunner:
                 )
                 warnings.append(
                     f"SRSS with closely spaced modes (frequency ratio at or above "
-                    f"{case.closely_spaced_ratio:g}): {listed}. SRSS ignores their correlation "
-                    f"and its result depends on the eigen basis inside such a pair; use CQC."
+                    f"{case.closely_spaced_ratio:g}): {listed}. SRSS ignores their correlation; "
+                    f"use CQC."
                 )
 
         return ResponseSpectrumResults(
@@ -2218,6 +2235,13 @@ class OpenSeesRunner:
             damping_ratio=damping,
             warnings=warnings,
         )
+
+    def _node_mass_by_dof(self) -> dict[int, np.ndarray]:
+        """Each node's lumped mass over the model's DOFs, in OpenSees order."""
+        return {
+            node.id: np.array([self._node_mass[node.id][i] for i in self._dof_idx], dtype=float)
+            for node in self.project.nodes
+        }
 
     def _modal_static_responses(
         self, loads_by_mode: dict[int, dict[int, np.ndarray]]
@@ -2313,10 +2337,7 @@ class OpenSeesRunner:
                 * self._dof_sign
                 for node in self.project.nodes
             }
-        node_mass = {
-            node.id: np.array([self._node_mass[node.id][i] for i in self._dof_idx], dtype=float)
-            for node in self.project.nodes
-        }
+        node_mass = self._node_mass_by_dof()
         # A repeated eigenvalue gives an arbitrary, with the dense solver even
         # mass-oblique, basis of its eigenspace: make it mass-orthogonal so
         # participation and CQC are basis-invariant, then fix every sign.

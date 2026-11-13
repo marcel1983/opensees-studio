@@ -576,7 +576,10 @@ structure's modes, and combines them into a design response.
   scale factors it needs per period range.
 - **Modes** — every mode used must be orthogonalised and sign-normalised; the
   application does that before combining, so a repeated eigenvalue cannot
-  produce a wrong combination.
+  produce a wrong combination. Inside a group of repeated modes it also turns
+  the basis so one mode carries all of the group's participation in the
+  spectrum's direction: SRSS and CQC then give the same answer whatever basis
+  the eigen solver returned, on every platform.
 
 # Mechanics
 The peak response of mode *i* is Sa(T_i)·Γ_i·φ_i (Γ is the modal participation

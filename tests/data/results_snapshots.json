@@ -53,14 +53,6 @@
   },
   "bridge_influence_line": {
    "1": {
-    "disp_max": [
-     0.0,
-     2.481541838e-24,
-     2.843433356e-25
-    ],
-    "disp_norm": 3.53448559e-24,
-    "force_max": 3.126742715e-16,
-    "force_norm": 7.327247429e-16,
     "kind": "InfluenceLineResults",
     "line_disp_max": [
      0.0,
@@ -70,12 +62,13 @@
     "line_disp_norm": 2.438850269e-07,
     "line_force_max": 4.211956522,
     "line_force_norm": 42.95270194,
-    "n_steps": 81,
-    "reaction_sum": [
+    "line_reaction_max": [
      0.0,
      1.0,
-     -5.215115268e-16
-    ]
+     6.661338148e-15
+    ],
+    "line_reaction_norm": 8.165228119,
+    "n_steps": 81
    }
   },
   "building_3storey_diaphragm": {
@@ -1317,12 +1310,12 @@
    "4": {
     "combination": "SRSS",
     "disp_max": [
-     0.01382920484,
-     0.002394295317,
-     7.653877799e-05
+     0.01403494056,
+     1.479098212e-15,
+     6.88993552e-05
     ],
     "disp_norm": 0.03016092837,
-    "force_max": 97117.29326,
+    "force_max": 98558.6476,
     "force_norm": 321525.9038,
     "kind": "ResponseSpectrumResults",
     "periods": [
@@ -1334,12 +1327,12 @@
      0.05336259362
     ],
     "reaction_max": [
-     36784.47165,
-     6345.589918,
-     41512.27956,
-     16793.99791,
-     97117.29326,
-     1.872290966e-09
+     37327.78946,
+     3.514774826e-09,
+     37368.30017,
+     9.027801087e-09,
+     98558.6476,
+     2.146953448e-09
     ],
     "reaction_norm": 223638.6437
    }

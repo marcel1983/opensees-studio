@@ -499,12 +499,13 @@ of that history:
 
 - **CQC** (Complete Quadratic Combination, Der Kiureghian correlation,
   equal or per-mode damping) is the default for new response spectrum
-  cases. Inside a repeated or near-repeated mode pair the eigen solver
-  returns an arbitrary basis of the eigenspace; CQC gives the same combined
-  response for every such basis (correlation 1 inside the pair), SRSS does
-  not. On `space_frame_3d` (two sway modes with one eigenvalue) the SRSS
-  roof displacement differs by 12 percent between the dense and the ARPACK
-  basis, the CQC one by 3e-10.
+  cases. Inside a repeated mode pair the eigen solver returns an arbitrary
+  basis of the eigenspace, and different LAPACK builds return different
+  ones. Before combining, each group of repeated modes is turned so one mode
+  carries all of its participation in the spectrum's direction and the
+  others none; CQC and SRSS then give the same result for every basis (on
+  `space_frame_3d` the SRSS roof displacement used to differ by 12 percent
+  between the dense and the ARPACK basis, and between Linux and macOS).
 - **SRSS** is still available, and saved cases keep their stored rule. When
   the rule is SRSS and any two included modes have a frequency ratio (lower
   over higher) at or above 0.9 (`closely_spaced_ratio` on the case), the
