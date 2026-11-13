@@ -67,6 +67,27 @@ def test_transient_case_form_round_trips_preload_and_damping(qtbot) -> None:  # 
 
 
 @pytest.mark.gui
+def test_transient_case_form_keeps_initial_and_committed_damping(qtbot) -> None:  # type: ignore[no-untyped-def]
+    """OK on an unchanged case must not drop the βK the form did not show before."""
+    form = TransientCaseForm(_patterns(), [])
+    qtbot.addWidget(form)
+    case = TransientCase(
+        id=1,
+        name="Earthquake",
+        pattern_ids=[2],
+        dt=0.01,
+        n_steps=400,
+        rayleigh_beta_k_init=1.5e-4,
+        rayleigh_beta_k_comm=6.25e-4,
+    )
+    form.populate(case)
+    rebuilt = form.read()
+    assert rebuilt.rayleigh_beta_k == 0.0
+    assert rebuilt.rayleigh_beta_k_init == pytest.approx(1.5e-4)
+    assert rebuilt.rayleigh_beta_k_comm == pytest.approx(6.25e-4)
+
+
+@pytest.mark.gui
 def test_transient_case_form_zero_mode1_damping_reads_as_none(qtbot) -> None:  # type: ignore[no-untyped-def]
     form = TransientCaseForm(_patterns(), [StaticCase(id=1, name="Gravity", pattern_ids=[1])])
     qtbot.addWidget(form)

@@ -7,7 +7,7 @@ that this is pre-alpha: minor and patch releases may change the `.osmodel`
 schema (it carries a `schema_version`, and a file from a newer build is now
 refused instead of silently downgraded).
 
-## [Unreleased]
+## [0.0.58] - 2026-11-13
 
 ### Fixed
 
@@ -18,6 +18,23 @@ refused instead of silently downgraded).
   `--material-test ID --material-protocol JSON`); a dead child shows its exit
   code and the solver's last output in the dialog. Starting the process adds
   about a second per test.
+- **The RC Frame Earthquake example runs to the end of its record.** It stopped
+  at t = 0.99 s, 98 of 400 steps. Its Rayleigh damping was proportional to the
+  current tangent stiffness instead of the committed one the OpenSees example
+  uses; with the softening concrete fibres that damping changed inside every
+  iteration and Newton never converged.
+- **The transient case form no longer drops damping it did not show.** Analyze →
+  Cases offered only βK on the current tangent, and OK rebuilt the case without
+  βK on the initial and on the committed stiffness, so editing any case that
+  used them silently removed its damping. The form now shows all three, with a
+  note on which to prefer for a non-linear model. If your own non-linear
+  transient cases stall, move their βK from *current tangent* to *committed*.
+
+### Results changed
+
+- `rc_frame_earthquake`, case 1: 400 steps instead of 98, peak drift at node 3
+  1.644 in instead of 1.275 in (the old run had stopped before the peak). See
+  `docs/results-changes.md`.
 
 ## [0.0.57] - 2026-11-13
 

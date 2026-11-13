@@ -486,6 +486,12 @@ you asked the recorder for.
   periods (or as α and β directly). For one target ratio at one period, β =
   2ζ/ω. The two periods must bracket the range that matters; damping applied to
   a range it was not fitted to is a common source of surprises.
+- **Which stiffness β multiplies** — the case has three β fields, OpenSees'
+  `rayleigh αM βK βKinit βKcomm`: the *current* tangent, the *initial*
+  stiffness and the last *committed* stiffness. For a linear model they are the
+  same. For a non-linear one prefer committed (what the OpenSees examples use) or
+  initial: damping on the current tangent changes inside every Newton iteration
+  once the model softens, and a run can stop converging for that reason alone.
 - **Modal damping** — one ratio ζ for each of the first N modes (OpenSees
   `modalDamping`), as SAP2000 and ETABS damp a modal history: every mode up to N
   gets exactly ζ, whatever its period, so no pair of periods has to be chosen.

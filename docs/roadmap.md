@@ -776,11 +776,23 @@ Status legend: ✅ done · 🟡 partial · ⬜ planned · ✂️ deferred / out-
   where no step converges raises instead of returning empty arrays. The class
   is not persisted, so there is no `.osmodel` or HDF5 schema change. The fix
   exposed the stall recorded in the next box, which the old count had hidden.
-- ⬜ `rc_frame_earthquake` stalls at t = 1.93 s: the run completes 192 of 400
-  steps (it was 98 before the case went from tol 1e-12 / 10 iterations to
-  1e-8 / 50). The step-count assertion in
-  `tests/integration/test_rc_frame_earthquake.py` is `xfail(strict=True)` until
-  this is fixed.
+- ✅ `rc_frame_earthquake` covers the whole record (closed 2026-11-13). Root
+  cause: the example put its Rayleigh coefficient in `rayleigh_beta_k`, damping
+  proportional to the **current** tangent, while its docstring and the Tcl
+  reference use the committed stiffness (`rayleigh 0 0 0 0.000625`). Once the
+  concrete fibres soften, the current tangent changes inside every Newton
+  iteration and so does the damping matrix, which is why every algorithm cycled
+  without converging. Units, mass and ground-motion factor were consistent
+  (kip-in, m = P/g and factor g with g = 386.4). With `rayleigh_beta_k_comm` the
+  run completes 400 of 400 steps, peak |Ux| at node 3 1.644 in (1.1 % drift);
+  it also completes with the Tcl test 1e-12 / 10, with the record scaled by 0.9,
+  1.1 and 1.5, with 1e-6 g of noise, and at dt / 2 (1.650 in, 0.4 % apart).
+  The `xfail` is gone, the drift bound is 2 % of the column height, and the
+  CLI early-stop test builds the stalling variant itself. The history of the
+  investigation follows.
+- Former box: `rc_frame_earthquake` stalls at t = 1.93 s: the run completes 192
+  of 400 steps (it was 98 before the case went from tol 1e-12 / 10 iterations to
+  1e-8 / 50).
   - Since the input record was rounded to 6 decimals (2026-09-28, `dd67bf7`,
     at most 5e-7 g of change) the run stops at step 99 (t = 0.99 s, 98 of 400
     steps), the step the fallback chain used to pass. The cycle data below is
