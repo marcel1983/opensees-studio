@@ -632,6 +632,8 @@ class MainWindow(QMainWindow):
         self._act_run_all = QAction("Run &All Cases", self, shortcut=QKeySequence("Shift+F5"))
         self._act_run_selected = QAction("Run Se&lected Cases…", self)
         self._act_clear_results = QAction("Delete &All Results…", self)
+        self._act_design_basis = QAction("Design &Basis (AISC)…", self)
+        self._act_direct_analysis = QAction("Direct &Analysis Method…", self)
         self._act_steel_check = QAction("&Steel Frame Check (AISC 360-16)…", self)
         self._act_concrete_check = QAction("Co&ncrete Frame Check (ACI 318-19)…", self)
         self._act_base_plate = QAction("&Base Plate && Anchors (DG1, ACI 318)…", self)
@@ -939,6 +941,9 @@ class MainWindow(QMainWindow):
         m_display.addAction(self._act_back_to_model)
 
         m_design = mb.addMenu("Desi&gn")
+        m_design.addAction(self._act_design_basis)
+        m_design.addAction(self._act_direct_analysis)
+        m_design.addSeparator()
         m_design.addAction(self._act_steel_check)
         m_design.addAction(self._act_concrete_check)
         m_design.addAction(self._act_base_plate)
@@ -1417,6 +1422,8 @@ class MainWindow(QMainWindow):
         self._act_run_all.triggered.connect(self._on_run_all_cases)
         self._act_run_selected.triggered.connect(self._on_run_selected_cases)
         self._act_clear_results.triggered.connect(self._on_clear_results)
+        self._act_design_basis.triggered.connect(self._on_design_basis)
+        self._act_direct_analysis.triggered.connect(self._on_direct_analysis)
         self._act_steel_check.triggered.connect(self._on_steel_check)
         self._act_concrete_check.triggered.connect(self._on_concrete_check)
         self._act_base_plate.triggered.connect(self._on_base_plate)
@@ -2909,6 +2916,53 @@ class MainWindow(QMainWindow):
         if checks != project.chapter_j_checks:
             self._vm.apply_command(SetChapterJChecksCommand(self._vm, checks))
         self._log(f"{len(checks)} Chapter J check(s).")
+
+    def _on_design_basis(self) -> None:
+        """Design → Design Basis: code, method, stability method, systems and steel grades."""
+        from opensees_studio.views.dialogs.design_basis import DesignBasisDialog
+
+        project = self._vm.project
+        if project is None:
+            return
+        dialog = DesignBasisDialog(project, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        settings = dialog.settings()
+        if settings != project.design:
+            self._vm.apply_command(SetDesignSettingsCommand(self._vm, settings))
+            self._log(
+                f"Design basis: {settings.method}, {settings.stability_method} stability "
+                f"design, system {settings.seismic_system}"
+                + (f" / {settings.seismic_system_y}" if settings.seismic_system_y else "")
+                + (
+                    f", {len(settings.steel_grades)} family grade(s)."
+                    if settings.steel_grades
+                    else "."
+                )
+            )
+
+    def _on_direct_analysis(self) -> None:
+        """Design → Direct Analysis Method: one second-order case per LRFD combination."""
+        from opensees_studio.commands import ReplaceDirectAnalysisCasesCommand
+        from opensees_studio.views.dialogs.design_basis import DirectAnalysisDialog
+
+        project = self._vm.project
+        if project is None:
+            return
+        dialog = DirectAnalysisDialog(project, dict(self._case_results.current(project)), self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        cases = dialog.cases()
+        if not cases:
+            return
+        self._vm.apply_command(
+            ReplaceDirectAnalysisCasesCommand(self._vm, cases, dialog.settings())
+        )
+        self._log(
+            f"Direct Analysis Method: {len(cases)} case(s) generated; run them "
+            "(Analyze → Run All Cases), then check Δ2/Δ1 here and the members in "
+            "Design → Steel Frame Check."
+        )
 
     def _on_steel_check(self) -> None:
         """Design → Steel Frame Check: AISC 360-16 ratios over this session's results.
@@ -7067,6 +7121,8 @@ class MainWindow(QMainWindow):
         )
         db_there = has_project and database_path(self._vm.path).exists()
         self._act_clear_results.setEnabled(bool(has_project and (stored or db_there)))
+        self._act_design_basis.setEnabled(has_project)
+        self._act_direct_analysis.setEnabled(has_project)
         self._act_steel_check.setEnabled(has_project)
         self._act_concrete_check.setEnabled(has_project)
         self._act_base_plate.setEnabled(has_project)

@@ -88,6 +88,34 @@ def test_transient_case_form_keeps_initial_and_committed_damping(qtbot) -> None:
 
 
 @pytest.mark.gui
+def test_static_case_form_keeps_what_it_does_not_show(qtbot) -> None:  # type: ignore[no-untyped-def]
+    """OK on a direct analysis case must not turn it into a plain first-order case."""
+    from opensees_studio.core.analysis import DirectAnalysisTag
+    from opensees_studio.views.dialogs.case_forms import StaticCaseForm
+
+    form = StaticCaseForm(_patterns(), [StaticCase(id=7, name="Pre", pattern_ids=[1])])
+    qtbot.addWidget(form)
+    case = StaticCase(
+        id=3,
+        name="DAM 1.2D+1.6L",
+        pattern_ids=[1, 2],
+        pattern_factors=[1.2, 1.6],
+        preload_case_ids=[7],
+        p_delta=True,
+        stiffness_factor=0.8,
+        notional_ratio=0.003,
+        notional_direction="-X",
+        direct_analysis=DirectAnalysisTag(combination="1.2D+1.6L"),
+    )
+    form.populate(case)
+    assert "P-Delta in every frame" in form._kept_note.text()
+    assert form.read() == case
+    # Dropping a pattern keeps the factor of the other.
+    form._patterns_picker.item(0).setSelected(False)
+    assert form.read().pattern_factors == [1.6]
+
+
+@pytest.mark.gui
 def test_transient_case_form_zero_mode1_damping_reads_as_none(qtbot) -> None:  # type: ignore[no-untyped-def]
     form = TransientCaseForm(_patterns(), [StaticCase(id=1, name="Gravity", pattern_ids=[1])])
     qtbot.addWidget(form)

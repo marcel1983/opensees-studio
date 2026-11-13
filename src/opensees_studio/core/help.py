@@ -1457,10 +1457,87 @@ when the second-order/first-order drift ratio is at most 1.7 in every storey;
 otherwise apply it in all combinations. This action does not run the analysis
 and does not by itself make a case AISC 360 Chapter C compliant. It gives the
 engineer the notional loads with the right code values and a traceable name.
+For the whole method in one step (combinations solved to second order, reduced
+stiffness and each combination's own notional loads) use Design → Direct
+Analysis Method instead.
 """,
+            "design.direct_analysis",
             "design.steel_check",
             "define.mass_source",
             "define.plain_pattern",
+        ),
+        "design.basis": _t(
+            "Design → Design Basis (AISC)",
+            "Design",
+            "Where a steel design starts: code, method, stability design, systems and steels.",
+            """
+Everything the later steel checks read, set once for the project.
+
+# Values
+- **Design method** — LRFD or ASD. The Direct Analysis Method cases are made for
+  LRFD (in ASD, C2.1(e) runs the analysis at 1.6 times the combinations).
+- **Stability design** — the *Direct Analysis Method* of AISC 360 Chapter C
+  (second-order analysis with reduced stiffness and notional loads; every
+  member is then checked with **K = 1** and **B1** for P-delta), the *Effective
+  Length Method* (Appendix 7.2, the K factors you enter) or the *First-Order
+  Method* (Appendix 7.3). *Not chosen* keeps the K factors and the B1 switch of
+  the Steel Frame Check as they are.
+- **Lateral system** along X and, in 3D, along Y: none, a steel system not
+  detailed for seismic (R = 3), OMF, IMF, SMF, OCBF, SCBF, EBF or BRBF. The
+  dialog shows R, Ω0 and Cd of ASCE 7 Table 12.2-1. Ω0 (the larger of the two
+  directions) makes the overstrength combinations of the direct analysis cases.
+  AISC 341 member checks are applied for SMF, IMF, SCBF and OCBF; the others are
+  checked against AISC 360 with a note.
+- **SDS** — the 0.2 SDS D term of the overstrength combinations.
+- **Ry** — expected to specified yield stress (AISC 341 Table A3.1).
+- **Steel by shape family** — the grade of W, M, S, HP, tees, channels, angles,
+  rectangular and round HSS and pipe: ASTM A36, A572 Gr. 50, A992, A588 Gr. 50,
+  A500 Gr. B and C, A1085 or A53 Gr. B, each with its Fy and Fu (A500 and A53
+  have their own values for round sections). *AISC Manual defaults* sets the
+  preferred grades of Manual Table 2-4. A family left on *Project Fy / Fu* uses
+  the values of the Steel Frame Check. A member can still take its own grade.
+""",
+            "design.direct_analysis",
+            "design.steel_check",
+        ),
+        "design.direct_analysis": _t(
+            "Design → Direct Analysis Method",
+            "Design",
+            "AISC 360 Chapter C: every LRFD combination as one second-order analysis.",
+            """
+A combination of separate results is a sum, and a second-order analysis cannot be
+summed. So each **ASCE 7-16 LRFD combination** becomes **one static case** that
+applies its patterns with their factors and is solved with:
+
+- **P-Delta** in every frame member (Corotational members keep theirs). The
+  member's own curvature (P-delta) is covered by **B1** in the member check.
+- **Stiffness x0.8** on the elastic sections of the frames and the elastic
+  materials of trusses (C2.3). τb is taken as 1.0 with the additional notional
+  load **0.001 α Yi** in every combination (C2.3(c)), so no iteration is needed.
+  Fibre sections and nonlinear materials are not reduced; the run log says which.
+- **Notional loads 0.002 α Yi** (C2.2b) at every storey, Yi being the storey's
+  factored gravity load *in that combination*: in the gravity-only combinations,
+  in +X and -X (and +Y, -Y in 3D) as separate cases.
+
+The model itself is never changed: the case applies all of it when it runs.
+
+# Steps
+1. Give each load case its **role** (dead, live, roof live, snow, rain, wind,
+   earthquake). Names such as DEAD, LIVE, WX or EQ are recognised. Response
+   spectrum cases cannot enter a second-order analysis; use an equivalent
+   lateral force case.
+2. **OK** replaces the cases made here before, sets the stability design to the
+   Direct Analysis Method and makes these cases the load sets of the Steel Frame
+   Check. Every lateral combination also gets a **first-order twin**.
+3. Run them (**Analyze → Run All Cases**) and open this dialog again: the
+   **Second-order check** tab lists **Δ2/Δ1** of every storey. Above **1.7** the
+   notional loads must act in every combination (C2.2b(d)): tick the option and
+   regenerate. Above 1.5 the Effective Length Method is not permitted.
+4. **Design → Steel Frame Check** then checks every member with K = 1.
+""",
+            "design.basis",
+            "design.steel_check",
+            "design.notional_loads",
         ),
         "design.connections": _t(
             "Design → Connections",
@@ -5942,6 +6019,8 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_import_s3d": "file.import_s3d",
     "_act_import_s2k": "file.import_s2k",
     "_act_import_tcl": "file.import_tcl",
+    "_act_design_basis": "design.basis",
+    "_act_direct_analysis": "design.direct_analysis",
     "_act_steel_check": "design.steel_check",
     "_act_concrete_check": "design.concrete_check",
     "_act_base_plate": "design.base_plate",

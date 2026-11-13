@@ -37,7 +37,7 @@ from __future__ import annotations
 import itertools
 import os
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import replace
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -97,6 +97,7 @@ from opensees_studio.core import (
 from opensees_studio.core.analysis import test_args, transient_integrator_args
 from opensees_studio.core.area_loads import pattern_distributed_loads, surface_nodal_loads
 from opensees_studio.core.custom_commands import block_tag_base
+from opensees_studio.core.design.direct_analysis import analysis_model, case_notional_loads
 from opensees_studio.core.diaphragms import (
     auto_fixed_slots,
     constrained_node_ids,
@@ -211,6 +212,12 @@ class OpenSeesRunner:
         #: Time series already sent since the last build (a series two patterns share
         #: is defined once).
         self._emitted_series: set[int] = set()
+        #: Notes on how a case changed the model it ran on (P-Delta, reduced stiffness,
+        #: notional loads); they lead the case's result notes.
+        self._model_notes: list[str] = []
+        #: Next tag for a series or pattern a case adds itself (factored copies, notional).
+        self._next_extra_series = 0
+        self._next_extra_pattern = 0
 
     # ─────────────────────── public API ───────────────────────
     def _progress(self, completed: int, total: int) -> None:
@@ -233,6 +240,8 @@ class OpenSeesRunner:
             self._clear_truss_scratch()
         ops.wipe()
         self._emitted_series = set()
+        self._next_extra_series = max((ts.id for ts in self.project.time_series), default=0) + 1
+        self._next_extra_pattern = max((p.id for p in self.project.load_patterns), default=0) + 1
         ops.model("basic", "-ndm", self.project.ndm, "-ndf", self.project.ndf)
 
         for node in self.project.nodes:
@@ -382,6 +391,20 @@ class OpenSeesRunner:
             return self._run(case, results_dir)
 
     def _run(self, case: Any, results_dir: Path | None = None) -> Any:
+        """Run ``case``; a static case with P-Delta or a stiffness factor runs on a copy."""
+        self._model_notes = []
+        if not isinstance(case, StaticCase) or (not case.p_delta and case.stiffness_factor == 1.0):
+            return self._run_case(case, results_dir)
+        original = self.project
+        self.project, self._model_notes = analysis_model(
+            original, p_delta=case.p_delta, stiffness_factor=case.stiffness_factor
+        )
+        try:
+            return self._run_case(case, results_dir)
+        finally:
+            self.project = original
+
+    def _run_case(self, case: Any, results_dir: Path | None = None) -> Any:
         perf.gauge("analysis.nodes", len(self.project.nodes))
         perf.gauge("analysis.elements", len(self.project.elements))
         with perf.span("analysis.checks"):
@@ -1318,7 +1341,55 @@ class OpenSeesRunner:
             ops.imposedMotion(nid, pat.direction, pat.id)
 
     # ─────────────────────── analysis runners ───────────────────────
-    def _emit_patterns_for_case(self, pattern_ids: list[int]) -> None:
+    def _scaled_pattern(self, pat: Any, factor: float) -> Any:
+        """``pat`` on its own copy of its series with ``-factor`` times ``factor``."""
+        if not isinstance(pat, PlainLoadPattern):
+            raise ValueError(
+                f"Pattern '{pat.name or pat.id}' is not a Plain pattern: only those take a factor."
+            )
+        if pat.temperature_loads:
+            raise ValueError(
+                f"Pattern '{pat.name or pat.id}' has temperature loads, which a pattern "
+                "factor cannot scale; give it the factor 1."
+            )
+        series = next(ts for ts in self.project.time_series if ts.id == pat.time_series_id)
+        kinds = {LinearTimeSeries: "Linear", ConstantTimeSeries: "Constant"}
+        kind = kinds.get(type(series))
+        if kind is None:
+            raise ValueError(
+                f"Pattern '{pat.name or pat.id}': a pattern factor needs a Linear or Constant "
+                f"time series, not {type(series).__name__}."
+            )
+        tag = self._next_extra_series
+        self._next_extra_series += 1
+        self._ops.timeSeries(kind, tag, "-factor", series.factor * factor)
+        return pat.model_copy(update={"time_series_id": tag})
+
+    def _emit_notional_loads(self, case: StaticCase) -> None:
+        """The case's notional loads ``Ni = ratio Yi`` as a Linear pattern of their own."""
+        loads, storeys = case_notional_loads(self.project, case)
+        if not loads:
+            self._model_notes.append(
+                "Notional loads: no storey carries a factored gravity load in this case."
+            )
+            return
+        series = self._next_extra_series
+        self._next_extra_series += 1
+        pattern = self._next_extra_pattern
+        self._next_extra_pattern += 1
+        self._ops.timeSeries("Linear", series)
+        self._emit_pattern(
+            PlainLoadPattern(id=pattern, name="Notional", time_series_id=series, nodal_loads=loads)
+        )
+        total = sum(s.force for s in storeys)
+        self._model_notes.append(
+            f"Notional loads along {case.notional_direction}: Ni = {case.notional_ratio:g} Yi "
+            f"at {len(storeys)} level(s), {total:.6g} in all."
+        )
+
+    def _emit_patterns_for_case(
+        self, pattern_ids: list[int], factors: Sequence[float] = ()
+    ) -> None:
         # Time series for the patterns we are about to emit.
         used_ts: set[int] = set()
         for pid in pattern_ids:
@@ -1335,9 +1406,10 @@ class OpenSeesRunner:
             if ts.id in used_ts and ts.id not in self._emitted_series:
                 self._emit_time_series(ts)
                 self._emitted_series.add(ts.id)
-        for pid in pattern_ids:
+        for index, pid in enumerate(pattern_ids):
             pat = next(p for p in self.project.load_patterns if p.id == pid)
-            self._emit_pattern(pat)
+            factor = float(factors[index]) if factors else 1.0
+            self._emit_pattern(pat if factor == 1.0 else self._scaled_pattern(pat, factor))
 
     def _run_preload_sequence(self, preload_ids: list[int], parent_case_id: int) -> None:
         """Run a list of StaticCase preloads, then lock load + reset time.
@@ -1371,7 +1443,7 @@ class OpenSeesRunner:
                     f"supports StaticCase entries; got "
                     f"{type(preload_case).__name__}."
                 )
-            self._emit_patterns_for_case(preload_case.pattern_ids)
+            self._emit_patterns_for_case(preload_case.pattern_ids, preload_case.pattern_factors)
             applied_ids.extend(preload_case.pattern_ids)
             self._setup_analysis(preload_case)
             correct = self._needs_correction_solve(preload_case, applied_ids)
@@ -1690,8 +1762,10 @@ class OpenSeesRunner:
 
     def _run_static(self, case: StaticCase) -> StaticResults:
         ops = self._ops
-        self._emit_patterns_for_case(case.pattern_ids)
-        self._case_notes = []
+        self._emit_patterns_for_case(case.pattern_ids, case.pattern_factors)
+        if case.notional_ratio > 0.0:
+            self._emit_notional_loads(case)
+        self._case_notes = list(self._model_notes)
         self._setup_analysis(case)
 
         ndf = len(self._dof_idx)
