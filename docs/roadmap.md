@@ -340,12 +340,11 @@ Status legend: ✅ done · 🟡 partial · ⬜ planned · ✂️ deferred / out-
   is out of scope here); confirm the rule, the damping (5 percent) and
   whether the closely spaced warning threshold of 0.9 matches the intended
   practice before response spectrum cases are used for TBDY checks.
-- ⬜ Material Tester still runs `test_uniaxial_material` in the GUI process
-  (`viewmodels/material_tester_vm.py`, `run()` calls the service directly),
-  so an unsupported input that makes OpenSees hard-exit takes the
-  application down; move it to the CLI path (a `--material-test` mode or a
-  second entry point with the same JSON protocol) or guard the inputs
-  before emission.
+- ✅ Material Tester runs OpenSees in a child process (0.0.58): the analysis
+  CLI gained `--material-test ID --material-protocol JSON`, and the view model
+  calls it through `test_uniaxial_material_in_child`, so an input that makes
+  OpenSees hard-exit ends the child and shows its exit code and solver output
+  in the dialog. `OPENSEES_STUDIO_IN_PROCESS=1` keeps the in-process call.
 - ✅ ISO-3 Seismic isolators, `TripleFrictionPendulum` (0.0.13): the
   `TripleFrictionPendulumElement` link, Assign → Joint → Link (twoNodeLink / TFP).
 - ✅ GM-1 Ground motions: import, metadata, catalog (2026-09-24). Core

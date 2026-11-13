@@ -7,6 +7,18 @@ that this is pre-alpha: minor and patch releases may change the `.osmodel`
 schema (it carries a `schema_version`, and a file from a newer build is now
 refused instead of silently downgraded).
 
+## [Unreleased]
+
+### Fixed
+
+- **The Material Tester can no longer close the application.** It ran OpenSees
+  in the application's own process, so an input that makes OpenSees end its
+  process instead of raising took OpenSees Studio down with it. The test now
+  runs in a child process like an analysis (the analysis CLI gained
+  `--material-test ID --material-protocol JSON`); a dead child shows its exit
+  code and the solver's last output in the dialog. Starting the process adds
+  about a second per test.
+
 ## [0.0.57] - 2026-11-13
 
 ### Added
