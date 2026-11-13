@@ -11,6 +11,15 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **Mechanisms are named and shown.** Check Model (and the check Run performs
+  on its way in) now describes each independent free motion on its own — the
+  structure or a group of joints sliding or turning as a rigid body, a joint
+  that rotates freely, a joint between members in line, a frame that sways —
+  with the joints and elements involved and what to do (which support is
+  missing, which release to remove, where to brace). Independent hinges come
+  out one per motion instead of blended. **Show the motion** animates the
+  chosen mechanism on the model in a *Mechanism* panel.
+
 - **Results snapshots.** Every case of every example project is pinned by a
   fingerprint of its results (largest displacement per DOF, reaction sums,
   largest element force, norms, periods, step counts) in

@@ -399,7 +399,10 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   to look at, and can be selected in the canvas. Run performs the same check on
   its way in: errors stop at the list with *Run anyway* offered (Cancel is the
   default), warnings go to the console. Stability is a linear, small-displacement
-  test of the connectivity, independent of units and of member stiffness.
+  test of the connectivity, independent of units and of member stiffness. Each
+  mechanism is named — sliding or turning as a rigid body, a joint rotating
+  freely, members in line, a frame that sways — with what to do, and **Show the
+  motion** animates it on the model.
 - **Copying geometry** — Edit → Move, Replicate (an offset applied N times,
   which carries the loads of the copied nodes and elements with it) and Mirror
   across a global plane.

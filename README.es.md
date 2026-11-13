@@ -252,6 +252,13 @@ ese viewport: solo selecciona lo que realmente se dibuja.
 
 ## Chequeo de estabilidad
 
+**Analyze → Check Model** (y la revisión que hace Run antes de correr) nombra
+cada mecanismo por separado —la estructura o un grupo de nudos que se desliza o
+gira como cuerpo rígido, un nudo que rota libremente, barras alineadas, un marco
+que se desplaza lateralmente— con los nudos y elementos involucrados y qué hacer
+(qué apoyo falta, qué liberación quitar, dónde arriostrar). **Show the motion**
+anima el mecanismo elegido sobre el modelo.
+
 **Analyze → Check Model Stability** captura la rigidez inicial como una matriz
 dispersa CSR mediante `PythonSparse` de OpenSees; un modelo pequeño usa una
 referencia densa y uno grande una búsqueda espectral dispersa desplazada tras

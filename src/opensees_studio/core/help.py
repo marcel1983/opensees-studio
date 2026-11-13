@@ -4390,6 +4390,27 @@ It never changes the model. **Run** performs the same check on its way in.
   DOF (Ux, Uy, Rz …) that are free to move, and how many independent motions there
   are.
 
+# What each motion is, and what to do
+Every independent motion is described on its own (up to six), and named:
+
+- **Slides as a rigid body** — the whole structure, or a group of joints, moves
+  along an axis without deforming: a support direction is missing, or the group
+  hangs on the rest through hinges or bars in line.
+- **Turns as a rigid body** — about an axis near a named joint: the supports hold
+  only a point or a line, or a group is joined by hinges on one line.
+- **Rotates freely** — a joint turns while nothing around it moves: only bars
+  reach it, every member end there is released, or a member spins about its own
+  axis between ball joints (restrain its torsion at one end).
+- **Joint moves alone** — the members that reach it line up with the motion.
+- **Sways** — joints move sideways at their level while the members turn: the
+  frame has no lateral stiffness in that direction (add bracing, fix the bases or
+  make the joints rigid).
+
+Pick a mechanism row and press **Show the motion**: the window closes (before a
+run, the run is not started) and the *Mechanism* panel animates each motion on
+the model, with the joints and elements involved selected and the advice in the
+status bar. **Back to model** ends it.
+
 # How stability is decided
 Each element is replaced by its independent deformation modes with unit stiffness
 (a bar has one, a 3D frame six, a shell eighteen) and the stiffness matrix is

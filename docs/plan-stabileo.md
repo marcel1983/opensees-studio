@@ -27,7 +27,7 @@ Cada punto es un PR con su ayuda, README/README.es, CHANGELOG y los gates de
 | # | Entrega | Estado |
 |---|---|---|
 | 10 | **Snapshots de resultados y "Results changed".** Cada caso de cada ejemplo fijado por una huella en `tests/data/results_snapshots.json`; CI falla si un número se mueve más de 1e-5; `--write --reason` registra el antes/después en `docs/results-changes.md`. | Hecho |
-| 11 | **Diagnóstico de mecanismos.** Check Stability nombra el mecanismo (nudos, GDL, elementos), lo dibuja en el canvas y se revisa antes de cada corrida, con un mensaje accionable. | Pendiente |
+| 11 | **Diagnóstico de mecanismos.** Check Model (y la revisión de Run) clasifica cada movimiento libre (cuerpo rígido, rotación libre, nudo entre barras alineadas, desplazamiento lateral), nombra nudos y elementos, dice qué hacer y **Show the motion** lo anima. | Hecho |
 
 ## Fase 1 — Análisis
 

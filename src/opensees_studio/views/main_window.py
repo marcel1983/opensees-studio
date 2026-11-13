@@ -117,7 +117,7 @@ from opensees_studio.core.geometry.ordering import QuadOrderError, order_quad_no
 from opensees_studio.core.groups import Group, colour_for, group_members
 from opensees_studio.core.help import ACTION_TOPICS, TOPIC_PROPERTY
 from opensees_studio.core.materials.library import is_uniaxial
-from opensees_studio.core.model_check import check_model
+from opensees_studio.core.model_check import Finding, check_model
 from opensees_studio.core.reactions import ReactionRow, reaction_rows
 from opensees_studio.core.sections import SHELL_SECTION_CLASSES
 from opensees_studio.core.self_weight import section_weight_per_length
@@ -129,6 +129,7 @@ from opensees_studio.services.combination import MissingCaseResultsError
 from opensees_studio.services.deformation import (
     linear_static_auto_scale,
     modal_to_deformation,
+    motion_to_deformation,
     peak_static_displacement,
     static_to_deformation,
 )
@@ -5408,9 +5409,43 @@ class MainWindow(QMainWindow):
         )
         try:
             dlg.exec()
+            mechanism = dlg.mechanism_to_show()
         finally:
             dlg.deleteLater()
         self._log(report.summary())
+        if mechanism is not None:
+            self._show_mechanism(mechanism)
+
+    def _show_mechanism(self, finding: Finding) -> None:
+        """Animate the free motions of a mechanism finding on the model."""
+        project = self._vm.project
+        if project is None or not finding.modes:
+            return
+        self._tear_down_post_dock()
+        modes = list(finding.modes)
+        labels = [f"Motion {k}: {m.kind.replace('_', ' ')}" for k, m in enumerate(modes, 1)]
+        animator = ModeShapeAnimator(
+            len(modes), [0.0] * len(modes), labels=labels, title="Mechanism"
+        )
+        dock = QDockWidget("Mechanism", self)
+        dock.setWidget(animator)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
+        self._post_dock = dock
+
+        def _apply(mode: int, scale: float, phase: float) -> None:
+            if not 0 <= mode < len(modes) or self._vm.project is None:
+                return
+            chosen = modes[mode]
+            src = motion_to_deformation(self._vm.project, chosen.motion, scale=scale, phase=phase)
+            self._canvas._renderer.set_mode(RendererMode.MODAL, src)
+            self._select_report_row(chosen.node_ids, chosen.element_ids)
+            self.statusBar().showMessage(f"{chosen.description} {chosen.hint}")
+
+        animator.frameChanged.connect(_apply)
+        animator.closed.connect(self._on_back_to_model)
+        animator._export_btn.hide()  # a mechanism is not a result to export
+        _apply(0, 1.0, 1.0)
+        self._log("Mechanism: " + " ".join(m.description for m in modes))
 
     def _review_model_before_run(self) -> bool:
         """Check the model on the way into Run; ``False`` means the run was called off.
@@ -5434,9 +5469,12 @@ class MainWindow(QMainWindow):
             )
             try:
                 proceed = dlg.exec() == QDialog.DialogCode.Accepted
+                mechanism = dlg.mechanism_to_show()
             finally:
                 dlg.deleteLater()
             self._log(report.summary() + (" Running anyway." if proceed else " Run cancelled."))
+            if mechanism is not None:
+                self._show_mechanism(mechanism)
             return proceed
         for finding in report.warnings:
             self._log(finding.summary())
