@@ -7,7 +7,7 @@ that this is pre-alpha: minor and patch releases may change the `.osmodel`
 schema (it carries a `schema_version`, and a file from a newer build is now
 refused instead of silently downgraded).
 
-## [Unreleased]
+## [0.0.61] - 2026-11-13
 
 ### Added
 
@@ -24,6 +24,15 @@ refused instead of silently downgraded).
   a selection, and **Size tp** picks the thinnest standard plate that passes.
   Anchor rods in F1554 Gr. 36, 55 or 105. `.osmodel`: `design.base_plates`.
   The single-plate calculator (Design → Base Plate & Anchors) stays.
+
+### Fixed
+
+- **The Linux bundle starts on Linux Mint 21 and Ubuntu 22.04 again.** It was
+  built on Ubuntu 24.04 and so asked for glibc 2.38 or newer, which Mint 21 and
+  Ubuntu 22.04 (glibc 2.35) do not have. It is now built on Ubuntu 22.04, and the
+  release build fails if any file of the bundle asks for a glibc newer than 2.35
+  (`tools/glibc_floor.py`). Supported: Ubuntu 22.04 and later, Linux Mint 21 and
+  later, Debian 12, LMDE 6.
 
 ## [0.0.60] - 2026-11-13
 

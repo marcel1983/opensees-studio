@@ -230,6 +230,9 @@ Descomprime la carpeta completa, no sólo el ejecutable. La primera vez el siste
 puede bloquearlo porque los binarios no están firmados: en macOS, clic derecho →
 Abrir; en Windows, "Más información" → "Ejecutar de todas formas".
 
+El paquete de Linux funciona en Ubuntu 22.04 o posterior, Linux Mint 21 o
+posterior, Debian 12 y LMDE 6 (glibc 2.35 o más nueva), en x86-64.
+
 ## Instalación (desarrollo)
 
 ```bash
