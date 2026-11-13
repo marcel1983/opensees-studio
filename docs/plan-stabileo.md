@@ -34,7 +34,7 @@ Cada punto es un PR con su ayuda, README/README.es, CHANGELOG y los gates de
 | # | Entrega | Verificación | Estado |
 |---|---|---|---|
 | 1 | Láminas `ShellDKGQ`, `ShellNLDKGQ`, `ShellDKGT` (triángulos) | Placa de Timoshenko (V-18), Scordelis-Lo (V-19) | Hecho |
-| 2 | Construcción por etapas: fases que agregan/quitan grupos, apoyos y cargas sobre el estado anterior | Voladizo por tramos contra cálculo a mano | Pendiente |
+| 2 | Construcción por etapas: fases que agregan/quitan grupos y aplican cargas sobre el estado anterior | Columna construida piso a piso (V-20), retiro de puntal | Hecho |
 | 3 | Pretensado (`InitStressMaterial`, trazado, pérdidas) y fluencia/retracción (`TDConcreteMC10`) en el tiempo | Viga pretensada (P·e), fib MC2010 | Pendiente |
 | 4 | Interacción suelo-estructura: asistente de pilote con resortes p-y / t-z / q-z por estrato | Casos de Reese y Van Impe | Pendiente |
 

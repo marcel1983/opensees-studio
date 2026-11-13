@@ -13,11 +13,15 @@ from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QPushButton,
     QSpinBox,
+    QTableWidget,
+    QTableWidgetItem,
     QWidget,
 )
 
@@ -26,11 +30,13 @@ from opensees_studio.core import (
     SYSTEM_NOTES,
     SYSTEMS,
     AnalysisCase,
+    ConstructionStage,
     InfluenceLineCase,
     LoadPattern,
     ModalCase,
     PushoverCase,
     ResponseSpectrumCase,
+    StagedCase,
     StaticCase,
     TransientCase,
 )
@@ -722,9 +728,109 @@ class InfluenceLineCaseForm(CaseFormBase):
         )
 
 
+class StagedCaseForm(CaseFormBase):
+    type_label = "Staged construction — groups built and removed stage by stage"
+
+    _COLUMNS = ("Stage name", "Build groups", "Remove groups", "Load patterns", "Steps")
+
+    def __init__(
+        self,
+        patterns: list[LoadPattern],
+        analyses: list[AnalysisCase],
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(patterns, analyses, parent)
+        self._table = QTableWidget(0, len(self._COLUMNS))
+        self._table.setHorizontalHeaderLabels(list(self._COLUMNS))
+        self._table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self._table.setMinimumHeight(160)
+        buttons = QHBoxLayout()
+        add = QPushButton("Add stage")
+        add.clicked.connect(
+            lambda: self._append(ConstructionStage(name=f"Stage {self._table.rowCount() + 1}"))
+        )
+        remove = QPushButton("Remove stage")
+        remove.clicked.connect(self._remove_current)
+        buttons.addWidget(add)
+        buttons.addWidget(remove)
+        buttons.addStretch(1)
+        self._new_joints = QComboBox()
+        self._new_joints.addItem("At their design position", "design")
+        self._new_joints.addItem("Following the deformed structure", "follow")
+        self._algorithm = QComboBox()
+        self._algorithm.addItems(["Linear", "Newton", "ModifiedNewton"])
+        self._layout.addRow(self._table)
+        self._layout.addRow(buttons)
+        self._layout.addRow("New joints are built:", self._new_joints)
+        self._layout.addRow("Algorithm:", self._algorithm)
+        self._layout.addRow(
+            _note(
+                "<i>Ids separated by commas. Elements of a group some stage builds do not "
+                "exist before it; everything else is there from the start. New elements "
+                "appear stress-free, removed ones (shoring, formwork) give their forces back, "
+                "then the stage's patterns are applied and kept. A pattern's self weight only "
+                "weighs the elements its stage builds. One result step per stage.</i>"
+            )
+        )
+
+    @staticmethod
+    def _ids(text: str) -> list[int]:
+        return [int(x) for x in text.replace(",", " ").split() if x]
+
+    def _append(self, stage: ConstructionStage) -> None:
+        row = self._table.rowCount()
+        self._table.insertRow(row)
+        values = (
+            stage.name,
+            ", ".join(map(str, stage.add_group_ids)),
+            ", ".join(map(str, stage.remove_group_ids)),
+            ", ".join(map(str, stage.pattern_ids)),
+            str(stage.n_steps),
+        )
+        for column, value in enumerate(values):
+            self._table.setItem(row, column, QTableWidgetItem(value))
+
+    def _remove_current(self) -> None:
+        row = self._table.currentRow()
+        if row >= 0 and self._table.rowCount() > 1:
+            self._table.removeRow(row)
+
+    def _populate_specific(self, c: AnalysisCase) -> None:
+        assert isinstance(c, StagedCase)
+        self._table.setRowCount(0)
+        for stage in c.stages:
+            self._append(stage)
+        self._new_joints.setCurrentIndex(max(0, self._new_joints.findData(c.new_joints)))
+        self._algorithm.setCurrentText(c.algorithm)
+
+    def _cell(self, row: int, column: int) -> str:
+        item = self._table.item(row, column)
+        return item.text().strip() if item is not None else ""
+
+    def _read_specific(self, cid: int) -> StagedCase:
+        stages = [
+            ConstructionStage(
+                name=self._cell(row, 0),
+                add_group_ids=self._ids(self._cell(row, 1)),
+                remove_group_ids=self._ids(self._cell(row, 2)),
+                pattern_ids=self._ids(self._cell(row, 3)),
+                n_steps=int(self._cell(row, 4) or 1),
+            )
+            for row in range(self._table.rowCount())
+        ]
+        return StagedCase(
+            id=cid,
+            name=self._name_edit.text(),
+            stages=stages,
+            new_joints=self._new_joints.currentData(),
+            algorithm=self._algorithm.currentText(),
+        )
+
+
 # ─────────────────────────── registry ───────────────────────────
 FORM_REGISTRY: dict[str, type[CaseFormBase]] = {
     "Static": StaticCaseForm,
+    "Staged": StagedCaseForm,
     "Modal": ModalCaseForm,
     "Transient": TransientCaseForm,
     "Pushover": PushoverCaseForm,

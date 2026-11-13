@@ -79,6 +79,7 @@ from opensees_studio.core import (
     SectionAggregator,
     ShellDKGTElement,
     ShellMITC4Element,
+    StagedCase,
     StaticCase,
     TransientCase,
     TriangleTimeSeries,
@@ -202,6 +203,12 @@ class OpenSeesRunner:
         self._node_mass: dict[int, np.ndarray] = {}
         self._frame_plan = FramePlan()
         self._case_notes: list[str] = []
+        #: Elements whose self weight a pattern carries; None = every element.
+        #: A construction stage weighs only what it builds.
+        self._self_weight_scope: set[int] | None = None
+        #: Time series already sent since the last build (a series two patterns share
+        #: is defined once).
+        self._emitted_series: set[int] = set()
 
     # ─────────────────────── public API ───────────────────────
     def _progress(self, completed: int, total: int) -> None:
@@ -223,6 +230,7 @@ class OpenSeesRunner:
         ):
             self._clear_truss_scratch()
         ops.wipe()
+        self._emitted_series = set()
         ops.model("basic", "-ndm", self.project.ndm, "-ndf", self.project.ndf)
 
         for node in self.project.nodes:
@@ -382,6 +390,9 @@ class OpenSeesRunner:
             self.build()
         with perf.span("analysis.dof_coverage"):
             self._check_dof_coverage()
+        if isinstance(case, StagedCase):
+            with perf.span("analysis.staged"):
+                return self._run_staged(case)
         if isinstance(case, StaticCase):
             with perf.span("analysis.static"):
                 return self._run_static(case)
@@ -1059,7 +1070,7 @@ class OpenSeesRunner:
                     ops.load(node_j, *self._solver_dofs(load_j))
                 # Shells and trusses: their self weight as nodal forces (translations only).
                 for node_id, force in nodal_self_weight_loads(
-                    self.project, pat.self_weight
+                    self.project, pat.self_weight, self._self_weight_scope
                 ).items():
                     full = (*(float(f) for f in force), 0.0, 0.0, 0.0)
                     ops.load(node_id, *self._solver_dofs(full))
@@ -1087,7 +1098,10 @@ class OpenSeesRunner:
                     for eid, member in self._frame_plan.members.items()
                     if member.layout is not None and member.layout.has_rigid_zones
                 }
-                uniform = [*pat.element_loads, *self_weight_loads(self.project, pat.self_weight)]
+                uniform = [
+                    *pat.element_loads,
+                    *self_weight_loads(self.project, pat.self_weight, self._self_weight_scope),
+                ]
                 for el in uniform:
                     # eleLoad -ele N -type -beamUniform wy wz wx
                     # (the pattern's self weight is a uniform load per frame).
@@ -1305,8 +1319,9 @@ class OpenSeesRunner:
                 if ts_id is not None:
                     used_ts.add(ts_id)
         for ts in self.project.time_series:
-            if ts.id in used_ts:
+            if ts.id in used_ts and ts.id not in self._emitted_series:
                 self._emit_time_series(ts)
+                self._emitted_series.add(ts.id)
         for pid in pattern_ids:
             pat = next(p for p in self.project.load_patterns if p.id == pid)
             self._emit_pattern(pat)
@@ -1757,6 +1772,214 @@ class OpenSeesRunner:
             section_cut_forces=section_cut_forces,
             warnings=notes,
         )
+
+    def _run_staged(self, case: StagedCase) -> StaticResults:
+        """Staged construction: one static result row per stage (see :class:`StagedCase`).
+
+        The model is built whole, then the elements of later stages are removed
+        and the joints only they reach are held still in every free DOF. At each
+        stage the new joints are released (and, with ``new_joints="follow"``,
+        placed by the rigid continuation of an active joint they connect to), the
+        new elements are added back — OpenSees records their joints' displacement
+        when an element is added, so it starts stress-free — removed ones are
+        taken out, and the stage's patterns are applied in ``n_steps`` and locked
+        with ``loadConst``.
+        """
+        from opensees_studio.core.staging import stage_plan
+
+        ops = self._ops
+        plan = stage_plan(self.project, case)
+        if plan.errors:
+            raise ValueError("\n".join(plan.errors))
+        elements = {el.id: el for el in self.project.elements}
+        for eid in sorted(plan.staged):
+            member = self._frame_plan.members.get(eid)
+            if member is not None and tuple(member.nodes) != tuple(elements[eid].nodes):
+                raise ValueError(
+                    f"Staged case {case.id}: member {eid} has end releases or rigid end zones "
+                    "(hidden joints), which a construction stage cannot add or remove yet. "
+                    "Build it from the start, or model the release another way."
+                )
+        ndf = len(self._dof_idx)
+        node_ids = [n.id for n in self.project.nodes]
+        restraint = {
+            n.id: [bool(n.restraint[self._dof_idx[d]]) for d in range(ndf)]
+            for n in self.project.nodes
+        }
+        held: dict[int, list[int]] = {}  # node -> solver DOFs (1-based) held by the stage logic
+
+        def touched(active: set[int]) -> set[int]:
+            return {n for eid in active for n in getattr(elements[eid], "nodes", ())}
+
+        def hold(nodes: set[int]) -> None:
+            for nid in sorted(nodes):
+                if nid in held:
+                    continue
+                dofs = [d + 1 for d in range(ndf) if not restraint[nid][d]]
+                if dofs:
+                    ops.fix(nid, *[1 if (d + 1) in dofs else 0 for d in range(ndf)])
+                held[nid] = dofs
+
+        def release(nid: int) -> None:
+            for dof in held.pop(nid, []):
+                ops.remove("sp", nid, dof)
+
+        active = set(plan.initial)
+        for eid in sorted(set(elements) - active):
+            ops.remove("element", eid)
+        hold(set(node_ids) - touched(active) & touched(set(elements)))
+
+        n_stages = len(case.stages)
+        node_disp = {nid: np.zeros((n_stages, ndf)) for nid in node_ids}
+        node_reaction = {nid: np.zeros((n_stages, ndf)) for nid in node_ids}
+        element_forces: dict[int, np.ndarray] = {}
+        element_stresses: dict[int, np.ndarray] = {}
+        notes = list(self._case_notes)
+        done_patterns: set[int] = set()
+        total_steps = sum(stage.n_steps for stage in case.stages)
+        completed = 0
+        for k, stage in enumerate(case.stages):
+            label = f"stage {k + 1}" + (f" ({stage.name})" if stage.name else "")
+            new = [eid for eid in plan.added[k] if eid not in active]
+            fresh = touched(set(new)) - touched(active)
+            # Joints that appear with this stage: released, and placed at their design
+            # position (OpenSees records it when the element is added) or rigidly.
+            placed = (
+                self._place_new_joints(fresh, new, touched(active), elements)
+                if case.new_joints == "follow"
+                else {}
+            )
+            for nid in sorted(fresh & set(held)):
+                release(nid)
+            for nid, values in placed.items():
+                for dof, value in enumerate(values, start=1):
+                    ops.setNodeDisp(nid, dof, float(value), "-commit")
+            for eid in new:
+                self._emit_element(elements[eid])
+            active |= set(new)
+            gone = [eid for eid in plan.removed[k] if eid in active]
+            for eid in gone:
+                ops.remove("element", eid)
+            active -= set(gone)
+            orphans = touched(set(gone)) - touched(active)
+            hold(orphans)
+
+            ids = [pid for pid in stage.pattern_ids if pid not in done_patterns]
+            self._self_weight_scope = set(new) | (set(plan.initial) if k == 0 else set())
+            try:
+                if ids:
+                    self._emit_patterns_for_case(ids)
+            finally:
+                self._self_weight_scope = None
+            done_patterns |= set(ids)
+            ops.wipeAnalysis()
+            self._setup_staged_analysis(case, 1.0 / stage.n_steps if ids else 0.0)
+            steps = stage.n_steps if ids else 1
+            for step in range(steps):
+                status = ops.analyze(1)
+                if status != 0:
+                    raise RuntimeError(
+                        f"Staged analysis failed in {label}, step {step + 1}/{steps} "
+                        f"(ops.analyze returned {status})."
+                    )
+                completed += 1
+                self._progress(min(completed, total_steps), total_steps)
+            ops.loadConst("-time", 0.0)
+            ops.reactions()
+            for nid in node_ids:
+                if nid in held:
+                    continue  # not built yet (or taken away): no displacement, no reaction
+                for j in range(ndf):
+                    node_disp[nid][k, j] = ops.nodeDisp(nid, j + 1) * self._dof_sign[j]
+                node_reaction[nid][k, :] = (
+                    np.asarray(self._node_reactions(nid, ndf), dtype=float) * self._dof_sign
+                )
+            for eid in sorted(active):
+                forces = self._element_local_force(eid)
+                if eid not in element_forces:
+                    element_forces[eid] = np.zeros((n_stages, len(forces)))
+                element_forces[eid][k, :] = forces
+                stresses = self._element_stress_resultants(eid)
+                if stresses is not None:
+                    if eid not in element_stresses:
+                        element_stresses[eid] = np.zeros((n_stages, self.STRESS_RESULTANTS))
+                    element_stresses[eid][k, :] = stresses
+        return StaticResults(
+            case_id=case.id,
+            case_name=case.name,
+            n_steps=n_stages,
+            node_disp=node_disp,
+            node_reaction=node_reaction,
+            element_forces=element_forces,
+            element_stresses=element_stresses,
+            warnings=notes,
+        )
+
+    def _setup_staged_analysis(self, case: StagedCase, increment: float) -> None:
+        """The case's solver objects, with a load increment for this stage."""
+        ops = self._ops
+        ops.system(case.system, *case.system_args)
+        ops.numberer(case.numberer)
+        self._constraints(case)
+        ops.test(case.test, *test_args(case.test, case.tolerance, case.max_iter))
+        ops.algorithm(case.algorithm, *case.algorithm_args)
+        ops.integrator(case.integrator, increment)
+        ops.analysis("Static")
+
+    def _place_new_joints(
+        self,
+        fresh: set[int],
+        new_elements: list[int],
+        anchored: set[int],
+        elements: dict[int, Any],
+    ) -> dict[int, list[float]]:
+        """Solver displacements of the joints a stage creates: a rigid continuation.
+
+        Each new joint takes the motion of the active joint it is built from (a
+        breadth-first walk through the stage's new elements): the same rotation
+        and the translation ``u + theta x (x_new - x_old)`` (small rotations). A
+        group with no active joint stays at zero.
+        """
+        ops = self._ops
+        ndf = self.project.ndf
+        slots = self._dof_idx
+        coords = {n.id: np.asarray(n.coords, dtype=float) for n in self.project.nodes}
+        neighbours: dict[int, set[int]] = {}
+        for eid in new_elements:
+            nodes = list(getattr(elements[eid], "nodes", ()))
+            for a in nodes:
+                neighbours.setdefault(a, set()).update(b for b in nodes if b != a)
+
+        def motion(nid: int) -> np.ndarray:
+            full = np.zeros(6)
+            for d in range(ndf):
+                full[slots[d]] = float(ops.nodeDisp(nid, d + 1)) * self._dof_sign[d]
+            return full
+
+        state: dict[int, np.ndarray] = {}
+        queue = [n for n in sorted(anchored) if n in neighbours]
+        for n in queue:
+            state[n] = motion(n)
+        while queue:
+            current = queue.pop(0)
+            for nxt in sorted(neighbours.get(current, ())):
+                if nxt in state or nxt not in fresh:
+                    continue
+                base = state[current]
+                theta = base[3:]
+                arm = coords[nxt] - coords[current]
+                moved = np.zeros(6)
+                moved[:3] = base[:3] + np.cross(theta, arm)
+                moved[3:] = theta
+                state[nxt] = moved
+                queue.append(nxt)
+        out: dict[int, list[float]] = {}
+        for nid in fresh:
+            if nid not in state:
+                continue
+            full = state[nid]
+            out[nid] = [full[slots[d]] * self._dof_sign[d] for d in range(ndf)]
+        return out
 
     def _one_sided_springs(self) -> list[Any]:
         return [s for s in self._frame_plan.springs if getattr(s, "one_sided", False)]

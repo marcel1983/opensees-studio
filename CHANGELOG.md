@@ -11,6 +11,16 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **Staged construction.** A new analysis case type, *Staged construction*
+  (Analyze → Cases): a table of stages, each building groups of elements,
+  removing groups (shoring, formwork) and applying load patterns that then
+  stay. New elements appear stress-free, new joints at their design position
+  (a floor built level on the shortened storeys below) or following the
+  deformed structure; removed elements give their forces back; a pattern's
+  self weight weighs only what its stage builds. One result step per stage.
+  Verification Manual V-20 (column shortening since built,
+  `k (N − k + 1) P h / EA`) and the new example `staged_frame.osmodel`.
+  `.osmodel`: case type `Staged` with `stages` and `new_joints`.
 - **Shells: DKGQ, NLDKGQ and triangles.** Assign → Area → Shell Formulation
   switches the selected shells between `ShellMITC4`, `ShellDKGQ` (Discrete
   Kirchhoff plate with a drilling stiffness: thin slabs, walls framing into

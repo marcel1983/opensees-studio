@@ -103,14 +103,22 @@ def truss_weight_per_length(element: object) -> float:
     return element.unit_weight * element.area
 
 
-def self_weight_loads(project: Project, multiplier: float = 1.0) -> list[UniformElementLoad]:
-    """One uniform load per weighted frame, in its local axes, scaled by ``multiplier``."""
+def self_weight_loads(
+    project: Project, multiplier: float = 1.0, element_ids: set[int] | None = None
+) -> list[UniformElementLoad]:
+    """One uniform load per weighted frame, in its local axes, scaled by ``multiplier``.
+
+    ``element_ids`` limits it to those elements (a construction stage weighs only
+    what it builds); ``None`` weighs every element.
+    """
     if multiplier == 0.0:
         return []
     coords = {node.id: node.coords for node in project.nodes}
     down = gravity_direction(project.ndm)
     loads: list[UniformElementLoad] = []
     for element in project.elements:
+        if element_ids is not None and element.id not in element_ids:
+            continue
         w = weight_per_length(project, element) * multiplier
         if w == 0.0 or len(element.nodes) != 2:
             continue
@@ -145,11 +153,14 @@ def weight_per_area(project: Project, element: object) -> float:
     return section.unit_weight * section.h
 
 
-def nodal_self_weight_loads(project: Project, multiplier: float = 1.0) -> dict[int, np.ndarray]:
+def nodal_self_weight_loads(
+    project: Project, multiplier: float = 1.0, element_ids: set[int] | None = None
+) -> dict[int, np.ndarray]:
     """Node id -> global force (Fx, Fy, Fz) of the weight carried as nodal loads, summed.
 
     The shells (consistent nodal forces) and the truss bars (half to each end):
-    the members a ``-beamUniform`` load cannot reach.
+    the members a ``-beamUniform`` load cannot reach. ``element_ids`` limits it to
+    those elements, as in :func:`self_weight_loads`.
     """
     if multiplier == 0.0:
         return {}
@@ -161,6 +172,8 @@ def nodal_self_weight_loads(project: Project, multiplier: float = 1.0) -> dict[i
         forces[node_id] = forces.get(node_id, np.zeros(3)) + weight * down
 
     for element in project.elements:
+        if element_ids is not None and element.id not in element_ids:
+            continue
         q = weight_per_area(project, element) * multiplier
         if q != 0.0:
             points = np.array([coords[node_id] for node_id in element.nodes])

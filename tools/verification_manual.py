@@ -574,6 +574,71 @@ def _plate_of(kind: str) -> list[Check]:
     ]
 
 
+def _staged_column() -> list[Check]:
+    from opensees_studio.core import (
+        ConstructionStage,
+        ElasticBeamColumn,
+        ElasticSection,
+        LinearTimeSeries,
+        NodalLoad,
+        Node,
+        PlainLoadPattern,
+        Project,
+        StagedCase,
+    )
+    from opensees_studio.core.groups import Group
+
+    n, h, area, load = 4, 3.0, 0.16, 500e3
+    project = Project(
+        ndm=2,
+        ndf=3,
+        nodes=[
+            Node(
+                id=k + 1,
+                coords=(0.0, 0.0, h * k),
+                restraint=(True,) * 6 if k == 0 else (False,) * 6,
+            )
+            for k in range(n + 1)
+        ],
+        sections=[ElasticSection(id=1, E=E, A=area, Iz=1e-3, Iy=1e-3, G=E / 2.6, J=1e-3)],
+        elements=[
+            ElasticBeamColumn(id=k + 1, nodes=(k + 1, k + 2), section_id=1) for k in range(n)
+        ],
+        groups=[Group(id=k + 1, name=f"Storey {k + 1}", element_ids=[k + 1]) for k in range(n)],
+        time_series=[LinearTimeSeries(id=1, name="Ramp")],
+        load_patterns=[
+            PlainLoadPattern(
+                id=k + 1,
+                name=f"Level {k + 1}",
+                time_series_id=1,
+                nodal_loads=[NodalLoad(node_id=k + 2, forces=(0, 0, -load, 0, 0, 0))],
+            )
+            for k in range(n)
+        ],
+    )
+    case = StagedCase(
+        id=1,
+        name="Storey by storey",
+        stages=[
+            ConstructionStage(name=f"Storey {k + 1}", add_group_ids=[k + 1], pattern_ids=[k + 1])
+            for k in range(n)
+        ],
+    )
+    project.analyses.append(case)
+    r = _run(project, case)
+    unit = load * h / (E * area)
+    return [
+        Check(
+            f"Shortening of level {k} since it was built (k (N - k + 1) P h / EA)",
+            "m",
+            -float(r.node_disp[k + 1][-1][1]),
+            k * (n - k + 1) * unit,
+            1e-3,
+        )
+        for k in (1, 2, 4)
+    ]
+
+
 def _scordelis_lo() -> list[Check]:
     from opensees_studio.core import (
         QUAD_SHELL_CLASSES,
@@ -1498,6 +1563,19 @@ CASES: list[Case] = [
         "per unit area; rigid diaphragms at both ends, free straight edges; 16 × 16 shells, "
         "`ShellDKGQ` (2 %) and `ShellMITC4` (5 %).",
         _scordelis_lo,
+    ),
+    Case(
+        "V-20",
+        "Column built storey by storey",
+        "Staged construction",
+        "Each level is built at its design position after the storeys below have "
+        "shortened; it then shortens only under the loads applied after it exists: "
+        "Δk = k (N - k + 1) P h / EA, largest at mid-height (a one-shot analysis puts "
+        "the largest at the top).",
+        "Four storeys of 3 m, EA = 200 GPa × 0.16 m², 500 kN applied at each level as it is "
+        "finished; one stage per storey. The 1e-3 tolerance covers each storey being cast "
+        "h + Δ long to meet its design level.",
+        _staged_column,
     ),
     Case(
         "D-01",

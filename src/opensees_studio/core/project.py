@@ -472,6 +472,10 @@ class Project(BaseModel):
                     visit(preload, (*chain, current.id))
 
         visit(case, ())
+        if getattr(case, "type", "") == "Staged":
+            from opensees_studio.core.staging import staged_errors
+
+            errors.extend(staged_errors(self, case))
         return list(dict.fromkeys(errors))
 
     def validate_case_references(self, case: Any) -> None:

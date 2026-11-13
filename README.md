@@ -203,6 +203,13 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   Display → Influence Line plots any of them against the load's position and
   moves a vehicle (axle loads and spacings, e.g. the HL-93 truck) across it in
   both directions, reporting the extreme effects and where the front axle stood.
+- **Staged construction** — a *Staged construction* case builds groups of
+  elements stage by stage, removes shoring and formwork, and applies each
+  stage's loads on the deformed, stressed state of the stages before. New
+  elements appear stress-free, new joints at their design position (column
+  shortening since built) or following the deformed structure; a stage's self
+  weight weighs only what it builds. One result step per stage
+  (`examples/staged_frame.osmodel`).
 - **Load combinations and envelopes** (Define → Load Combinations…) — Linear
   Add, Envelope (max/min), Absolute Add and SRSS of static and response spectrum
   cases, or of other combinations, each with a scale factor. Combining is

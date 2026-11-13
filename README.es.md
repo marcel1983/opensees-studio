@@ -94,7 +94,10 @@ script o un notebook de Jupyter: la interfaz es una forma de usarlo, no la únic
   gradientes, Assign → Frame → Temperature Load); líneas de influencia y cargas móviles (un caso
   *InfluenceLine* recorre una carga unitaria por una cadena de miembros, y
   Display → Influence Line pasa un vehículo, p. ej. el camión HL-93, en ambos
-  sentidos).
+  sentidos); construcción por etapas (un caso *Staged construction* construye
+  grupos etapa a etapa, retira puntales y encofrados y aplica las cargas de cada
+  etapa sobre el estado deformado de las anteriores; los nudos nuevos se
+  construyen en su posición de diseño o siguiendo la estructura deformada).
 - **Diseño**: Design → Steel Frame Check verifica según **AISC 360-16** (LRFD o
   ASD) los miembros de perfiles W, M, S y HP —y canales, tees, ángulos de alas
   iguales, HSS rectangulares y circulares y tubos—: tracción (D2), compresión

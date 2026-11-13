@@ -4294,9 +4294,24 @@ TOPICS.update(
 A case is what to solve. Several cases coexist on one model — a gravity static
 case, a modal case and a pushover, for instance — each with its own settings.
 
-# The six types
+# The seven types
 - **Static** — equilibrium under the patterns' loads, in N steps. See
   **Static analysis**.
+- **Staged construction** — the structure grows group by group (Define →
+  Groups). Each row of the stage table builds groups, removes groups (shoring,
+  formwork) and applies load patterns, which then stay. An element in a group
+  some stage builds does not exist before that stage; every other element is
+  there from the start. New elements appear stress-free; a removed element's
+  forces go back into the structure. New joints are built **at their design
+  position** (a floor is built level, whatever the storeys below have
+  shortened: their displacement is the movement since they were built) or
+  **following the deformed structure** (the rigid continuation of the joint they
+  grow from). A pattern's self weight weighs only the elements its stage builds,
+  so give each stage its own weight pattern. The result has one step per stage:
+  the state at the end of it. A load on an element that does not exist yet, a
+  group removed before it is built, and members with end releases or rigid end
+  zones in a staged group are refused before the run. Verified on a column built
+  storey by storey (Verification Manual V-20); see `examples/staged_frame.osmodel`.
 - **Modal** — eigenvalues and mode shapes; needs mass. See **Modal analysis**.
 - **Pushover** — displacement-controlled monotonic push to a target. See
   **Pushover**.
