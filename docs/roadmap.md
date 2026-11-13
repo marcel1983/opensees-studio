@@ -320,8 +320,11 @@ Status legend: ✅ done · 🟡 partial · ⬜ planned · ✂️ deferred / out-
   and CQC (Der Kiureghian, equal and unequal damping); CQC of a degenerate
   pair is invariant under rotation of the pair (below 1e-12 in the unit
   test, below 1e-10 relative on the real space_frame_3d output, 3e-10
-  between the dense and the ARPACK basis) while SRSS moves by more than
-  1 percent (12 percent between the two bases). New response spectrum
+  between the dense and the ARPACK basis) while SRSS moved by more than
+  1 percent (12 percent between the two bases) until 0.0.57, which turns
+  each repeated group so one mode carries the participation of the
+  spectrum's direction (`core.modal.align_degenerate_modes`); SRSS is now
+  basis-independent too. New response spectrum
   cases default to CQC with the case's modal damping (0 or empty stored as
   none, meaning the spectrum's damping; a CQC run never uses zero damping),
   saved cases keep their rule, and SRSS with a mode pair at frequency

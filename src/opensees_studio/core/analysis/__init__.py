@@ -516,8 +516,82 @@ class InfluenceLineCase(Entity):
         return value
 
 
+class ConstructionStage(BaseModel):
+    """One stage of a :class:`StagedCase`: what is built or taken away, then loaded.
+
+    Elements (and their joints) of ``add_group_ids`` are activated at the start
+    of the stage, stress-free in the current deformed shape; elements of
+    ``remove_group_ids`` are taken out (shoring, formwork), and the forces they
+    carried go back into the structure. Then ``pattern_ids`` are applied in
+    ``n_steps`` load steps and locked, so the next stage starts from this state.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = ""
+    add_group_ids: list[PositiveInt] = Field(default_factory=list)
+    remove_group_ids: list[PositiveInt] = Field(default_factory=list)
+    pattern_ids: list[PositiveInt] = Field(default_factory=list)
+    n_steps: PositiveInt = 1
+    duration: float = Field(
+        default=0.0,
+        ge=0.0,
+        description="Days the stage's state is held after its loads (time-dependent case).",
+    )
+    time_steps: PositiveInt = Field(
+        default=20, description="Time steps over the duration, geometrically spaced."
+    )
+
+
+class StagedCase(_SolverOptions):
+    """Staged construction: the structure grows (and loses its shoring) stage by stage.
+
+    Elements in a group that some stage adds do not exist before that stage;
+    every other element is there from the start. Each stage starts from the
+    deformed, stressed state of the previous one: new elements appear
+    stress-free, removed elements give their forces back, and the stage's load
+    patterns are applied and locked (``loadConst``). The result is a static
+    result with one step per stage: the state at the end of each.
+
+    ``new_joints`` says where a joint that appears with a stage is built:
+    ``"design"`` (the default) at its drawn position, as a floor is built level
+    whatever the storeys below have shortened, so its displacement is the
+    movement since it was built; ``"follow"`` by the rigid continuation of the
+    joint it is built from, so the structure keeps the deformed shape of the
+    stages before. Either way its elements are stress-free when they appear.
+    """
+
+    type: Literal["Staged"] = "Staged"
+    stages: list[ConstructionStage] = Field(..., min_length=1)
+    new_joints: Literal["design", "follow"] = "design"
+    time_dependent: bool = False
+    """Creep and shrinkage: time is the concrete age in days, each stage's loads
+    act at once and are then held for its ``duration`` (``TDConcreteMC10``)."""
+    start_time: float = Field(default=28.0, ge=0.0, description="Time of the first stage, days.")
+    system: str = "BandGeneral"
+    constraints: str = "Plain"
+    integrator: str = "LoadControl"
+    algorithm: str = "Linear"
+    test: str = "NormDispIncr"
+    tolerance: float = Field(default=1e-8, gt=0.0)
+    max_iter: PositiveInt = 25
+
+    serialize_without_defaults = omit_when_default(
+        "numberer", "system_args", "algorithm_args", "new_joints", "time_dependent", "start_time"
+    )
+
+    @property
+    def pattern_ids(self) -> list[int]:
+        """Every pattern some stage applies, in stage order."""
+        out: list[int] = []
+        for stage in self.stages:
+            out.extend(p for p in stage.pattern_ids if p not in out)
+        return out
+
+
 AnalysisCase = Annotated[
-    StaticCase
+    StagedCase
+    | StaticCase
     | ModalCase
     | TransientCase
     | PushoverCase

@@ -32,6 +32,7 @@ from opensees_studio.core import (
     PointElementLoad,
     Project,
     QuadElement,
+    ShellDKGTElement,
     ShellMITC4Element,
     TrapezoidalElementLoad,
     TrussElement,
@@ -80,6 +81,7 @@ LEGEND_MAX_ENTRIES = 15
 _SURFACE_CLASSES = (
     QuadElement,
     ShellMITC4Element,
+    ShellDKGTElement,
 )
 
 
@@ -627,9 +629,9 @@ class ModelRenderer:
                 rows = [self._node_id_to_row[nid] for nid in el.nodes[:4]]
             except KeyError:
                 continue
-            if len(rows) != 4:
+            if len(rows) not in (3, 4):
                 continue
-            cells.extend([4, *rows])  # a quad cell: size then the four corners
+            cells.extend([len(rows), *rows])  # a face cell: size then its corners
             ids.append(el.id)
         if not ids:
             return

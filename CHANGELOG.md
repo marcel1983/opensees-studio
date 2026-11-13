@@ -7,6 +7,117 @@ that this is pre-alpha: minor and patch releases may change the `.osmodel`
 schema (it carries a `schema_version`, and a file from a newer build is now
 refused instead of silently downgraded).
 
+## [Unreleased]
+
+### Added
+
+- **Verification Manual: large rotations.** V-22 bends a cantilever of
+  corotational members into a quarter circle with a tip moment and compares the
+  tip with the elastica (within 0.05 %). With V-18 to V-21 and D-15 the manual
+  now has 37 cases.
+- **Interface in Spanish.** Options → Language switches menus, actions,
+  dialog titles, labels, buttons and tabs between English and Spanish at once
+  and remembers the choice; Qt's own dialogs follow. The catalog is
+  `data/i18n/es.json`; a test keeps every menu action translated. Help pages
+  and messages composed at run time stay in English.
+
+- **Base plates and bolted connections.** Design → Base Plate & Anchors checks
+  a column base after AISC Design Guide 1 (bearing, plate thickness for
+  concentric, small and large eccentricity) and its anchor rods after ACI 318-19
+  Chapter 17 (steel, concrete breakout, shear by friction or rods), with the
+  demands read from a selected support's reaction. Design → Bolted Connection
+  computes prying action (AISC Manual Part 9) and the most loaded bolt of an
+  eccentric group (elastic method). Both are calculators, verified by hand.
+- **Concrete Frame Check (ACI 318-19).** Design → Concrete Frame Check
+  checks every reinforced concrete member — fibre sections of concrete and
+  bars, or the elastic section the Concrete Section Wizard made next to one —
+  at 25 stations over the steel check's load sets: P-M interaction by strain
+  compatibility (stress block, φ by εt, φPn,max), biaxial bending by Bresler,
+  shear with the stirrups given in the dialog, the torsion threshold, minimum
+  steel and εt ≥ 0.004 in beams. Show ratios on model paints them. Verified
+  against hand calculations of a beam and a column (Verification Manual D-15).
+  `.osmodel`: `design.concrete`.
+- **Pile soil springs (p-y, t-z, q-z).** Assign → Frame → Pile Soil Springs
+  ties every joint of the selected pile below the ground to a fixed ground
+  joint with `PySimple1` p-y springs (Matlock soft clay, API sand), a
+  `TzSimple1` shaft spring (API α-method in clay, β-method in sand) and a
+  `QzSimple1` tip spring (9 su, API Nq), from the diameter and a table of soil
+  layers. Pushed down to failure the pile reaches the sum of its shaft and tip
+  capacities (integration test). One undo step.
+- **Creep and shrinkage (fib Model Code 2010).** Define → Concrete Creep &
+  Shrinkage builds a `TDConcreteMC10` material from fcm, humidity, notional
+  size, cement class and casting time, previewing φ(t, t0) and εcs. A staged
+  construction case marked *time-dependent* runs in concrete age (days): each
+  stage applies its loads at once and holds them for its duration with creep
+  on. A column under sustained stress follows the Model Code within 2 % over
+  10 000 days (Verification Manual V-21). `.osmodel`: material
+  `TDConcreteMC10`; stage `duration`, `time_steps`; case `time_dependent`,
+  `start_time`.
+- **Post-tensioning tendons.** Assign → Frame → Tendon (Post-Tensioning)
+  applies a tendon to each selected member as its equivalent loads: a
+  parabola through three eccentricities, the jacking force from end i, end j
+  or both, friction and wobble losses and a long-term loss fraction. The
+  member carries the anchorage forces and the tendon's pressure along its
+  curve. A straight tendon gives the camber `P e L² / 8EI` and a parabolic one
+  balances `8 P f / L²` exactly (integration tests). `.osmodel`:
+  `tendon_loads` in Plain patterns.
+- **Staged construction.** A new analysis case type, *Staged construction*
+  (Analyze → Cases): a table of stages, each building groups of elements,
+  removing groups (shoring, formwork) and applying load patterns that then
+  stay. New elements appear stress-free, new joints at their design position
+  (a floor built level on the shortened storeys below) or following the
+  deformed structure; removed elements give their forces back; a pattern's
+  self weight weighs only what its stage builds. One result step per stage.
+  Verification Manual V-20 (column shortening since built,
+  `k (N − k + 1) P h / EA`) and the new example `staged_frame.osmodel`.
+  `.osmodel`: case type `Staged` with `stages` and `new_joints`.
+- **Shells: DKGQ, NLDKGQ and triangles.** Assign → Area → Shell Formulation
+  switches the selected shells between `ShellMITC4`, `ShellDKGQ` (Discrete
+  Kirchhoff plate with a drilling stiffness: thin slabs, walls framing into
+  beams in their plane) and the geometrically nonlinear `ShellNLDKGQ`;
+  triangles are `ShellDKGT`/`ShellNLDKGT`, built by Define → Create Shell from
+  three selected nodes. Every formulation takes the same plate sections, loads,
+  self-weight, contours and results; the Tcl importer reads them. New
+  Verification Manual cases: the simply supported plate with DKGQ and DKGT
+  (V-18) and the Scordelis-Lo roof (V-19, DKGQ within 0.6 % of 0.3024 on a
+  16 × 16 mesh). `.osmodel`: element types `ShellDKGQ`, `ShellNLDKGQ`,
+  `ShellDKGT`, `ShellNLDKGT`.
+- **Mechanisms are named and shown.** Check Model (and the check Run performs
+  on its way in) now describes each independent free motion on its own — the
+  structure or a group of joints sliding or turning as a rigid body, a joint
+  that rotates freely, a joint between members in line, a frame that sways —
+  with the joints and elements involved and what to do (which support is
+  missing, which release to remove, where to brace). Independent hinges come
+  out one per motion instead of blended. **Show the motion** animates the
+  chosen mechanism on the model in a *Mechanism* panel.
+
+- **Results snapshots.** Every case of every example project is pinned by a
+  fingerprint of its results (largest displacement per DOF, reaction sums,
+  largest element force, norms, periods, step counts) in
+  `tests/data/results_snapshots.json`, and CI fails when a number moves by more
+  than 1e-5 relative. An intended change is pinned with
+  `python tools/results_snapshot.py --write --reason "..."`, which writes the
+  before and after to `docs/results-changes.md`; from now on such changes are
+  announced in a **Results changed** section of these notes.
+
+### Fixed
+
+- **SRSS response spectra no longer depend on the platform.** Inside a group
+  of repeated modes (a symmetric building's two sway modes) the eigen solver
+  returns an arbitrary basis, and SRSS, unlike CQC, changed with it: the
+  `space_frame_3d` largest Y displacement under an X spectrum was 0.0024 m on
+  Linux and 0.00036 m on macOS, where the symmetric frame gives none. Each repeated group is now turned so one mode carries all of its
+  participation in the spectrum's direction, which makes SRSS and CQC
+  basis-independent. The SRSS warning for closely spaced modes stays.
+
+### Results changed
+
+- `space_frame_3d`, case 4 (response spectrum, SRSS, X direction): the values
+  move to the basis-independent result, the same on every platform. Largest Y
+  displacement 0.0024 m → 0 (the frame is symmetric), largest X displacement
+  0.01383 → 0.01403 m, largest base moment 97.1 → 98.6 kN·m. See
+  `docs/results-changes.md`.
+
 ## [0.0.56] - 2026-11-11
 
 ### Added
