@@ -27,7 +27,6 @@ from typing import Any
 
 from PySide6.QtCore import QObject, QProcess, QProcessEnvironment, QThread, QTimer, Signal
 
-from opensees_studio.child_cli import IN_PROCESS_ENV as IN_PROCESS_ENV
 from opensees_studio.child_cli import analysis_cli_command, in_process_mode, is_frozen
 from opensees_studio.core import Project
 from opensees_studio.diagnostics.performance import perf
