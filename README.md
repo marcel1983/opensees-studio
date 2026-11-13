@@ -365,7 +365,10 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   combination into one second-order case: P-Delta in every frame, stiffness
   ×0.8 (C2.3, τb = 1 with 0.001 α Yi), and the notional loads `0.002 α Yi` of
   that combination's own factored gravity; it then reports Δ2/Δ1 per storey
-  (C2.2b(d)), and the steel check reads these cases with K = 1.
+  (C2.2b(d)), and the steel check reads these cases with K = 1. Design →
+  Member Classification shows the physical members (collinear elements of one
+  section), their role and the unbraced lengths Lx, Ly and Lb from their bracing
+  points; the check uses those lengths, so a meshed member keeps its real ones.
 - **Design** — AISC 360-16 member check (LRFD or ASD) for W, M, S, HP,
   channels, tees, equal-leg angles, rectangular and round HSS and pipes:
   tension (D2), compression (E3, E4, E7), flexure (F2–F10), shear (G2–G6) and

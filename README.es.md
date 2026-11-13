@@ -130,6 +130,10 @@ script o un notebook de Jupyter: la interfaz es una forma de usarlo, no la únic
   los marcos, rigidez ×0,8 (C2.3, τb = 1 con 0,001 α Yi) y las cargas ficticias
   `0,002 α Yi` de la gravedad factorizada de esa combinación; luego informa
   Δ2/Δ1 por piso (C2.2b(d)), y la verificación de acero lee esos casos con K = 1.
+  Design → Member Classification muestra los miembros físicos (elementos
+  colineales de una misma sección), su rol y las longitudes no arriostradas Lx,
+  Ly y Lb según sus puntos de arriostramiento; la verificación usa esas
+  longitudes, así un miembro mallado conserva las reales.
 - **Diseño**: Design → Steel Frame Check verifica según **AISC 360-16** (LRFD o
   ASD) los miembros de perfiles W, M, S y HP —y canales, tees, ángulos de alas
   iguales, HSS rectangulares y circulares y tubos—: tracción (D2), compresión

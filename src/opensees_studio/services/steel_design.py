@@ -34,6 +34,7 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from functools import lru_cache
+from types import SimpleNamespace
 from typing import Any
 
 import numpy as np
@@ -112,6 +113,12 @@ from opensees_studio.core.design.connections import (
 )
 from opensees_studio.core.design.direct_analysis import is_direct_analysis_case
 from opensees_studio.core.design.gussets import gusset_checks
+from opensees_studio.core.design.members import (
+    DesignMember,
+    design_members,
+    direction_role,
+    members_by_element,
+)
 from opensees_studio.core.design.rbs_web import web_connection_checks
 from opensees_studio.core.design.scbf_joints import (
     column_splice_demand,
@@ -513,6 +520,10 @@ class MemberResult:
     """Worst ratio of the SCBF capacity-design alternative (AISC 341-22 F2.3)."""
     grade: str = ""
     """The steel grade the member was checked with; empty for the project's Fy / Fu."""
+    member_id: int = 0
+    """The physical member (its first element) the element belongs to."""
+    unbraced: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    """``(Lx, Ly, Lb)`` the check used: from the bracing points, or the overrides."""
 
 
 @dataclass
@@ -738,25 +749,141 @@ def _length(project: Any, element: Any) -> float:
     return float(np.linalg.norm(coords[element.nodes[1]] - coords[element.nodes[0]]))
 
 
-def _member_role(project: Any, element: Any) -> Role:
-    """``column``, ``beam`` or ``brace`` from the member's direction.
+def _member_role(project: Any, element: Any, settings: DesignSettings) -> Role:
+    """The role the user gave the element, else ``column``, ``beam`` or ``brace`` by direction.
 
     A member within 20% of vertical is a column; within 20% of horizontal is a
     beam (a plan diagonal in 3D is a brace); anything else is a brace.
     """
+    chosen = settings.member(element.id).role
+    if chosen is not None:
+        return chosen
     coords = {n.id: np.asarray(n.coords, dtype=float) for n in project.nodes}
-    delta = coords[element.nodes[1]] - coords[element.nodes[0]]
-    length = float(np.linalg.norm(delta))
-    if length <= 0.0:
-        return "beam"
-    vertical = abs(float(delta[2])) / length
-    if vertical >= 0.8:
-        return "column"
-    if vertical <= 0.2:
-        horizontal = math.hypot(float(delta[0]), float(delta[1]))
-        if project.ndm == 2 or min(abs(float(delta[0])), abs(float(delta[1]))) <= 0.2 * horizontal:
-            return "beam"
-    return "brace"
+    return direction_role(project, coords[element.nodes[0]], coords[element.nodes[1]])
+
+
+def _design_members(project: Any, settings: DesignSettings) -> dict[int, DesignMember]:
+    """Element id -> its physical member, with the roles the user chose."""
+    roles = {m.element_id: m.role for m in settings.members if m.role is not None}
+    return members_by_element(design_members(project, roles))
+
+
+@dataclass(frozen=True)
+class MemberLengths:
+    """What Design → Member Classification shows for one frame element."""
+
+    element_id: int
+    member_id: int
+    element_ids: tuple[int, ...]
+    """Every element of the physical member."""
+    role: str
+    role_from_user: bool
+    length: float
+    """The physical member's length."""
+    unbraced: tuple[float, float, float]
+    """``(Lx, Ly, Lb)`` from the bracing points, before any override."""
+
+
+def member_lengths(project: Any, settings: DesignSettings | None = None) -> list[MemberLengths]:
+    """Physical member, role and automatic unbraced lengths of every frame element.
+
+    The major axis comes from the AISC shape when the section names one, else
+    from the larger of the section's two moments of inertia.
+    """
+    settings = settings or DesignSettings()
+    physical = _design_members(project, settings)
+    sections = {s.id: s for s in project.sections}
+    out: list[MemberLengths] = []
+    for element in project.elements:
+        member = physical.get(element.id)
+        if member is None:
+            continue
+        section = sections.get(getattr(element, "section_id", -1))
+        name = settings.member(element.id).shape or (getattr(section, "name", "") or "")
+        try:
+            shape: Any = shape_in_units(name, project.meta.units)
+        except (KeyError, ValueError):
+            iz = float(getattr(section, "Iz", 1.0) or 1.0)
+            iy = float(getattr(section, "Iy", 0.0) or 0.0)
+            shape = SimpleNamespace(Ix=max(iy, iz) or 1.0, Iy=min(iy, iz))
+        m_major, _vx, m_minor, _vy, _about = _axes(project, section, shape)
+        out.append(
+            MemberLengths(
+                element_id=element.id,
+                member_id=member.id,
+                element_ids=member.element_ids,
+                role=member.role,
+                role_from_user=settings.member(element.id).role is not None,
+                length=member.length,
+                unbraced=_unbraced(member, element, m_major, m_minor, member.length),
+            )
+        )
+    return out
+
+
+def _bending_axes(m_major: str, m_minor: str) -> tuple[str, str]:
+    """``(major, minor)``: the local axis each buckling mode moves the member along.
+
+    ``M3`` bends towards local y, ``M2`` towards z. A 2D member bent about its
+    minor axis has no major moment: in-plane (y) is then its minor axis.
+    """
+    toward = {"M3": "y", "M2": "z"}
+    major = toward[m_major] if m_major else ("z" if toward.get(m_minor, "y") == "y" else "y")
+    return major, ("z" if major == "y" else "y")
+
+
+def _segment_cb(
+    member: DesignMember,
+    element_id: int,
+    axis: str,
+    moments: Mapping[int, np.ndarray],
+    elements: Mapping[int, Any],
+) -> float | None:
+    """F1-1 Cb over the laterally unbraced segment that holds ``element_id``.
+
+    ``moments`` maps element id to its major-axis moment at the stations, for one
+    load alternative. The segment's diagram is put together from its elements in
+    order along the member (an element pointing the other way is read backwards);
+    Cb takes absolute values, so the sign convention does not matter. None when an
+    element of the segment has no diagram.
+    """
+    first, last = member.segment(element_id, axis)  # type: ignore[arg-type]
+    xs: list[np.ndarray] = []
+    ms: list[np.ndarray] = []
+    for k in range(first, last):
+        eid = member.element_ids[k]
+        values = moments.get(eid)
+        if values is None:
+            return None
+        values = np.abs(np.asarray(values, dtype=float))
+        if int(elements[eid].nodes[0]) != member.node_ids[k]:
+            values = values[::-1]
+        xs.append(member.stations[k] + _GRID * (member.stations[k + 1] - member.stations[k]))
+        ms.append(values)
+    x = np.concatenate(xs)
+    m = np.concatenate(ms)
+    start, end = member.stations[first], member.stations[last]
+    quarter = [float(np.interp(start + f * (end - start), x, m)) for f in (0.25, 0.5, 0.75)]
+    peak = float(np.max(m))
+    return cb_from_moments(peak, *quarter) if peak > 0.0 else 1.0
+
+
+def _unbraced(
+    member: DesignMember | None, element: Any, m_major: str, m_minor: str, fallback: float
+) -> tuple[float, float, float]:
+    """``(Lx, Ly, Lb)`` of ``element`` from its member's bracing points.
+
+    Major-axis buckling moves the member along the local axis its major moment
+    bends it towards (``M3`` → y, ``M2`` → z); lateral-torsional buckling moves
+    the compression flange along the other one, so ``Lb`` is the minor-axis
+    unbraced length. Without a member, every length is ``fallback``.
+    """
+    if member is None:
+        return fallback, fallback, fallback
+    major, minor = _bending_axes(m_major, m_minor)
+    lx = member.unbraced_length(element.id, major)  # type: ignore[arg-type]
+    ly = member.unbraced_length(element.id, minor)  # type: ignore[arg-type]
+    return lx, ly, ly
 
 
 def _case_role(case: Any) -> str | None:
@@ -789,12 +916,13 @@ def _capacity_alternatives(
         return [], [], []
     cases = {c.id: c for c in project.analyses}
     sections = {s.id: s for s in project.sections}
-    braces: list[tuple[Any, Any, float, Any]] = []
+    braces: list[tuple[Any, Any, tuple[float, float], Any]] = []
     notes: list[str] = []
+    physical = _design_members(project, settings)
     for element in project.elements:
         if not isinstance(element, FRAME_ELEMENT_CLASSES):
             continue
-        if _member_role(project, element) != "brace":
+        if _member_role(project, element, settings) != "brace":
             continue
         overrides = settings.member(element.id)
         section = sections.get(getattr(element, "section_id", -1))
@@ -804,7 +932,12 @@ def _capacity_alternatives(
         except (KeyError, ValueError) as exc:
             notes.append(f"Capacity design: brace {element.id} has no AISC shape ({exc}).")
             continue
-        braces.append((element, shape, _length(project, element), overrides))
+        m_major, _v_major, m_minor, _v_minor, _about = _axes(project, section, shape)
+        lx, ly, _lb = _unbraced(
+            physical.get(element.id), element, m_major, m_minor, _length(project, element)
+        )
+        lengths = (overrides.length_major or lx, overrides.length_minor or ly)
+        braces.append((element, shape, lengths, overrides))
     if not braces:
         return [], [], notes
 
@@ -816,7 +949,7 @@ def _capacity_alternatives(
             continue
         best: CapacityDesign | None = None
         skipped: list[int] = []
-        for element, shape, length, overrides in braces:
+        for element, shape, lengths, overrides in braces:
             total = np.zeros(STATIONS)
             peak = False
             for cid, factor in seismic.items():
@@ -838,8 +971,8 @@ def _capacity_alternatives(
                 shape,
                 Steel(Fy=fy, E=e, G=g, Fu=fu),
                 ry=settings.ry,
-                length_x=overrides.length_major or length,
-                length_y=overrides.length_minor or length,
+                length_x=lengths[0],
+                length_y=lengths[1],
                 k_x=overrides.k_major,
                 k_y=overrides.k_minor,
                 method=settings.method,
@@ -1206,12 +1339,16 @@ def steel_frame_check(
     frame_elements = [
         element for element in project.elements if isinstance(element, FRAME_ELEMENT_CLASSES)
     ]
-    element_roles = {element.id: _member_role(project, element) for element in frame_elements}
+    element_roles = {
+        element.id: _member_role(project, element, settings) for element in frame_elements
+    }
     elements_at_node: dict[int, list[Any]] = {}
     for element in frame_elements:
         for node_id in element.nodes:
             elements_at_node.setdefault(int(node_id), []).append(element)
     overstrength = any("O0:" in label for label in report.load_sets)
+    physical = _design_members(project, settings)
+    elements_by_id = {e.id: e for e in project.elements}
 
     sections = {s.id: s for s in project.sections}
     for element in project.elements:
@@ -1246,11 +1383,20 @@ def steel_frame_check(
         e = float(getattr(section, "E", 0.0) or 0.0) or 29000.0 * stress_scale(SOURCE_UNITS, units)
         g = float(getattr(section, "G", 0.0) or 0.0) or e / 2.6
         steel = Steel(Fy=member_fy, E=e, G=g, Fu=member_fu)
-        length = _length(project, element)
-        role = _member_role(project, element)
+        role = _member_role(project, element, settings)
         m_major, v_major, m_minor, v_minor, about_major = _axes(project, section, shape)
         if not about_major:
             result.notes.append("Bent about the shape's minor axis in this 2D model.")
+        member = physical.get(element.id)
+        if member is not None:
+            result.member_id = member.id
+        auto_x, auto_y, auto_b = _unbraced(
+            member, element, m_major, m_minor, _length(project, element)
+        )
+        lx = overrides.length_major or auto_x
+        ly = overrides.length_minor or auto_y
+        lb = overrides.length_ltb or auto_b
+        result.unbraced = (lx, ly, lb)
         if not alternatives:
             result.notes.append("No load set with results.")
             continue
@@ -1269,9 +1415,25 @@ def steel_frame_check(
                         total = total + factor * per_case
                 values[component] = total
             major_moment = values[m_major] if m_major else np.zeros(STATIONS)
-            quarter = [float(np.interp(s, _GRID, major_moment)) for s in (0.25, 0.5, 0.75)]
-            peak = float(np.max(np.abs(major_moment)))
-            cb = overrides.cb or cb_from_moments(peak, *quarter)
+            cb = overrides.cb
+            if cb is None and m_major and member is not None and len(member.element_ids) > 1:
+                # Cb over the whole laterally unbraced segment, not this element alone.
+                segment_moments = {
+                    eid: sum(
+                        (
+                            factor * fields[cid].get(m_major, {}).get(eid, np.zeros(STATIONS))
+                            for cid, factor in alt.items()
+                        ),
+                        np.zeros(STATIONS),
+                    )
+                    for eid in member.element_ids
+                }
+                lateral = _bending_axes(m_major, m_minor)[1]
+                cb = _segment_cb(member, element.id, lateral, segment_moments, elements_by_id)
+            if cb is None:
+                quarter = [float(np.interp(s, _GRID, major_moment)) for s in (0.25, 0.5, 0.75)]
+                peak = float(np.max(np.abs(major_moment)))
+                cb = cb_from_moments(peak, *quarter)
             # The diagrams draw compression positive (OpenSees' end-i axial force);
             # the check takes tension positive. Evaluate every station with the
             # axial force, moments and shears of that same station, so the H1
@@ -1298,9 +1460,9 @@ def steel_frame_check(
                     steel,
                     settings.method,
                     demand,
-                    length_x=overrides.length_major or length,
-                    length_y=overrides.length_minor or length,
-                    length_ltb=overrides.length_ltb or length,
+                    length_x=lx,
+                    length_y=ly,
+                    length_ltb=lb,
                     k_x=k_major,
                     k_y=k_minor,
                     net_area=overrides.net_area,
@@ -1358,8 +1520,8 @@ def steel_frame_check(
                     )
                     if radius > 0.0 and math.isfinite(radius):
                         lc = max(
-                            k_major * (overrides.length_major or length),
-                            k_minor * (overrides.length_minor or length),
+                            k_major * lx,
+                            k_minor * ly,
                         )
                         slenderness = lc / radius
                         key = "SCBF brace slenderness (F2.5b)"
@@ -1432,8 +1594,8 @@ def steel_frame_check(
                     )
                     if radius > 0.0 and math.isfinite(radius):
                         lc = max(
-                            k_major * (overrides.length_major or length),
-                            k_minor * (overrides.length_minor or length),
+                            k_major * lx,
+                            k_minor * ly,
                         )
                         slenderness = lc / radius
                         limit = ocbf_brace_slenderness_limit(steel.E, steel.Fy)
@@ -1659,7 +1821,7 @@ def _ishape_members(
         if not isinstance(shape, IShape):
             continue
         length = float(np.linalg.norm(coords[element.nodes[1]] - coords[element.nodes[0]]))
-        out[element.id] = (shape, _member_role(project, element), length, shape.d)
+        out[element.id] = (shape, _member_role(project, element, settings), length, shape.d)
     return out
 
 
@@ -2047,7 +2209,7 @@ def _scbf_protected_zones(
     for element in project.elements:
         if not isinstance(element, FRAME_ELEMENT_CLASSES):
             continue
-        if _member_role(project, element) != "brace":
+        if _member_role(project, element, settings) != "brace":
             continue
         section = sections.get(getattr(element, "section_id", -1))
         name = getattr(section, "name", "") or ""
@@ -2110,7 +2272,7 @@ def _scbf_beam_column_joints(
     frame_elements = [
         element for element in project.elements if isinstance(element, FRAME_ELEMENT_CLASSES)
     ]
-    roles = {element.id: _member_role(project, element) for element in frame_elements}
+    roles = {element.id: _member_role(project, element, settings) for element in frame_elements}
     connected: dict[int, list[Any]] = {}
     for element in frame_elements:
         for node_id in element.nodes:
