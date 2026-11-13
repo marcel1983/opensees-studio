@@ -350,6 +350,10 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   net tensile strain, biaxial bending (Bresler), shear with the given stirrups,
   the torsion threshold, minimum steel and εt ≥ 0.004 in beams, with the ratios
   painted on the model (Verification Manual D-15).
+- **Base plates and bolted connections** — Design → Base Plate & Anchors (AISC
+  Design Guide 1, ACI 318-19 Chapter 17 anchors) and Design → Bolted Connection
+  (prying action, eccentric bolt groups), calculators that can read the
+  demands from a support's reaction.
 - **Design** — AISC 360-16 member check (LRFD or ASD) for W, M, S, HP,
   channels, tees, equal-leg angles, rectangular and round HSS and pipes:
   tension (D2), compression (E3, E4, E7), flexure (F2–F10), shear (G2–G6) and

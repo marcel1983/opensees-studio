@@ -632,6 +632,8 @@ class MainWindow(QMainWindow):
         self._act_clear_results = QAction("Delete &All Results…", self)
         self._act_steel_check = QAction("&Steel Frame Check (AISC 360-16)…", self)
         self._act_concrete_check = QAction("Co&ncrete Frame Check (ACI 318-19)…", self)
+        self._act_base_plate = QAction("&Base Plate && Anchors (DG1, ACI 318)…", self)
+        self._act_bolted = QAction("Bolted Connection (&Prying, Bolt Group)…", self)
         self._act_connections = QAction("&Connections (AISC 358-22)…", self)
         self._act_gussets = QAction("&Gussets (AISC 341-22)…", self)
         self._act_column_splices = QAction("&Column Splices (AISC 341-22)…", self)
@@ -937,6 +939,8 @@ class MainWindow(QMainWindow):
         m_design = mb.addMenu("Desi&gn")
         m_design.addAction(self._act_steel_check)
         m_design.addAction(self._act_concrete_check)
+        m_design.addAction(self._act_base_plate)
+        m_design.addAction(self._act_bolted)
         m_design.addAction(self._act_connections)
         m_design.addAction(self._act_gussets)
         m_design.addAction(self._act_column_splices)
@@ -1404,6 +1408,8 @@ class MainWindow(QMainWindow):
         self._act_clear_results.triggered.connect(self._on_clear_results)
         self._act_steel_check.triggered.connect(self._on_steel_check)
         self._act_concrete_check.triggered.connect(self._on_concrete_check)
+        self._act_base_plate.triggered.connect(self._on_base_plate)
+        self._act_bolted.triggered.connect(self._on_bolted_connection)
         self._act_connections.triggered.connect(self._on_connections)
         self._act_gussets.triggered.connect(self._on_gussets)
         self._act_column_splices.triggered.connect(self._on_column_splices)
@@ -2945,6 +2951,31 @@ class MainWindow(QMainWindow):
                 self._log(note)
             if dialog.show_ratios_requested:
                 self._show_design_ratios(report, settings, concrete=True)
+
+    def _on_base_plate(self) -> None:
+        """Design → Base Plate & Anchors: DG1 and ACI 318 Ch. 17 for one column base."""
+        from opensees_studio.views.dialogs.connection_calculators import BasePlateDialog
+
+        project = self._vm.project
+        if project is None:
+            return
+        nodes = sorted(self._canvas.selection.nodes)
+        dialog = BasePlateDialog(
+            project,
+            dict(self._case_results.current(project)),
+            nodes[0] if len(nodes) == 1 else None,
+            self,
+        )
+        dialog.exec()
+
+    def _on_bolted_connection(self) -> None:
+        """Design → Bolted Connection: prying action and an eccentric bolt group."""
+        from opensees_studio.views.dialogs.connection_calculators import BoltedConnectionDialog
+
+        project = self._vm.project
+        if project is None:
+            return
+        BoltedConnectionDialog(project, self).exec()
 
     def _on_steel_ratios(self) -> None:
         """Design → Display Steel Ratios: paint the members by the stored check's ratios.
@@ -7006,6 +7037,8 @@ class MainWindow(QMainWindow):
         self._act_clear_results.setEnabled(bool(has_project and (stored or db_there)))
         self._act_steel_check.setEnabled(has_project)
         self._act_concrete_check.setEnabled(has_project)
+        self._act_base_plate.setEnabled(has_project)
+        self._act_bolted.setEnabled(has_project)
         self._act_connections.setEnabled(has_project)
         self._act_gussets.setEnabled(has_project)
         self._act_column_splices.setEnabled(has_project)

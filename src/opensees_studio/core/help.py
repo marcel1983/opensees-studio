@@ -1589,6 +1589,63 @@ stiffener and doubler-plate design is not modeled.
             "design.column_splices",
             "design.steel_check",
         ),
+        "design.base_plate": _t(
+            "Design → Base Plate & Anchors (DG1, ACI 318)",
+            "Design",
+            "A column base plate and its anchor rods: bearing, plate thickness, rods, breakout, shear.",
+            """
+A calculator (LRFD, project units): it keeps nothing in the project. Enter the
+column (d, bf), the plate (N along d, B, tp, Fy), the concrete (f'c and the
+supporting area A2), the anchor rods (diameter, futa, how many on the tension
+side and in all, the offset f of the rod line from the plate centre, their
+spacing, edge distance and embedment) and the demands. With one support joint
+selected, **Demands from the selected support** reads Pu, Mu and Vu from its
+reaction in a solved static case.
+
+# Checks
+- **Concrete bearing** — fp,max = 0.65·min(0.85 f'c √(A2/A1), 1.7 f'c) (AISC J8).
+- **Plate thickness** — Design Guide 1: concentric with l = max(m, n, λn');
+  small eccentricity (e ≤ e,crit) with the bearing length Y = N - 2e; large
+  eccentricity with Y from the quadratic of DG1 3.3.2 and the rod tension
+  T = q,max·Y - Pu, the plate also bending over the rods.
+- **Anchor rods** (ACI 318-19 Chapter 17, cast-in, cracked concrete) — steel
+  0.75·Ase·futa in tension (Ase = 0.75 Ab), concrete breakout of the tension
+  group 0.70·(ANc/ANco)·ψed·Nb with Nb = 10 λ √f'c hef^1.5; shear by friction
+  0.75·0.55·Pu or by the rods 0.65·0.6·Ase·futa, the larger.
+
+Not checked: pullout and side-face blowout, anchor reinforcement, grout and the
+column-to-plate weld. Verified against the DG1 and ACI expressions by hand
+(unit tests).
+""",
+            "design.bolted_connection",
+            "design.chapter_j",
+        ),
+        "design.bolted_connection": _t(
+            "Design → Bolted Connection (Prying, Bolt Group)",
+            "Design",
+            "Prying action of a tee or end plate, and the most loaded bolt of an eccentric group.",
+            """
+A calculator (LRFD, project units).
+
+# Prying action (AISC Manual Part 9)
+For a flange of thickness t and Fu with bolts of diameter db in holes d' at a
+tributary width p, b from the bolt line to the stem and a to the edge:
+b' = b - db/2, a' = min(a, 1.25 b) + db/2, ρ = b'/a', δ = 1 - d'/p,
+tc = √(4 B b' / (0.9 p Fu)) for the bolt's available tension B,
+α' = ((tc/t)² - 1) / (δ(1 + ρ)) within 0 and 1, Q = (t/tc)²(1 + δα') ≤ 1. The
+available tension per bolt is B·Q; the window also gives tc and the thickness
+that needs no prying for the demand.
+
+# Eccentric bolt group (elastic method, Manual Part 7)
+Bolts at x,y (semicolon-separated pairs) and a force (Px, Py) at a point: each
+bolt takes P/n plus the torsion M·r/Ip about the group's centroid. The most
+loaded bolt is compared with the single-bolt strength you give (the smaller of
+J3.6 shear and J3.10 bearing, from Design → Connection Checks). The elastic
+method is conservative next to the instantaneous centre of rotation.
+""",
+            "design.base_plate",
+            "design.chapter_j",
+        ),
         "design.concrete_check": _t(
             "Design → Concrete Frame Check (ACI 318-19)",
             "Design",
@@ -5874,6 +5931,8 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_import_tcl": "file.import_tcl",
     "_act_steel_check": "design.steel_check",
     "_act_concrete_check": "design.concrete_check",
+    "_act_base_plate": "design.base_plate",
+    "_act_bolted": "design.bolted_connection",
     "_act_connections": "design.connections",
     "_act_gussets": "design.gussets",
     "_act_column_splices": "design.column_splices",

@@ -43,7 +43,7 @@ Cada punto es un PR con su ayuda, README/README.es, CHANGELOG y los gates de
 | # | Entrega | Verificación | Estado |
 |---|---|---|---|
 | 5 | Hormigón armado ACI 318-19: P-M por compatibilidad (cualquier sección de fibras), biaxial (Bresler), corte, umbral de torsión, cuantía mínima y εt en vigas; ratios en el modelo. Pendiente para una segunda entrega: esbeltez, muros especiales y detallado sísmico, memoria de cálculo | Viga y columna a mano (D-15) | Hecho (1.ª entrega) |
-| 6 | Placas base (AISC DG1 + ACI 318 cap. 17) y uniones abulonadas/soldadas de corte y momento con prying | Ejemplos AISC / DG1 | Pendiente |
+| 6 | Placas base (AISC DG1 + ACI 318 cap. 17) y uniones apernadas: prying y grupos excéntricos (método elástico), como calculadoras | Expresiones de DG1, ACI y Manual AISC a mano | Hecho |
 
 ## Fase 3 — Producto
 

@@ -113,6 +113,10 @@ script o un notebook de Jupyter: la interfaz es una forma de usarlo, no la únic
   según la deformación neta de tracción, flexión biaxial (Bresler), corte con
   los estribos indicados, umbral de torsión, cuantía mínima y εt ≥ 0.004 en
   vigas, con los ratios pintados sobre el modelo.
+- **Placas base y uniones apernadas**: Design → Base Plate & Anchors (AISC Design
+  Guide 1, anclajes según ACI 318-19 capítulo 17) y Design → Bolted Connection
+  (efecto palanca y grupos de pernos excéntricos), calculadoras que pueden leer
+  las demandas de la reacción de un apoyo.
 - **Diseño**: Design → Steel Frame Check verifica según **AISC 360-16** (LRFD o
   ASD) los miembros de perfiles W, M, S y HP —y canales, tees, ángulos de alas
   iguales, HSS rectangulares y circulares y tubos—: tracción (D2), compresión

@@ -11,6 +11,13 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **Base plates and bolted connections.** Design → Base Plate & Anchors checks
+  a column base after AISC Design Guide 1 (bearing, plate thickness for
+  concentric, small and large eccentricity) and its anchor rods after ACI 318-19
+  Chapter 17 (steel, concrete breakout, shear by friction or rods), with the
+  demands read from a selected support's reaction. Design → Bolted Connection
+  computes prying action (AISC Manual Part 9) and the most loaded bolt of an
+  eccentric group (elastic method). Both are calculators, verified by hand.
 - **Concrete Frame Check (ACI 318-19).** Design → Concrete Frame Check
   checks every reinforced concrete member — fibre sections of concrete and
   bars, or the elastic section the Concrete Section Wizard made next to one —
