@@ -14,7 +14,7 @@ Units are SI (m, N, kg, s) for the V cases and kip-inch for the D (design)
 cases, as in the AISC examples. Errors below 1e-6 are floating-point noise
 and are printed as `< 1e-6`.
 
-**31 of 31 cases pass.**
+**33 of 33 cases pass.**
 
 | Case | Title | Group | Max. error | Verdict |
 |---|---|---|---|---|
@@ -35,6 +35,8 @@ and are printed as `< 1e-6`.
 | [V-15](#v-15) | Plastic moment of a rectangle | Nonlinear, fibre sections | 2.9e-04 | ✅ pass |
 | [V-16](#v-16) | Influence lines of a two-span continuous beam | Influence lines, moving loads | < 1e-06 | ✅ pass |
 | [V-17](#v-17) | Temperature: uniform change and gradient | Static, temperature loads | < 1e-06 | ✅ pass |
+| [V-18](#v-18) | Simply supported plate with DKGQ and DKGT shells | Shells | 2.4e-03 | ✅ pass |
+| [V-19](#v-19) | Scordelis-Lo roof | Shells | 3.6e-02 | ✅ pass |
 | [D-01](#d-01) | AISC: column available strength | Design, AISC 360-16 | 1.3e-03 | ✅ pass |
 | [D-02](#d-02) | AISC: beam flexural strength and LTB | Design, AISC 360-16 | 3.4e-03 | ✅ pass |
 | [D-03](#d-03) | AISC: web shear strength | Design, AISC 360-16 | 8.8e-04 | ✅ pass |
@@ -278,6 +280,32 @@ and are printed as `< 1e-6`.
 | Free end: deflection α g L²/2 | m | 0.0096 | 0.0096 | < 1e-06 | 1e-09 | ✅ |
 | Held: axial compression EA α ΔT | N | 720000 | 720000 | < 1e-06 | 1e-09 | ✅ |
 | Held: moment EI α g | N·m | 24000 | 24000 | < 1e-06 | 1e-09 | ✅ |
+
+<a id="v-18"></a>
+
+## V-18 — Simply supported plate with DKGQ and DKGT shells
+
+**Model.** The V-14 plate, 16 × 16 `ShellDKGQ`, and the same grid split into 512 `ShellDKGT` triangles.
+
+**Reference.** Timoshenko & Woinowsky-Krieger, Table 8 (ν = 0.3): w = 0.00406 qa⁴/D.
+
+| Quantity | Unit | OpenSees Studio | Reference | Rel. error | Tolerance | |
+|---|---|---|---|---|---|---|
+| Centre deflection (0.00406 q a⁴ / D) — ShellDKGQ | m | 0.000443555 | 0.000443609 | 1.2e-04 | 1e-02 | ✅ |
+| Centre deflection (0.00406 q a⁴ / D) — ShellDKGT | m | 0.000442556 | 0.000443609 | 2.4e-03 | 1e-02 | ✅ |
+
+<a id="v-19"></a>
+
+## V-19 — Scordelis-Lo roof
+
+**Model.** Cylindrical roof R = 25, L = 50, 80° arc, t = 0.25, E = 4.32e8, ν = 0, weight 90 per unit area; rigid diaphragms at both ends, free straight edges; 16 × 16 shells, `ShellDKGQ` (2 %) and `ShellMITC4` (5 %).
+
+**Reference.** MacNeal & Harder (1985), *A proposed standard set of problems to test finite element accuracy*: vertical deflection 0.3024 at the midspan of the free edge.
+
+| Quantity | Unit | OpenSees Studio | Reference | Rel. error | Tolerance | |
+|---|---|---|---|---|---|---|
+| Free-edge midspan deflection — ShellDKGQ | length | 0.304072 | 0.3024 | 5.5e-03 | 2e-02 | ✅ |
+| Free-edge midspan deflection — ShellMITC4 | length | 0.291501 | 0.3024 | 3.6e-02 | 5e-02 | ✅ |
 
 <a id="d-01"></a>
 

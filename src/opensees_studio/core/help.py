@@ -2658,12 +2658,14 @@ the way to check a coordinate you are unsure about.
             "define.grid",
         ),
         "define.create_shell": _t(
-            "Define → Create Shell from 4 Nodes",
+            "Define → Create Shell from 3 or 4 Nodes",
             "Define",
-            "A four-node shell element from four selected nodes.",
+            "A four-node shell from four selected nodes, a triangle from three.",
             """
-Select exactly four nodes and a plate section, and the command builds a
-`ShellMITC4`. Walls, slabs and shear walls are shells.
+Select four nodes and a plate section, and the command builds a `ShellMITC4`;
+select three and it builds a triangular `ShellDKGT` (in the order you picked
+them). Walls, slabs and shear walls are shells. Change the formulation
+afterwards with Assign → Area → Shell Formulation.
 
 - The **winding** is derived from the coordinates: a click selection has no
   order, and a face built from a scrambled list is inverted or twisted. The
@@ -2677,6 +2679,40 @@ Select exactly four nodes and a plate section, and the command builds a
 - If the project has several plate sections you are asked which one.
 """,
             "define.section_library",
+            "assign.shell_formulation",
+            "mechanics.shells",
+        ),
+        "assign.shell_formulation": _t(
+            "Assign → Area → Shell Formulation",
+            "Assign — areas",
+            "Which OpenSees shell element the selected shells are: MITC4, DKGQ, NLDKGQ, DKGT.",
+            """
+Every shell keeps its nodes, section, loads and results; only the element
+OpenSees builds changes. Pick a pair: the first applies to the selected
+quadrilaterals, the second to the triangles.
+
+- **MITC4 / DKGT** — the default. `ShellMITC4` (Dvorkin-Bathe mixed
+  interpolation) is a thick-shell element with transverse shear; it is what the
+  importers create.
+- **DKGQ / DKGT** — `ShellDKGQ` (Lu, Xie, Zhang): a Discrete Kirchhoff plate with
+  a generalised-conforming membrane and a real drilling (in-plane rotation)
+  stiffness. The better choice for thin slabs and for walls whose edges frame
+  into beams or columns in their own plane. It has no transverse-shear strain,
+  so its V13/V23 resultants read zero: take shear from equilibrium.
+- **NLDKGQ / NLDKGT** — the geometrically nonlinear versions (updated
+  Lagrangian), for large displacements: wall or slab buckling, catenary action.
+  In a linear step they behave as DKGQ/DKGT.
+
+`ShellDKGT` is the triangle of the family, for panels a quadrilateral mesh cannot
+cover. Every formulation takes the plate sections of Define → Section Library
+(elastic, layered or fibre) and reports the same eight stress resultants. Verified
+against the simply supported plate and the Scordelis-Lo roof in the Verification
+Manual. The SAP2000 and IFC exporters write every quadrilateral as an area or
+a surface member whatever its formulation, and leave triangles out, listed in
+their report.
+""",
+            "define.create_shell",
+            "assign.surface_load",
             "mechanics.shells",
         ),
         "define.portal_frame": _t(
@@ -5734,6 +5770,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_mass_source": "define.mass_source",
     "_act_seismic_loads": "define.seismic_loads",
     "_act_create_shell": "define.create_shell",
+    "_act_shell_formulation": "assign.shell_formulation",
     "_act_frame_wizard": "define.portal_frame",
     "_act_truss_wizard": "define.truss",
     "_act_material_library": "define.material_library",

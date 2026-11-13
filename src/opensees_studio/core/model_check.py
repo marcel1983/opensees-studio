@@ -63,6 +63,7 @@ from opensees_studio.core.geometry.elements import (
     ElasticBeamColumn,
     ForceBeamColumn,
     QuadElement,
+    ShellDKGTElement,
     ShellMITC4Element,
     TrussElement,
     ZeroLengthElement,
@@ -419,7 +420,7 @@ def _element_rows(
         return [row]
     if isinstance(element, FRAME_CLASSES):
         return _frame_rows((ids[0], ids[1]), points[ids[0]], points[ids[1]], ndm, ndf)
-    if isinstance(element, (QuadElement, ShellMITC4Element)):
+    if isinstance(element, (QuadElement, ShellMITC4Element, ShellDKGTElement)):
         pts = np.array([points[n] for n in ids])
         complement = _complement_rows(_rigid_body_matrix(pts, ndm, ndf))
         rows = []
@@ -577,7 +578,7 @@ def check_model(
             )
             rejected.append(el)
             continue
-        if isinstance(el, ShellMITC4Element) and (ndm, ndf) != (3, 6):
+        if isinstance(el, (ShellMITC4Element, ShellDKGTElement)) and (ndm, ndf) != (3, 6):
             findings.append(
                 Finding(
                     Severity.ERROR,

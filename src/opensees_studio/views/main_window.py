@@ -90,10 +90,12 @@ from opensees_studio.commands.joint_patterns import SetJointPatternsCommand
 from opensees_studio.commands.support_springs import SetSupportSpringsCommand
 from opensees_studio.commands.tables import ApplyModelTablesCommand
 from opensees_studio.core import (
+    SHELL_ELEMENT_CLASSES,
     SUPPORTED_NDF,
     ElasticSection,
     LinearTimeSeries,
     Project,
+    ShellDKGTElement,
     ShellMITC4Element,
     UnitConverter,
     UnitSystem,
@@ -102,6 +104,7 @@ from opensees_studio.core import (
     labels_for,
     make_default_section,
     make_default_truss_material,
+    with_shell_formulation,
 )
 from opensees_studio.core import selection as selection_queries
 from opensees_studio.core.combinations import model_fingerprint
@@ -537,7 +540,8 @@ class MainWindow(QMainWindow):
         self._act_assign_group.setShortcut("Ctrl+Shift+G")
         self._act_mass_source = QAction("Mass S&ource…", self)
         self._act_seismic_loads = QAction("Seismic &Loads (Equivalent Lateral Force)…", self)
-        self._act_create_shell = QAction("Create S&hell from 4 Nodes…", self)
+        self._act_create_shell = QAction("Create S&hell from 3 or 4 Nodes…", self)
+        self._act_shell_formulation = QAction("Shell &Formulation…", self)
         self._act_frame_wizard = QAction("Create Portal &Frame…", self)
         self._act_truss_wizard = QAction("Create &Truss…", self)
         self._act_material_library = QAction("&Material Library…", self, shortcut="Ctrl+Shift+M")
@@ -873,6 +877,8 @@ class MainWindow(QMainWindow):
             self._act_assign_line_springs,
         ]
         self._area_actions: list[QAction | None] = [
+            self._act_shell_formulation,
+            None,
             self._act_assign_surface_load,
             self._act_assign_floor_load,
             None,
@@ -1312,6 +1318,7 @@ class MainWindow(QMainWindow):
         self._canvas.contextMenuRequested.connect(self._on_canvas_context_menu)
         self._act_add_node.triggered.connect(self._on_add_node)
         self._act_create_shell.triggered.connect(self._on_create_shell)
+        self._act_shell_formulation.triggered.connect(self._on_shell_formulation)
         self._act_frame_wizard.triggered.connect(self._on_frame_wizard)
         self._act_truss_wizard.triggered.connect(self._on_truss_wizard)
         self._act_material_library.triggered.connect(self._on_material_library)
@@ -2394,7 +2401,7 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Grid update failed", str(exc))
 
     def _on_create_shell(self) -> None:
-        """Define → Create Shell: a ShellMITC4 from four selected nodes.
+        """Define → Create Shell: a ShellMITC4 from four selected nodes, a ShellDKGT from three.
 
         The selection carries no order, so the winding is derived from the
         nodes' coordinates: a shell built from a scrambled list is inverted or
@@ -2406,11 +2413,12 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Create shell", "Open or create a project first.")
             return
         selected = [n for n in project.nodes if n.id in self._canvas.selection.nodes]
-        if len(selected) != 4:
+        if len(selected) not in (3, 4):
             QMessageBox.information(
                 self,
                 "Create shell",
-                f"Select exactly four nodes first (you have {len(selected)}).",
+                "Select four nodes (a quadrilateral) or three (a triangle) first "
+                f"(you have {len(selected)}).",
             )
             return
         plate_sections = [s for s in project.sections if isinstance(s, SHELL_SECTION_CLASSES)]
@@ -2432,6 +2440,18 @@ class MainWindow(QMainWindow):
             if not accepted:
                 return
             section = plate_sections[labels.index(choice)]
+        element_id = project.next_element_id()
+        if len(selected) == 3:
+            # Any three points wind one way or the other: keep the selection order.
+            corners = (selected[0].id, selected[1].id, selected[2].id)
+            tri = ShellDKGTElement(id=element_id, nodes=corners, section_id=section.id)
+            self._vm.apply_command(
+                AddElementsCommand(self._vm, [tri], text=f"Add shell {element_id}")
+            )
+            self._log(
+                f"Shell {element_id} (ShellDKGT): nodes {tri.nodes}, plate section {section.id}."
+            )
+            return
         points = [
             (float(node.coords[0]), float(node.coords[1]), float(node.coords[2]))
             for node in selected
@@ -2443,7 +2463,6 @@ class MainWindow(QMainWindow):
             return
         ordered = [selected[index] for index in order]
         nodes = (ordered[0].id, ordered[1].id, ordered[2].id, ordered[3].id)
-        element_id = project.next_element_id()
         try:
             self._vm.apply_command(
                 AddElementsCommand(
@@ -2459,6 +2478,48 @@ class MainWindow(QMainWindow):
             f"Shell {element_id}: nodes {nodes}, plate section {section.id} "
             f"(winding ordered counter-clockwise)."
         )
+
+    def _on_shell_formulation(self) -> None:
+        """Assign → Area → Shell Formulation: MITC4, DKGQ or NLDKGQ (quads), DKGT or NLDKGT."""
+        project = self._vm.project
+        if project is None:
+            return
+        selected = set(self._canvas.selection.elements)
+        shells = [
+            e for e in project.elements if e.id in selected and isinstance(e, SHELL_ELEMENT_CLASSES)
+        ]
+        if not shells:
+            QMessageBox.information(self, "Shell Formulation", "Select one or more shells first.")
+            return
+        quads = [e for e in shells if len(e.nodes) == 4]
+        tris = [e for e in shells if len(e.nodes) == 3]
+        choices: list[tuple[str, str, str]] = [
+            ("MITC4 / DKGT — the default pair", "ShellMITC4", "ShellDKGT"),
+            ("DKGQ / DKGT — thin plates, drilling stiffness", "ShellDKGQ", "ShellDKGT"),
+            ("NLDKGQ / NLDKGT — large displacements", "ShellNLDKGQ", "ShellNLDKGT"),
+        ]
+        labels = [c[0] for c in choices]
+        choice, accepted = QInputDialog.getItem(
+            self,
+            "Shell Formulation",
+            f"{len(quads)} quadrilateral and {len(tris)} triangular shell(s):",
+            labels,
+            0,
+            False,
+        )
+        if not accepted:
+            return
+        _label, quad_kind, tri_kind = choices[labels.index(choice)]
+        replaced = [
+            with_shell_formulation(e, quad_kind if len(e.nodes) == 4 else tri_kind) for e in shells
+        ]
+        replaced = [new for new, old in zip(replaced, shells, strict=True) if new.type != old.type]
+        if not replaced:
+            self._log("Shell formulation: nothing to change.")
+            return
+        self._vm.apply_command(ReplaceElementsCommand(self._vm, replaced))
+        self._log(f"Shell formulation: {len(replaced)} shell(s) are now {choice.split(' — ')[0]}.")
+        self._canvas.render()
 
     def _on_check_duplicates(self) -> None:
         """Edit → Check Model for Duplicates: report, then repair on request.
@@ -5013,7 +5074,7 @@ class MainWindow(QMainWindow):
         shells = sorted(
             el.id
             for el in project.elements
-            if el.id in selected and isinstance(el, ShellMITC4Element)
+            if el.id in selected and isinstance(el, SHELL_ELEMENT_CLASSES)
         )
         if not shells:
             QMessageBox.information(self, "Surface Load", "Select one or more shells first.")
@@ -6879,6 +6940,7 @@ class MainWindow(QMainWindow):
         self._act_assign_load.setEnabled(has_project and has_selected_nodes)
         self._act_assign_imposed_displacement.setEnabled(has_project and has_selected_nodes)
         self._act_assign_surface_load.setEnabled(has_project)
+        self._act_shell_formulation.setEnabled(has_project)
         for action in (
             self._act_assign_area_springs,
             self._act_assign_edge_springs,

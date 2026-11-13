@@ -494,13 +494,22 @@ def _spectrum_sdof() -> list[Check]:
 
 # ──────────────────────────── shells and nonlinear ────────────────────────────
 def _plate() -> list[Check]:
+    return _plate_of("ShellMITC4")
+
+
+def _plate_dkg() -> list[Check]:
+    return _plate_of("ShellDKGQ") + _plate_of("ShellDKGT")
+
+
+def _plate_of(kind: str) -> list[Check]:
     from opensees_studio.core import (
+        QUAD_SHELL_CLASSES,
+        TRI_SHELL_CLASSES,
         ElasticMembranePlateSection,
         LinearTimeSeries,
         Node,
         PlainLoadPattern,
         Project,
-        ShellMITC4Element,
         StaticCase,
         SurfaceLoad,
     )
@@ -518,17 +527,18 @@ def _plate() -> list[Check]:
                     restraint=(edge, edge, edge, False, False, False),
                 )
             )
-    elements = []
+    elements: list[Any] = []
     for j in range(n):
         for i in range(n):
             first = j * (n + 1) + i + 1
-            elements.append(
-                ShellMITC4Element(
-                    id=j * n + i + 1,
-                    nodes=(first, first + 1, first + n + 2, first + n + 1),
-                    section_id=1,
-                )
-            )
+            c0, c1, c2, c3 = first, first + 1, first + n + 2, first + n + 1
+            if kind in TRI_SHELL_CLASSES:
+                tri = TRI_SHELL_CLASSES[kind]
+                elements.append(tri(id=len(elements) + 1, nodes=(c0, c1, c2), section_id=1))
+                elements.append(tri(id=len(elements) + 1, nodes=(c0, c2, c3), section_id=1))
+            else:
+                quad = QUAD_SHELL_CLASSES[kind]
+                elements.append(quad(id=len(elements) + 1, nodes=(c0, c1, c2, c3), section_id=1))
     project = Project(
         ndm=3,
         ndf=6,
@@ -552,15 +562,96 @@ def _plate() -> list[Check]:
     r = _run(project, case)
     centre = (n // 2) * (n + 1) + n // 2 + 1
     D = E * h**3 / (12 * (1 - NU**2))
+    label = "" if kind == "ShellMITC4" else f" — {kind}"
     return [
         Check(
-            "Centre deflection (0.00406 q a⁴ / D)",
+            f"Centre deflection (0.00406 q a⁴ / D){label}",
             "m",
             -float(r.node_disp[centre][-1][2]),
             0.00406235 * q * a**4 / D,
             1e-2,
         )
     ]
+
+
+def _scordelis_lo() -> list[Check]:
+    from opensees_studio.core import (
+        QUAD_SHELL_CLASSES,
+        ElasticMembranePlateSection,
+        LinearTimeSeries,
+        Node,
+        PlainLoadPattern,
+        Project,
+        StaticCase,
+        SurfaceLoad,
+    )
+
+    radius, length, half_angle, t, n = 25.0, 50.0, math.radians(40.0), 0.25, 16
+
+    def node_id(i: int, j: int) -> int:
+        return j * (n + 1) + i + 1
+
+    checks: list[Check] = []
+    for kind, tolerance in (("ShellDKGQ", 2e-2), ("ShellMITC4", 5e-2)):
+        nodes = []
+        for j in range(n + 1):
+            theta = -half_angle + 2 * half_angle * j / n
+            for i in range(n + 1):
+                end = i in (0, n)
+                # Rigid diaphragms at both ends (Uy, Uz); one node holds Ux.
+                hold_x = i == 0 and j == n // 2
+                nodes.append(
+                    Node(
+                        id=node_id(i, j),
+                        coords=(
+                            length * i / n,
+                            radius * math.sin(theta),
+                            radius * math.cos(theta),
+                        ),
+                        restraint=(hold_x, end, end, False, False, False),
+                    )
+                )
+        cls = QUAD_SHELL_CLASSES[kind]
+        elements = [
+            cls(
+                id=j * n + i + 1,
+                nodes=(node_id(i, j), node_id(i + 1, j), node_id(i + 1, j + 1), node_id(i, j + 1)),
+                section_id=1,
+            )
+            for j in range(n)
+            for i in range(n)
+        ]
+        project = Project(
+            ndm=3,
+            ndf=6,
+            nodes=nodes,
+            sections=[ElasticMembranePlateSection(id=1, name="Roof", E=4.32e8, nu=0.0, h=t)],
+            elements=elements,
+            time_series=[LinearTimeSeries(id=1, name="Ramp")],
+            load_patterns=[
+                PlainLoadPattern(
+                    id=1,
+                    name="Weight",
+                    time_series_id=1,
+                    surface_loads=[
+                        SurfaceLoad(element_id=e.id, value=-90.0, direction="Z") for e in elements
+                    ],
+                )
+            ],
+        )
+        case = StaticCase(id=1, name="Weight", pattern_ids=[1])
+        project.analyses.append(case)
+        r = _run(project, case)
+        checks.append(
+            Check(
+                f"Free-edge midspan deflection — {kind}",
+                "length",
+                -float(r.node_disp[node_id(n // 2, 0)][-1][2]),
+                0.3024,
+                tolerance,
+            )
+        )
+    return checks
 
 
 def _plastic_moment() -> list[Check]:
@@ -1387,6 +1478,26 @@ CASES: list[Case] = [
         "2D member, L = 4 m in two members, ΔT = 30 °C and a gradient of 100 °C/m "
         "across local y, α = 1.2e-5; once as a cantilever, once fixed at both ends.",
         _thermal,
+    ),
+    Case(
+        "V-18",
+        "Simply supported plate with DKGQ and DKGT shells",
+        "Shells",
+        "Timoshenko & Woinowsky-Krieger, Table 8 (ν = 0.3): w = 0.00406 qa⁴/D.",
+        "The V-14 plate, 16 × 16 `ShellDKGQ`, and the same grid split into 512 `ShellDKGT` "
+        "triangles.",
+        _plate_dkg,
+    ),
+    Case(
+        "V-19",
+        "Scordelis-Lo roof",
+        "Shells",
+        "MacNeal & Harder (1985), *A proposed standard set of problems to test finite "
+        "element accuracy*: vertical deflection 0.3024 at the midspan of the free edge.",
+        "Cylindrical roof R = 25, L = 50, 80° arc, t = 0.25, E = 4.32e8, ν = 0, weight 90 "
+        "per unit area; rigid diaphragms at both ends, free straight edges; 16 × 16 shells, "
+        "`ShellDKGQ` (2 %) and `ShellMITC4` (5 %).",
+        _scordelis_lo,
     ),
     Case(
         "D-01",

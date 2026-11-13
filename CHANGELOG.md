@@ -11,6 +11,17 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **Shells: DKGQ, NLDKGQ and triangles.** Assign → Area → Shell Formulation
+  switches the selected shells between `ShellMITC4`, `ShellDKGQ` (Discrete
+  Kirchhoff plate with a drilling stiffness: thin slabs, walls framing into
+  beams in their plane) and the geometrically nonlinear `ShellNLDKGQ`;
+  triangles are `ShellDKGT`/`ShellNLDKGT`, built by Define → Create Shell from
+  three selected nodes. Every formulation takes the same plate sections, loads,
+  self-weight, contours and results; the Tcl importer reads them. New
+  Verification Manual cases: the simply supported plate with DKGQ and DKGT
+  (V-18) and the Scordelis-Lo roof (V-19, DKGQ within 0.6 % of 0.3024 on a
+  16 × 16 mesh). `.osmodel`: element types `ShellDKGQ`, `ShellNLDKGQ`,
+  `ShellDKGT`, `ShellNLDKGT`.
 - **Mechanisms are named and shown.** Check Model (and the check Run performs
   on its way in) now describes each independent free motion on its own — the
   structure or a group of joints sliding or turning as a rigid body, a joint

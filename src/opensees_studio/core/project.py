@@ -710,7 +710,7 @@ class Project(BaseModel):
                     problems.append(f"Pattern {pat.id} drives missing node {nid}.")
             for sl in getattr(pat, "surface_loads", []):
                 element = elements_by_id.get(sl.element_id)
-                if element is None or len(element.nodes) != 4:
+                if element is None or len(element.nodes) not in (3, 4):
                     problems.append(
                         f"Pattern {pat.id} has a surface load on element {sl.element_id}, "
                         "which is not a shell."

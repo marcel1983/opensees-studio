@@ -50,9 +50,11 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   application translates it to OpenSees' own 2D plane and back, and opens 2D
   projects saved by earlier builds (X-Y plane, Y up) in the new layout.
 - **Modeling** — grids, nodes, frames (elastic, force-based and
-  displacement-based), trusses, corotational trusses, quads, `ShellMITC4`
-  shells (Define → Create Shell from 4 Nodes derives the winding from the
-  coordinates), zero-length elements (Assign → Joint → Zero-Length Element) and
+  displacement-based), trusses, corotational trusses, quads, shells
+  (`ShellMITC4`, `ShellDKGQ` with drilling stiffness, the geometrically
+  nonlinear `ShellNLDKGQ`, and the triangles `ShellDKGT`/`ShellNLDKGT`; Define →
+  Create Shell from 3 or 4 Nodes derives the winding from the coordinates,
+  Assign → Area → Shell Formulation switches them), zero-length elements (Assign → Joint → Zero-Length Element) and
   zero-length sections, restraints,
   equalDOF constraints, uniform, trapezoidal / partial-span and point loads on
   frames, imposed support motion.
@@ -919,7 +921,8 @@ The [Verification Manual](docs/verification-manual.md) compares OpenSees Studio
 with closed-form and published solutions: beams (Euler-Bernoulli and Timoshenko,
 2D and 3D), trusses, support settlement, P-Δ, modal frequencies, a step-load time
 history, a response spectrum, a simply supported plate of shells and the plastic
-moment of a fibre section, and the AISC 360-16 design examples E.1A, F.1, G.1A
+moment of a fibre section, the same plate with `ShellDKGQ` and `ShellDKGT`
+shells and the Scordelis-Lo roof, and the AISC 360-16 design examples E.1A, F.1, G.1A
 and H.1A plus an end-to-end beam check, each with its relative error and
 tolerance. The file is
 generated from real runs by `tools/verification_manual.py` (`--write` regenerates

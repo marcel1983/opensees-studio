@@ -77,6 +77,7 @@ from opensees_studio.core import (
     RectangularTimeSeries,
     ResponseSpectrumCase,
     SectionAggregator,
+    ShellDKGTElement,
     ShellMITC4Element,
     StaticCase,
     TransientCase,
@@ -887,8 +888,11 @@ class OpenSeesRunner:
                     el.section_id,
                 )
             case ShellMITC4Element():
-                # element ShellMITC4 eleTag n1 n2 n3 n4 secTag
-                ops.element("ShellMITC4", el.id, *el.nodes, el.section_id)
+                # element ShellMITC4|ShellDKGQ|ShellNLDKGQ eleTag n1 n2 n3 n4 secTag
+                ops.element(el.type, el.id, *el.nodes, el.section_id)
+            case ShellDKGTElement():
+                # element ShellDKGT|ShellNLDKGT eleTag n1 n2 n3 secTag
+                ops.element(el.type, el.id, *el.nodes, el.section_id)
             case QuadElement() if True:
                 # element quad         eleTag n1 n2 n3 n4 thk type matTag <pressure rho b1 b2>
                 # element bbarQuad     eleTag n1 n2 n3 n4 thk matTag
