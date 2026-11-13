@@ -7,6 +7,46 @@ that this is pre-alpha: minor and patch releases may change the `.osmodel`
 schema (it carries a `schema_version`, and a file from a newer build is now
 refused instead of silently downgraded).
 
+## [Unreleased]
+
+### Added
+
+- **Design basis (AISC).** Design → Design Basis is where a steel design
+  starts: the method (LRFD or ASD), the stability design (Direct Analysis
+  Method, Effective Length or First-Order), the lateral system of each direction
+  (none, R = 3, OMF, IMF, SMF, OCBF, SCBF, EBF, BRBF) with R, Ω0 and Cd of ASCE 7
+  Table 12.2-1, SDS, Ry, and the **steel grade of each shape family**: ASTM A36,
+  A572 Gr. 50, A992, A588 Gr. 50, A500 Gr. B and C (with their own Fy for round
+  sections), A1085 and A53 Gr. B, and a button for the AISC Manual Table 2-4
+  defaults. The member check uses each member's grade (a member can still have
+  its own). `.osmodel`: `design.stability_method`, `seismic_system_y`, `sds`,
+  `steel_grades`, `members[].grade`.
+- **Direct Analysis Method (AISC 360-16 Chapter C).** Design → Direct Analysis
+  Method turns every ASCE 7-16 LRFD combination, the Ω0 overstrength ones
+  included, into one second-order static case: a combination of separate
+  results cannot be second order. The case runs with P-Delta in every frame,
+  stiffness ×0.8 on elastic sections and truss materials (C2.3; τb = 1 with the
+  additional notional load 0.001 α Yi of C2.3(c)), and the notional loads
+  0.002 α Yi of its own factored gravity at every storey (in ±X, and ±Y in 3D,
+  for the gravity combinations). Each lateral combination gets a first-order
+  twin, and the dialog reports Δ2/Δ1 per storey; above 1.7 it regenerates with
+  the notional loads in every combination (C2.2b(d)). The Steel Frame Check
+  then reads these cases with K = 1 and B1 for P-delta. The model itself is
+  never changed. Verified against the storey amplifier 1/(1 − PΔ/HL) on a
+  portal frame. LRFD only (ASD needs the 1.6 scaling of C2.1(e)).
+- **Static case options.** A static case can factor each pattern
+  (`pattern_factors`), run every frame as P-Delta (`p_delta`), scale the
+  elastic stiffness (`stiffness_factor`) and add notional loads
+  (`notional_ratio`, `notional_direction`). The PyNite engine refuses them.
+
+### Fixed
+
+- **Editing a static case no longer drops its preload cases.** Analyze → Cases
+  rebuilt a static case from the fields the form shows, so OK on a case with
+  preload cases removed them. The form now keeps everything it does not show
+  (preloads, and the new pattern factors, P-Delta, stiffness factor and notional
+  loads) and lists it under the form.
+
 ## [0.0.59] - 2026-11-13
 
 ### Fixed

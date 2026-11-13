@@ -110,13 +110,20 @@ from opensees_studio.core.design.connections import (
     rbs_mpr,
     rbs_protected_zone,
 )
+from opensees_studio.core.design.direct_analysis import is_direct_analysis_case
 from opensees_studio.core.design.gussets import gusset_checks
 from opensees_studio.core.design.rbs_web import web_connection_checks
 from opensees_studio.core.design.scbf_joints import (
     column_splice_demand,
     scbf_beam_column_moment,
 )
-from opensees_studio.core.design.settings import DesignLoadSet, DesignSettings
+from opensees_studio.core.design.settings import (
+    CHECKED_SEISMIC_SYSTEMS,
+    DesignLoadSet,
+    DesignSettings,
+    SteelMemberDesign,
+)
+from opensees_studio.core.design.steel_grades import STEEL_GRADES, grade_stresses
 from opensees_studio.core.geometry.elements import FRAME_ELEMENT_CLASSES
 from opensees_studio.core.sections import ElasticSection
 from opensees_studio.core.units import UnitSystem, length_scale, stress_scale
@@ -160,7 +167,18 @@ Alternative = dict[int, float]
 
 
 def default_load_sets(project: Any) -> list[DesignLoadSet]:
-    """Every combination, or every static case when the project has none."""
+    """The direct analysis strength cases, else every combination, else every static case.
+
+    A direct analysis case is a whole combination solved to second order, so when
+    they exist they are the demands; their first-order twins are left out.
+    """
+    direct = [
+        DesignLoadSet(source="case", ref_id=c.id)
+        for c in project.analyses
+        if is_direct_analysis_case(c) and c.direct_analysis.order == "second"
+    ]
+    if direct:
+        return direct
     if project.combinations:
         return [DesignLoadSet(source="combination", ref_id=c.id) for c in project.combinations]
     return [
@@ -431,6 +449,38 @@ def shape_in_units(name: str, units: Any) -> SteelShape:
     )
 
 
+def member_steel(
+    settings: DesignSettings, family: str, member: SteelMemberDesign, units: Any
+) -> tuple[float, float, str]:
+    """``(Fy, Fu, grade label)`` of a member: its own grade, its family's, or the project's.
+
+    The grade label is empty when the project's Fy and Fu (or their 50 / 65 ksi
+    defaults) apply.
+    """
+    key = member.grade or settings.steel_grades.get(family)
+    if key in STEEL_GRADES:
+        fy, fu = grade_stresses(key, family, units)
+        return fy, fu, STEEL_GRADES[key].label
+    fy = settings.fy if settings.fy is not None else default_fy(units)
+    fu = settings.fu if settings.fu is not None else default_fu(units)
+    return fy, fu, ""
+
+
+def project_steel(settings: DesignSettings, units: Any) -> tuple[float, float]:
+    """``(Fy, Fu)`` of the checks that take one value for the whole frame.
+
+    The project's Fy and Fu when set, else the W-shape grade when one is chosen,
+    else 50 / 65 ksi. The joint, connection and capacity-design checks use it.
+    """
+    if settings.fy is None and "W" in settings.steel_grades:
+        key = settings.steel_grades["W"]
+        if key in STEEL_GRADES:
+            return grade_stresses(key, "W", units)
+    fy = settings.fy if settings.fy is not None else default_fy(units)
+    fu = settings.fu if settings.fu is not None else default_fu(units)
+    return fy, fu
+
+
 def default_fy(units: Any) -> float:
     """50 ksi in the project's stress unit."""
     return _FY_KSI * stress_scale(SOURCE_UNITS, units)
@@ -461,6 +511,8 @@ class MemberResult:
     checks: list[LimitStateCheck] = field(default_factory=list)
     capacity_ratio: float = 0.0
     """Worst ratio of the SCBF capacity-design alternative (AISC 341-22 F2.3)."""
+    grade: str = ""
+    """The steel grade the member was checked with; empty for the project's Fy / Fu."""
 
 
 @dataclass
@@ -1064,8 +1116,21 @@ def steel_frame_check(
     settings = settings or DesignSettings()
     report = DesignReport()
     units = project.meta.units
-    fy = settings.fy if settings.fy is not None else default_fy(units)
-    fu = settings.fu if settings.fu is not None else default_fu(units)
+    fy, fu = project_steel(settings, units)
+    direct = settings.stability_method == "direct"
+    if direct:
+        report.notes.append(
+            "Direct Analysis Method (AISC 360-16 C1, C3): K = 1 for every member, and B1 "
+            "amplifies the moments of members in compression for P-delta (C2.1b)."
+        )
+    if settings.seismic_system not in CHECKED_SEISMIC_SYSTEMS:
+        report.notes.append(
+            f"Seismic system {settings.seismic_system}: its AISC 341 provisions are not "
+            "checked here; the members are checked against AISC 360 only."
+        )
+    seismic_check = (
+        settings.seismic_system if settings.seismic_system in CHECKED_SEISMIC_SYSTEMS else "none"
+    )
 
     # Station fields of every case a load set needs, read once.
     fields: dict[int, Field] = {}
@@ -1164,6 +1229,15 @@ def steel_frame_check(
             result.notes.append(f"No AISC shape to check with: {reason}")
             continue
         result.shape = shape.name
+        member_fy, member_fu, result.grade = member_steel(
+            settings, get_shape(shape.name).family, overrides, units
+        )
+        k_major, k_minor = overrides.k_major, overrides.k_minor
+        if direct and (k_major != 1.0 or k_minor != 1.0):
+            result.notes.append(
+                f"K = {k_major:g} / {k_minor:g} entered; the direct analysis method uses K = 1."
+            )
+            k_major = k_minor = 1.0
         if isinstance(section, ElasticSection) and abs(section.A - shape.A) > 0.02 * shape.A:
             result.notes.append(
                 f"The analysis section's area differs from {shape.name}'s by "
@@ -1171,7 +1245,7 @@ def steel_frame_check(
             )
         e = float(getattr(section, "E", 0.0) or 0.0) or 29000.0 * stress_scale(SOURCE_UNITS, units)
         g = float(getattr(section, "G", 0.0) or 0.0) or e / 2.6
-        steel = Steel(Fy=fy, E=e, G=g, Fu=fu)
+        steel = Steel(Fy=member_fy, E=e, G=g, Fu=member_fu)
         length = _length(project, element)
         role = _member_role(project, element)
         m_major, v_major, m_minor, v_minor, about_major = _axes(project, section, shape)
@@ -1227,13 +1301,13 @@ def steel_frame_check(
                     length_x=overrides.length_major or length,
                     length_y=overrides.length_minor or length,
                     length_ltb=overrides.length_ltb or length,
-                    k_x=overrides.k_major,
-                    k_y=overrides.k_minor,
+                    k_x=k_major,
+                    k_y=k_minor,
                     net_area=overrides.net_area,
                     shear_lag=overrides.shear_lag,
-                    p_delta=settings.p_delta,
+                    p_delta=settings.p_delta or direct,
                 )
-                if settings.seismic_system != "none":
+                if seismic_check != "none":
                     ca_value = ca(
                         max(0.0, -demand.axial),
                         settings.ry,
@@ -1244,7 +1318,7 @@ def steel_frame_check(
                     for item in member_limits(
                         shape,
                         role=role,
-                        system=settings.seismic_system,
+                        system=seismic_check,
                         e=steel.E,
                         ry=settings.ry,
                         fy=steel.Fy,
@@ -1284,8 +1358,8 @@ def steel_frame_check(
                     )
                     if radius > 0.0 and math.isfinite(radius):
                         lc = max(
-                            overrides.k_major * (overrides.length_major or length),
-                            overrides.k_minor * (overrides.length_minor or length),
+                            k_major * (overrides.length_major or length),
+                            k_minor * (overrides.length_minor or length),
                         )
                         slenderness = lc / radius
                         key = "SCBF brace slenderness (F2.5b)"
@@ -1358,8 +1432,8 @@ def steel_frame_check(
                     )
                     if radius > 0.0 and math.isfinite(radius):
                         lc = max(
-                            overrides.k_major * (overrides.length_major or length),
-                            overrides.k_minor * (overrides.length_minor or length),
+                            k_major * (overrides.length_major or length),
+                            k_minor * (overrides.length_minor or length),
                         )
                         slenderness = lc / radius
                         limit = ocbf_brace_slenderness_limit(steel.E, steel.Fy)

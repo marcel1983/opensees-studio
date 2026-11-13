@@ -356,6 +356,16 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   Design Guide 1, ACI 318-19 Chapter 17 anchors) and Design → Bolted Connection
   (prying action, eccentric bolt groups), calculators that can read the
   demands from a support's reaction.
+- **Design basis and the Direct Analysis Method** — Design → Design Basis
+  (AISC) sets the method (LRFD/ASD), the stability design (AISC 360 Chapter C
+  or Appendix 7), the lateral system of each direction with R, Ω0 and Cd of
+  ASCE 7 Table 12.2-1, and the steel grade of each shape family (A36, A572
+  Gr. 50, A992, A588, A500 Gr. B/C, A1085, A53, with the AISC Manual Table 2-4
+  defaults). Design → Direct Analysis Method turns every ASCE 7-16 LRFD
+  combination into one second-order case: P-Delta in every frame, stiffness
+  ×0.8 (C2.3, τb = 1 with 0.001 α Yi), and the notional loads `0.002 α Yi` of
+  that combination's own factored gravity; it then reports Δ2/Δ1 per storey
+  (C2.2b(d)), and the steel check reads these cases with K = 1.
 - **Design** — AISC 360-16 member check (LRFD or ASD) for W, M, S, HP,
   channels, tees, equal-leg angles, rectangular and round HSS and pipes:
   tension (D2), compression (E3, E4, E7), flexure (F2–F10), shear (G2–G6) and

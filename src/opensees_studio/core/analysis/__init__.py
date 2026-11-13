@@ -189,11 +189,51 @@ class _SolverOptions(Entity):
         return self
 
 
+NotionalDirection = Literal["+X", "-X", "+Y", "-Y"]
+"""Global direction a case's notional loads act in."""
+
+NOTIONAL_DIRECTIONS: tuple[str, ...] = get_args(NotionalDirection)
+
+
+class DirectAnalysisTag(BaseModel):
+    """Marks a static case made by Design → Direct Analysis Method, and what it stands for."""
+
+    model_config = ConfigDict(extra="forbid")
+    serialize_without_defaults = omit_when_default("order", "lateral", "overstrength")
+
+    combination: str = Field(..., description="The load combination, e.g. '1.2D+1.6L'.")
+    order: Literal["second", "first"] = Field(
+        default="second",
+        description=(
+            "'second': the strength case (P-Delta, reduced stiffness). 'first': its "
+            "first-order twin, only for the drift ratio Δ2/Δ1 (C2.2b(d))."
+        ),
+    )
+    lateral: bool = Field(default=False, description="The combination has wind or earthquake.")
+    overstrength: bool = Field(
+        default=False, description="An ASCE 7 overstrength (Ω0) combination."
+    )
+
+
 class StaticCase(_SolverOptions):
-    """Linear or nonlinear static analysis (single load step or pushover)."""
+    """Linear or nonlinear static analysis (single load step or pushover).
+
+    ``pattern_factors`` scales each pattern, so one case can carry a whole factored
+    load combination (``1.2D + 1.6L``) and be solved as one nonlinear analysis,
+    which a combination of separate results cannot be. ``p_delta`` runs every
+    frame with a Linear transformation as P-Delta, ``stiffness_factor`` scales the
+    elastic stiffness of frames and trusses (0.8 in the AISC 360 direct analysis
+    method), and ``notional_ratio`` adds a lateral load of that fraction of each
+    storey's factored gravity load in this case (``Ni = ratio Yi``). All of it
+    happens when the case runs; the model itself is never changed.
+    """
 
     type: Literal["Static"] = "Static"
     pattern_ids: list[PositiveInt] = Field(..., min_length=1)
+    pattern_factors: list[float] = Field(
+        default_factory=list,
+        description="Factor of each pattern of pattern_ids, in order; empty = every one 1.0.",
+    )
     n_steps: PositiveInt = 1
     load_factor_increment: float = 1.0
     system: str = "BandGeneral"
@@ -210,10 +250,56 @@ class StaticCase(_SolverOptions):
             "Each applies its patterns and then locks the load with loadConst -time 0.0."
         ),
     )
+    p_delta: bool = Field(
+        default=False,
+        description="Run every frame with a Linear transformation as PDelta in this case.",
+    )
+    stiffness_factor: float = Field(
+        default=1.0,
+        gt=0.0,
+        le=1.0,
+        description=(
+            "Factor on the elastic stiffness (E, G) of frame sections and elastic truss "
+            "materials in this case; 0.8 for the AISC 360 C2.3 reduction."
+        ),
+    )
+    notional_ratio: float = Field(
+        default=0.0,
+        ge=0.0,
+        lt=0.1,
+        description=(
+            "Notional load Ni = ratio x Yi at every storey, Yi being the storey's "
+            "factored gravity load in this case (AISC 360 C2-1: 0.002 alpha)."
+        ),
+    )
+    notional_direction: NotionalDirection = "+X"
+    direct_analysis: DirectAnalysisTag | None = None
 
     serialize_without_defaults = omit_when_default(
-        "numberer", "system_args", "algorithm_args", "preload_case_ids"
+        "numberer",
+        "system_args",
+        "algorithm_args",
+        "preload_case_ids",
+        "pattern_factors",
+        "p_delta",
+        "stiffness_factor",
+        "notional_ratio",
+        "notional_direction",
+        "direct_analysis",
     )
+
+    @model_validator(mode="after")
+    def _one_factor_per_pattern(self) -> StaticCase:
+        if self.pattern_factors and len(self.pattern_factors) != len(self.pattern_ids):
+            raise ValueError(
+                f"Static case {self.id}: {len(self.pattern_factors)} pattern factors for "
+                f"{len(self.pattern_ids)} patterns; give one per pattern or none."
+            )
+        return self
+
+    def factor_of(self, index: int) -> float:
+        """The factor of the ``index``-th pattern of ``pattern_ids``."""
+        return float(self.pattern_factors[index]) if self.pattern_factors else 1.0
 
 
 class ModalCase(Entity):
