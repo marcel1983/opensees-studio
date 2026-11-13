@@ -135,28 +135,15 @@ def stage_plan(project: Any, case: Any) -> StagePlan:
                     f"{', '.join(map(str, missing[:8]))} that do not exist in that stage."
                 )
 
-    # Joints that a constraint ties cannot be held still and freed again.
-    staged = plan.staged
-    staged_nodes = {n for eid in staged for n in _element_nodes(elements[eid])}
-    always = {n for eid in initial for n in _element_nodes(elements[eid])}
-    late = staged_nodes - always
-    tied: set[int] = set()
-    for mp in getattr(project, "mp_constraints", []):
-        tied |= {mp.retained_node, mp.constrained_node}
-    for diaphragm in getattr(project, "diaphragms", []):
-        from opensees_studio.core.diaphragms import constrained_node_ids
-
-        tied.add(diaphragm.retained_node)
-        tied |= set(constrained_node_ids(project, diaphragm))
-    for link in getattr(project, "rigid_links", []):
-        tied |= {link.retained_node, link.constrained_node}
-    conflict = sorted(late & tied)
-    if conflict:
-        errors.append(
-            f"{prefix}: joint(s) {', '.join(map(str, conflict[:8]))} appear in a later stage "
-            "and are in a constraint, diaphragm or rigid link: build them from the start."
-        )
     return plan
+
+
+def late_joints(project: Any, plan: StagePlan) -> set[int]:
+    """Joints only staged elements reach: held still until their elements are built."""
+    elements = {e.id: e for e in project.elements}
+    staged_nodes = {n for eid in plan.staged for n in _element_nodes(elements[eid])}
+    always = {n for eid in plan.initial for n in _element_nodes(elements[eid])}
+    return staged_nodes - always
 
 
 def staged_errors(project: Any, case: Any) -> list[str]:

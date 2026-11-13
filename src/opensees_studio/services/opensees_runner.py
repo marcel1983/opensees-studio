@@ -1798,12 +1798,27 @@ class OpenSeesRunner:
         taken out, and the stage's patterns are applied in ``n_steps`` and locked
         with ``loadConst``.
         """
-        from opensees_studio.core.staging import stage_plan
+        from opensees_studio.core.staging import late_joints, stage_plan
 
         ops = self._ops
         plan = stage_plan(self.project, case)
         if plan.errors:
             raise ValueError("\n".join(plan.errors))
+        # A joint held still until its elements are built cannot be in a constraint.
+        tied: set[int] = set()
+        for mp in self.project.mp_constraints:
+            tied |= {mp.retained_node, mp.constrained_node}
+        for diaphragm in self.project.diaphragms:
+            tied |= {diaphragm.retained_node, *constrained_node_ids(self.project, diaphragm)}
+        for link in self.project.rigid_links:
+            tied |= {link.retained_node, link.constrained_node}
+        conflict = sorted(late_joints(self.project, plan) & tied)
+        if conflict:
+            raise ValueError(
+                f"Staged case {case.id}: joint(s) {', '.join(map(str, conflict[:8]))} appear "
+                "in a later stage and are in a constraint, diaphragm or rigid link: build "
+                "them from the start."
+            )
         elements = {el.id: el for el in self.project.elements}
         for eid in sorted(plan.staged):
             member = self._frame_plan.members.get(eid)
