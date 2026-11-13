@@ -120,7 +120,10 @@ script o un notebook de Jupyter: la interfaz es una forma de usarlo, no la únic
   los pernos de anclaje de cada base de columna sobre las cargas de diseño (AISC
   Design Guide 1, ACI 318-19 capítulo 17): bases articuladas concéntricas,
   empotradas con su momento, voladizos según el tipo de columna (perfil I, HSS,
-  tubo) y dimensionado del espesor de la placa. Design → Base Plate & Anchors y
+  tubo) y dimensionado del espesor de la placa. Design → Connections by Joint
+  clasifica cada extremo de miembro (viga a ala o alma de columna, viga a viga
+  maestra, diagonal, empalme, base), propone la conexión y verifica las placas de
+  corte de los extremos simples (Manual AISC parte 10). Design → Base Plate & Anchors y
   Design → Bolted Connection (efecto palanca y grupos de pernos excéntricos)
   siguen como calculadoras que pueden leer las demandas de la reacción de un
   apoyo.

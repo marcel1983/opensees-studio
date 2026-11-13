@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt
 
 from opensees_studio.core._base import omit_when_default
 from opensees_studio.core.design.base_plate import BasePlateDesign
+from opensees_studio.core.design.shear_tab_model import ShearTabDesign
 
 #: ASCE 7-22 Table 12.12-1 and other common allowable storey drift ratios.
 DRIFT_PRESETS: dict[str, tuple[float, float]] = {
@@ -192,6 +193,7 @@ class DesignSettings(BaseModel):
         "sds",
         "steel_grades",
         "base_plates",
+        "shear_tabs",
     )
 
     code: Literal["AISC 360-16"] = "AISC 360-16"
@@ -262,6 +264,10 @@ class DesignSettings(BaseModel):
     base_plates: list[BasePlateDesign] = Field(
         default_factory=list,
         description="Base plate and anchor rods of each column base (Design → Base Plates).",
+    )
+    shear_tabs: list[ShearTabDesign] = Field(
+        default_factory=list,
+        description="Shear tab of each simple beam end (Design → Connections by Joint).",
     )
     drift_limit: PositiveFloat = Field(
         default=0.020, description="Allowable storey drift ratio (drift / storey height)."

@@ -636,6 +636,7 @@ class MainWindow(QMainWindow):
         self._act_direct_analysis = QAction("Direct &Analysis Method…", self)
         self._act_member_classification = QAction("&Member Classification…", self)
         self._act_base_plates = QAction("Base &Plates (Column Bases)…", self)
+        self._act_joint_connections = QAction("Connections by &Joint…", self)
         self._act_steel_check = QAction("&Steel Frame Check (AISC 360-16)…", self)
         self._act_concrete_check = QAction("Co&ncrete Frame Check (ACI 318-19)…", self)
         self._act_base_plate = QAction("&Base Plate && Anchors (DG1, ACI 318)…", self)
@@ -950,6 +951,7 @@ class MainWindow(QMainWindow):
         m_design.addAction(self._act_steel_check)
         m_design.addAction(self._act_concrete_check)
         m_design.addAction(self._act_base_plates)
+        m_design.addAction(self._act_joint_connections)
         m_design.addAction(self._act_base_plate)
         m_design.addAction(self._act_bolted)
         m_design.addAction(self._act_connections)
@@ -1430,6 +1432,7 @@ class MainWindow(QMainWindow):
         self._act_direct_analysis.triggered.connect(self._on_direct_analysis)
         self._act_member_classification.triggered.connect(self._on_member_classification)
         self._act_base_plates.triggered.connect(self._on_base_plates)
+        self._act_joint_connections.triggered.connect(self._on_joint_connections)
         self._act_steel_check.triggered.connect(self._on_steel_check)
         self._act_concrete_check.triggered.connect(self._on_concrete_check)
         self._act_base_plate.triggered.connect(self._on_base_plate)
@@ -2990,6 +2993,27 @@ class MainWindow(QMainWindow):
                 f"Member classification: {dialog.member_count()} member(s), "
                 f"{chosen} element(s) with a role set by hand."
             )
+
+    def _on_joint_connections(self) -> None:
+        """Design → Connections by Joint: topology of every member end, shear tabs checked."""
+        from opensees_studio.views.dialogs.joint_connections import JointConnectionsDialog
+
+        project = self._vm.project
+        if project is None:
+            return
+        dialog = JointConnectionsDialog(project, dict(self._case_results.current(project)), self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        settings = dialog.settings()
+        if settings != (project.design or DesignSettings()):
+            self._vm.apply_command(SetDesignSettingsCommand(self._vm, settings))
+        rows = dialog.run_check()
+        tabs = [r for r in rows if r.status in ("OK", "NG")]
+        failing = [f"{r.connection.element_id}{r.connection.end}" for r in tabs if r.status == "NG"]
+        self._log(
+            f"Connections by joint: {len(rows)} connection(s), {len(tabs)} shear tab(s)"
+            + (f", over the limit at {', '.join(failing)}." if failing else ".")
+        )
 
     def _on_base_plates(self) -> None:
         """Design → Base Plates: every column base over the design load sets."""
@@ -7171,6 +7195,7 @@ class MainWindow(QMainWindow):
         self._act_direct_analysis.setEnabled(has_project)
         self._act_member_classification.setEnabled(has_project)
         self._act_base_plates.setEnabled(has_project)
+        self._act_joint_connections.setEnabled(has_project)
         self._act_steel_check.setEnabled(has_project)
         self._act_concrete_check.setEnabled(has_project)
         self._act_base_plate.setEnabled(has_project)

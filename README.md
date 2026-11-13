@@ -356,7 +356,10 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   plate and anchor rods of every column base over the design load sets (AISC
   Design Guide 1, ACI 318-19 Chapter 17): pinned bases concentric, fixed ones
   with their moment, cantilevers by column kind (I-shape, HSS, pipe), and
-  sizing of the plate thickness. Design → Base Plate & Anchors and Design →
+  sizing of the plate thickness. Design → Connections by Joint classifies every
+  member end (beam to column flange or web, beam to girder, brace, splice, base),
+  suggests the connection, and checks the shear tabs of simple beam ends (AISC
+  Manual Part 10). Design → Base Plate & Anchors and Design →
   Bolted Connection (prying action, eccentric bolt groups) remain as
   calculators that can read the demands from a support's reaction.
 - **Design basis and the Direct Analysis Method** — Design → Design Basis

@@ -1718,6 +1718,51 @@ stiffener and doubler-plate design is not modeled.
             "design.column_splices",
             "design.steel_check",
         ),
+        "design.joint_connections": _t(
+            "Design → Connections by Joint",
+            "Design",
+            "Every member end: what it frames into, the connection that fits, shear tabs checked.",
+            """
+One row per **member end** of the frame (physical members, see Design → Member
+Classification; a member that goes on through a joint has no end there).
+
+# Topology
+- **Beam to column flange / web**: a beam end at a column. Flange when the
+  beam runs along the column's depth d, web otherwise (in 2D, flange).
+- **Beam to girder**: a beam end at a beam that continues through the joint.
+- **Brace**, **column splice** (a column onto a column of another section,
+  listed once, on the upper one), **column base** (a column on a support).
+
+A free cantilever tip and a column top under a roof beam are not connections.
+
+# Suggested connection
+- A beam end whose **major-axis moment is released** (Assign → Frame →
+  Releases) is a simple connection: a **single-plate shear connection** (shear
+  tab), checked here.
+- A moment beam end at a column flange in an **SMF or IMF** (Design → Design
+  Basis): the **reduced beam section** of AISC 358 Ch. 5, designed in Design →
+  Connections. Other moment ends: a fully restrained moment connection, not
+  checked here.
+- A brace: a gusset plate (Design → Gussets for SCBF). A column splice: Design →
+  Column Splices for SCBF. A column base: Design → Base Plates.
+
+# The shear tab
+Conventional configuration of AISC Manual Part 10: one row of n bolts at s,
+the bolt line a from the weld, edge distances Lev and Leh, a plate welded both
+sides to the support. Checked under the **largest end shear** over every
+alternative of the design load sets (the direct analysis cases when they
+exist): bolt shear on the most loaded bolt with the full eccentricity a
+(elastic method, conservative), bolt bearing and tearout on the plate and the
+beam web, plate shear yielding and rupture, block shear, the welds, the
+detailing rule w >= 5/8 tp and the ductility limit tp <= d/2 + 1/16 in. A beam
+end starts from 3/4 in A325-N bolts at 3 in, a 3/8 in A36 plate and 1/4 in E70
+welds, with as many bolts as fit in the beam's clear depth. Axial force in the
+beam (a collector) is not checked.
+""",
+            "design.connections",
+            "design.member_classification",
+            "design.base_plates",
+        ),
         "design.base_plates": _t(
             "Design → Base Plates (Column Bases)",
             "Design",
@@ -6116,6 +6161,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_steel_check": "design.steel_check",
     "_act_concrete_check": "design.concrete_check",
     "_act_base_plates": "design.base_plates",
+    "_act_joint_connections": "design.joint_connections",
     "_act_base_plate": "design.base_plate",
     "_act_bolted": "design.bolted_connection",
     "_act_connections": "design.connections",
