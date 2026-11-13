@@ -702,6 +702,161 @@ def _creep_column() -> list[Check]:
     return checks
 
 
+ACI_B, ACI_H, ACI_COVER, ACI_SPAN, ACI_W = 0.3, 0.5, 0.06, 6.0, -60e3
+ACI_FC, ACI_FY = 28e6, 420e6
+ACI_AS = 3 * math.pi * 0.02**2 / 4
+
+
+def aci_beam_project() -> Any:
+    """The D-15 beam: 300 x 500 mm, 3 φ20 at d = 440 mm, 6 m span, 60 kN/m factored."""
+    from opensees_studio.core import (
+        Concrete02,
+        ElasticBeamColumn,
+        ElasticSection,
+        FiberSection,
+        LinearTimeSeries,
+        Node,
+        PlainLoadPattern,
+        Project,
+        RectangularPatch,
+        StaticCase,
+        Steel02,
+        StraightLayer,
+        UniformElementLoad,
+    )
+
+    B, H, COVER, SPAN, W = ACI_B, ACI_H, ACI_COVER, ACI_SPAN, ACI_W
+    FC, FY, AS = ACI_FC, ACI_FY, ACI_AS
+    fibre = FiberSection(
+        id=1,
+        name="Beam 300x500",
+        GJ=1e8,
+        patches=[
+            RectangularPatch(
+                material_id=1, n_fib_y=100, n_fib_z=10, y_i=-H / 2, z_i=-B / 2, y_j=H / 2, z_j=B / 2
+            )
+        ],
+        layers=[
+            StraightLayer(
+                material_id=2,
+                n_bars=3,
+                bar_area=AS / 3,
+                y_start=-H / 2 + COVER,
+                z_start=-0.1,
+                y_end=-H / 2 + COVER,
+                z_end=0.1,
+            )
+        ],
+    )
+    elastic = ElasticSection(
+        id=2,
+        name="Beam 300x500 (elastic, 0.35 Ig)",
+        E=25e9,
+        A=B * H,
+        Iz=0.35 * B * H**3 / 12,
+        Iy=H * B**3 / 12,
+        G=10e9,
+        J=1e-3,
+    )
+    pin, roller = (
+        (True, False, True, False, False, False),
+        (False, False, True, False, False, False),
+    )
+    return Project(
+        ndm=2,
+        ndf=3,
+        nodes=[
+            Node(id=1, coords=(0.0, 0.0, 0.0), restraint=pin),
+            Node(id=2, coords=(SPAN / 2, 0.0, 0.0)),
+            Node(id=3, coords=(SPAN, 0.0, 0.0), restraint=roller),
+        ],
+        materials=[
+            Concrete02.model_validate(
+                {
+                    "id": 1,
+                    "fpc": -FC,
+                    "epsc0": -0.002,
+                    "fpcu": 0.0,
+                    "epsU": -0.005,
+                    "lambda": 0.1,
+                    "ft": 2e6,
+                    "Ets": 1e9,
+                }
+            ),
+            Steel02(id=2, Fy=FY, E0=200e9, b=0.01),
+        ],
+        sections=[fibre, elastic],
+        elements=[
+            ElasticBeamColumn(id=1, nodes=(1, 2), section_id=2),
+            ElasticBeamColumn(id=2, nodes=(2, 3), section_id=2),
+        ],
+        time_series=[LinearTimeSeries(id=1)],
+        load_patterns=[
+            PlainLoadPattern(
+                id=1,
+                time_series_id=1,
+                element_loads=[UniformElementLoad(element_id=k, wy=W) for k in (1, 2)],
+            )
+        ],
+        analyses=[StaticCase(id=1, name="1.2D+1.6L", pattern_ids=[1])],
+    )
+
+
+def _aci_beam_and_column() -> list[Check]:
+    AS, COVER, FC, FY, SPAN, W, B, H = (
+        ACI_AS,
+        ACI_COVER,
+        ACI_FC,
+        ACI_FY,
+        ACI_SPAN,
+        ACI_W,
+        ACI_B,
+        ACI_H,
+    )
+    _beam = aci_beam_project
+
+    from opensees_studio.core.design.aci318 import RcSection, interaction_curve
+    from opensees_studio.services.concrete_design import concrete_frame_check
+
+    project = _beam()
+    case = project.analyses[0]
+    report = concrete_frame_check(project, {case.id: _run(project, case)})
+    ratios = next(m for m in report.members if m.element_id == 1).ratios
+    d = H - COVER
+    a = AS * FY / (0.85 * FC * B)
+    flexure = abs(W) * SPAN**2 / 8 / (0.9 * AS * FY * (d - a / 2))
+    vc = 0.17 * math.sqrt(28.0) * 1e6 * B * d
+    vs = 157e-6 * 420e6 * d / 0.150
+    shear = abs(W) * SPAN / 2 / (0.75 * (vc + vs))
+    # Column by strain compatibility, against the hand balanced point.
+    ny, nz = 100, 30
+    ys = (np.arange(ny) + 0.5) / ny * H - H / 2
+    zs = (np.arange(nz) + 0.5) / nz * B - B / 2
+    grid_y, grid_z = np.meshgrid(ys, zs, indexing="ij")
+    concrete = np.column_stack(
+        [grid_y.ravel(), grid_z.ravel(), np.full(grid_y.size, B * H / (ny * nz))]
+    )
+    bar = math.pi * 0.02**2 / 4
+    bars = np.array([[y, z, bar] for y in (-H / 2 + 0.06, H / 2 - 0.06) for z in (-0.09, 0.09)])
+    section = RcSection(concrete=concrete, bars=bars, fc=FC, fy=FY, es=200e9)
+    eps_y = FY / 200e9
+    c = d * 0.003 / (0.003 + eps_y)
+    block = section.beta1 * c
+    fs = min(0.003 * (c - 0.06) / c * 200e9, FY)
+    p_b = 0.85 * FC * block * B + (fs - 0.85 * FC) * 2 * bar - FY * 2 * bar
+    curve = interaction_curve(section, "y", points=2000)
+    balanced = min(curve, key=lambda p: abs(p.eps_t - eps_y))
+    p0 = 0.85 * FC * (B * H - 4 * bar) + FY * 4 * bar
+    return [
+        Check(
+            "Beam flexure ratio Mu / φMn", "-", ratios["Flexure M3 with axial force"], flexure, 1e-2
+        ),
+        Check("Beam shear ratio Vu / φVn", "-", ratios["Shear V2"], shear, 2e-2),
+        Check("Column P0", "N", section.p0, p0, 1e-9),
+        Check("Column balanced Pb", "N", balanced.pn, p_b, 1e-3),
+    ]
+
+
 def _scordelis_lo() -> list[Check]:
     from opensees_studio.core import (
         QUAD_SHELL_CLASSES,
@@ -1644,7 +1799,7 @@ CASES: list[Case] = [
         "V-21",
         "Creep and shrinkage of a concrete column",
         "Staged construction",
-        "fib Model Code 2010, 5.1.9.4: ε(t) = σ / Eci · (1 + φ(t, t0)) + εcs(t), with "
+        "fib Model Code 2010, 5.1.9.4: ε(t) = stress / Eci · (1 + φ(t, t0)) + εcs(t), with "
         "basic and drying creep and shrinkage counted from casting.",
         "A bar of C30/37 (fcm = 38 MPa, RH 60 %, h0 = 200 mm, cement 42.5R) cast at day 0, "
         "10 MPa of compression at 28 days held to 10 000 days in a time-dependent staged "
@@ -1774,6 +1929,18 @@ CASES: list[Case] = [
         "splice; 50 ksi bearing on 2 in.2; f'c = 4 ksi, A1 = 100 in.2 and "
         "A2 = 400 in.2.",
         _aisc_chapter_j_fillers,
+    ),
+    Case(
+        "D-15",
+        "ACI 318: reinforced concrete beam and column",
+        "Design, ACI 318-19",
+        "Beam: φMn = 0.9 As fy (d - a/2), a = As fy / (0.85 f'c b); Vc = 0.17 √f'c bw d, "
+        "Vs = Av fyt d / s. Column: P0 = 0.85 f'c (Ag - Ast) + fy Ast and the balanced "
+        "point of strain compatibility, by hand.",
+        "300 x 500 mm, f'c = 28 MPa, fy = 420 MPa; beam with 3 φ20 at d = 440 mm, simply "
+        "supported over 6 m under 60 kN/m, solved and checked by Design → Concrete Frame "
+        "Check; column with 4 φ20 at 60 mm from the faces.",
+        _aci_beam_and_column,
     ),
 ]
 

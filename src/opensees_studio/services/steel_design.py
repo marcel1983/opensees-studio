@@ -131,6 +131,7 @@ _COMPONENTS = (
     ForceComponent.N,
     ForceComponent.V2,
     ForceComponent.V3,
+    ForceComponent.T,
     ForceComponent.M2,
     ForceComponent.M3,
 )
@@ -138,7 +139,14 @@ _FY_KSI = 50.0
 _FU_KSI = 65.0
 
 #: localForce index of (component, end) for the response spectrum peaks.
-_PEAK_INDEX_3D = {"N": (0, 6), "V2": (1, 7), "V3": (2, 8), "M2": (4, 10), "M3": (5, 11)}
+_PEAK_INDEX_3D = {
+    "N": (0, 6),
+    "V2": (1, 7),
+    "V3": (2, 8),
+    "T": (3, 9),
+    "M2": (4, 10),
+    "M3": (5, 11),
+}
 _PEAK_INDEX_2D = {"N": (0, 3), "V2": (1, 4), "M3": (2, 5)}
 
 

@@ -343,6 +343,13 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   density and yield stress come from the material property sets, and every
   value is converted from the file's declared units. A file written by File →
   Export → IFC imports back to the same model.
+- **Concrete design** — Design → Concrete Frame Check (ACI 318-19) checks
+  every member whose section is a fibre section of concrete and bars (the
+  Concrete Section Wizard's or any other, also when the analysis uses its
+  cracked elastic twin): P-M interaction by strain compatibility with φ by the
+  net tensile strain, biaxial bending (Bresler), shear with the given stirrups,
+  the torsion threshold, minimum steel and εt ≥ 0.004 in beams, with the ratios
+  painted on the model (Verification Manual D-15).
 - **Design** — AISC 360-16 member check (LRFD or ASD) for W, M, S, HP,
   channels, tees, equal-leg angles, rectangular and round HSS and pipes:
   tension (D2), compression (E3, E4, E7), flexure (F2–F10), shear (G2–G6) and

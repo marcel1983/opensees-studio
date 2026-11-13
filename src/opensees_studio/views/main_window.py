@@ -631,6 +631,7 @@ class MainWindow(QMainWindow):
         self._act_run_selected = QAction("Run Se&lected Cases…", self)
         self._act_clear_results = QAction("Delete &All Results…", self)
         self._act_steel_check = QAction("&Steel Frame Check (AISC 360-16)…", self)
+        self._act_concrete_check = QAction("Co&ncrete Frame Check (ACI 318-19)…", self)
         self._act_connections = QAction("&Connections (AISC 358-22)…", self)
         self._act_gussets = QAction("&Gussets (AISC 341-22)…", self)
         self._act_column_splices = QAction("&Column Splices (AISC 341-22)…", self)
@@ -935,6 +936,7 @@ class MainWindow(QMainWindow):
 
         m_design = mb.addMenu("Desi&gn")
         m_design.addAction(self._act_steel_check)
+        m_design.addAction(self._act_concrete_check)
         m_design.addAction(self._act_connections)
         m_design.addAction(self._act_gussets)
         m_design.addAction(self._act_column_splices)
@@ -1401,6 +1403,7 @@ class MainWindow(QMainWindow):
         self._act_run_selected.triggered.connect(self._on_run_selected_cases)
         self._act_clear_results.triggered.connect(self._on_clear_results)
         self._act_steel_check.triggered.connect(self._on_steel_check)
+        self._act_concrete_check.triggered.connect(self._on_concrete_check)
         self._act_connections.triggered.connect(self._on_connections)
         self._act_gussets.triggered.connect(self._on_gussets)
         self._act_column_splices.triggered.connect(self._on_column_splices)
@@ -2922,6 +2925,27 @@ class MainWindow(QMainWindow):
         if dialog.show_ratios_requested and report is not None:
             self._show_design_ratios(report, settings)
 
+    def _on_concrete_check(self) -> None:
+        """Design → Concrete Frame Check: ACI 318-19 ratios over this session's results."""
+        from opensees_studio.views.dialogs.concrete_design import ConcreteDesignDialog
+
+        project = self._vm.project
+        if project is None:
+            return
+        dialog = ConcreteDesignDialog(project, dict(self._case_results.current(project)), self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        settings = dialog.settings()
+        if settings != project.design:
+            self._vm.apply_command(SetDesignSettingsCommand(self._vm, settings))
+        report = dialog.report()
+        if report is not None:
+            self._log(f"Concrete frame check (ACI 318-19): {report.summary()}")
+            for note in report.notes:
+                self._log(note)
+            if dialog.show_ratios_requested:
+                self._show_design_ratios(report, settings, concrete=True)
+
     def _on_steel_ratios(self) -> None:
         """Design → Display Steel Ratios: paint the members by the stored check's ratios.
 
@@ -2943,13 +2967,18 @@ class MainWindow(QMainWindow):
         self._log(f"Steel frame check (AISC 360-16, {settings.method}): {report.summary()}")
         self._show_design_ratios(report, settings)
 
-    def _show_design_ratios(self, report: Any, settings: DesignSettings) -> None:
+    def _show_design_ratios(
+        self, report: Any, settings: DesignSettings, *, concrete: bool = False
+    ) -> None:
         """The ratio overlay and its legend dock; Back to model clears both."""
         self._on_back_to_model()
         self._ratio_renderer.render(self._vm.project, report.members, limit=settings.ratio_limit)
         view = DesignRatioView()
-        view.set_report(report, method=settings.method, limit=settings.ratio_limit)
-        dock = QDockWidget("Steel Ratios", self)
+        if concrete:
+            view.set_report(report, method="", limit=settings.ratio_limit, code="ACI 318-19")
+        else:
+            view.set_report(report, method=settings.method, limit=settings.ratio_limit)
+        dock = QDockWidget("Concrete Ratios" if concrete else "Steel Ratios", self)
         dock.setWidget(view)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
         self._post_dock = dock
@@ -2961,7 +2990,11 @@ class MainWindow(QMainWindow):
 
         view.selectFailing.connect(_select_failing)
         view.closed.connect(self._on_back_to_model)
-        self._set_result_caption(f"Steel ratios · AISC 360-16 {settings.method}")
+        self._set_result_caption(
+            "Concrete ratios · ACI 318-19"
+            if concrete
+            else f"Steel ratios · AISC 360-16 {settings.method}"
+        )
         self._canvas.render()
 
     def _on_drift_check(self) -> None:
@@ -6972,6 +7005,7 @@ class MainWindow(QMainWindow):
         db_there = has_project and database_path(self._vm.path).exists()
         self._act_clear_results.setEnabled(bool(has_project and (stored or db_there)))
         self._act_steel_check.setEnabled(has_project)
+        self._act_concrete_check.setEnabled(has_project)
         self._act_connections.setEnabled(has_project)
         self._act_gussets.setEnabled(has_project)
         self._act_column_splices.setEnabled(has_project)

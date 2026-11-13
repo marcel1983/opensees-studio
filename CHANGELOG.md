@@ -11,6 +11,15 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **Concrete Frame Check (ACI 318-19).** Design → Concrete Frame Check
+  checks every reinforced concrete member — fibre sections of concrete and
+  bars, or the elastic section the Concrete Section Wizard made next to one —
+  at 25 stations over the steel check's load sets: P-M interaction by strain
+  compatibility (stress block, φ by εt, φPn,max), biaxial bending by Bresler,
+  shear with the stirrups given in the dialog, the torsion threshold, minimum
+  steel and εt ≥ 0.004 in beams. Show ratios on model paints them. Verified
+  against hand calculations of a beam and a column (Verification Manual D-15).
+  `.osmodel`: `design.concrete`.
 - **Pile soil springs (p-y, t-z, q-z).** Assign → Frame → Pile Soil Springs
   ties every joint of the selected pile below the ground to a fixed ground
   joint with `PySimple1` p-y springs (Matlock soft clay, API sand), a

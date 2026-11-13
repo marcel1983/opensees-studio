@@ -14,7 +14,7 @@ Units are SI (m, N, kg, s) for the V cases and kip-inch for the D (design)
 cases, as in the AISC examples. Errors below 1e-6 are floating-point noise
 and are printed as `< 1e-6`.
 
-**35 of 35 cases pass.**
+**36 of 36 cases pass.**
 
 | Case | Title | Group | Max. error | Verdict |
 |---|---|---|---|---|
@@ -53,6 +53,7 @@ and are printed as `< 1e-6`.
 | [D-12](#d-12) | AISC 360 Chapter J: weld, bolts and block shear | Design, AISC 360-16 | 1.1e-05 | ✅ pass |
 | [D-13](#d-13) | AISC 360 Chapter J: concentrated forces | Design, AISC 360-16 | 2.2e-06 | ✅ pass |
 | [D-14](#d-14) | AISC 360 Chapter J: fillers, splices and bearing | Design, AISC 360-16 | < 1e-06 | ✅ pass |
+| [D-15](#d-15) | ACI 318: reinforced concrete beam and column | Design, ACI 318-19 | 1.9e-03 | ✅ pass |
 
 <a id="v-01"></a>
 
@@ -329,7 +330,7 @@ and are printed as `< 1e-6`.
 
 **Model.** A bar of C30/37 (fcm = 38 MPa, RH 60 %, h0 = 200 mm, cement 42.5R) cast at day 0, 10 MPa of compression at 28 days held to 10 000 days in a time-dependent staged case, 400 geometric time steps (`TDConcreteMC10`). The 2 % tolerance covers the explicit time integration of the material.
 
-**Reference.** fib Model Code 2010, 5.1.9.4: ε(t) = σ / Eci · (1 + φ(t, t0)) + εcs(t), with basic and drying creep and shrinkage counted from casting.
+**Reference.** fib Model Code 2010, 5.1.9.4: ε(t) = stress / Eci · (1 + φ(t, t0)) + εcs(t), with basic and drying creep and shrinkage counted from casting.
 
 | Quantity | Unit | OpenSees Studio | Reference | Rel. error | Tolerance | |
 |---|---|---|---|---|---|---|
@@ -536,3 +537,18 @@ and are printed as `< 1e-6`.
 | Groove-welded splice nominal J6 | kip | 1000 | 1000 | < 1e-06 | 1e-09 | ✅ |
 | Bearing nominal J7-1 | kip | 180 | 180 | < 1e-06 | 1e-09 | ✅ |
 | Concrete bearing nominal J8-2 | kip | 680 | 680 | < 1e-06 | 1e-09 | ✅ |
+
+<a id="d-15"></a>
+
+## D-15 — ACI 318: reinforced concrete beam and column
+
+**Model.** 300 x 500 mm, f'c = 28 MPa, fy = 420 MPa; beam with 3 φ20 at d = 440 mm, simply supported over 6 m under 60 kN/m, solved and checked by Design → Concrete Frame Check; column with 4 φ20 at 60 mm from the faces.
+
+**Reference.** Beam: φMn = 0.9 As fy (d - a/2), a = As fy / (0.85 f'c b); Vc = 0.17 √f'c bw d, Vs = Av fyt d / s. Column: P0 = 0.85 f'c (Ag - Ast) + fy Ast and the balanced point of strain compatibility, by hand.
+
+| Quantity | Unit | OpenSees Studio | Reference | Rel. error | Tolerance | |
+|---|---|---|---|---|---|---|
+| Beam flexure ratio Mu / φMn | - | 1.83844 | 1.83827 | 9.2e-05 | 1e-02 | ✅ |
+| Beam shear ratio Vu / φVn | - | 0.770257 | 0.768823 | 1.9e-03 | 2e-02 | ✅ |
+| Column P0 | N | 4.06788e+06 | 4.06788e+06 | < 1e-06 | 1e-09 | ✅ |
+| Column balanced Pb | N | 1.55585e+06 | 1.55585e+06 | < 1e-06 | 1e-03 | ✅ |

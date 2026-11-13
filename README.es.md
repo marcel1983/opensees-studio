@@ -106,6 +106,13 @@ script o un notebook de Jupyter: la interfaz es una forma de usarlo, no la únic
   de suelo en pilotes (Assign → Frame → Pile Soil Springs: p-y de Matlock en
   arcilla y API en arena, t-z y q-z de punta, a partir del diámetro y los
   estratos).
+- **Diseño de hormigón armado**: Design → Concrete Frame Check verifica según
+  **ACI 318-19** todo miembro cuya sección sea de fibras de hormigón y barras
+  (las del asistente de secciones, también si el análisis usa su gemela
+  elástica fisurada): interacción P-M por compatibilidad de deformaciones con φ
+  según la deformación neta de tracción, flexión biaxial (Bresler), corte con
+  los estribos indicados, umbral de torsión, cuantía mínima y εt ≥ 0.004 en
+  vigas, con los ratios pintados sobre el modelo.
 - **Diseño**: Design → Steel Frame Check verifica según **AISC 360-16** (LRFD o
   ASD) los miembros de perfiles W, M, S y HP —y canales, tees, ángulos de alas
   iguales, HSS rectangulares y circulares y tubos—: tracción (D2), compresión

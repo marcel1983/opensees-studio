@@ -87,6 +87,24 @@ class DesignLoadSet(BaseModel):
     ref_id: PositiveInt
 
 
+class ConcreteDesign(BaseModel):
+    """ACI 318-19 settings of Design → Concrete Frame Check (project units)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    stirrup_area: PositiveFloat | None = Field(
+        default=None, description="Av of one stirrup set; None = two 10 mm legs (157 mm²)."
+    )
+    stirrup_spacing: PositiveFloat | None = Field(
+        default=None, description="Stirrup spacing s; None = 150 mm."
+    )
+    fyt: PositiveFloat | None = Field(
+        default=None, description="Yield stress of the stirrups; None = 420 MPa."
+    )
+    lam: float = Field(default=1.0, gt=0.0, le=1.0, description="Lightweight factor λ.")
+    transverse: Literal["tied", "spiral"] = "tied"
+
+
 class DesignSettings(BaseModel):
     """Steel frame check and storey drift check settings of a project."""
 
@@ -103,9 +121,13 @@ class DesignSettings(BaseModel):
         "members",
         "drift_limit",
         "drift_amplification",
+        "concrete",
     )
 
     code: Literal["AISC 360-16"] = "AISC 360-16"
+    concrete: ConcreteDesign | None = Field(
+        default=None, description="ACI 318-19 settings of the concrete frame check."
+    )
     method: Literal["LRFD", "ASD"] = "LRFD"
     fy: PositiveFloat | None = Field(
         default=None,
