@@ -116,10 +116,14 @@ script o un notebook de Jupyter: la interfaz es una forma de usarlo, no la únic
   según la deformación neta de tracción, flexión biaxial (Bresler), corte con
   los estribos indicados, umbral de torsión, cuantía mínima y εt ≥ 0.004 en
   vigas, con los ratios pintados sobre el modelo.
-- **Placas base y uniones apernadas**: Design → Base Plate & Anchors (AISC Design
-  Guide 1, anclajes según ACI 318-19 capítulo 17) y Design → Bolted Connection
-  (efecto palanca y grupos de pernos excéntricos), calculadoras que pueden leer
-  las demandas de la reacción de un apoyo.
+- **Placas base y uniones apernadas**: Design → Base Plates verifica la placa y
+  los pernos de anclaje de cada base de columna sobre las cargas de diseño (AISC
+  Design Guide 1, ACI 318-19 capítulo 17): bases articuladas concéntricas,
+  empotradas con su momento, voladizos según el tipo de columna (perfil I, HSS,
+  tubo) y dimensionado del espesor de la placa. Design → Base Plate & Anchors y
+  Design → Bolted Connection (efecto palanca y grupos de pernos excéntricos)
+  siguen como calculadoras que pueden leer las demandas de la reacción de un
+  apoyo.
 - **Bases de diseño y Método de Análisis Directo**: Design → Design Basis
   (AISC) fija el método (LRFD/ASD), el diseño por estabilidad (AISC 360
   capítulo C o apéndice 7), el sistema lateral de cada dirección con R, Ω0 y Cd

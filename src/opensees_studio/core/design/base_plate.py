@@ -12,10 +12,11 @@ plate centre, ``n`` of them on the tension side.
   Large: ``Y = (f + N/2) - √((f + N/2)² - 2 Pu (e + f) / q,max)`` at ``q,max``,
   and the rods carry ``T = q,max Y - Pu``.
 * **Plate** (DG1 3.1.2, 3.3): cantilevers ``m = (N - 0.95 d) / 2``,
-  ``n = (B - 0.8 bf) / 2`` and, concentric, ``λ n' = λ √(d bf) / 4``; the
-  required thickness is ``1.49 l √(fp / Fy)`` (``Y ≥ l``) or
-  ``2.11 √(fp Y (l - Y/2) / Fy)``, and on the tension side
-  ``2.11 √(T x / (B Fy))`` with ``x = f - 0.95 d / 2``.
+  ``n = (B - 0.8 bf) / 2`` for an I-shape (``0.95 b`` for a rectangular HSS,
+  ``0.8 D`` both ways for a round one) and, concentric, ``λ n' = λ √(d bf) / 4``
+  (kept for every kind, which is conservative); the required thickness is
+  ``1.49 l √(fp / Fy)`` (``Y ≥ l``) or ``2.11 √(fp Y (l - Y/2) / Fy)``, and on
+  the tension side ``2.11 √(T x / (B Fy))`` with ``x = f - 0.95 d / 2``.
 * **Anchor rods** (ACI 318-19 17.6.1, 17.6.2, 17.7.1): steel ``φ 0.75 Ase futa``
   in tension and ``φ 0.65 · 0.6 Ase futa`` in shear (``Ase = 0.75 Ab``); concrete
   breakout of the tension group ``φ 0.70 (ANc / ANco) ψed Nb`` with
@@ -31,9 +32,31 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt
 
 PHI_BEARING = 0.65
 PHI_PLATE = 0.90
+
+
+ColumnKind = Literal["W", "HSS", "round"]
+"""Column on the plate: an I-shape, a rectangular HSS, or a round HSS / pipe."""
+
+CANTILEVER_FACTORS: dict[str, tuple[float, float]] = {
+    "W": (0.95, 0.80),
+    "HSS": (0.95, 0.95),
+    "round": (0.80, 0.80),
+}
+"""DG1 3.1.2: ``m = (N - kd d) / 2``, ``n = (B - kb bf) / 2`` for each column kind
+(a round column has ``d = bf = D``)."""
+
+ROD_GRADES: dict[str, tuple[str, float]] = {
+    "F1554-36": ("ASTM F1554 Gr. 36", 58.0),
+    "F1554-55": ("ASTM F1554 Gr. 55", 75.0),
+    "F1554-105": ("ASTM F1554 Gr. 105", 125.0),
+}
+"""Anchor rod grades: label and futa in ksi."""
 
 
 @dataclass(frozen=True)
@@ -68,6 +91,39 @@ class BasePlate:
     """One millimetre in the lengths' unit."""
     newton: float = 1.0
     """One newton in the forces' unit."""
+    kind: ColumnKind = "W"
+
+    def cantilevers(self) -> tuple[float, float]:
+        """``(m, n)`` of DG1 3.1.2 for the column kind."""
+        kd, kb = CANTILEVER_FACTORS[self.kind]
+        return (self.n_length - kd * self.d) / 2.0, (self.b_width - kb * self.bf) / 2.0
+
+
+class BasePlateDesign(BaseModel):
+    """The base plate and anchor rods of one column base, as a project saves them.
+
+    Lengths and stresses are in the project's units; ``a2_ratio`` is A2 / A1 of
+    J8 (1.0 when the plate covers the pier, at most 4).
+    """
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    node_id: PositiveInt
+    n_length: PositiveFloat
+    b_width: PositiveFloat
+    tp: PositiveFloat
+    plate_grade: str = "A36"
+    fc: PositiveFloat
+    a2_ratio: float = Field(default=1.0, ge=1.0, le=4.0)
+    rod_diameter: PositiveFloat
+    rod_grade: str = "F1554-36"
+    rods_total: PositiveInt = 4
+    rods_tension: PositiveInt = 2
+    rod_offset: PositiveFloat
+    """f: from the plate centre to the line of the tension rods."""
+    rod_spacing: PositiveFloat
+    edge_distance: PositiveFloat
+    embedment: PositiveFloat
 
 
 @dataclass
@@ -111,8 +167,7 @@ def check_base_plate(
     out = BasePlateResult()
     fp_max = bearing_limit(plate)
     q_max = fp_max * plate.b_width
-    m = (plate.n_length - 0.95 * plate.d) / 2.0
-    n = (plate.b_width - 0.8 * plate.bf) / 2.0
+    m, n = plate.cantilevers()
     if pu <= 0.0:
         out.notes.append("The column is not in compression: only the anchor rods are checked.")
     tension = 0.0
@@ -166,7 +221,7 @@ def check_base_plate(
             out.anchor_tension = tension
             out.checks.append(PlateCheck("Concrete bearing", 1.0, "DG1 3.3.2 (large e, at q,max)"))
             required = _thickness_bearing(fp_max, length, y, plate.fy)
-            x = f - 0.95 * plate.d / 2.0
+            x = f - CANTILEVER_FACTORS[plate.kind][0] * plate.d / 2.0
             if x > 0.0 and tension > 0.0:
                 t_tension = 2.11 * math.sqrt(tension * x / (plate.b_width * plate.fy))
                 required = max(required, t_tension)
