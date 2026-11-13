@@ -11,6 +11,13 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **Pile soil springs (p-y, t-z, q-z).** Assign → Frame → Pile Soil Springs
+  ties every joint of the selected pile below the ground to a fixed ground
+  joint with `PySimple1` p-y springs (Matlock soft clay, API sand), a
+  `TzSimple1` shaft spring (API α-method in clay, β-method in sand) and a
+  `QzSimple1` tip spring (9 su, API Nq), from the diameter and a table of soil
+  layers. Pushed down to failure the pile reaches the sum of its shaft and tip
+  capacities (integration test). One undo step.
 - **Creep and shrinkage (fib Model Code 2010).** Define → Concrete Creep &
   Shrinkage builds a `TDConcreteMC10` material from fcm, humidity, notional
   size, cement class and casting time, previewing φ(t, t0) and εcs. A staged

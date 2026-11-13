@@ -600,6 +600,7 @@ class MainWindow(QMainWindow):
         self._act_assign_temperature_load = QAction("Te&mperature Load…", self)
         self._act_assign_wall = QAction("RC &Wall (MVLEM)…", self)
         self._act_assign_tendon = QAction("Te&ndon (Post-Tensioning)…", self)
+        self._act_assign_pile = QAction("&Pile Soil Springs (p-y, t-z, q-z)…", self)
 
         # Display (post-processing)
         self._act_select_results = QAction("Show Results &Of…", self)
@@ -879,6 +880,7 @@ class MainWindow(QMainWindow):
             self._act_assign_wall,
             None,
             self._act_assign_line_springs,
+            self._act_assign_pile,
         ]
         self._area_actions: list[QAction | None] = [
             self._act_shell_formulation,
@@ -1364,6 +1366,7 @@ class MainWindow(QMainWindow):
         )
         self._act_assign_surface_load.triggered.connect(self._on_assign_surface_load)
         self._act_assign_tendon.triggered.connect(self._on_assign_tendon)
+        self._act_assign_pile.triggered.connect(self._on_assign_pile_springs)
         self._act_assign_area_springs.triggered.connect(lambda: self._on_assign_springs_of("area"))
         self._act_assign_edge_springs.triggered.connect(lambda: self._on_assign_springs_of("edge"))
         self._act_assign_line_springs.triggered.connect(lambda: self._on_assign_springs_of("line"))
@@ -4800,6 +4803,31 @@ class MainWindow(QMainWindow):
             f"RC wall: {len(conversion.elements)} member(s) became MVLEM segments"
             + (f", {len(conversion.skipped)} left as they were." if conversion.skipped else ".")
         )
+
+    def _on_assign_pile_springs(self) -> None:
+        """Assign → Frame → Pile Soil Springs: p-y, t-z and q-z springs along the pile."""
+        from opensees_studio.views.dialogs.pile_springs import PileSpringsDialog
+
+        project = self._vm.project
+        selected = set(self._canvas.selection.elements)
+        if project is None or not selected:
+            QMessageBox.information(self, "Pile Soil Springs", "Select the pile's members first.")
+            return
+        dialog = PileSpringsDialog(project, selected, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        springs = dialog.springs()
+        if springs is None or not springs.elements:
+            return
+        stack = self._vm.undo_stack
+        stack.beginMacro("Assign pile soil springs")
+        try:
+            self._vm.apply_command(AddNodesCommand(self._vm, springs.nodes))
+            self._vm.apply_command(AddMaterialsCommand(self._vm, springs.materials))
+            self._vm.apply_command(AddElementsCommand(self._vm, springs.elements))
+        finally:
+            stack.endMacro()
+        self._log("Pile soil springs: " + " ".join(springs.notes))
 
     def _on_assign_hinge(self) -> None:
         from opensees_studio.core import BeamWithHingesElement

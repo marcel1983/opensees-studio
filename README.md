@@ -214,6 +214,9 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   (`TDConcreteMC10`, Define → Concrete Creep & Shrinkage). Post-tensioning
   tendons (Assign → Frame → Tendon) act as their equivalent loads: a parabolic
   profile, friction and wobble losses and a long-term loss.
+- **Soil-structure interaction for piles** — Assign → Frame → Pile Soil
+  Springs builds p-y (Matlock clay, API sand), t-z and q-z springs along a pile
+  from its diameter and the soil layers.
 - **Load combinations and envelopes** (Define → Load Combinations…) — Linear
   Add, Envelope (max/min), Absolute Add and SRSS of static and response spectrum
   cases, or of other combinations, each with a scale factor. Combining is
