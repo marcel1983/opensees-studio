@@ -576,6 +576,9 @@ Unpack the whole folder, not the executable on its own: the libraries live
 beside it. A bundle is about 1 GB unpacked, most of it the VTK renderer and the
 Qt runtime.
 
+The Linux bundle runs on Ubuntu 22.04 or later, Linux Mint 21 or later, Debian 12
+and LMDE 6 (glibc 2.35 or newer), on x86-64.
+
 The first launch of a downloaded bundle may be blocked by the operating
 system, since these binaries are not code-signed: on macOS, right-click →
 Open the first time; on Windows, "More info" → "Run anyway" in the
