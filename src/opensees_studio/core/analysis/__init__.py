@@ -257,8 +257,9 @@ class TransientCase(_SolverOptions):
 
     If ``rayleigh_mode1_damping`` is set, the runner computes a stiffness-
     proportional Rayleigh coefficient βK = 2ζ/√λ₁ from the first eigen-
-    value of the current (possibly preloaded) structure. This matches
-    the Tcl idiom ``rayleigh 0 0 0 [expr 2*ζ/sqrt([eigen 1])]``.
+    value of the current (possibly preloaded) structure and applies it to
+    the committed stiffness, the Tcl idiom
+    ``rayleigh 0 0 0 [expr 2*ζ/sqrt([eigen 1])]``.
     """
 
     type: Literal["Transient"] = "Transient"
@@ -307,8 +308,9 @@ class TransientCase(_SolverOptions):
         default=None,
         ge=0.0,
         description=(
-            "If set, βK is computed as 2·ζ/√λ₁ (first-mode eigenvalue) and "
-            "overrides ``rayleigh_beta_k``. ``rayleigh_alpha_m`` still applies."
+            "If set, βK is computed as 2·ζ/√λ₁ (first-mode eigenvalue) and applied "
+            "to the COMMITTED stiffness (``rayleigh`` slot 4), replacing the three "
+            "βK fields. ``rayleigh_alpha_m`` still applies."
         ),
     )
     # Modal damping — OpenSees ``modalDamping`` over the first N modes. Additive:

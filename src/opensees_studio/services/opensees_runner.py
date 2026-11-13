@@ -2738,13 +2738,16 @@ class OpenSeesRunner:
         self._setup_analysis(case)
         # If a mode-1 βK was computed, re-issue ``ops.rayleigh`` with the
         # calibrated coefficient — this overrides whatever _setup_analysis
-        # emitted from ``case.rayleigh_beta_k``.
+        # emitted from the case's βK fields. It goes on the COMMITTED stiffness,
+        # as the Tcl idiom ``rayleigh 0 0 0 [expr 2*ζ/sqrt([eigen 1])]``: on the
+        # current tangent the damping changes inside every Newton iteration once
+        # a non-linear model softens, and the run can stop converging.
         if beta_k_override is not None:
             ops.rayleigh(
                 float(case.rayleigh_alpha_m),
+                0.0,
+                0.0,
                 beta_k_override,
-                0.0,
-                0.0,
             )
 
         # Step-by-step with a ModifiedNewton -initial fallback on any

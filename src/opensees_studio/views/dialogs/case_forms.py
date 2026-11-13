@@ -448,7 +448,8 @@ class TransientCaseForm(CaseFormBase):
         self._layout.addRow(
             _note(
                 "<i>If mode-1 damping is > 0, the runner computes βK = 2ζ/√λ1 "
-                "after preload and uses it instead of the manual βK value.</i>"
+                "after preload and applies it to the committed stiffness, instead "
+                "of the three βK values above.</i>"
             )
         )
         self._layout.addRow("Modal damping ratio ζ:", self._modal_damping)

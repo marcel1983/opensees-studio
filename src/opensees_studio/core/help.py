@@ -492,6 +492,9 @@ you asked the recorder for.
   same. For a non-linear one prefer committed (what the OpenSees examples use) or
   initial: damping on the current tangent changes inside every Newton iteration
   once the model softens, and a run can stop converging for that reason alone.
+- **Mode-1 damping ratio** — the runner computes β = 2ζ/ω₁ from the first mode
+  after the preload and applies it to the committed stiffness, replacing the
+  three β fields (α still applies).
 - **Modal damping** — one ratio ζ for each of the first N modes (OpenSees
   `modalDamping`), as SAP2000 and ETABS damp a modal history: every mode up to N
   gets exactly ζ, whatever its period, so no pair of periods has to be chosen.
