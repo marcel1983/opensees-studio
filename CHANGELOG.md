@@ -7,6 +7,19 @@ that this is pre-alpha: minor and patch releases may change the `.osmodel`
 schema (it carries a `schema_version`, and a file from a newer build is now
 refused instead of silently downgraded).
 
+## [Unreleased]
+
+### Added
+
+- **Results snapshots.** Every case of every example project is pinned by a
+  fingerprint of its results (largest displacement per DOF, reaction sums,
+  largest element force, norms, periods, step counts) in
+  `tests/data/results_snapshots.json`, and CI fails when a number moves by more
+  than 1e-5 relative. An intended change is pinned with
+  `python tools/results_snapshot.py --write --reason "..."`, which writes the
+  before and after to `docs/results-changes.md`; from now on such changes are
+  announced in a **Results changed** section of these notes.
+
 ## [0.0.56] - 2026-11-11
 
 ### Added

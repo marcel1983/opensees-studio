@@ -921,6 +921,15 @@ tolerance. The file is
 generated from real runs by `tools/verification_manual.py` (`--write` regenerates
 it), and CI fails when a case leaves its tolerance or the file is stale.
 
+**Results changes are never silent.** Every case of every project in
+`examples/` is pinned by a fingerprint (largest displacement per DOF, reaction
+sums, largest element force, norms, periods, step counts) in
+`tests/data/results_snapshots.json`; CI fails when one moves by more than 1e-5
+relative. A fix that changes numbers on purpose is pinned with
+`python tools/results_snapshot.py --write --reason "..."`, which records the
+before and after in [docs/results-changes.md](docs/results-changes.md), and the
+release notes announce it under **Results changed**.
+
 ## Roadmap
 
 See [`docs/roadmap.md`](docs/roadmap.md) for the phase-by-phase plan.

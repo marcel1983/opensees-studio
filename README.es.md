@@ -143,6 +143,16 @@ diseño de AISC— con su error relativo y su tolerancia. Se genera a partir de
 corridas reales (`tools/verification_manual.py`), y la integración continua falla
 si un caso se sale de su tolerancia o si el archivo quedó desactualizado.
 
+**Ningún cambio de resultados pasa en silencio.** Cada caso de cada proyecto de
+`examples/` queda fijado por una huella (desplazamiento máximo por grado de
+libertad, suma de reacciones, fuerza máxima en elementos, normas, períodos,
+número de pasos) en `tests/data/results_snapshots.json`, y la integración
+continua falla si alguno se mueve más de 1e-5 relativo. Una corrección que
+cambia números a propósito se fija con
+`python tools/results_snapshot.py --write --reason "..."`, que registra el antes
+y el después en [docs/results-changes.md](docs/results-changes.md), y las notas
+de versión lo anuncian en **Results changed**.
+
 ## Tutoriales
 
 Recorridos paso a paso, en español e inglés: [docs/tutorials](docs/tutorials/README.es.md).

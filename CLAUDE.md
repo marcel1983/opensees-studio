@@ -278,6 +278,16 @@ pytest tests/integration -v    # real openseespy runs (slow)
   analysis CLI as a subprocess (`test_analysis_cli.py`) and the
   direct-versus-CLI result parity (`test_cli_result_parity.py`).
 
+## Results snapshots
+
+`tools/results_snapshot.py` runs every project in `examples/` through the
+analysis CLI and pins a fingerprint of each case in
+`tests/data/results_snapshots.json` (`tests/integration/test_results_snapshot.py`
+checks it, 1e-5 relative). Never re-pin to make CI green: a change of results is
+pinned only with `--write --reason "..."`, which appends the before/after to
+`docs/results-changes.md`, and the CHANGELOG gets a **Results changed** entry
+for it. A new example is pinned with `--write <stem>`.
+
 ## Render budget
 
 `tools/render_bench.py` builds synthetic models and measures the geometry build
