@@ -1718,6 +1718,45 @@ stiffener and doubler-plate design is not modeled.
             "design.column_splices",
             "design.steel_check",
         ),
+        "design.base_plates": _t(
+            "Design → Base Plates (Column Bases)",
+            "Design",
+            "Every column base of the model, checked over the design load sets.",
+            """
+One row per **column base**: a support joint with one column framing up into
+it, whose section is an AISC I-shape, rectangular HSS or round HSS / pipe.
+
+# What decides the check
+- **Support type** from the joint's restraint: both bending rotations free is a
+  **pinned** base, checked concentric (bearing, plate thickness with λn', shear);
+  both fixed is a **fixed** base, checked with the axial force and the reaction
+  moment about the column's **major axis** (DG1 3.3, small or large
+  eccentricity, anchor rods in tension); one fixed is **partial**, checked as
+  fixed with a note.
+- **Column kind**: the plate's cantilevers are `m = (N - 0.95 d)/2` and
+  `n = (B - 0.8 bf)/2` for an I-shape, `0.95 B` for a rectangular HSS, and
+  `0.8 D` both ways for a round one. N runs along the column depth d.
+- **Demands**: the joint's reactions under **every alternative** of the design
+  load sets the steel check uses (the direct analysis cases when they exist,
+  else the combinations), so the largest compression, the largest M / P, uplift
+  and the largest shear are all checked. Only static results enter.
+- A moment about the column's **minor axis** is reported, not combined: Design
+  Guide 1 has no biaxial method.
+
+# Editing
+Select one or more rows, change the plate (N, B, tp, steel), the concrete (f'c,
+A2 / A1) or the rods (diameter, F1554 grade, count, offset f, spacing, edge
+distance, embedment) and press **Apply to the selected bases**. **Size tp**
+picks the thinnest standard plate (1/2 in to 4 in) whose thickness checks pass.
+A base starts from a plate 3 in larger than the column all round, 1 in thick,
+A36 on f'c 4 ksi, with four 3/4 in F1554 Gr. 36 rods. **OK** keeps the plates
+in the project (`design.base_plates`); a base left at the starting plate is not
+saved.
+""",
+            "design.base_plate",
+            "design.steel_check",
+            "design.direct_analysis",
+        ),
         "design.base_plate": _t(
             "Design → Base Plate & Anchors (DG1, ACI 318)",
             "Design",
@@ -6076,6 +6115,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_member_classification": "design.member_classification",
     "_act_steel_check": "design.steel_check",
     "_act_concrete_check": "design.concrete_check",
+    "_act_base_plates": "design.base_plates",
     "_act_base_plate": "design.base_plate",
     "_act_bolted": "design.bolted_connection",
     "_act_connections": "design.connections",
