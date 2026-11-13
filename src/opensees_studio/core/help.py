@@ -2966,6 +2966,10 @@ before you trust it inside a section.
   of cycles. The strain rate is irrelevant for these rate-independent laws.
 - It uses the same emitters as the analysis runner, so a material cannot behave
   one way in the tester and another way in a model.
+- Like an analysis, the test runs in a separate process: the solve takes
+  milliseconds, starting the process about a second. If OpenSees ends that
+  process on an input it cannot handle, the summary shows the exit code and the
+  solver's last output, and the application stays open.
 """,
             "define.material_library",
             "mechanics.fiber_sections",
