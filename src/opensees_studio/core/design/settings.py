@@ -91,9 +91,14 @@ class SteelMemberDesign(BaseModel):
         "net_area",
         "shear_lag",
         "grade",
+        "role",
     )
 
     element_id: PositiveInt
+    role: Literal["column", "beam", "brace"] | None = Field(
+        default=None,
+        description="Member role for the design checks; None = from the member's direction.",
+    )
     shape: str | None = Field(
         default=None,
         description="AISC shape name to design with; None takes the section's name.",
@@ -105,14 +110,22 @@ class SteelMemberDesign(BaseModel):
     k_major: PositiveFloat = Field(default=1.0, description="Effective length factor, major axis.")
     k_minor: PositiveFloat = Field(default=1.0, description="Effective length factor, minor axis.")
     length_major: PositiveFloat | None = Field(
-        default=None, description="Unbraced length for major-axis buckling; None = member length."
+        default=None,
+        description=(
+            "Unbraced length for major-axis buckling; None = between the bracing points "
+            "of the physical member (core.design.members)."
+        ),
     )
     length_minor: PositiveFloat | None = Field(
-        default=None, description="Unbraced length for minor-axis buckling; None = member length."
+        default=None,
+        description="Unbraced length for minor-axis buckling; None = between the bracing points.",
     )
     length_ltb: PositiveFloat | None = Field(
         default=None,
-        description="Unbraced length of the compression flange (LTB); None = member length.",
+        description=(
+            "Unbraced length of the compression flange (LTB); None = between the lateral "
+            "bracing points."
+        ),
     )
     cb: PositiveFloat | None = Field(
         default=None, description="Moment gradient factor; None = from the moment diagram (F1-1)."

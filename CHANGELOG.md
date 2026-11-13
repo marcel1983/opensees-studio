@@ -7,7 +7,7 @@ that this is pre-alpha: minor and patch releases may change the `.osmodel`
 schema (it carries a `schema_version`, and a file from a newer build is now
 refused instead of silently downgraded).
 
-## [Unreleased]
+## [0.0.60] - 2026-11-13
 
 ### Added
 
@@ -38,6 +38,24 @@ refused instead of silently downgraded).
   (`pattern_factors`), run every frame as P-Delta (`p_delta`), scale the
   elastic stiffness (`stiffness_factor`) and add notional loads
   (`notional_ratio`, `notional_direction`). The PyNite engine refuses them.
+- **Member classification.** Design → Member Classification lists the physical
+  members the steel check works on (collinear elements of one section, end to
+  end), their role and the unbraced lengths Lx, Ly and Lb their bracing points
+  give: a member, support, diaphragm or slab holding the member along one of its
+  local axes. The role can be set by hand (a sloped rafter is a beam).
+  `.osmodel`: `design.members[].role`.
+
+### Changed
+
+- **The steel check uses the unbraced length of the physical member, not of the
+  analysis element.** A beam meshed into four elements was checked with a
+  quarter of its span as Lb, Lx and Ly, which overestimates its buckling and
+  lateral-torsional strength. Each element now takes the length between the
+  bracing points of its member, and Cb comes from the moment diagram of that
+  whole segment. **Steel check ratios of meshed members, and of members braced
+  at fewer joints than their element ends, go up.** Lengths entered as overrides
+  still win; brace slenderness and the SCBF expected brace strength use the same
+  lengths.
 
 ### Fixed
 

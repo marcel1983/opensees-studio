@@ -1500,6 +1500,49 @@ Everything the later steel checks read, set once for the project.
             "design.direct_analysis",
             "design.steel_check",
         ),
+        "design.member_classification": _t(
+            "Design → Member Classification",
+            "Design",
+            "Physical members, their role and the unbraced lengths the bracing gives.",
+            """
+The steel check works on physical members, not on analysis elements. This page
+lists them, one row per member.
+
+# Members
+Frame elements of the **same section**, end to end and **collinear** (within 1
+degree), form one member. A member continues through a joint where other
+members frame in, as long as exactly one collinear element of its section goes
+on from there. Its ends are taken as braced.
+
+# Bracing points and unbraced lengths
+An interior joint holds the member along one of its local axes (y or z) when, at
+that joint:
+- another frame or truss element runs within 60 degrees of that axis,
+- a support restrains the translation along it,
+- a rigid diaphragm's plane contains it, or
+- a shell's plane contains it (a slab braces a beam laterally).
+
+**Lx** and **Ly** are the distances between the bracing points along the axes
+that major- and minor-axis buckling move the member along; **Lb** (lateral-
+torsional buckling) is the minor-axis one. The table shows, per member, the
+largest value over its elements.
+
+A **2D model** has no out-of-plane information: there every joint where another
+element frames in, or a support, braces the member out of its plane too (the
+usual assumption that the floors brace the frame).
+
+# Role
+Column, beam or brace from the direction (within 20 % of vertical a column,
+within 20 % of horizontal a beam, otherwise a brace). Set it by hand where the
+direction misleads (a sloped rafter is a beam, not a brace). The role decides
+which AISC 341 provisions a member gets.
+
+Lengths that do not fit (a beam braced by a deck the model does not have) are
+entered as overrides in Design → Steel Frame Check; they win over these.
+""",
+            "design.steel_check",
+            "design.basis",
+        ),
         "design.direct_analysis": _t(
             "Design → Direct Analysis Method",
             "Design",
@@ -1831,18 +1874,27 @@ no signed demands and are skipped with a note.
 Each member is read at 25 stations along its length, span loads included. Every
 station is checked with its own axial force, moments and shears, so the interaction
 uses forces that act at the same place; the governing station is reported. Cb comes
-from the major-axis moment diagram (F1-1) unless you set it. **Set Cb = 1.0 for a
-cantilever**: F1-1 assumes both ends braced.
+from the major-axis moment diagram (F1-1) of the whole laterally unbraced
+segment unless you set it. **Set Cb = 1.0 for a cantilever**: F1-1 assumes both
+ends braced.
+
+# Members and unbraced lengths
+The check works on **physical members**, not analysis elements: collinear
+elements of one section, end to end, are one member (Design → Member
+Classification lists them). Lx and Ly run between the joints that hold the
+member along each of its local axes, and Lb is the minor-axis one; see that page
+for what counts as a brace. A beam meshed into four elements is therefore
+checked with its whole unbraced length, not a quarter of it.
 
 # The values the dialog asks for
 - **Method** LRFD (φ) or ASD (Ω); **Fy** and **Fu** (50 and 65 ksi by default,
   in the project's stress unit); **ratio limit** above which a member is
   reported **NG**.
 - **Overrides for the selected members**: the AISC shape, K about each axis, the
-  unbraced length of the compression flange Lb (0 = the member length), Cb
-  (0 = from the diagram), the net area An (0 = D2-2 rupture unchecked) and the
-  shear-lag factor U in `Ae = U An`. The buckling lengths are the member length
-  times K.
+  unbraced length of the compression flange Lb (0 = between the lateral bracing
+  points), Cb (0 = from the diagram), the net area An (0 = D2-2 rupture
+  unchecked) and the shear-lag factor U in `Ae = U An`. The buckling lengths are
+  the unbraced lengths times K.
 - **Amplify P-δ (B1)**: multiplies the moments of members in compression by
   `B1 = 1 / (1 - α Pr / Pe1) >= 1` (AISC 360-16 C2.1b; A-8-3 in the 2022
   edition) with the conservative `Cm = 1.0` and `Pe1` on `0.8 τb EI` (C2.3).
@@ -6021,6 +6073,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_import_tcl": "file.import_tcl",
     "_act_design_basis": "design.basis",
     "_act_direct_analysis": "design.direct_analysis",
+    "_act_member_classification": "design.member_classification",
     "_act_steel_check": "design.steel_check",
     "_act_concrete_check": "design.concrete_check",
     "_act_base_plate": "design.base_plate",

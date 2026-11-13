@@ -634,6 +634,7 @@ class MainWindow(QMainWindow):
         self._act_clear_results = QAction("Delete &All Results…", self)
         self._act_design_basis = QAction("Design &Basis (AISC)…", self)
         self._act_direct_analysis = QAction("Direct &Analysis Method…", self)
+        self._act_member_classification = QAction("&Member Classification…", self)
         self._act_steel_check = QAction("&Steel Frame Check (AISC 360-16)…", self)
         self._act_concrete_check = QAction("Co&ncrete Frame Check (ACI 318-19)…", self)
         self._act_base_plate = QAction("&Base Plate && Anchors (DG1, ACI 318)…", self)
@@ -943,6 +944,7 @@ class MainWindow(QMainWindow):
         m_design = mb.addMenu("Desi&gn")
         m_design.addAction(self._act_design_basis)
         m_design.addAction(self._act_direct_analysis)
+        m_design.addAction(self._act_member_classification)
         m_design.addSeparator()
         m_design.addAction(self._act_steel_check)
         m_design.addAction(self._act_concrete_check)
@@ -1424,6 +1426,7 @@ class MainWindow(QMainWindow):
         self._act_clear_results.triggered.connect(self._on_clear_results)
         self._act_design_basis.triggered.connect(self._on_design_basis)
         self._act_direct_analysis.triggered.connect(self._on_direct_analysis)
+        self._act_member_classification.triggered.connect(self._on_member_classification)
         self._act_steel_check.triggered.connect(self._on_steel_check)
         self._act_concrete_check.triggered.connect(self._on_concrete_check)
         self._act_base_plate.triggered.connect(self._on_base_plate)
@@ -2963,6 +2966,27 @@ class MainWindow(QMainWindow):
             "(Analyze → Run All Cases), then check Δ2/Δ1 here and the members in "
             "Design → Steel Frame Check."
         )
+
+    def _on_member_classification(self) -> None:
+        """Design → Member Classification: physical members, roles and unbraced lengths."""
+        from opensees_studio.views.dialogs.member_classification import (
+            MemberClassificationDialog,
+        )
+
+        project = self._vm.project
+        if project is None:
+            return
+        dialog = MemberClassificationDialog(project, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        settings = dialog.settings()
+        if settings != (project.design or DesignSettings()):
+            self._vm.apply_command(SetDesignSettingsCommand(self._vm, settings))
+            chosen = sum(1 for m in settings.members if m.role is not None)
+            self._log(
+                f"Member classification: {dialog.member_count()} member(s), "
+                f"{chosen} element(s) with a role set by hand."
+            )
 
     def _on_steel_check(self) -> None:
         """Design → Steel Frame Check: AISC 360-16 ratios over this session's results.
@@ -7123,6 +7147,7 @@ class MainWindow(QMainWindow):
         self._act_clear_results.setEnabled(bool(has_project and (stored or db_there)))
         self._act_design_basis.setEnabled(has_project)
         self._act_direct_analysis.setEnabled(has_project)
+        self._act_member_classification.setEnabled(has_project)
         self._act_steel_check.setEnabled(has_project)
         self._act_concrete_check.setEnabled(has_project)
         self._act_base_plate.setEnabled(has_project)
