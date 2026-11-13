@@ -3003,10 +3003,10 @@ class MainWindow(QMainWindow):
             if app is not None
             else None
         )
-        if translator is None and isinstance(app, QApplication):
-            translator = InterfaceTranslator(app, code)
-        elif translator is not None:
+        if translator is not None:
             translator.set_language(code)
+        elif isinstance(app, QApplication):
+            InterfaceTranslator(app, code)  # parented to the application, which keeps it
         self._log(f"Interface language: {LANGUAGES[code]}.")
 
     def _on_steel_ratios(self) -> None:
