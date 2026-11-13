@@ -395,6 +395,8 @@ class TransientCaseForm(CaseFormBase):
         self._max_iter = _int_spin(25)
         self._alpha_m = _spin(0.0, minimum=0.0, maximum=1e12, step=1e-4)
         self._beta_k = _spin(0.0, minimum=0.0, maximum=1e12, step=1e-6)
+        self._beta_k_init = _spin(0.0, minimum=0.0, maximum=1e12, step=1e-6)
+        self._beta_k_comm = _spin(0.0, minimum=0.0, maximum=1e12, step=1e-6)
         self._mode1_damping = _spin(0.0, minimum=0.0, maximum=1.0, step=0.01)
         self._modal_damping = _spin(0.0, minimum=0.0, maximum=0.99, step=0.01)
         self._modal_damping_modes = _int_spin(10)
@@ -432,7 +434,16 @@ class TransientCaseForm(CaseFormBase):
         self._layout.addRow("Tolerance:", self._tol)
         self._layout.addRow("Max iterations:", self._max_iter)
         self._layout.addRow("Rayleigh αM:", self._alpha_m)
-        self._layout.addRow("Rayleigh βK:", self._beta_k)
+        self._layout.addRow("Rayleigh βK (current tangent):", self._beta_k)
+        self._layout.addRow("Rayleigh βK (initial):", self._beta_k_init)
+        self._layout.addRow("Rayleigh βK (committed):", self._beta_k_comm)
+        self._layout.addRow(
+            _note(
+                "<i>For a nonlinear model prefer the committed or initial stiffness: "
+                "damping on the current tangent changes inside every iteration once "
+                "the model softens and can stop Newton from converging.</i>"
+            )
+        )
         self._layout.addRow("Mode-1 damping ratio:", self._mode1_damping)
         self._layout.addRow(
             _note(
@@ -489,6 +500,8 @@ class TransientCaseForm(CaseFormBase):
         self._max_iter.setValue(c.max_iter)
         self._alpha_m.setValue(c.rayleigh_alpha_m)
         self._beta_k.setValue(c.rayleigh_beta_k)
+        self._beta_k_init.setValue(c.rayleigh_beta_k_init)
+        self._beta_k_comm.setValue(c.rayleigh_beta_k_comm)
         self._mode1_damping.setValue(c.rayleigh_mode1_damping or 0.0)
         self._modal_damping.setValue(c.modal_damping or 0.0)
         self._modal_damping_modes.setValue(c.modal_damping_modes)
@@ -514,6 +527,8 @@ class TransientCaseForm(CaseFormBase):
             max_iter=self._max_iter.value(),
             rayleigh_alpha_m=self._alpha_m.value(),
             rayleigh_beta_k=self._beta_k.value(),
+            rayleigh_beta_k_init=self._beta_k_init.value(),
+            rayleigh_beta_k_comm=self._beta_k_comm.value(),
             rayleigh_mode1_damping=mode1_damping if mode1_damping > 0.0 else None,
             modal_damping=self._modal_damping.value() or None,
             modal_damping_modes=self._modal_damping_modes.value(),
