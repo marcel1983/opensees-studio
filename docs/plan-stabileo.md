@@ -49,7 +49,7 @@ Cada punto es un PR con su ayuda, README/README.es, CHANGELOG y los gates de
 
 | # | Entrega | Estado |
 |---|---|---|
-| 8 | Interfaz en español: infraestructura de traducción de Qt, selector de idioma, menús, diálogos y ayuda | Pendiente |
+| 8 | Interfaz en español: catálogo `data/i18n/es.json`, filtro de eventos que traduce cada ventana al mostrarse, Opciones → Idioma, traducciones de Qt; las páginas de ayuda quedan en inglés | Hecho |
 
 ## Transversal
 

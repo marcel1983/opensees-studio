@@ -119,6 +119,7 @@ from opensees_studio.core.duplicates import default_tolerance
 from opensees_studio.core.geometry.ordering import QuadOrderError, order_quad_nodes
 from opensees_studio.core.groups import Group, colour_for, group_members
 from opensees_studio.core.help import ACTION_TOPICS, TOPIC_PROPERTY
+from opensees_studio.core.i18n import LANGUAGES
 from opensees_studio.core.materials.library import is_uniaxial
 from opensees_studio.core.model_check import Finding, check_model
 from opensees_studio.core.reactions import ReactionRow, reaction_rows
@@ -282,6 +283,7 @@ from opensees_studio.views.docks import (
     TimeHistoryView,
 )
 from opensees_studio.views.help_window import HelpController
+from opensees_studio.views.i18n import stored_language
 from opensees_studio.views.report_pdf import write_pdf
 from opensees_studio.views.tools import (
     DrawFrameTool,
@@ -1023,6 +1025,15 @@ class MainWindow(QMainWindow):
         m_options = mb.addMenu("&Options")
         m_options.addAction(self._act_set_units)
         m_options.addAction(self._act_solver_settings)
+        m_language = m_options.addMenu("&Language")
+        self._language_actions: dict[str, QAction] = {}
+        for code, label in LANGUAGES.items():
+            action = QAction(label, self, checkable=True)
+            action.setProperty("_i18n_original", label)  # a language's own name stays
+            action.triggered.connect(lambda _checked=False, c=code: self._on_language(c))
+            m_language.addAction(action)
+            self._language_actions[code] = action
+        self._language_actions[stored_language()].setChecked(True)
 
         m_help = mb.addMenu("&Help")
         m_help.addAction(self._act_help_contents)
@@ -2976,6 +2987,27 @@ class MainWindow(QMainWindow):
         if project is None:
             return
         BoltedConnectionDialog(project, self).exec()
+
+    def _on_language(self, code: str) -> None:
+        """Options → Language: switch the interface now and remember it."""
+        from PySide6.QtCore import QSettings
+
+        from opensees_studio.views.i18n import SETTINGS_KEY, InterfaceTranslator
+
+        QSettings().setValue(SETTINGS_KEY, code)
+        for other, action in self._language_actions.items():
+            action.setChecked(other == code)
+        app = QApplication.instance()
+        translator = (
+            next((c for c in app.children() if isinstance(c, InterfaceTranslator)), None)
+            if app is not None
+            else None
+        )
+        if translator is None and isinstance(app, QApplication):
+            translator = InterfaceTranslator(app, code)
+        elif translator is not None:
+            translator.set_language(code)
+        self._log(f"Interface language: {LANGUAGES[code]}.")
 
     def _on_steel_ratios(self) -> None:
         """Design → Display Steel Ratios: paint the members by the stored check's ratios.

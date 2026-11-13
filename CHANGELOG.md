@@ -11,6 +11,12 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **Interface in Spanish.** Options → Language switches menus, actions,
+  dialog titles, labels, buttons and tabs between English and Spanish at once
+  and remembers the choice; Qt's own dialogs follow. The catalog is
+  `data/i18n/es.json`; a test keeps every menu action translated. Help pages
+  and messages composed at run time stay in English.
+
 - **Base plates and bolted connections.** Design → Base Plate & Anchors checks
   a column base after AISC Design Guide 1 (bearing, plate thickness for
   concentric, small and large eccentricity) and its anchor rods after ACI 318-19

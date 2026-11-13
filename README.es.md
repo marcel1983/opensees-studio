@@ -106,6 +106,9 @@ script o un notebook de Jupyter: la interfaz es una forma de usarlo, no la únic
   de suelo en pilotes (Assign → Frame → Pile Soil Springs: p-y de Matlock en
   arcilla y API en arena, t-z y q-z de punta, a partir del diámetro y los
   estratos).
+- **Idioma de la interfaz**: Options → Language (en español: Opciones → Idioma)
+  cambia menús, diálogos y botones entre inglés y español; las páginas de ayuda
+  siguen en inglés.
 - **Diseño de hormigón armado**: Design → Concrete Frame Check verifica según
   **ACI 318-19** todo miembro cuya sección sea de fibras de hormigón y barras
   (las del asistente de secciones, también si el análisis usa su gemela

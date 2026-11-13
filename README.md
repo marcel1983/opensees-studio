@@ -343,6 +343,8 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   density and yield stress come from the material property sets, and every
   value is converted from the file's declared units. A file written by File →
   Export → IFC imports back to the same model.
+- **Interface language** — Options → Language: English or Spanish (menus,
+  dialogs, buttons; the help pages stay in English).
 - **Concrete design** — Design → Concrete Frame Check (ACI 318-19) checks
   every member whose section is a fibre section of concrete and bars (the
   Concrete Section Wizard's or any other, also when the analysis uses its
