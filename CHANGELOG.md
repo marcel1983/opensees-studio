@@ -7,6 +7,24 @@ that this is pre-alpha: minor and patch releases may change the `.osmodel`
 schema (it carries a `schema_version`, and a file from a newer build is now
 refused instead of silently downgraded).
 
+## [Unreleased]
+
+### Added
+
+- **Connections by joint.** Design → Connections by Joint lists every member end
+  of the frame and classifies it by what it frames into: beam to column flange
+  or web (from the column's depth direction), beam to girder, brace, column
+  splice, column base. It suggests the connection from the topology, the end
+  release and the seismic system: a **shear tab** for a simple beam end, the
+  AISC 358 RBS for a moment end in an SMF or IMF, a gusset for a brace, a splice,
+  a base plate. **Shear tabs are checked** (AISC Manual Part 10, conventional
+  configuration) under the largest end shear over the design load sets: bolt
+  shear with the full eccentricity, bearing and tearout on plate and beam web,
+  plate shear yielding, rupture and block shear, welds, w >= 5/8 tp and the
+  ductility limit tp <= d/2 + 1/16 in; each is edited per end or for a
+  selection. Bolts A325 / A490, threads included or excluded.
+  `.osmodel`: `design.shear_tabs`.
+
 ## [0.0.61] - 2026-11-13
 
 ### Added
