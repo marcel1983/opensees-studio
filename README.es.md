@@ -60,7 +60,10 @@ script o un notebook de Jupyter: la interfaz es una forma de usarlo, no la únic
 
 - **Modelación**: grillas cartesianas y cilíndricas, nodos, masas añadidas y
   resortes de apoyo, marcos (elásticos,
-  basados en fuerza y en desplazamiento), barras, quads, cáscaras `ShellMITC4`,
+  basados en fuerza y en desplazamiento), barras, quads, cáscaras (`ShellMITC4`,
+  `ShellDKGQ` con rigidez de giro en el plano, la no lineal geométrica
+  `ShellNLDKGQ` y los triángulos `ShellDKGT`/`ShellNLDKGT`; Assign → Area → Shell
+  Formulation cambia entre ellas),
   elementos de longitud cero, restricciones, equalDOF, diafragmas rígidos, rigid
   links, aisladores (elastoméricos y de fricción), liberaciones, brazos rígidos,
   modificadores y puntos de inserción al estilo SAP2000.
@@ -91,7 +94,32 @@ script o un notebook de Jupyter: la interfaz es una forma de usarlo, no la únic
   gradientes, Assign → Frame → Temperature Load); líneas de influencia y cargas móviles (un caso
   *InfluenceLine* recorre una carga unitaria por una cadena de miembros, y
   Display → Influence Line pasa un vehículo, p. ej. el camión HL-93, en ambos
-  sentidos).
+  sentidos); construcción por etapas (un caso *Staged construction* construye
+  grupos etapa a etapa, retira puntales y encofrados y aplica las cargas de cada
+  etapa sobre el estado deformado de las anteriores; los nudos nuevos se
+  construyen en su posición de diseño o siguiendo la estructura deformada; con
+  la opción *time-dependent* el tiempo es la edad del hormigón en días y hay
+  fluencia y retracción según el fib Model Code 2010, con el material
+  `TDConcreteMC10` de Define → Concrete Creep & Shrinkage); cables de
+  postensado (Assign → Frame → Tendon) como cargas equivalentes, con trazado
+  parabólico y pérdidas por fricción, curvatura parásita y diferidas; resortes
+  de suelo en pilotes (Assign → Frame → Pile Soil Springs: p-y de Matlock en
+  arcilla y API en arena, t-z y q-z de punta, a partir del diámetro y los
+  estratos).
+- **Idioma de la interfaz**: Options → Language (en español: Opciones → Idioma)
+  cambia menús, diálogos y botones entre inglés y español; las páginas de ayuda
+  siguen en inglés.
+- **Diseño de hormigón armado**: Design → Concrete Frame Check verifica según
+  **ACI 318-19** todo miembro cuya sección sea de fibras de hormigón y barras
+  (las del asistente de secciones, también si el análisis usa su gemela
+  elástica fisurada): interacción P-M por compatibilidad de deformaciones con φ
+  según la deformación neta de tracción, flexión biaxial (Bresler), corte con
+  los estribos indicados, umbral de torsión, cuantía mínima y εt ≥ 0.004 en
+  vigas, con los ratios pintados sobre el modelo.
+- **Placas base y uniones apernadas**: Design → Base Plate & Anchors (AISC Design
+  Guide 1, anclajes según ACI 318-19 capítulo 17) y Design → Bolted Connection
+  (efecto palanca y grupos de pernos excéntricos), calculadoras que pueden leer
+  las demandas de la reacción de un apoyo.
 - **Flujo de diseño de acero**: Design → Steel Design Workflow recorre siete etapas: base de diseño AISC/ASCE, modelo y cargas, demandas, chequeo de miembros AISC 360, chequeo sísmico AISC 341, conexiones AISC 358/Capítulo J y detallado. Cada etapa muestra OK, PENDIENTE o REVISAR y abre el diálogo existente que la edita o ejecuta.
 - **Diseño**: Design → Steel Frame Check verifica según **AISC 360-16** (LRFD o
   ASD) los miembros de perfiles W, M, S y HP —y canales, tees, ángulos de alas
@@ -139,10 +167,23 @@ aproximaciones y lo que no soporta están en
 El [Manual de Verificación](docs/verification-manual.md) compara OpenSees Studio
 con soluciones cerradas y publicadas —vigas Euler-Bernoulli y Timoshenko, 2D y
 3D, reticulados, asentamientos, P-Δ, frecuencias, tiempo-historia, espectro, una
-placa de cáscaras, el momento plástico de una sección de fibras y los ejemplos de
+placa de cáscaras (también con `ShellDKGQ`/`ShellDKGT`), la cubierta de
+Scordelis-Lo, una columna construida piso a piso, la fluencia y retracción de una
+columna a 10 000 días, un voladizo curvado en un cuarto de círculo por un momento
+en la punta (grandes rotaciones), una viga y una columna de ACI 318-19, el momento plástico de una sección de fibras y los ejemplos de
 diseño de AISC— con su error relativo y su tolerancia. Se genera a partir de
 corridas reales (`tools/verification_manual.py`), y la integración continua falla
 si un caso se sale de su tolerancia o si el archivo quedó desactualizado.
+
+**Ningún cambio de resultados pasa en silencio.** Cada caso de cada proyecto de
+`examples/` queda fijado por una huella (desplazamiento máximo por grado de
+libertad, suma de reacciones, fuerza máxima en elementos, normas, períodos,
+número de pasos) en `tests/data/results_snapshots.json`, y la integración
+continua falla si alguno se mueve más de 1e-5 relativo. Una corrección que
+cambia números a propósito se fija con
+`python tools/results_snapshot.py --write --reason "..."`, que registra el antes
+y el después en [docs/results-changes.md](docs/results-changes.md), y las notas
+de versión lo anuncian en **Results changed**.
 
 ## Tutoriales
 
@@ -242,6 +283,13 @@ vista de línea de grilla. El cuadro de selección nunca toma objetos ocultos en
 ese viewport: solo selecciona lo que realmente se dibuja.
 
 ## Chequeo de estabilidad
+
+**Analyze → Check Model** (y la revisión que hace Run antes de correr) nombra
+cada mecanismo por separado —la estructura o un grupo de nudos que se desliza o
+gira como cuerpo rígido, un nudo que rota libremente, barras alineadas, un marco
+que se desplaza lateralmente— con los nudos y elementos involucrados y qué hacer
+(qué apoyo falta, qué liberación quitar, dónde arriostrar). **Show the motion**
+anima el mecanismo elegido sobre el modelo.
 
 **Analyze → Check Model Stability** captura la rigidez inicial como una matriz
 dispersa CSR mediante `PythonSparse` de OpenSees; un modelo pequeño usa una

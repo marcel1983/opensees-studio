@@ -264,7 +264,7 @@ Weight; Joints of Selected Elements, Elements between Selected Joints.
 
 # Define
 - Geometry and building: Coordinate System/Grids, Grid Wizard, Add Node, Storeys, Groups,
-Section Cuts, Mass Source, Seismic Loads (ELF), Create Shell from 4 Nodes,
+Section Cuts, Mass Source, Seismic Loads (ELF), Create Shell from 3 or 4 Nodes,
 Create Portal Frame, Create Truss.
 - Properties: Material Library (40 materials, Material Tester to check one),
 Friction Models, Ground Motions, Section Library (elastic, nonprismatic, fibre
@@ -576,7 +576,10 @@ structure's modes, and combines them into a design response.
   scale factors it needs per period range.
 - **Modes** — every mode used must be orthogonalised and sign-normalised; the
   application does that before combining, so a repeated eigenvalue cannot
-  produce a wrong combination.
+  produce a wrong combination. Inside a group of repeated modes it also turns
+  the basis so one mode carries all of the group's participation in the
+  spectrum's direction: SRSS and CQC then give the same answer whatever basis
+  the eigen solver returned, on every platform.
 
 # Mechanics
 The peak response of mode *i* is Sa(T_i)·Γ_i·φ_i (Γ is the modal participation
@@ -1620,6 +1623,102 @@ and the connection dialogs store their own entities.
             "design.steel_ratios",
             "file.export_report",
             "file.calc_memory",
+        ),
+        "design.base_plate": _t(
+            "Design → Base Plate & Anchors (DG1, ACI 318)",
+            "Design",
+            "A column base plate and its anchor rods: bearing, plate thickness, rods, breakout, shear.",
+            """
+A calculator (LRFD, project units): it keeps nothing in the project. Enter the
+column (d, bf), the plate (N along d, B, tp, Fy), the concrete (f'c and the
+supporting area A2), the anchor rods (diameter, futa, how many on the tension
+side and in all, the offset f of the rod line from the plate centre, their
+spacing, edge distance and embedment) and the demands. With one support joint
+selected, **Demands from the selected support** reads Pu, Mu and Vu from its
+reaction in a solved static case.
+
+# Checks
+- **Concrete bearing** — fp,max = 0.65·min(0.85 f'c √(A2/A1), 1.7 f'c) (AISC J8).
+- **Plate thickness** — Design Guide 1: concentric with l = max(m, n, λn');
+  small eccentricity (e ≤ e,crit) with the bearing length Y = N - 2e; large
+  eccentricity with Y from the quadratic of DG1 3.3.2 and the rod tension
+  T = q,max·Y - Pu, the plate also bending over the rods.
+- **Anchor rods** (ACI 318-19 Chapter 17, cast-in, cracked concrete) — steel
+  0.75·Ase·futa in tension (Ase = 0.75 Ab), concrete breakout of the tension
+  group 0.70·(ANc/ANco)·ψed·Nb with Nb = 10 λ √f'c hef^1.5; shear by friction
+  0.75·0.55·Pu or by the rods 0.65·0.6·Ase·futa, the larger.
+
+Not checked: pullout and side-face blowout, anchor reinforcement, grout and the
+column-to-plate weld. Verified against the DG1 and ACI expressions by hand
+(unit tests).
+""",
+            "design.bolted_connection",
+            "design.chapter_j",
+        ),
+        "design.bolted_connection": _t(
+            "Design → Bolted Connection (Prying, Bolt Group)",
+            "Design",
+            "Prying action of a tee or end plate, and the most loaded bolt of an eccentric group.",
+            """
+A calculator (LRFD, project units).
+
+# Prying action (AISC Manual Part 9)
+For a flange of thickness t and Fu with bolts of diameter db in holes d' at a
+tributary width p, b from the bolt line to the stem and a to the edge:
+b' = b - db/2, a' = min(a, 1.25 b) + db/2, ρ = b'/a', δ = 1 - d'/p,
+tc = √(4 B b' / (0.9 p Fu)) for the bolt's available tension B,
+α' = ((tc/t)² - 1) / (δ(1 + ρ)) within 0 and 1, Q = (t/tc)²(1 + δα') ≤ 1. The
+available tension per bolt is B·Q; the window also gives tc and the thickness
+that needs no prying for the demand.
+
+# Eccentric bolt group (elastic method, Manual Part 7)
+Bolts at x,y (semicolon-separated pairs) and a force (Px, Py) at a point: each
+bolt takes P/n plus the torsion M·r/Ip about the group's centroid. The most
+loaded bolt is compared with the single-bolt strength you give (the smaller of
+J3.6 shear and J3.10 bearing, from Design → Connection Checks). The elastic
+method is conservative next to the instantaneous centre of rotation.
+""",
+            "design.base_plate",
+            "design.chapter_j",
+        ),
+        "design.concrete_check": _t(
+            "Design → Concrete Frame Check (ACI 318-19)",
+            "Design",
+            "Reinforced concrete members: axial force and bending, shear, torsion, minimum steel.",
+            """
+Checks every frame member whose section is a **fibre section of concrete and
+bars** — the Concrete Section Wizard's, the Section Designer's or any other — or
+the elastic section the wizard made next to it (`<name> (elastic, …)`): the
+reinforcement is read from the fibres, so the analysis can run on the cracked
+elastic section while the design uses the bars. Stations, load sets and
+combinations are those of Design → Steel Frame Check (25 stations, every
+combination or every static case).
+
+# What it checks (ACI 318-19, SI expressions in consistent units)
+- **Axial force and bending** — strain compatibility, εcu = 0.003 and the
+  0.85 f'c stress block over a = β1 c (22.2), bars elastic-perfectly plastic,
+  for a sweep of neutral-axis depths: the interaction curve about each axis. φ
+  goes from 0.65 (tied) or 0.75 (spiral) to 0.90 with the net tensile strain
+  (Table 21.2.2), and φPn,max = 0.80 φP0 (tied) or 0.85 φP0 (spiral). Each
+  station's Mu is compared with φMn at its Pu, using the bars on the side the
+  moment puts in tension.
+- **Biaxial bending** — Bresler's reciprocal load method above 0.1 f'c Ag, the
+  linear load contour below.
+- **Shear** — Vc = (0.17 λ √f'c + Nu/(6 Ag)) bw d, Vs = Av fyt d / s with the
+  stirrups given here (the same for every member), Vs ≤ 0.66 √f'c bw d, φ = 0.75.
+  bw is the gross area over the depth: exact for rectangles, conservative for T.
+- **Torsion threshold** — φ 0.083 λ √f'c Acp²/pcp (22.7.4.1); above it the
+  member is flagged for torsion design, which is not done here.
+- **Beams** — As,min (9.6.1.2) and εt ≥ 0.004 (9.3.3.1).
+
+Not checked: slenderness (6.6.4: run P-Delta or a buckling analysis), crack
+control, development and splices, and the seismic detailing of special moment
+frames. **Show ratios on model** paints the members by their governing ratio.
+Verified on a simply supported beam (flexure and shear by hand, Verification
+Manual D-12) and the balanced point of a column (unit tests).
+""",
+            "define.concrete_section",
+            "design.steel_check",
         ),
         "design.steel_check": _t(
             "Design → Steel Frame Check (AISC 360-16)",
@@ -2690,12 +2789,14 @@ the way to check a coordinate you are unsure about.
             "define.grid",
         ),
         "define.create_shell": _t(
-            "Define → Create Shell from 4 Nodes",
+            "Define → Create Shell from 3 or 4 Nodes",
             "Define",
-            "A four-node shell element from four selected nodes.",
+            "A four-node shell from four selected nodes, a triangle from three.",
             """
-Select exactly four nodes and a plate section, and the command builds a
-`ShellMITC4`. Walls, slabs and shear walls are shells.
+Select four nodes and a plate section, and the command builds a `ShellMITC4`;
+select three and it builds a triangular `ShellDKGT` (in the order you picked
+them). Walls, slabs and shear walls are shells. Change the formulation
+afterwards with Assign → Area → Shell Formulation.
 
 - The **winding** is derived from the coordinates: a click selection has no
   order, and a face built from a scrambled list is inverted or twisted. The
@@ -2709,6 +2810,40 @@ Select exactly four nodes and a plate section, and the command builds a
 - If the project has several plate sections you are asked which one.
 """,
             "define.section_library",
+            "assign.shell_formulation",
+            "mechanics.shells",
+        ),
+        "assign.shell_formulation": _t(
+            "Assign → Area → Shell Formulation",
+            "Assign — areas",
+            "Which OpenSees shell element the selected shells are: MITC4, DKGQ, NLDKGQ, DKGT.",
+            """
+Every shell keeps its nodes, section, loads and results; only the element
+OpenSees builds changes. Pick a pair: the first applies to the selected
+quadrilaterals, the second to the triangles.
+
+- **MITC4 / DKGT** — the default. `ShellMITC4` (Dvorkin-Bathe mixed
+  interpolation) is a thick-shell element with transverse shear; it is what the
+  importers create.
+- **DKGQ / DKGT** — `ShellDKGQ` (Lu, Xie, Zhang): a Discrete Kirchhoff plate with
+  a generalised-conforming membrane and a real drilling (in-plane rotation)
+  stiffness. The better choice for thin slabs and for walls whose edges frame
+  into beams or columns in their own plane. It has no transverse-shear strain,
+  so its V13/V23 resultants read zero: take shear from equilibrium.
+- **NLDKGQ / NLDKGT** — the geometrically nonlinear versions (updated
+  Lagrangian), for large displacements: wall or slab buckling, catenary action.
+  In a linear step they behave as DKGQ/DKGT.
+
+`ShellDKGT` is the triangle of the family, for panels a quadrilateral mesh cannot
+cover. Every formulation takes the plate sections of Define → Section Library
+(elastic, layered or fibre) and reports the same eight stress resultants. Verified
+against the simply supported plate and the Scordelis-Lo roof in the Verification
+Manual. The SAP2000 and IFC exporters write every quadrilateral as an area or
+a surface member whatever its formulation, and leave triangles out, listed in
+their report.
+""",
+            "define.create_shell",
+            "assign.surface_load",
             "mechanics.shells",
         ),
         "define.portal_frame": _t(
@@ -4214,6 +4349,114 @@ reaction 6 E I d / L³ — the application matches it.
             "assign.support",
             "assign.load",
         ),
+        "define.mc2010": _t(
+            "Define → Concrete Creep & Shrinkage (fib MC2010)",
+            "Define",
+            "A time-dependent concrete material from the mix, the exposure and the cement.",
+            """
+Builds a `TDConcreteMC10` material (OpenSees, after Tosic): creep by
+superposition of the stress history and shrinkage, both with the equations of
+the fib Model Code 2010 (5.1.9.4). Enter, in the Model Code's units:
+
+- **fcm** — mean compressive strength at 28 days, MPa;
+- **relative humidity** (40 to 99 %) and the **notional size h0 = 2·Ac/u** in mm
+  (Ac the section area, u the perimeter exposed to drying);
+- the **cement class** (32.5N; 32.5R/42.5N; 42.5R/52.5N/R) and the age at which
+  **drying starts** (end of curing);
+- the **analysis time of casting**: give each pour its own material, cast when
+  its stage builds it.
+
+The window previews the creep coefficient φ(t, t0) and the shrinkage εcs at a
+few ages. Stresses are stored in the project's unit; the modulus is
+Eci = 21500·(fcm/10)^(1/3) MPa.
+
+# Using it
+Use the material in fibre sections or bars, and run a **staged construction**
+case marked **time-dependent**: its time is the concrete age in days, each stage
+applies its loads at once and then holds them for its duration (creep on), with
+geometrically spaced time steps. Elastic sections do not creep. A column loaded
+at 28 days follows the Model Code's eps = stress/Eci·(1 + phi) + eps_cs within 2 % over
+ten thousand days (integration test). A member that only shrinks, with nothing
+compressing it, cracks in this material as it would in reality: give the
+analysis enough time steps (the creep and shrinkage of a step are computed from
+the state at its start).
+""",
+            "analyze.cases",
+            "define.material_library",
+        ),
+        "assign.pile_springs": _t(
+            "Assign → Frame → Pile Soil Springs (p-y, t-z, q-z)",
+            "Assign — frame",
+            "Nonlinear soil springs along a pile, from its diameter and the soil layers.",
+            """
+Select the pile's members (a vertical chain of frame members) and give the pile
+diameter, the elevation of the ground and the soil layers (depths below the
+ground, with the effective unit weight; the undrained strength su for clay; the
+friction angle and the initial modulus of subgrade reaction k for sand). Every
+pile joint in the soil is tied to a new fixed ground joint at the same point by
+a zero-length element with:
+
+- **p-y** springs in each horizontal direction (`PySimple1`) — soft clay after
+  Matlock (1970): pu = min((3 + γ'z/su + 0.5 z/D)·su·D, 9·su·D),
+  y50 = 2.5·ε50·D (ε50 0.02/0.01/0.005 for su below 48/96 kPa/above); sand
+  after API RP 2A: pu from C1, C2, C3 of the friction angle, the curve
+  A·pu·tanh(k·z·y/(A·pu)) with A = max(0.9, 3 - 0.8 z/D);
+- a **t-z** spring along the axis (`TzSimple1`) — clay f = α·su with API's α
+  (0.5·ψ^-0.5 for ψ = su/sv' ≤ 1, else 0.5·ψ^-0.25), sand f = 0.8·sv'·tan(φ - 5°);
+  z50 = 0.0025·D;
+- at the tip, a **q-z** spring (`QzSimple1`) — clay q = 9·su, sand q = Nq·sv'
+  with API's Nq (8 at 20° to 50 at 40°); z50 = 0.0125·D.
+
+Each spring carries the soil of half of each member next to its joint, so mesh
+the pile finely (a joint every half diameter to one diameter near the head).
+Values are in the project's units. Pushed down to failure, the pile reaches
+the sum of its shaft and tip capacities, and sideways its lateral springs'
+(integration tests). The materials are ordinary entries of the Material
+Library: adjust any of them by hand.
+""",
+            "assign.line_springs",
+            "define.material_library",
+        ),
+        "assign.tendon": _t(
+            "Assign → Frame → Tendon (Post-Tensioning)",
+            "Assign — frame",
+            "A post-tensioning tendon in each selected member, as its equivalent loads.",
+            """
+The tendon is not a member of the model: it is the push it exerts on the
+concrete (load balancing), placed in a Plain load pattern.
+
+# Profile
+A parabola through three eccentricities measured along the member's **local
+y**: at end i, at midspan and at end j. A horizontal 2D beam's local y is up, so
+a tendon below the centroid has a negative eccentricity. For a continuous
+draped tendon, give each member its own piece of the curve (the eccentricities
+at a shared joint must match).
+
+# What the member carries
+- At each anchorage: the force P along the tendon at its eccentricity — an
+  axial compression P, a shear P·de/dx and a moment -P·e about the centroid.
+- Along the curve: the upward pressure 8·P·f/L² of a parabola of sag
+  f = (e_i + e_j)/2 - e_mid (positive when the tendon dips towards -y), and the
+  friction along the member.
+
+A simply supported beam with a straight tendon below its centroid gets a
+uniform moment P·e and the camber P·e·L²/(8EI); a parabolic one balances a
+uniform load of 8·P·f/L². Both are pinned by the integration tests.
+
+# Losses
+- **Friction and wobble**: P(x) = P0·exp(-(μα + k·d)) from the stressing end
+  (α the angle change, d the distance), the larger of the two values when
+  stressed from both ends.
+- **Long-term loss**: a fraction applied everywhere — creep, shrinkage,
+  relaxation, and the elastic shortening of the concrete (the tendon is not
+  modelled, so that loss is not computed).
+
+Combine the pattern like any other; in a staged construction case, put it in
+the stage where the tendon is stressed.
+""",
+            "assign.temperature_load",
+            "analyze.cases",
+        ),
         "assign.wall": _t(
             "Assign → Frame → RC Wall (MVLEM)",
             "Assign — frame",
@@ -4290,9 +4533,29 @@ TOPICS.update(
 A case is what to solve. Several cases coexist on one model — a gravity static
 case, a modal case and a pushover, for instance — each with its own settings.
 
-# The six types
+# The seven types
 - **Static** — equilibrium under the patterns' loads, in N steps. See
   **Static analysis**.
+- **Staged construction** — the structure grows group by group (Define →
+  Groups). Each row of the stage table builds groups, removes groups (shoring,
+  formwork) and applies load patterns, which then stay. An element in a group
+  some stage builds does not exist before that stage; every other element is
+  there from the start. New elements appear stress-free; a removed element's
+  forces go back into the structure. New joints are built **at their design
+  position** (a floor is built level, whatever the storeys below have
+  shortened: their displacement is the movement since they were built) or
+  **following the deformed structure** (the rigid continuation of the joint they
+  grow from). A pattern's self weight weighs only the elements its stage builds,
+  so give each stage its own weight pattern. The result has one step per stage:
+  the state at the end of it. A load on an element that does not exist yet, a
+  group removed before it is built, and members with end releases or rigid end
+  zones in a staged group are refused before the run. Verified on a column built
+  storey by storey (Verification Manual V-20); see `examples/staged_frame.osmodel`.
+  Mark the case **time-dependent** for creep and shrinkage: its time is then the
+  concrete age in days (starting at the case's start time), each stage applies
+  its loads at once and holds them for its **duration**, in geometrically spaced
+  time steps; the concrete must be a `TDConcreteMC10` material (Define →
+  Concrete Creep & Shrinkage).
 - **Modal** — eigenvalues and mode shapes; needs mass. See **Modal analysis**.
 - **Pushover** — displacement-controlled monotonic push to a target. See
   **Pushover**.
@@ -4424,6 +4687,27 @@ It never changes the model. **Run** performs the same check on its way in.
   a truss modelled with free rotations. Each is reported with the nodes and the
   DOF (Ux, Uy, Rz …) that are free to move, and how many independent motions there
   are.
+
+# What each motion is, and what to do
+Every independent motion is described on its own (up to six), and named:
+
+- **Slides as a rigid body** — the whole structure, or a group of joints, moves
+  along an axis without deforming: a support direction is missing, or the group
+  hangs on the rest through hinges or bars in line.
+- **Turns as a rigid body** — about an axis near a named joint: the supports hold
+  only a point or a line, or a group is joined by hinges on one line.
+- **Rotates freely** — a joint turns while nothing around it moves: only bars
+  reach it, every member end there is released, or a member spins about its own
+  axis between ball joints (restrain its torsion at one end).
+- **Joint moves alone** — the members that reach it line up with the motion.
+- **Sways** — joints move sideways at their level while the members turn: the
+  frame has no lateral stiffness in that direction (add bracing, fix the bases or
+  make the joints rigid).
+
+Pick a mechanism row and press **Show the motion**: the window closes (before a
+run, the run is not started) and the *Mechanism* panel animates each motion on
+the model, with the joints and elements involved selected and the advice in the
+status bar. **Back to model** ends it.
 
 # How stability is decided
 Each element is replaced by its independent deformation modes with unit stiffness
@@ -5682,6 +5966,9 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_import_tcl": "file.import_tcl",
     "_act_steel_check": "design.steel_check",
     "_act_steel_workflow": "design.steel_workflow",
+    "_act_concrete_check": "design.concrete_check",
+    "_act_base_plate": "design.base_plate",
+    "_act_bolted": "design.bolted_connection",
     "_act_connections": "design.connections",
     "_act_gussets": "design.gussets",
     "_act_column_splices": "design.column_splices",
@@ -5746,6 +6033,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_mass_source": "define.mass_source",
     "_act_seismic_loads": "define.seismic_loads",
     "_act_create_shell": "define.create_shell",
+    "_act_shell_formulation": "assign.shell_formulation",
     "_act_frame_wizard": "define.portal_frame",
     "_act_truss_wizard": "define.truss",
     "_act_material_library": "define.material_library",
@@ -5800,6 +6088,9 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_assign_temperature_load": "assign.temperature_load",
     "_act_assign_hinge": "assign.hinge",
     "_act_assign_wall": "assign.wall",
+    "_act_assign_tendon": "assign.tendon",
+    "_act_assign_pile": "assign.pile_springs",
+    "_act_mc2010": "define.mc2010",
     # ── Analyze ─────────────────────────────────────────────────────
     "_act_case_manager": "analyze.cases",
     "_act_check_model": "analyze.check_model",
