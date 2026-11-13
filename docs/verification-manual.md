@@ -14,7 +14,7 @@ Units are SI (m, N, kg, s) for the V cases and kip-inch for the D (design)
 cases, as in the AISC examples. Errors below 1e-6 are floating-point noise
 and are printed as `< 1e-6`.
 
-**36 of 36 cases pass.**
+**37 of 37 cases pass.**
 
 | Case | Title | Group | Max. error | Verdict |
 |---|---|---|---|---|
@@ -39,6 +39,7 @@ and are printed as `< 1e-6`.
 | [V-19](#v-19) | Scordelis-Lo roof | Shells | 3.6e-02 | ✅ pass |
 | [V-20](#v-20) | Column built storey by storey | Staged construction | 2.3e-05 | ✅ pass |
 | [V-21](#v-21) | Creep and shrinkage of a concrete column | Staged construction | 1.5e-03 | ✅ pass |
+| [V-22](#v-22) | Large rotation: cantilever bent into a quarter circle | Nonlinear geometry | 4.5e-04 | ✅ pass |
 | [D-01](#d-01) | AISC: column available strength | Design, AISC 360-16 | 1.3e-03 | ✅ pass |
 | [D-02](#d-02) | AISC: beam flexural strength and LTB | Design, AISC 360-16 | 3.4e-03 | ✅ pass |
 | [D-03](#d-03) | AISC: web shear strength | Design, AISC 360-16 | 8.8e-04 | ✅ pass |
@@ -336,6 +337,20 @@ and are printed as `< 1e-6`.
 |---|---|---|---|---|---|---|
 | Strain at 10 000 days, creep only | - | 0.000732699 | 0.000733541 | 1.1e-03 | 2e-02 | ✅ |
 | Strain at 10 000 days, creep and shrinkage | - | 0.00142234 | 0.00142449 | 1.5e-03 | 2e-02 | ✅ |
+
+<a id="v-22"></a>
+
+## V-22 — Large rotation: cantilever bent into a quarter circle
+
+**Model.** 2D cantilever, L = 1 m in 20 corotational elastic members, a tip moment M = π EI / (2 L) (θ = 90°) in 20 Newton steps.
+
+**Reference.** Elastica under a tip moment (MacNeal & Harder 1985, NAFEMS large-rotation tests): the bar bends into an arc of curvature M/EI; with θ = M L / EI the tip is at (L sin θ / θ, L (1 - cos θ) / θ).
+
+| Quantity | Unit | OpenSees Studio | Reference | Rel. error | Tolerance | |
+|---|---|---|---|---|---|---|
+| Tip shortening L - L sin(θ)/θ | m | 0.363217 | 0.36338 | 4.5e-04 | 2e-03 | ✅ |
+| Tip rise L (1 - cos θ)/θ | m | 0.636783 | 0.63662 | 2.6e-04 | 2e-03 | ✅ |
+| Tip rotation θ = M L / EI | rad | 1.5708 | 1.5708 | < 1e-06 | 1e-06 | ✅ |
 
 <a id="d-01"></a>
 

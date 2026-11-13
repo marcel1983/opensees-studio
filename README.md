@@ -949,7 +949,9 @@ with closed-form and published solutions: beams (Euler-Bernoulli and Timoshenko,
 2D and 3D), trusses, support settlement, P-Δ, modal frequencies, a step-load time
 history, a response spectrum, a simply supported plate of shells and the plastic
 moment of a fibre section, the same plate with `ShellDKGQ` and `ShellDKGT`
-shells and the Scordelis-Lo roof, and the AISC 360-16 design examples E.1A, F.1, G.1A
+shells and the Scordelis-Lo roof, a column built storey by storey, creep and
+shrinkage of a column over 10 000 days, a cantilever bent into a quarter circle
+by a tip moment (large rotations), an ACI 318-19 beam and column, and the AISC 360-16 design examples E.1A, F.1, G.1A
 and H.1A plus an end-to-end beam check, each with its relative error and
 tolerance. The file is
 generated from real runs by `tools/verification_manual.py` (`--write` regenerates

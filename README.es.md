@@ -166,7 +166,10 @@ aproximaciones y lo que no soporta están en
 El [Manual de Verificación](docs/verification-manual.md) compara OpenSees Studio
 con soluciones cerradas y publicadas —vigas Euler-Bernoulli y Timoshenko, 2D y
 3D, reticulados, asentamientos, P-Δ, frecuencias, tiempo-historia, espectro, una
-placa de cáscaras, el momento plástico de una sección de fibras y los ejemplos de
+placa de cáscaras (también con `ShellDKGQ`/`ShellDKGT`), la cubierta de
+Scordelis-Lo, una columna construida piso a piso, la fluencia y retracción de una
+columna a 10 000 días, un voladizo curvado en un cuarto de círculo por un momento
+en la punta (grandes rotaciones), una viga y una columna de ACI 318-19, el momento plástico de una sección de fibras y los ejemplos de
 diseño de AISC— con su error relativo y su tolerancia. Se genera a partir de
 corridas reales (`tools/verification_manual.py`), y la integración continua falla
 si un caso se sale de su tolerancia o si el archivo quedó desactualizado.

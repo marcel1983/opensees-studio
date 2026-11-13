@@ -11,6 +11,10 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **Verification Manual: large rotations.** V-22 bends a cantilever of
+  corotational members into a quarter circle with a tip moment and compares the
+  tip with the elastica (within 0.05 %). With V-18 to V-21 and D-15 the manual
+  now has 37 cases.
 - **Interface in Spanish.** Options → Language switches menus, actions,
   dialog titles, labels, buttons and tabs between English and Spanish at once
   and remembers the choice; Qt's own dialogs follow. The catalog is

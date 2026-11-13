@@ -55,4 +55,4 @@ Cada punto es un PR con su ayuda, README/README.es, CHANGELOG y los gates de
 
 | # | Entrega | Estado |
 |---|---|---|
-| 9 | Verificación externa (NAFEMS, ANSYS VM, Code_Aster) en el Verification Manual: por entrega y una tanda dedicada al cerrar la Fase 1 (~25 casos) | Pendiente |
+| 9 | Verificación externa en el Verification Manual: placa de Timoshenko con DKG (V-18), Scordelis-Lo (V-19), construcción por etapas (V-20), fluencia MC2010 (V-21), elástica de grandes rotaciones (V-22), viga y columna ACI (D-15); 37 casos en total | Hecho |

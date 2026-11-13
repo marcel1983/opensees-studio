@@ -178,6 +178,49 @@ def _cantilever_tip() -> list[Check]:
     ]
 
 
+def _elastica() -> list[Check]:
+    from opensees_studio.core import NodalLoad, PlainLoadPattern
+
+    length, inertia, area, pieces, steps = 1.0, 8e-5, 0.01, 20, 20
+    moment = math.pi * E * inertia / (2.0 * length)  # bends the bar into a quarter circle
+    project = _frame_2d(
+        [(length * k / pieces, 0.0) for k in range(pieces + 1)],
+        restraints={1: (True, True, True)},
+        area=area,
+        inertia=inertia,
+        geom_transf="Corotational",
+    )
+    load = NodalLoad(node_id=pieces + 1, forces=(0.0, 0.0, 0.0, 0.0, -moment, 0.0))
+    r = _static(
+        project,
+        PlainLoadPattern(id=1, name="M", time_series_id=1, nodal_loads=[load]),
+        n_steps=steps,
+        load_factor_increment=1.0 / steps,
+        algorithm="Newton",
+        tolerance=1e-10,
+        max_iter=50,
+    )
+    tip = r.node_disp[pieces + 1][-1]
+    theta = moment * length / (E * inertia)
+    return [
+        Check(
+            "Tip shortening L - L sin(θ)/θ",
+            "m",
+            -tip[0],
+            length - length * math.sin(theta) / theta,
+            2e-3,
+        ),
+        Check(
+            "Tip rise L (1 - cos θ)/θ",
+            "m",
+            abs(tip[1]),
+            length * (1 - math.cos(theta)) / theta,
+            2e-3,
+        ),
+        Check("Tip rotation θ = M L / EI", "rad", abs(tip[2]), theta, 1e-6),
+    ]
+
+
 def _cantilever_udl() -> list[Check]:
     from opensees_studio.core import PlainLoadPattern, UniformElementLoad
 
@@ -1806,6 +1849,17 @@ CASES: list[Case] = [
         "case, 400 geometric time steps (`TDConcreteMC10`). The 2 % tolerance covers the "
         "explicit time integration of the material.",
         _creep_column,
+    ),
+    Case(
+        "V-22",
+        "Large rotation: cantilever bent into a quarter circle",
+        "Nonlinear geometry",
+        "Elastica under a tip moment (MacNeal & Harder 1985, NAFEMS large-rotation tests): "
+        "the bar bends into an arc of curvature M/EI; with θ = M L / EI the tip is at "
+        "(L sin θ / θ, L (1 - cos θ) / θ).",
+        "2D cantilever, L = 1 m in 20 corotational elastic members, a tip moment "
+        "M = π EI / (2 L) (θ = 90°) in 20 Newton steps.",
+        _elastica,
     ),
     Case(
         "D-01",
