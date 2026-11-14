@@ -372,6 +372,8 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   ×0.8 (C2.3, τb = 1 with 0.001 α Yi), and the notional loads `0.002 α Yi` of
   that combination's own factored gravity; it then reports Δ2/Δ1 per storey
   (C2.2b(d)), and the steel check reads these cases with K = 1. Design →
+  Built-Up Shapes defines welded I-shapes and plate girders from their plates
+  (kc flange limits, F4/F5, web shear with stiffeners). Design →
   Member Classification shows the physical members (collinear elements of one
   section), their role and the unbraced lengths Lx, Ly and Lb from their bracing
   points; the check uses those lengths, so a meshed member keeps its real ones.

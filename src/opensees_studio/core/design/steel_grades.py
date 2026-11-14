@@ -71,8 +71,10 @@ DEFAULT_GRADES: dict[str, str] = {
     "HSS": "A500-C",
     "HSS_R": "A500-C",
     "PIPE": "A53-B",
+    "BU": "A572-50",
 }
-"""AISC Manual Table 2-4 preferred grade of each family the check covers."""
+"""AISC Manual Table 2-4 preferred grade of each family the check covers (BU: plates
+of a built-up shape, A572 Gr. 50 as for welded girders and columns)."""
 
 FAMILY_LABELS: dict[str, str] = {
     "W": "W shapes",
@@ -88,6 +90,7 @@ FAMILY_LABELS: dict[str, str] = {
     "HSS": "Rectangular HSS",
     "HSS_R": "Round HSS",
     "PIPE": "Pipe",
+    "BU": "Built-up I (welded plates)",
 }
 
 

@@ -11,6 +11,16 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **Built-up I-shapes and plate girders.** Design → Built-Up Shapes defines
+  doubly symmetric I-shapes welded from plates (d, bf, tf, tw, and the spacing
+  of transverse web stiffeners), shows their properties and AISC classes, and
+  adds their analysis sections. A section or member override naming one is
+  checked with it, under the built-up rules of AISC 360: flange limits with kc
+  (Table B4.1 cases 2 and 11, so E7 and F3 follow), F4 or F5 (Rpg) for
+  noncompact or slender webs, and web shear without the rolled-shape exception
+  and with the stiffeners' kv (G2.1). The plates take the new *Built-up I* grade
+  family of the design basis (A572 Gr. 50 by default). `.osmodel`:
+  `design.built_up`.
 - **Connections by joint.** Design → Connections by Joint lists every member end
   of the frame and classifies it by what it frames into: beam to column flange
   or web (from the column's depth direction), beam to girder, brace, column

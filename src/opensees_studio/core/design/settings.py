@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt
 
 from opensees_studio.core._base import omit_when_default
 from opensees_studio.core.design.base_plate import BasePlateDesign
+from opensees_studio.core.design.built_up_model import BuiltUpShape
 from opensees_studio.core.design.shear_tab_model import ShearTabDesign
 
 #: ASCE 7-22 Table 12.12-1 and other common allowable storey drift ratios.
@@ -194,6 +195,7 @@ class DesignSettings(BaseModel):
         "steel_grades",
         "base_plates",
         "shear_tabs",
+        "built_up",
     )
 
     code: Literal["AISC 360-16"] = "AISC 360-16"
@@ -269,6 +271,18 @@ class DesignSettings(BaseModel):
         default_factory=list,
         description="Shear tab of each simple beam end (Design → Connections by Joint).",
     )
+    built_up: list[BuiltUpShape] = Field(
+        default_factory=list,
+        description=(
+            "Welded I-shapes defined from their plates (Design → Built-Up Shapes); a "
+            "section or member override naming one is checked with its properties."
+        ),
+    )
+
+    def built_up_by_name(self) -> dict[str, BuiltUpShape]:
+        """Built-up shapes by upper-case name (names are matched case-blind)."""
+        return {shape.name.strip().upper(): shape for shape in self.built_up}
+
     drift_limit: PositiveFloat = Field(
         default=0.020, description="Allowable storey drift ratio (drift / storey height)."
     )

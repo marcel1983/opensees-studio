@@ -24,7 +24,7 @@ from typing import Any
 
 import numpy as np
 
-from opensees_studio.core.aisc import SOURCE_UNITS, get_shape
+from opensees_studio.core.aisc import SOURCE_UNITS
 from opensees_studio.core.design.aisc360 import IShape
 from opensees_studio.core.design.joints import SHEAR_TAB, Connection, joint_connections
 from opensees_studio.core.design.settings import DesignSettings
@@ -38,6 +38,7 @@ from opensees_studio.services.steel_design import (
     expand,
     load_set_label,
     member_steel,
+    shape_family,
     shape_in_units,
     static_field,
 )
@@ -142,7 +143,7 @@ def connection_report(
         section = sections.get(getattr(element, "section_id", -1))
         name = overrides.shape or (getattr(section, "name", "") or "")
         try:
-            beam = shape_in_units(name, units)
+            beam = shape_in_units(name, units, settings.built_up_by_name())
         except (KeyError, ValueError):
             result.notes.append("No AISC shape for the beam: the shear tab is not checked.")
             continue
@@ -175,7 +176,7 @@ def connection_report(
             if abs(v) > worst_v:
                 worst_v, worst_label = abs(v), label
         result.vu, result.load_set = worst_v, worst_label
-        _fy, web_fu, _grade = member_steel(settings, get_shape(beam.name).family, overrides, units)
+        _fy, web_fu, _grade = member_steel(settings, shape_family(beam), overrides, units)
         plate_fy, plate_fu = grade_stresses(tab.plate_grade, "W", units)
         fnv = BOLT_GRADES[tab.bolt_grade][1] * stress_scale(SOURCE_UNITS, units)
         check = check_shear_tab(
