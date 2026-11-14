@@ -23,9 +23,9 @@ refused instead of silently downgraded).
   `design.built_up`.
 - **Distributed loads as line diagrams.** Uniform and trapezoidal/partial member
   loads are now drawn as a load diagram: short line shafts with V-shaped heads
-  on the member, joined by a top line through their tips. The old row of 3D
-  arrow glyphs is gone; the diagram follows the Load arrows size percentage and
-  rebuilds on zoom.
+  on the member, joined by a top line through their tails, offset against the
+  load. The old row of 3D arrow glyphs is gone; the diagram follows the Load
+  arrows size percentage and rebuilds on zoom.
 - **Object snaps on members.** The left-hand icon bar toggles midpoint,
   perpendicular and nearest-point snaps for the draw tools. The hover marker is
   colour-coded (amber midpoint, blue perpendicular, green nearest point); after

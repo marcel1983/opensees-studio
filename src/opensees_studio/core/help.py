@@ -5427,7 +5427,8 @@ Toggles the annotations and the heavy overlays:
   on screen at every zoom level. Release dots are screen-space points like the
   nodes. The values are per viewport and travel with the project. Distributed
   member loads (uniform and trapezoidal) use this size for their line diagram:
-  a top line through the arrow tips, with V-shaped heads on the member.
+  a top line through the arrow tails, offset against the load, with V-shaped
+  heads on the member.
 - **Section extrusions** (View → Show Extruded Sections) — each member's real
   cross section (I, channel, tee, tube, pipe, angle, fibre patches) swept along
   it, so the physical footprint and the local axes are visible.

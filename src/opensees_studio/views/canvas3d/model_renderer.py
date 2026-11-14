@@ -79,14 +79,16 @@ def distributed_load_glyphs(
     The members' display already has enough solid geometry; a distributed load
     reads better as a 2D-style diagram: one short line from the member to the
     load line at every station, a V-shaped head on each, and a polyline joining
-    the tips (the "top line"). Everything is returned as one point array plus
+    the tails (the "top line"). Everything is returned as one point array plus
     polylines of indices, so the caller can draw the whole family in one actor.
 
-    ``bases`` lie on the member, ``directions`` are unit load vectors pointing
-    away from it and ``lengths`` scale each arrow. A zero length keeps the tip
-    on the member (a triangular load that starts at zero) and contributes to
-    the top line without drawing a shaft or head. ``axis`` is the member's
-    direction, used to put the arrowheads in the member/load plane.
+    ``bases`` lie on the member, ``directions`` are unit load vectors (the way
+    the load acts) and ``lengths`` scale each arrow. The load line is offset
+    **against** the direction, so the arrows point from the line onto the
+    member, as a load diagram should. A zero length keeps the tail on the
+    member (a triangular load that starts at zero) and contributes to the top
+    line without drawing a shaft or head. ``axis`` is the member's direction,
+    used to put the arrowheads in the member/load plane.
     """
     base_array = np.asarray(bases, dtype=float)
     direction_array = np.asarray(directions, dtype=float)
@@ -103,7 +105,7 @@ def distributed_load_glyphs(
     if count == 0:
         return np.empty((0, 3), dtype=float), []
 
-    tips = base_array + direction_array * length_array[:, None]
+    tails = base_array - direction_array * length_array[:, None]
     dots = direction_array @ axis
     sides = axis[None, :] - direction_array * dots[:, None]
     norms = np.linalg.norm(sides, axis=1)
@@ -124,13 +126,13 @@ def distributed_load_glyphs(
 
     head_lengths = 0.45 * length_array
     head_widths = 0.6 * head_lengths
-    heads = base_array + direction_array * head_lengths[:, None]
+    heads = base_array - direction_array * head_lengths[:, None]
     head_minus = heads - sides * head_widths[:, None]
     head_plus = heads + sides * head_widths[:, None]
 
     points = np.empty((count * 4, 3), dtype=float)
     points[0::4] = base_array
-    points[1::4] = tips
+    points[1::4] = tails
     points[2::4] = head_minus
     points[3::4] = head_plus
 
@@ -182,7 +184,7 @@ def uniform_load_glyphs(
     base_points = bases[:, None, :] + t[None, :, None] * axes[:, None, :]
     directions_b = np.broadcast_to(directions[:, None, :], base_points.shape)
     lengths_b = np.broadcast_to(lengths[:, None], (count, stations))
-    tips = base_points + directions_b * lengths_b[..., None]
+    tails = base_points - directions_b * lengths_b[..., None]
 
     dots = np.einsum("nj,nj->n", directions, axes)
     sides = axes - directions * dots[:, None]
@@ -204,10 +206,10 @@ def uniform_load_glyphs(
 
     head_lengths = 0.45 * lengths_b
     head_widths = 0.6 * head_lengths
-    heads = base_points + directions_b * head_lengths[..., None]
+    heads = base_points - directions_b * head_lengths[..., None]
     head_minus = heads - sides[:, None, :] * head_widths[..., None]
     head_plus = heads + sides[:, None, :] * head_widths[..., None]
-    points = np.stack((base_points, tips, head_minus, head_plus), axis=2).reshape(-1, 3)
+    points = np.stack((base_points, tails, head_minus, head_plus), axis=2).reshape(-1, 3)
 
     polylines: list[list[int]] = []
     for index in range(count):
