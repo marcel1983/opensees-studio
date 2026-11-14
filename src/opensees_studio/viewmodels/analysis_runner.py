@@ -15,6 +15,7 @@ available there: ``ops.analyze`` blocks the worker thread.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -68,6 +69,40 @@ stay in the raw stderr capture, which the failure report shows only when a run f
 def is_solver_banner(line: str) -> bool:
     """True for an OpenSees solver-speed banner line."""
     return any(marker in line for marker in SOLVER_BANNERS)
+
+
+OVERRIDE_STEM_MAX = 200
+"""Longest case-id stem kept in the override file name, in characters.
+
+``case_`` + stem + ``.override.json`` must stay below the 255-byte limit of
+one file-name component. Joining the ids of a large run (125 generated
+combinations, for example) blew past it, and writing the file failed with
+``ENAMETOOLONG`` before the solver could start.
+"""
+
+
+def _override_path(out_dir: Path, cases: list[Any]) -> Path:
+    """Return the run-time override file path for ``cases``.
+
+    Short runs keep the readable ``case_<ids>.override.json`` name. Long ones
+    replace the id list with a case count and a hash, so the name cannot
+    exceed the filesystem limit.
+    """
+    stem = "_".join(str(c.id) for c in cases)
+    if len(stem) > OVERRIDE_STEM_MAX:
+        digest = hashlib.sha1(stem.encode("utf-8")).hexdigest()[:12]
+        stem = f"{len(cases)}cases_{digest}"
+    return out_dir / f"case_{stem}.override.json"
+
+
+def _write_case_overrides(out_dir: Path, cases: list[Any]) -> Path:
+    """Write the run-time overrides beside the snapshot and return their path."""
+    override = _override_path(out_dir, cases)
+    override.write_text(
+        json.dumps([c.model_dump(mode="json", by_alias=True) for c in cases]),
+        encoding="utf-8",
+    )
+    return override
 
 
 class AnalysisRunner(QObject):
@@ -193,12 +228,7 @@ class AnalysisRunner(QObject):
         out_dir.mkdir(parents=True, exist_ok=True)
         # The dialog may pass a modified copy of the case (run-time damping
         # overrides): it travels beside the snapshot, never inside it.
-        stem = "_".join(str(c.id) for c in cases)
-        override = out_dir / f"case_{stem}.override.json"
-        override.write_text(
-            json.dumps([c.model_dump(mode="json", by_alias=True) for c in cases]),
-            encoding="utf-8",
-        )
+        override = _write_case_overrides(out_dir, cases)
 
         self._out_dir = out_dir
         self._stdout_buffer = ""
