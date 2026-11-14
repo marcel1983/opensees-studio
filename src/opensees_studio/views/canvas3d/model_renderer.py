@@ -79,33 +79,35 @@ def distributed_load_glyphs(
     The members' display already has enough solid geometry; a distributed load
     reads better as a 2D-style diagram: one short line from the member to the
     load line at every station, a V-shaped head on each, and a polyline joining
-    the tips (the "top line"). Everything is returned as one point array plus
+    the tails (the "top line"). Everything is returned as one point array plus
     polylines of indices, so the caller can draw the whole family in one actor.
 
-    ``bases`` lie on the member, ``directions`` are unit load vectors pointing
-    away from it and ``lengths`` scale each arrow. A zero length keeps the tip
-    on the member (a triangular load that starts at zero) and contributes to
-    the top line without drawing a shaft or head. ``axis`` is the member's
-    direction, used to put the arrowheads in the member/load plane.
+    ``bases`` lie on the member, ``directions`` are unit load vectors (the way
+    the load acts) and ``lengths`` scale each arrow. The load line is offset
+    **against** the direction, so the arrows point from the line onto the
+    member, as a load diagram should. A zero length keeps the tail on the
+    member (a triangular load that starts at zero) and contributes to the top
+    line without drawing a shaft or head. ``axis`` is the member's direction,
+    used to put the arrowheads in the member/load plane.
     """
     points: list[np.ndarray] = []
     polylines: list[list[int]] = []
-    tips: list[int] = []
+    tails: list[int] = []
 
     for base, direction, length in zip(bases, directions, lengths, strict=True):
         base = np.asarray(base, dtype=float)
         direction = np.asarray(direction, dtype=float)
         length = max(float(length), 0.0)
-        tip = base + direction * length
+        tail = base - direction * length
         base_index = len(points)
         points.append(base)
-        tip_index = len(points)
-        points.append(tip)
-        tips.append(tip_index)
+        tail_index = len(points)
+        points.append(tail)
+        tails.append(tail_index)
         if length <= 0.0:
             continue
 
-        polylines.append([base_index, tip_index])
+        polylines.append([base_index, tail_index])
 
         side = np.asarray(axis, dtype=float) - direction * float(np.dot(axis, direction))
         side_norm = float(np.linalg.norm(side))
@@ -121,13 +123,14 @@ def distributed_load_glyphs(
         head_length = 0.45 * length
         head_width = 0.6 * head_length
         for sign in (-1.0, 1.0):
-            head = base + direction * head_length + side * (sign * head_width)
+            # The head's back is behind the tip, opposite the load direction.
+            head = base - direction * head_length + side * (sign * head_width)
             head_index = len(points)
             points.append(head)
             polylines.append([base_index, head_index])
 
-    if len(tips) > 1:
-        polylines.append(tips)
+    if len(tails) > 1:
+        polylines.append(tails)
     return np.asarray(points, dtype=float), polylines
 
 

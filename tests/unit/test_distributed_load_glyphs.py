@@ -21,9 +21,10 @@ def test_uniform_load_has_a_shaft_and_v_head_per_station_and_one_top_line() -> N
     assert len(polylines) == 10
     top = polylines[-1]
     assert len(top) == 3
+    # A downward load draws its top line above the member (opposite the load).
     np.testing.assert_allclose(
         np.asarray(points)[top],
-        [[0.0, 0.0, -0.5], [1.0, 0.0, -0.5], [2.0, 0.0, -0.5]],
+        [[0.0, 0.0, 0.5], [1.0, 0.0, 0.5], [2.0, 0.0, 0.5]],
         atol=1e-12,
     )
 
@@ -40,7 +41,7 @@ def test_triangular_load_keeps_its_zero_end_on_the_top_line() -> None:
     top = np.asarray(points)[polylines[-1]]
     np.testing.assert_allclose(
         top,
-        [[0.0, 0.0, 0.0], [1.0, 0.0, -0.5], [2.0, 0.0, -1.0]],
+        [[0.0, 0.0, 0.0], [1.0, 0.0, 0.5], [2.0, 0.0, 1.0]],
         atol=1e-12,
     )
 
