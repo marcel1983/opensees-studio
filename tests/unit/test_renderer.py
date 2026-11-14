@@ -22,6 +22,7 @@ from opensees_studio.core import (  # noqa: E402
     make_grid_lines,
 )
 from opensees_studio.core.geometry.grid import GridSystem  # noqa: E402
+from opensees_studio.core.geometry.local_axes import frame_local_axes  # noqa: E402
 from opensees_studio.services.deformation import (  # noqa: E402
     DeformationSource,
     peak_static_displacement,
@@ -32,6 +33,25 @@ from opensees_studio.views.canvas3d.model_renderer import (  # noqa: E402
     RendererMode,
     _classify_support,
 )
+
+
+@pytest.mark.parametrize("angle", [0.0, 30.0])
+def test_the_element_local_frame_matches_frame_local_axes(angle: float) -> None:
+    """The fast path for an unrotated member must match the shared local axes."""
+    project = Project(
+        nodes=[
+            Node(id=1, coords=(0.0, 0.0, 0.0)),
+            Node(id=2, coords=(1.0, 2.0, 3.0)),
+        ],
+        sections=[ElasticSection(id=1, E=200e9, A=0.01, Iz=1e-4, Iy=1e-4, G=80e9, J=1e-6)],
+        elements=[ElasticBeamColumn(id=1, nodes=(1, 2), section_id=1, local_axis_angle=angle)],
+    )
+    frame = ModelRenderer._element_local_frame(project, 1)
+    expected = frame_local_axes(3, project.nodes[0].coords, project.nodes[1].coords, angle)
+
+    assert frame is not None and expected is not None
+    for actual, wanted in zip(frame[2], expected, strict=True):
+        np.testing.assert_allclose(actual, wanted, atol=1e-12)
 
 
 # ──────────────────────────── support classification ────────────────────────────

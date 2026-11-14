@@ -88,47 +88,137 @@ def distributed_load_glyphs(
     the top line without drawing a shaft or head. ``axis`` is the member's
     direction, used to put the arrowheads in the member/load plane.
     """
-    points: list[np.ndarray] = []
-    polylines: list[list[int]] = []
-    tips: list[int] = []
+    bases = np.asarray(bases, dtype=float)
+    directions = np.asarray(directions, dtype=float)
+    lengths = np.maximum(np.asarray(lengths, dtype=float), 0.0)
+    if bases.ndim != 2 or bases.shape[1] != 3:
+        raise ValueError("bases must be an N x 3 array")
+    if directions.shape != bases.shape or lengths.shape != (len(bases),):
+        raise ValueError("bases, directions and lengths must have one row per station")
+    axis = np.asarray(axis, dtype=float)
+    if axis.shape != (3,):
+        raise ValueError("axis must be a 3-vector")
 
-    for base, direction, length in zip(bases, directions, lengths, strict=True):
-        base = np.asarray(base, dtype=float)
-        direction = np.asarray(direction, dtype=float)
-        length = max(float(length), 0.0)
-        tip = base + direction * length
-        base_index = len(points)
-        points.append(base)
-        tip_index = len(points)
-        points.append(tip)
-        tips.append(tip_index)
+    count = len(bases)
+    if count == 0:
+        return np.empty((0, 3), dtype=float), []
+
+    tips = bases + directions * lengths[:, None]
+    dots = directions @ axis
+    sides = axis[None, :] - directions * dots[:, None]
+    norms = np.linalg.norm(sides, axis=1)
+    bad = norms <= 1e-12
+    if np.any(bad):
+        fallback = np.zeros_like(sides)
+        fallback[:, 2] = 1.0
+        along_z = np.abs(directions[:, 2]) > 0.9
+        fallback[along_z] = (1.0, 0.0, 0.0)
+        fallback_dots = np.einsum("ij,ij->i", fallback, directions)
+        fallback_sides = fallback - directions * fallback_dots[:, None]
+        fallback_norms = np.linalg.norm(fallback_sides, axis=1)
+        sides[bad] = fallback_sides[bad]
+        norms[bad] = fallback_norms[bad]
+    safe = norms > 1e-12
+    sides[safe] /= norms[safe, None]
+    sides[~safe] = 0.0
+
+    head_lengths = 0.45 * lengths
+    head_widths = 0.6 * head_lengths
+    heads = bases + directions * head_lengths[:, None]
+    head_minus = heads - sides * head_widths[:, None]
+    head_plus = heads + sides * head_widths[:, None]
+
+    points = np.empty((count * 4, 3), dtype=float)
+    points[0::4] = bases
+    points[1::4] = tips
+    points[2::4] = head_minus
+    points[3::4] = head_plus
+
+    polylines: list[list[int]] = []
+    for index, length in enumerate(lengths):
         if length <= 0.0:
             continue
+        base = index * 4
+        polylines.append([base, base + 1])
+        polylines.append([base, base + 2])
+        polylines.append([base, base + 3])
+    if count > 1:
+        polylines.append([index * 4 + 1 for index in range(count)])
+    return points, polylines
 
-        polylines.append([base_index, tip_index])
 
-        side = np.asarray(axis, dtype=float) - direction * float(np.dot(axis, direction))
-        side_norm = float(np.linalg.norm(side))
-        if side_norm <= 1e-12:
-            fallback = np.array([0.0, 0.0, 1.0])
-            if abs(float(direction[2])) > 0.9:
-                fallback = np.array([1.0, 0.0, 0.0])
-            side = fallback - direction * float(np.dot(fallback, direction))
-            side_norm = float(np.linalg.norm(side))
-        if side_norm <= 1e-12:
-            continue
-        side = side / side_norm
-        head_length = 0.45 * length
-        head_width = 0.6 * head_length
-        for sign in (-1.0, 1.0):
-            head = base + direction * head_length + side * (sign * head_width)
-            head_index = len(points)
-            points.append(head)
-            polylines.append([base_index, head_index])
+def uniform_load_glyphs(
+    bases: np.ndarray,
+    directions: np.ndarray,
+    lengths: np.ndarray,
+    axes: np.ndarray,
+    stations: int,
+) -> tuple[np.ndarray, list[list[int]]]:
+    """Line geometry for a batch of uniform member loads, one top line per member.
 
-    if len(tips) > 1:
-        polylines.append(tips)
-    return np.asarray(points, dtype=float), polylines
+    This is the batched form of :func:`distributed_load_glyphs` for the dense
+    case (one uniform load on every member of a grid): the per-call numpy
+    overhead of a few hundred small arrays is what pushed the loaded benchmark
+    over its render budget. ``bases``/``directions``/``axes`` are ``N x 3``,
+    ``lengths`` is ``N``; each member gets ``stations`` stations along its axis.
+    """
+    if stations < 2:
+        raise ValueError("A load diagram needs at least two stations.")
+    bases = np.asarray(bases, dtype=float)
+    directions = np.asarray(directions, dtype=float)
+    axes = np.asarray(axes, dtype=float)
+    lengths = np.maximum(np.asarray(lengths, dtype=float), 0.0)
+    if bases.ndim != 2 or bases.shape[1] != 3:
+        raise ValueError("bases must be an N x 3 array")
+    if directions.shape != bases.shape or axes.shape != bases.shape:
+        raise ValueError("directions and axes must be N x 3 arrays")
+    if lengths.shape != (len(bases),):
+        raise ValueError("lengths must have one entry per member")
+    if len(bases) == 0:
+        return np.empty((0, 3), dtype=float), []
+
+    count = len(bases)
+    t = np.linspace(0.0, 1.0, stations)
+    base_points = bases[:, None, :] + t[None, :, None] * axes[:, None, :]
+    directions_b = np.broadcast_to(directions[:, None, :], base_points.shape)
+    lengths_b = np.broadcast_to(lengths[:, None], (count, stations))
+    tips = base_points + directions_b * lengths_b[..., None]
+
+    dots = np.einsum("nj,nj->n", directions, axes)
+    sides = axes - directions * dots[:, None]
+    norms = np.linalg.norm(sides, axis=1)
+    bad = norms <= 1e-12
+    if np.any(bad):
+        fallback = np.zeros_like(sides)
+        fallback[:, 2] = 1.0
+        along_z = np.abs(directions[:, 2]) > 0.9
+        fallback[along_z] = (1.0, 0.0, 0.0)
+        fallback_dots = np.einsum("nj,nj->n", fallback, directions)
+        fallback_sides = fallback - directions * fallback_dots[:, None]
+        fallback_norms = np.linalg.norm(fallback_sides, axis=1)
+        sides[bad] = fallback_sides[bad]
+        norms[bad] = fallback_norms[bad]
+    safe = norms > 1e-12
+    sides[safe] /= norms[safe, None]
+    sides[~safe] = 0.0
+
+    head_lengths = 0.45 * lengths_b
+    head_widths = 0.6 * head_lengths
+    heads = base_points + directions_b * head_lengths[..., None]
+    head_minus = heads - sides[:, None, :] * head_widths[..., None]
+    head_plus = heads + sides[:, None, :] * head_widths[..., None]
+    points = np.stack((base_points, tips, head_minus, head_plus), axis=2).reshape(-1, 3)
+
+    polylines: list[list[int]] = []
+    for index in range(count):
+        offset = index * stations * 4
+        for station in range(stations):
+            base = offset + station * 4
+            polylines.append([base, base + 1])
+            polylines.append([base, base + 2])
+            polylines.append([base, base + 3])
+        polylines.append([offset + station * 4 + 1 for station in range(stations)])
+    return points, polylines
 
 
 #: Colours of the origin reference: the usual X red, Y green, Z blue.
@@ -1314,7 +1404,7 @@ class ModelRenderer:
         load_color = (0.2, 0.85, 0.2)
         elem_load_color = (1.0, 0.55, 0.2)  # orange
         point_load_color = (0.85, 0.2, 0.75)  # magenta
-        distributed_stations = 7
+        distributed_stations = 5
 
         nodes = {node.id: node for node in project.nodes}
         elements = {element.id: element for element in project.elements}
@@ -1322,6 +1412,10 @@ class ModelRenderer:
         point: list[tuple[np.ndarray, np.ndarray]] = []
         distributed_points: list[np.ndarray] = []
         distributed_polylines: list[list[int]] = []
+        uniform_bases: list[np.ndarray] = []
+        uniform_directions: list[np.ndarray] = []
+        uniform_lengths: list[float] = []
+        uniform_axes: list[np.ndarray] = []
 
         def add_distributed(
             bases: list[np.ndarray],
@@ -1371,16 +1465,10 @@ class ModelRenderer:
                     continue
                 direction = load_vec / magnitude
                 arrow_len = max(0.6 * scale, length / 12.0)
-                bases = [
-                    pi + (k / (distributed_stations - 1)) * axis
-                    for k in range(distributed_stations)
-                ]
-                add_distributed(
-                    bases,
-                    [direction] * distributed_stations,
-                    [arrow_len] * distributed_stations,
-                    axis,
-                )
+                uniform_bases.append(pi)
+                uniform_directions.append(direction)
+                uniform_lengths.append(arrow_len)
+                uniform_axes.append(axis)
 
             # Trapezoidal / partial: the top line follows the load intensity
             # over the loaded part, so a triangular load shows its zero end.
@@ -1435,6 +1523,20 @@ class ModelRenderer:
                 if magnitude < 1e-12:
                     continue
                 point.append((pi + pload.x * axis, load_vec / magnitude))
+
+        if uniform_bases:
+            batch_points, batch_polylines = uniform_load_glyphs(
+                np.asarray(uniform_bases),
+                np.asarray(uniform_directions),
+                np.asarray(uniform_lengths),
+                np.asarray(uniform_axes),
+                distributed_stations,
+            )
+            offset = len(distributed_points)
+            distributed_points.extend(batch_points)
+            distributed_polylines.extend(
+                [[index + offset for index in polyline] for polyline in batch_polylines]
+            )
 
         self._add_arrow_batch(
             [p for p, _ in nodal],
@@ -1600,12 +1702,28 @@ class ModelRenderer:
             if axes2 is None:
                 return None
             return pi, axis, axes2
+        angle = float(getattr(elem, "local_axis_angle", 0.0) or 0.0)
+        if angle == 0.0:
+            # The common case: compute the same axes frame_local_axes would,
+            # without rebuilding the axis and length it already has.
+            x = axis / length
+            vecxz = (
+                np.array([1.0, 0.0, 0.0])
+                if abs(float(x[2])) > abs(float(x[0]))
+                else np.array([0.0, 0.0, 1.0])
+            )
+            y = np.cross(vecxz, x)
+            y_norm = float(np.linalg.norm(y))
+            if y_norm < 1e-12:
+                return None
+            y /= y_norm
+            return pi, axis, (x, y, np.cross(x, y))
         # The same axes the runner emits (including a member's local-axis rotation).
         axes3 = frame_local_axes(
             3,
             node_i.coords,
             node_j.coords,
-            float(getattr(elem, "local_axis_angle", 0.0) or 0.0),
+            angle,
         )
         if axes3 is None:
             return None
