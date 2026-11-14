@@ -46,6 +46,22 @@ def test_triangular_load_keeps_its_zero_end_on_the_top_line() -> None:
     )
 
 
+def test_a_horizontal_load_on_a_vertical_column_offsets_against_x() -> None:
+    """A +X wind load on a Z column puts its top line on the -X side."""
+    points, polylines = distributed_load_glyphs(
+        [np.array([0.0, 0.0, 0.0]), np.array([0.0, 0.0, 1.0])],
+        [np.array([1.0, 0.0, 0.0])] * 2,
+        [0.5, 0.5],
+        np.array([0.0, 0.0, 1.0]),
+    )
+    top = np.asarray(points)[polylines[-1]]
+    np.testing.assert_allclose(
+        top,
+        [[-0.5, 0.0, 0.0], [-0.5, 0.0, 1.0]],
+        atol=1e-12,
+    )
+
+
 def test_arrowheads_stay_finite_when_the_load_runs_along_the_member() -> None:
     points, polylines = distributed_load_glyphs(
         [np.array([0.0, 0.0, 0.0])],
