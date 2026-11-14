@@ -88,33 +88,33 @@ def distributed_load_glyphs(
     the top line without drawing a shaft or head. ``axis`` is the member's
     direction, used to put the arrowheads in the member/load plane.
     """
-    bases = np.asarray(bases, dtype=float)
-    directions = np.asarray(directions, dtype=float)
-    lengths = np.maximum(np.asarray(lengths, dtype=float), 0.0)
-    if bases.ndim != 2 or bases.shape[1] != 3:
+    base_array = np.asarray(bases, dtype=float)
+    direction_array = np.asarray(directions, dtype=float)
+    length_array = np.maximum(np.asarray(lengths, dtype=float), 0.0)
+    if base_array.ndim != 2 or base_array.shape[1] != 3:
         raise ValueError("bases must be an N x 3 array")
-    if directions.shape != bases.shape or lengths.shape != (len(bases),):
+    if direction_array.shape != base_array.shape or length_array.shape != (len(base_array),):
         raise ValueError("bases, directions and lengths must have one row per station")
     axis = np.asarray(axis, dtype=float)
     if axis.shape != (3,):
         raise ValueError("axis must be a 3-vector")
 
-    count = len(bases)
+    count = len(base_array)
     if count == 0:
         return np.empty((0, 3), dtype=float), []
 
-    tips = bases + directions * lengths[:, None]
-    dots = directions @ axis
-    sides = axis[None, :] - directions * dots[:, None]
+    tips = base_array + direction_array * length_array[:, None]
+    dots = direction_array @ axis
+    sides = axis[None, :] - direction_array * dots[:, None]
     norms = np.linalg.norm(sides, axis=1)
     bad = norms <= 1e-12
     if np.any(bad):
         fallback = np.zeros_like(sides)
         fallback[:, 2] = 1.0
-        along_z = np.abs(directions[:, 2]) > 0.9
+        along_z = np.abs(direction_array[:, 2]) > 0.9
         fallback[along_z] = (1.0, 0.0, 0.0)
-        fallback_dots = np.einsum("ij,ij->i", fallback, directions)
-        fallback_sides = fallback - directions * fallback_dots[:, None]
+        fallback_dots = np.einsum("ij,ij->i", fallback, direction_array)
+        fallback_sides = fallback - direction_array * fallback_dots[:, None]
         fallback_norms = np.linalg.norm(fallback_sides, axis=1)
         sides[bad] = fallback_sides[bad]
         norms[bad] = fallback_norms[bad]
@@ -122,20 +122,20 @@ def distributed_load_glyphs(
     sides[safe] /= norms[safe, None]
     sides[~safe] = 0.0
 
-    head_lengths = 0.45 * lengths
+    head_lengths = 0.45 * length_array
     head_widths = 0.6 * head_lengths
-    heads = bases + directions * head_lengths[:, None]
+    heads = base_array + direction_array * head_lengths[:, None]
     head_minus = heads - sides * head_widths[:, None]
     head_plus = heads + sides * head_widths[:, None]
 
     points = np.empty((count * 4, 3), dtype=float)
-    points[0::4] = bases
+    points[0::4] = base_array
     points[1::4] = tips
     points[2::4] = head_minus
     points[3::4] = head_plus
 
     polylines: list[list[int]] = []
-    for index, length in enumerate(lengths):
+    for index, length in enumerate(length_array):
         if length <= 0.0:
             continue
         base = index * 4
