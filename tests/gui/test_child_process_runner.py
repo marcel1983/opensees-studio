@@ -14,11 +14,12 @@ pytest.importorskip("openseespy.opensees")
 from PySide6.QtCore import QProcess, QTimer
 from PySide6.QtWidgets import QApplication
 
+from opensees_studio.child_cli import IN_PROCESS_ENV
 from opensees_studio.services import load_project
 from opensees_studio.services.opensees_runner import SKIP_BEARING_ORIENT_ENV
 from opensees_studio.services.results import StaticResults, TransientResults
 from opensees_studio.viewmodels import AnalysisRunner
-from opensees_studio.viewmodels.analysis_runner import IN_PROCESS_ENV, NO_STDERR_PLACEHOLDER
+from opensees_studio.viewmodels.analysis_runner import NO_STDERR_PLACEHOLDER
 from opensees_studio.views.main_window import MainWindow
 
 EXAMPLES = Path(__file__).resolve().parents[2] / "examples"

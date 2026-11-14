@@ -7,6 +7,8 @@ a multi-select list filtered to the project's existing patterns.
 
 from __future__ import annotations
 
+from typing import Any
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -276,6 +278,11 @@ class StaticCaseForm(CaseFormBase):
         self._layout.addRow("Test:", self._test)
         self._layout.addRow("Tolerance:", self._tol)
         self._layout.addRow("Max iterations:", self._max_iter)
+        #: The case being edited: what the form does not show is kept from it.
+        self._source: StaticCase | None = None
+        self._kept_note = _note("")
+        self._kept_note.setVisible(False)
+        self._layout.addRow(self._kept_note)
 
     @staticmethod
     def _combo(items: list[str], default: str) -> QComboBox:
@@ -285,6 +292,21 @@ class StaticCaseForm(CaseFormBase):
         return cb
 
     def _populate_specific(self, c: StaticCase) -> None:
+        self._source = c
+        kept = []
+        if c.pattern_factors:
+            factors = ", ".join(f"{pid} x{c.factor_of(k):g}" for k, pid in enumerate(c.pattern_ids))
+            kept.append(f"pattern factors ({factors})")
+        if c.p_delta:
+            kept.append("P-Delta in every frame")
+        if c.stiffness_factor != 1.0:
+            kept.append(f"stiffness x{c.stiffness_factor:g}")
+        if c.notional_ratio:
+            kept.append(f"notional loads {c.notional_ratio:g} Yi along {c.notional_direction}")
+        if c.preload_case_ids:
+            kept.append(f"preload cases {', '.join(str(i) for i in c.preload_case_ids)}")
+        self._kept_note.setText(f"<i>Kept as they are: {'; '.join(kept)}.</i>" if kept else "")
+        self._kept_note.setVisible(bool(kept))
         _select_pattern_ids(self._patterns_picker, c.pattern_ids)
         self._n_steps.setValue(c.n_steps)
         self._lf.setValue(c.load_factor_increment)
@@ -297,11 +319,33 @@ class StaticCaseForm(CaseFormBase):
         self._tol.setValue(c.tolerance)
         self._max_iter.setValue(c.max_iter)
 
+    def _kept_fields(self, pattern_ids: list[int]) -> dict[str, Any]:
+        """What the form does not show, from the case it was opened on.
+
+        A pattern keeps its factor; one added in the form gets 1.0.
+        """
+        source = self._source
+        if source is None:
+            return {}
+        factors = {pid: source.factor_of(k) for k, pid in enumerate(source.pattern_ids)}
+        kept_factors = [factors.get(pid, 1.0) for pid in pattern_ids]
+        return {
+            "pattern_factors": [] if all(f == 1.0 for f in kept_factors) else kept_factors,
+            "preload_case_ids": source.preload_case_ids,
+            "p_delta": source.p_delta,
+            "stiffness_factor": source.stiffness_factor,
+            "notional_ratio": source.notional_ratio,
+            "notional_direction": source.notional_direction,
+            "direct_analysis": source.direct_analysis,
+        }
+
     def _read_specific(self, cid: int) -> StaticCase:
+        pattern_ids = _selected_pattern_ids(self._patterns_picker) or [1]
         return StaticCase(
             id=cid,
             name=self._name_edit.text(),
-            pattern_ids=_selected_pattern_ids(self._patterns_picker) or [1],
+            pattern_ids=pattern_ids,
+            **self._kept_fields(pattern_ids),
             n_steps=self._n_steps.value(),
             load_factor_increment=self._lf.value(),
             **self._solver.values(),  # type: ignore[arg-type]
@@ -395,6 +439,8 @@ class TransientCaseForm(CaseFormBase):
         self._max_iter = _int_spin(25)
         self._alpha_m = _spin(0.0, minimum=0.0, maximum=1e12, step=1e-4)
         self._beta_k = _spin(0.0, minimum=0.0, maximum=1e12, step=1e-6)
+        self._beta_k_init = _spin(0.0, minimum=0.0, maximum=1e12, step=1e-6)
+        self._beta_k_comm = _spin(0.0, minimum=0.0, maximum=1e12, step=1e-6)
         self._mode1_damping = _spin(0.0, minimum=0.0, maximum=1.0, step=0.01)
         self._modal_damping = _spin(0.0, minimum=0.0, maximum=0.99, step=0.01)
         self._modal_damping_modes = _int_spin(10)
@@ -432,12 +478,22 @@ class TransientCaseForm(CaseFormBase):
         self._layout.addRow("Tolerance:", self._tol)
         self._layout.addRow("Max iterations:", self._max_iter)
         self._layout.addRow("Rayleigh αM:", self._alpha_m)
-        self._layout.addRow("Rayleigh βK:", self._beta_k)
+        self._layout.addRow("Rayleigh βK (current tangent):", self._beta_k)
+        self._layout.addRow("Rayleigh βK (initial):", self._beta_k_init)
+        self._layout.addRow("Rayleigh βK (committed):", self._beta_k_comm)
+        self._layout.addRow(
+            _note(
+                "<i>For a nonlinear model prefer the committed or initial stiffness: "
+                "damping on the current tangent changes inside every iteration once "
+                "the model softens and can stop Newton from converging.</i>"
+            )
+        )
         self._layout.addRow("Mode-1 damping ratio:", self._mode1_damping)
         self._layout.addRow(
             _note(
                 "<i>If mode-1 damping is > 0, the runner computes βK = 2ζ/√λ1 "
-                "after preload and uses it instead of the manual βK value.</i>"
+                "after preload and applies it to the committed stiffness, instead "
+                "of the three βK values above.</i>"
             )
         )
         self._layout.addRow("Modal damping ratio ζ:", self._modal_damping)
@@ -489,6 +545,8 @@ class TransientCaseForm(CaseFormBase):
         self._max_iter.setValue(c.max_iter)
         self._alpha_m.setValue(c.rayleigh_alpha_m)
         self._beta_k.setValue(c.rayleigh_beta_k)
+        self._beta_k_init.setValue(c.rayleigh_beta_k_init)
+        self._beta_k_comm.setValue(c.rayleigh_beta_k_comm)
         self._mode1_damping.setValue(c.rayleigh_mode1_damping or 0.0)
         self._modal_damping.setValue(c.modal_damping or 0.0)
         self._modal_damping_modes.setValue(c.modal_damping_modes)
@@ -514,6 +572,8 @@ class TransientCaseForm(CaseFormBase):
             max_iter=self._max_iter.value(),
             rayleigh_alpha_m=self._alpha_m.value(),
             rayleigh_beta_k=self._beta_k.value(),
+            rayleigh_beta_k_init=self._beta_k_init.value(),
+            rayleigh_beta_k_comm=self._beta_k_comm.value(),
             rayleigh_mode1_damping=mode1_damping if mode1_damping > 0.0 else None,
             modal_damping=self._modal_damping.value() or None,
             modal_damping_modes=self._modal_damping_modes.value(),

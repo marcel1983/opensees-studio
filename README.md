@@ -352,12 +352,31 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   net tensile strain, biaxial bending (Bresler), shear with the given stirrups,
   the torsion threshold, minimum steel and εt ≥ 0.004 in beams, with the ratios
   painted on the model (Verification Manual D-15).
-- **Base plates and bolted connections** — Design → Base Plate & Anchors (AISC
-  Design Guide 1, ACI 318-19 Chapter 17 anchors) and Design → Bolted Connection
-  (prying action, eccentric bolt groups), calculators that can read the
-  demands from a support's reaction.
-- **Steel Design Workflow** — Design → Steel Design Workflow is a guided seven-stage path: AISC/ASCE design basis, model and loads, demands, AISC 360 member check, AISC 341 seismic checks, AISC 358/Chapter J connections, and detailing. Each stage shows OK, PENDING or REVIEW and opens the existing dialog that edits or runs it.
-- **Design** — AISC 360-16 member check (LRFD or ASD) for W, M, S, HP,
+- **Base plates and bolted connections** — Design → Base Plates checks the
+  plate and anchor rods of every column base over the design load sets (AISC
+  Design Guide 1, ACI 318-19 Chapter 17): pinned bases concentric, fixed ones
+  with their moment, cantilevers by column kind (I-shape, HSS, pipe), and
+  sizing of the plate thickness. Design → Connections by Joint classifies every
+  member end (beam to column flange or web, beam to girder, brace, splice, base),
+  suggests the connection, and checks the shear tabs of simple beam ends (AISC
+  Manual Part 10). Design → Base Plate & Anchors and Design →
+  Bolted Connection (prying action, eccentric bolt groups) remain as
+  calculators that can read the demands from a support's reaction.
+- **Design basis and the Direct Analysis Method** — Design → Design Basis
+  (AISC) sets the method (LRFD/ASD), the stability design (AISC 360 Chapter C
+  or Appendix 7), the lateral system of each direction with R, Ω0 and Cd of
+  ASCE 7 Table 12.2-1, and the steel grade of each shape family (A36, A572
+  Gr. 50, A992, A588, A500 Gr. B/C, A1085, A53, with the AISC Manual Table 2-4
+  defaults). Design → Direct Analysis Method turns every ASCE 7-16 LRFD
+  combination into one second-order case: P-Delta in every frame, stiffness
+  ×0.8 (C2.3, τb = 1 with 0.001 α Yi), and the notional loads `0.002 α Yi` of
+  that combination's own factored gravity; it then reports Δ2/Δ1 per storey
+  (C2.2b(d)), and the steel check reads these cases with K = 1. Design →
+  Member Classification shows the physical members (collinear elements of one
+  section), their role and the unbraced lengths Lx, Ly and Lb from their bracing
+  points; the check uses those lengths, so a meshed member keeps its real ones.
+- **Steel Design Workflow** - Design → Steel Design Workflow is a guided seven-stage path: AISC/ASCE design basis, model and loads, demands, AISC 360 member check, AISC 341 seismic checks, AISC 358/Chapter J connections, and detailing. Each stage shows OK, PENDING or REVIEW and opens the existing dialog that edits or runs it.
+- **Design** - AISC 360-16 member check (LRFD or ASD) for W, M, S, HP,
   channels, tees, equal-leg angles, rectangular and round HSS and pipes:
   tension (D2), compression (E3, E4, E7), flexure (F2–F10), shear (G2–G6) and
   H1 interaction over the combinations already run, at 25 stations, with `Cb`
@@ -563,6 +582,9 @@ license.
 Unpack the whole folder, not the executable on its own: the libraries live
 beside it. A bundle is about 1 GB unpacked, most of it the VTK renderer and the
 Qt runtime.
+
+The Linux bundle runs on Ubuntu 22.04 or later, Linux Mint 21 or later, Debian 12
+and LMDE 6 (glibc 2.35 or newer), on x86-64.
 
 The first launch of a downloaded bundle may be blocked by the operating
 system, since these binaries are not code-signed: on macOS, right-click →

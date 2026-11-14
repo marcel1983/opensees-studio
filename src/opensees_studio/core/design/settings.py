@@ -16,6 +16,8 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt
 
 from opensees_studio.core._base import omit_when_default
+from opensees_studio.core.design.base_plate import BasePlateDesign
+from opensees_studio.core.design.shear_tab_model import ShearTabDesign
 
 #: ASCE 7-22 Table 12.12-1 and other common allowable storey drift ratios.
 DRIFT_PRESETS: dict[str, tuple[float, float]] = {
@@ -28,6 +30,52 @@ DRIFT_PRESETS: dict[str, tuple[float, float]] = {
 """Label → (allowable drift ratio, default amplification). The amplification
 multiplies the computed (elastic) drift: Cd / Ie for ASCE 7, 1 for a spectrum
 that already gives design displacements."""
+
+SeismicSystem = Literal["none", "R3", "OMF", "IMF", "SMF", "OCBF", "SCBF", "EBF", "BRBF"]
+"""Lateral system of a direction: ``none`` (wind or gravity only), ``R3`` (a
+steel system not specifically detailed for seismic resistance, ASCE 7 Table
+12.2-1 H) or an AISC 341-22 system."""
+
+SEISMIC_SYSTEM_LABELS: dict[str, str] = {
+    "none": "None (no seismic design)",
+    "R3": "Steel system not detailed for seismic (R = 3)",
+    "OMF": "Ordinary moment frame (OMF)",
+    "IMF": "Intermediate moment frame (IMF)",
+    "SMF": "Special moment frame (SMF)",
+    "OCBF": "Ordinary concentrically braced frame (OCBF)",
+    "SCBF": "Special concentrically braced frame (SCBF)",
+    "EBF": "Eccentrically braced frame (EBF)",
+    "BRBF": "Buckling-restrained braced frame (BRBF)",
+}
+
+SYSTEM_COEFFICIENTS: dict[str, tuple[float, float, float]] = {
+    "R3": (3.0, 3.0, 3.0),
+    "OMF": (3.5, 3.0, 3.0),
+    "IMF": (4.5, 3.0, 4.0),
+    "SMF": (8.0, 3.0, 5.5),
+    "OCBF": (3.25, 2.0, 3.25),
+    "SCBF": (6.0, 2.0, 5.0),
+    "EBF": (8.0, 2.0, 4.0),
+    "BRBF": (8.0, 2.5, 5.0),
+}
+"""ASCE 7-22 Table 12.2-1, steel systems: ``(R, Omega0, Cd)``. EBF and BRBF are
+the versions with moment-resisting beam-column connections."""
+
+CHECKED_SEISMIC_SYSTEMS = frozenset({"none", "SMF", "IMF", "SCBF", "OCBF"})
+"""Systems whose AISC 341 provisions the member check applies; the others are
+checked against AISC 360 only, with a note."""
+
+StabilityMethod = Literal["unset", "direct", "effective_length", "first_order"]
+"""AISC 360 design for stability: Chapter C direct analysis method, Appendix 7
+effective length or first-order method. ``unset`` keeps the check as it was
+before the method was chosen (the K factors and the B1 switch as given)."""
+
+STABILITY_METHOD_LABELS: dict[str, str] = {
+    "unset": "Not chosen (K factors and B1 as entered)",
+    "direct": "Direct Analysis Method (Chapter C)",
+    "effective_length": "Effective Length Method (Appendix 7.2)",
+    "first_order": "First-Order Analysis Method (Appendix 7.3)",
+}
 
 
 class SteelMemberDesign(BaseModel):
@@ -44,24 +92,42 @@ class SteelMemberDesign(BaseModel):
         "cb",
         "net_area",
         "shear_lag",
+        "grade",
+        "role",
     )
 
     element_id: PositiveInt
+    role: Literal["column", "beam", "brace"] | None = Field(
+        default=None,
+        description="Member role for the design checks; None = from the member's direction.",
+    )
     shape: str | None = Field(
         default=None,
         description="AISC shape name to design with; None takes the section's name.",
     )
+    grade: str | None = Field(
+        default=None,
+        description="Steel grade key (core.design.steel_grades); None = the family's grade.",
+    )
     k_major: PositiveFloat = Field(default=1.0, description="Effective length factor, major axis.")
     k_minor: PositiveFloat = Field(default=1.0, description="Effective length factor, minor axis.")
     length_major: PositiveFloat | None = Field(
-        default=None, description="Unbraced length for major-axis buckling; None = member length."
+        default=None,
+        description=(
+            "Unbraced length for major-axis buckling; None = between the bracing points "
+            "of the physical member (core.design.members)."
+        ),
     )
     length_minor: PositiveFloat | None = Field(
-        default=None, description="Unbraced length for minor-axis buckling; None = member length."
+        default=None,
+        description="Unbraced length for minor-axis buckling; None = between the bracing points.",
     )
     length_ltb: PositiveFloat | None = Field(
         default=None,
-        description="Unbraced length of the compression flange (LTB); None = member length.",
+        description=(
+            "Unbraced length of the compression flange (LTB); None = between the lateral "
+            "bracing points."
+        ),
     )
     cb: PositiveFloat | None = Field(
         default=None, description="Moment gradient factor; None = from the moment diagram (F1-1)."
@@ -122,9 +188,29 @@ class DesignSettings(BaseModel):
         "drift_limit",
         "drift_amplification",
         "concrete",
+        "stability_method",
+        "seismic_system_y",
+        "sds",
+        "steel_grades",
+        "base_plates",
+        "shear_tabs",
     )
 
     code: Literal["AISC 360-16"] = "AISC 360-16"
+    stability_method: StabilityMethod = Field(
+        default="unset",
+        description=(
+            "AISC 360 design for stability. 'direct' checks every member with K = 1 "
+            "and B1 for P-delta, over the direct analysis cases when they exist."
+        ),
+    )
+    steel_grades: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "Shape family → steel grade key (core.design.steel_grades). A family "
+            "without one takes fy / fu below."
+        ),
+    )
     concrete: ConcreteDesign | None = Field(
         default=None, description="ACI 318-19 settings of the concrete frame check."
     )
@@ -147,11 +233,22 @@ class DesignSettings(BaseModel):
             "C2.1b) when the analysis captures P-Delta but not member curvature."
         ),
     )
-    seismic_system: Literal["none", "SMF", "IMF", "SCBF", "OCBF"] = Field(
+    seismic_system: SeismicSystem = Field(
         default="none",
         description=(
-            "AISC 341-22 system: adds the Table D1.1 width-to-thickness check "
-            "for its ductility class; none leaves the AISC 360 check alone."
+            "Lateral system along X (and Y while seismic_system_y is None). An AISC "
+            "341-22 system the check covers adds its Table D1.1 width-to-thickness "
+            "and capacity design checks; none leaves the AISC 360 check alone."
+        ),
+    )
+    seismic_system_y: SeismicSystem | None = Field(
+        default=None, description="Lateral system along Y; None = the same as X."
+    )
+    sds: PositiveFloat | None = Field(
+        default=None,
+        description=(
+            "Design short-period spectral acceleration SDS (g) of the overstrength "
+            "combinations; None = 1.0."
         ),
     )
     ry: PositiveFloat = Field(
@@ -164,6 +261,14 @@ class DesignSettings(BaseModel):
         "or every static case when there is none.",
     )
     members: list[SteelMemberDesign] = Field(default_factory=list)
+    base_plates: list[BasePlateDesign] = Field(
+        default_factory=list,
+        description="Base plate and anchor rods of each column base (Design → Base Plates).",
+    )
+    shear_tabs: list[ShearTabDesign] = Field(
+        default_factory=list,
+        description="Shear tab of each simple beam end (Design → Connections by Joint).",
+    )
     drift_limit: PositiveFloat = Field(
         default=0.020, description="Allowable storey drift ratio (drift / storey height)."
     )
@@ -171,6 +276,12 @@ class DesignSettings(BaseModel):
         default=1.0,
         description="Factor on the computed drift before the limit, e.g. Cd / Ie (ASCE 7).",
     )
+
+    def omega0(self) -> float | None:
+        """Overstrength factor of the seismic systems (the larger of X and Y), None without one."""
+        systems = {self.seismic_system, self.seismic_system_y or self.seismic_system}
+        values = [SYSTEM_COEFFICIENTS[s][1] for s in systems if s in SYSTEM_COEFFICIENTS]
+        return max(values) if values else None
 
     def member(self, element_id: int) -> SteelMemberDesign:
         """The overrides of ``element_id``, all defaults when it has none."""

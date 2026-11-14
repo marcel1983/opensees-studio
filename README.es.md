@@ -116,10 +116,31 @@ script o un notebook de Jupyter: la interfaz es una forma de usarlo, no la únic
   según la deformación neta de tracción, flexión biaxial (Bresler), corte con
   los estribos indicados, umbral de torsión, cuantía mínima y εt ≥ 0.004 en
   vigas, con los ratios pintados sobre el modelo.
-- **Placas base y uniones apernadas**: Design → Base Plate & Anchors (AISC Design
-  Guide 1, anclajes según ACI 318-19 capítulo 17) y Design → Bolted Connection
-  (efecto palanca y grupos de pernos excéntricos), calculadoras que pueden leer
-  las demandas de la reacción de un apoyo.
+- **Placas base y uniones apernadas**: Design → Base Plates verifica la placa y
+  los pernos de anclaje de cada base de columna sobre las cargas de diseño (AISC
+  Design Guide 1, ACI 318-19 capítulo 17): bases articuladas concéntricas,
+  empotradas con su momento, voladizos según el tipo de columna (perfil I, HSS,
+  tubo) y dimensionado del espesor de la placa. Design → Connections by Joint
+  clasifica cada extremo de miembro (viga a ala o alma de columna, viga a viga
+  maestra, diagonal, empalme, base), propone la conexión y verifica las placas de
+  corte de los extremos simples (Manual AISC parte 10). Design → Base Plate & Anchors y
+  Design → Bolted Connection (efecto palanca y grupos de pernos excéntricos)
+  siguen como calculadoras que pueden leer las demandas de la reacción de un
+  apoyo.
+- **Bases de diseño y Método de Análisis Directo**: Design → Design Basis
+  (AISC) fija el método (LRFD/ASD), el diseño por estabilidad (AISC 360
+  capítulo C o apéndice 7), el sistema lateral de cada dirección con R, Ω0 y Cd
+  de la tabla 12.2-1 de ASCE 7, y el acero de cada familia de perfiles (A36,
+  A572 Gr. 50, A992, A588, A500 Gr. B/C, A1085, A53, con los valores de la
+  tabla 2-4 del Manual AISC). Design → Direct Analysis Method convierte cada
+  combinación LRFD de ASCE 7-16 en un caso de segundo orden: P-Delta en todos
+  los marcos, rigidez ×0,8 (C2.3, τb = 1 con 0,001 α Yi) y las cargas ficticias
+  `0,002 α Yi` de la gravedad factorizada de esa combinación; luego informa
+  Δ2/Δ1 por piso (C2.2b(d)), y la verificación de acero lee esos casos con K = 1.
+  Design → Member Classification muestra los miembros físicos (elementos
+  colineales de una misma sección), su rol y las longitudes no arriostradas Lx,
+  Ly y Lb según sus puntos de arriostramiento; la verificación usa esas
+  longitudes, así un miembro mallado conserva las reales.
 - **Flujo de diseño de acero**: Design → Steel Design Workflow recorre siete etapas: base de diseño AISC/ASCE, modelo y cargas, demandas, chequeo de miembros AISC 360, chequeo sísmico AISC 341, conexiones AISC 358/Capítulo J y detallado. Cada etapa muestra OK, PENDIENTE o REVISAR y abre el diálogo existente que la edita o ejecuta.
 - **Diseño**: Design → Steel Frame Check verifica según **AISC 360-16** (LRFD o
   ASD) los miembros de perfiles W, M, S y HP —y canales, tees, ángulos de alas
@@ -212,6 +233,9 @@ modales y transitorios…), que entonces necesita OpenSeesPy.
 Descomprime la carpeta completa, no sólo el ejecutable. La primera vez el sistema
 puede bloquearlo porque los binarios no están firmados: en macOS, clic derecho →
 Abrir; en Windows, "Más información" → "Ejecutar de todas formas".
+
+El paquete de Linux funciona en Ubuntu 22.04 o posterior, Linux Mint 21 o
+posterior, Debian 12 y LMDE 6 (glibc 2.35 o más nueva), en x86-64.
 
 ## Instalación (desarrollo)
 

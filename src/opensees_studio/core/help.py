@@ -486,6 +486,15 @@ you asked the recorder for.
   periods (or as α and β directly). For one target ratio at one period, β =
   2ζ/ω. The two periods must bracket the range that matters; damping applied to
   a range it was not fitted to is a common source of surprises.
+- **Which stiffness β multiplies** — the case has three β fields, OpenSees'
+  `rayleigh αM βK βKinit βKcomm`: the *current* tangent, the *initial*
+  stiffness and the last *committed* stiffness. For a linear model they are the
+  same. For a non-linear one prefer committed (what the OpenSees examples use) or
+  initial: damping on the current tangent changes inside every Newton iteration
+  once the model softens, and a run can stop converging for that reason alone.
+- **Mode-1 damping ratio** — the runner computes β = 2ζ/ω₁ from the first mode
+  after the preload and applies it to the committed stiffness, replacing the
+  three β fields (α still applies).
 - **Modal damping** — one ratio ζ for each of the first N modes (OpenSees
   `modalDamping`), as SAP2000 and ETABS damp a modal history: every mode up to N
   gets exactly ζ, whatever its period, so no pair of periods has to be chosen.
@@ -1448,10 +1457,130 @@ when the second-order/first-order drift ratio is at most 1.7 in every storey;
 otherwise apply it in all combinations. This action does not run the analysis
 and does not by itself make a case AISC 360 Chapter C compliant. It gives the
 engineer the notional loads with the right code values and a traceable name.
+For the whole method in one step (combinations solved to second order, reduced
+stiffness and each combination's own notional loads) use Design → Direct
+Analysis Method instead.
 """,
+            "design.direct_analysis",
             "design.steel_check",
             "define.mass_source",
             "define.plain_pattern",
+        ),
+        "design.basis": _t(
+            "Design → Design Basis (AISC)",
+            "Design",
+            "Where a steel design starts: code, method, stability design, systems and steels.",
+            """
+Everything the later steel checks read, set once for the project.
+
+# Values
+- **Design method** — LRFD or ASD. The Direct Analysis Method cases are made for
+  LRFD (in ASD, C2.1(e) runs the analysis at 1.6 times the combinations).
+- **Stability design** — the *Direct Analysis Method* of AISC 360 Chapter C
+  (second-order analysis with reduced stiffness and notional loads; every
+  member is then checked with **K = 1** and **B1** for P-delta), the *Effective
+  Length Method* (Appendix 7.2, the K factors you enter) or the *First-Order
+  Method* (Appendix 7.3). *Not chosen* keeps the K factors and the B1 switch of
+  the Steel Frame Check as they are.
+- **Lateral system** along X and, in 3D, along Y: none, a steel system not
+  detailed for seismic (R = 3), OMF, IMF, SMF, OCBF, SCBF, EBF or BRBF. The
+  dialog shows R, Ω0 and Cd of ASCE 7 Table 12.2-1. Ω0 (the larger of the two
+  directions) makes the overstrength combinations of the direct analysis cases.
+  AISC 341 member checks are applied for SMF, IMF, SCBF and OCBF; the others are
+  checked against AISC 360 with a note.
+- **SDS** — the 0.2 SDS D term of the overstrength combinations.
+- **Ry** — expected to specified yield stress (AISC 341 Table A3.1).
+- **Steel by shape family** — the grade of W, M, S, HP, tees, channels, angles,
+  rectangular and round HSS and pipe: ASTM A36, A572 Gr. 50, A992, A588 Gr. 50,
+  A500 Gr. B and C, A1085 or A53 Gr. B, each with its Fy and Fu (A500 and A53
+  have their own values for round sections). *AISC Manual defaults* sets the
+  preferred grades of Manual Table 2-4. A family left on *Project Fy / Fu* uses
+  the values of the Steel Frame Check. A member can still take its own grade.
+""",
+            "design.direct_analysis",
+            "design.steel_check",
+        ),
+        "design.member_classification": _t(
+            "Design → Member Classification",
+            "Design",
+            "Physical members, their role and the unbraced lengths the bracing gives.",
+            """
+The steel check works on physical members, not on analysis elements. This page
+lists them, one row per member.
+
+# Members
+Frame elements of the **same section**, end to end and **collinear** (within 1
+degree), form one member. A member continues through a joint where other
+members frame in, as long as exactly one collinear element of its section goes
+on from there. Its ends are taken as braced.
+
+# Bracing points and unbraced lengths
+An interior joint holds the member along one of its local axes (y or z) when, at
+that joint:
+- another frame or truss element runs within 60 degrees of that axis,
+- a support restrains the translation along it,
+- a rigid diaphragm's plane contains it, or
+- a shell's plane contains it (a slab braces a beam laterally).
+
+**Lx** and **Ly** are the distances between the bracing points along the axes
+that major- and minor-axis buckling move the member along; **Lb** (lateral-
+torsional buckling) is the minor-axis one. The table shows, per member, the
+largest value over its elements.
+
+A **2D model** has no out-of-plane information: there every joint where another
+element frames in, or a support, braces the member out of its plane too (the
+usual assumption that the floors brace the frame).
+
+# Role
+Column, beam or brace from the direction (within 20 % of vertical a column,
+within 20 % of horizontal a beam, otherwise a brace). Set it by hand where the
+direction misleads (a sloped rafter is a beam, not a brace). The role decides
+which AISC 341 provisions a member gets.
+
+Lengths that do not fit (a beam braced by a deck the model does not have) are
+entered as overrides in Design → Steel Frame Check; they win over these.
+""",
+            "design.steel_check",
+            "design.basis",
+        ),
+        "design.direct_analysis": _t(
+            "Design → Direct Analysis Method",
+            "Design",
+            "AISC 360 Chapter C: every LRFD combination as one second-order analysis.",
+            """
+A combination of separate results is a sum, and a second-order analysis cannot be
+summed. So each **ASCE 7-16 LRFD combination** becomes **one static case** that
+applies its patterns with their factors and is solved with:
+
+- **P-Delta** in every frame member (Corotational members keep theirs). The
+  member's own curvature (P-delta) is covered by **B1** in the member check.
+- **Stiffness x0.8** on the elastic sections of the frames and the elastic
+  materials of trusses (C2.3). τb is taken as 1.0 with the additional notional
+  load **0.001 α Yi** in every combination (C2.3(c)), so no iteration is needed.
+  Fibre sections and nonlinear materials are not reduced; the run log says which.
+- **Notional loads 0.002 α Yi** (C2.2b) at every storey, Yi being the storey's
+  factored gravity load *in that combination*: in the gravity-only combinations,
+  in +X and -X (and +Y, -Y in 3D) as separate cases.
+
+The model itself is never changed: the case applies all of it when it runs.
+
+# Steps
+1. Give each load case its **role** (dead, live, roof live, snow, rain, wind,
+   earthquake). Names such as DEAD, LIVE, WX or EQ are recognised. Response
+   spectrum cases cannot enter a second-order analysis; use an equivalent
+   lateral force case.
+2. **OK** replaces the cases made here before, sets the stability design to the
+   Direct Analysis Method and makes these cases the load sets of the Steel Frame
+   Check. Every lateral combination also gets a **first-order twin**.
+3. Run them (**Analyze → Run All Cases**) and open this dialog again: the
+   **Second-order check** tab lists **Δ2/Δ1** of every storey. Above **1.7** the
+   notional loads must act in every combination (C2.2b(d)): tick the option and
+   regenerate. Above 1.5 the Effective Length Method is not permitted.
+4. **Design → Steel Frame Check** then checks every member with K = 1.
+""",
+            "design.basis",
+            "design.steel_check",
+            "design.notional_loads",
         ),
         "design.connections": _t(
             "Design → Connections",
@@ -1624,6 +1753,90 @@ and the connection dialogs store their own entities.
             "file.export_report",
             "file.calc_memory",
         ),
+        "design.joint_connections": _t(
+            "Design → Connections by Joint",
+            "Design",
+            "Every member end: what it frames into, the connection that fits, shear tabs checked.",
+            """
+One row per **member end** of the frame (physical members, see Design → Member
+Classification; a member that goes on through a joint has no end there).
+
+# Topology
+- **Beam to column flange / web**: a beam end at a column. Flange when the
+  beam runs along the column's depth d, web otherwise (in 2D, flange).
+- **Beam to girder**: a beam end at a beam that continues through the joint.
+- **Brace**, **column splice** (a column onto a column of another section,
+  listed once, on the upper one), **column base** (a column on a support).
+
+A free cantilever tip and a column top under a roof beam are not connections.
+
+# Suggested connection
+- A beam end whose **major-axis moment is released** (Assign → Frame →
+  Releases) is a simple connection: a **single-plate shear connection** (shear
+  tab), checked here.
+- A moment beam end at a column flange in an **SMF or IMF** (Design → Design
+  Basis): the **reduced beam section** of AISC 358 Ch. 5, designed in Design →
+  Connections. Other moment ends: a fully restrained moment connection, not
+  checked here.
+- A brace: a gusset plate (Design → Gussets for SCBF). A column splice: Design →
+  Column Splices for SCBF. A column base: Design → Base Plates.
+
+# The shear tab
+Conventional configuration of AISC Manual Part 10: one row of n bolts at s,
+the bolt line a from the weld, edge distances Lev and Leh, a plate welded both
+sides to the support. Checked under the **largest end shear** over every
+alternative of the design load sets (the direct analysis cases when they
+exist): bolt shear on the most loaded bolt with the full eccentricity a
+(elastic method, conservative), bolt bearing and tearout on the plate and the
+beam web, plate shear yielding and rupture, block shear, the welds, the
+detailing rule w >= 5/8 tp and the ductility limit tp <= d/2 + 1/16 in. A beam
+end starts from 3/4 in A325-N bolts at 3 in, a 3/8 in A36 plate and 1/4 in E70
+welds, with as many bolts as fit in the beam's clear depth. Axial force in the
+beam (a collector) is not checked.
+""",
+            "design.connections",
+            "design.member_classification",
+            "design.base_plates",
+        ),
+        "design.base_plates": _t(
+            "Design → Base Plates (Column Bases)",
+            "Design",
+            "Every column base of the model, checked over the design load sets.",
+            """
+One row per **column base**: a support joint with one column framing up into
+it, whose section is an AISC I-shape, rectangular HSS or round HSS / pipe.
+
+# What decides the check
+- **Support type** from the joint's restraint: both bending rotations free is a
+  **pinned** base, checked concentric (bearing, plate thickness with λn', shear);
+  both fixed is a **fixed** base, checked with the axial force and the reaction
+  moment about the column's **major axis** (DG1 3.3, small or large
+  eccentricity, anchor rods in tension); one fixed is **partial**, checked as
+  fixed with a note.
+- **Column kind**: the plate's cantilevers are `m = (N - 0.95 d)/2` and
+  `n = (B - 0.8 bf)/2` for an I-shape, `0.95 B` for a rectangular HSS, and
+  `0.8 D` both ways for a round one. N runs along the column depth d.
+- **Demands**: the joint's reactions under **every alternative** of the design
+  load sets the steel check uses (the direct analysis cases when they exist,
+  else the combinations), so the largest compression, the largest M / P, uplift
+  and the largest shear are all checked. Only static results enter.
+- A moment about the column's **minor axis** is reported, not combined: Design
+  Guide 1 has no biaxial method.
+
+# Editing
+Select one or more rows, change the plate (N, B, tp, steel), the concrete (f'c,
+A2 / A1) or the rods (diameter, F1554 grade, count, offset f, spacing, edge
+distance, embedment) and press **Apply to the selected bases**. **Size tp**
+picks the thinnest standard plate (1/2 in to 4 in) whose thickness checks pass.
+A base starts from a plate 3 in larger than the column all round, 1 in thick,
+A36 on f'c 4 ksi, with four 3/4 in F1554 Gr. 36 rods. **OK** keeps the plates
+in the project (`design.base_plates`); a base left at the starting plate is not
+saved.
+""",
+            "design.base_plate",
+            "design.steel_check",
+            "design.direct_analysis",
+        ),
         "design.base_plate": _t(
             "Design → Base Plate & Anchors (DG1, ACI 318)",
             "Design",
@@ -1780,18 +1993,27 @@ no signed demands and are skipped with a note.
 Each member is read at 25 stations along its length, span loads included. Every
 station is checked with its own axial force, moments and shears, so the interaction
 uses forces that act at the same place; the governing station is reported. Cb comes
-from the major-axis moment diagram (F1-1) unless you set it. **Set Cb = 1.0 for a
-cantilever**: F1-1 assumes both ends braced.
+from the major-axis moment diagram (F1-1) of the whole laterally unbraced
+segment unless you set it. **Set Cb = 1.0 for a cantilever**: F1-1 assumes both
+ends braced.
+
+# Members and unbraced lengths
+The check works on **physical members**, not analysis elements: collinear
+elements of one section, end to end, are one member (Design → Member
+Classification lists them). Lx and Ly run between the joints that hold the
+member along each of its local axes, and Lb is the minor-axis one; see that page
+for what counts as a brace. A beam meshed into four elements is therefore
+checked with its whole unbraced length, not a quarter of it.
 
 # The values the dialog asks for
 - **Method** LRFD (φ) or ASD (Ω); **Fy** and **Fu** (50 and 65 ksi by default,
   in the project's stress unit); **ratio limit** above which a member is
   reported **NG**.
 - **Overrides for the selected members**: the AISC shape, K about each axis, the
-  unbraced length of the compression flange Lb (0 = the member length), Cb
-  (0 = from the diagram), the net area An (0 = D2-2 rupture unchecked) and the
-  shear-lag factor U in `Ae = U An`. The buckling lengths are the member length
-  times K.
+  unbraced length of the compression flange Lb (0 = between the lateral bracing
+  points), Cb (0 = from the diagram), the net area An (0 = D2-2 rupture
+  unchecked) and the shear-lag factor U in `Ae = U An`. The buckling lengths are
+  the unbraced lengths times K.
 - **Amplify P-δ (B1)**: multiplies the moments of members in compression by
   `B1 = 1 / (1 - α Pr / Pe1) >= 1` (AISC 360-16 C2.1b; A-8-3 in the 2022
   edition) with the conservative `Cm = 1.0` and `Pe1` on `0.8 τb EI` (C2.3).
@@ -3001,6 +3223,10 @@ before you trust it inside a section.
   of cycles. The strain rate is irrelevant for these rate-independent laws.
 - It uses the same emitters as the analysis runner, so a material cannot behave
   one way in the tester and another way in a model.
+- Like an analysis, the test runs in a separate process: the solve takes
+  milliseconds, starting the process about a second. If OpenSees ends that
+  process on an input it cannot handle, the summary shows the exit code and the
+  solver's last output, and the application stays open.
 """,
             "define.material_library",
             "mechanics.fiber_sections",
@@ -5964,9 +6190,14 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_import_s3d": "file.import_s3d",
     "_act_import_s2k": "file.import_s2k",
     "_act_import_tcl": "file.import_tcl",
+    "_act_design_basis": "design.basis",
+    "_act_direct_analysis": "design.direct_analysis",
+    "_act_member_classification": "design.member_classification",
     "_act_steel_check": "design.steel_check",
     "_act_steel_workflow": "design.steel_workflow",
     "_act_concrete_check": "design.concrete_check",
+    "_act_base_plates": "design.base_plates",
+    "_act_joint_connections": "design.joint_connections",
     "_act_base_plate": "design.base_plate",
     "_act_bolted": "design.bolted_connection",
     "_act_connections": "design.connections",

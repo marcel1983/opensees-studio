@@ -634,6 +634,11 @@ class MainWindow(QMainWindow):
         self._act_run_selected = QAction("Run Se&lected Cases…", self)
         self._act_clear_results = QAction("Delete &All Results…", self)
         self._act_steel_workflow = QAction("Steel Design &Workflow.", self)
+        self._act_design_basis = QAction("Design &Basis (AISC)…", self)
+        self._act_direct_analysis = QAction("Direct &Analysis Method…", self)
+        self._act_member_classification = QAction("&Member Classification…", self)
+        self._act_base_plates = QAction("Base &Plates (Column Bases)…", self)
+        self._act_joint_connections = QAction("Connections by &Joint…", self)
         self._act_steel_check = QAction("&Steel Frame Check (AISC 360-16)…", self)
         self._act_concrete_check = QAction("Co&ncrete Frame Check (ACI 318-19)…", self)
         self._act_base_plate = QAction("&Base Plate && Anchors (DG1, ACI 318)…", self)
@@ -942,9 +947,14 @@ class MainWindow(QMainWindow):
 
         m_design = mb.addMenu("Desi&gn")
         m_design.addAction(self._act_steel_workflow)
+        m_design.addAction(self._act_design_basis)
+        m_design.addAction(self._act_direct_analysis)
+        m_design.addAction(self._act_member_classification)
         m_design.addSeparator()
         m_design.addAction(self._act_steel_check)
         m_design.addAction(self._act_concrete_check)
+        m_design.addAction(self._act_base_plates)
+        m_design.addAction(self._act_joint_connections)
         m_design.addAction(self._act_base_plate)
         m_design.addAction(self._act_bolted)
         m_design.addAction(self._act_connections)
@@ -1421,6 +1431,11 @@ class MainWindow(QMainWindow):
         self._act_run_all.triggered.connect(self._on_run_all_cases)
         self._act_run_selected.triggered.connect(self._on_run_selected_cases)
         self._act_clear_results.triggered.connect(self._on_clear_results)
+        self._act_design_basis.triggered.connect(self._on_design_basis)
+        self._act_direct_analysis.triggered.connect(self._on_direct_analysis)
+        self._act_member_classification.triggered.connect(self._on_member_classification)
+        self._act_base_plates.triggered.connect(self._on_base_plates)
+        self._act_joint_connections.triggered.connect(self._on_joint_connections)
         self._act_steel_check.triggered.connect(self._on_steel_check)
         self._act_steel_workflow.triggered.connect(self._on_steel_workflow)
         self._act_concrete_check.triggered.connect(self._on_concrete_check)
@@ -2914,6 +2929,114 @@ class MainWindow(QMainWindow):
         if checks != project.chapter_j_checks:
             self._vm.apply_command(SetChapterJChecksCommand(self._vm, checks))
         self._log(f"{len(checks)} Chapter J check(s).")
+
+    def _on_design_basis(self) -> None:
+        """Design → Design Basis: code, method, stability method, systems and steel grades."""
+        from opensees_studio.views.dialogs.design_basis import DesignBasisDialog
+
+        project = self._vm.project
+        if project is None:
+            return
+        dialog = DesignBasisDialog(project, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        settings = dialog.settings()
+        if settings != project.design:
+            self._vm.apply_command(SetDesignSettingsCommand(self._vm, settings))
+            self._log(
+                f"Design basis: {settings.method}, {settings.stability_method} stability "
+                f"design, system {settings.seismic_system}"
+                + (f" / {settings.seismic_system_y}" if settings.seismic_system_y else "")
+                + (
+                    f", {len(settings.steel_grades)} family grade(s)."
+                    if settings.steel_grades
+                    else "."
+                )
+            )
+
+    def _on_direct_analysis(self) -> None:
+        """Design → Direct Analysis Method: one second-order case per LRFD combination."""
+        from opensees_studio.commands import ReplaceDirectAnalysisCasesCommand
+        from opensees_studio.views.dialogs.design_basis import DirectAnalysisDialog
+
+        project = self._vm.project
+        if project is None:
+            return
+        dialog = DirectAnalysisDialog(project, dict(self._case_results.current(project)), self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        cases = dialog.cases()
+        if not cases:
+            return
+        self._vm.apply_command(
+            ReplaceDirectAnalysisCasesCommand(self._vm, cases, dialog.settings())
+        )
+        self._log(
+            f"Direct Analysis Method: {len(cases)} case(s) generated; run them "
+            "(Analyze → Run All Cases), then check Δ2/Δ1 here and the members in "
+            "Design → Steel Frame Check."
+        )
+
+    def _on_member_classification(self) -> None:
+        """Design → Member Classification: physical members, roles and unbraced lengths."""
+        from opensees_studio.views.dialogs.member_classification import (
+            MemberClassificationDialog,
+        )
+
+        project = self._vm.project
+        if project is None:
+            return
+        dialog = MemberClassificationDialog(project, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        settings = dialog.settings()
+        if settings != (project.design or DesignSettings()):
+            self._vm.apply_command(SetDesignSettingsCommand(self._vm, settings))
+            chosen = sum(1 for m in settings.members if m.role is not None)
+            self._log(
+                f"Member classification: {dialog.member_count()} member(s), "
+                f"{chosen} element(s) with a role set by hand."
+            )
+
+    def _on_joint_connections(self) -> None:
+        """Design → Connections by Joint: topology of every member end, shear tabs checked."""
+        from opensees_studio.views.dialogs.joint_connections import JointConnectionsDialog
+
+        project = self._vm.project
+        if project is None:
+            return
+        dialog = JointConnectionsDialog(project, dict(self._case_results.current(project)), self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        settings = dialog.settings()
+        if settings != (project.design or DesignSettings()):
+            self._vm.apply_command(SetDesignSettingsCommand(self._vm, settings))
+        rows = dialog.run_check()
+        tabs = [r for r in rows if r.status in ("OK", "NG")]
+        failing = [f"{r.connection.element_id}{r.connection.end}" for r in tabs if r.status == "NG"]
+        self._log(
+            f"Connections by joint: {len(rows)} connection(s), {len(tabs)} shear tab(s)"
+            + (f", over the limit at {', '.join(failing)}." if failing else ".")
+        )
+
+    def _on_base_plates(self) -> None:
+        """Design → Base Plates: every column base over the design load sets."""
+        from opensees_studio.views.dialogs.base_plates import BasePlatesDialog
+
+        project = self._vm.project
+        if project is None:
+            return
+        dialog = BasePlatesDialog(project, dict(self._case_results.current(project)), self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        settings = dialog.settings()
+        if settings != (project.design or DesignSettings()):
+            self._vm.apply_command(SetDesignSettingsCommand(self._vm, settings))
+        failing = [r.node_id for r in dialog.run_check() if r.status == "NG"]
+        self._log(
+            f"Base plates: {len(dialog.designs())} column base(s)"
+            + (f", over the limit at node(s) {', '.join(map(str, failing))}." if failing else ".")
+        )
 
     def _on_steel_check(self) -> None:
         """Design → Steel Frame Check: AISC 360-16 ratios over this session's results.
@@ -7127,6 +7250,11 @@ class MainWindow(QMainWindow):
         )
         db_there = has_project and database_path(self._vm.path).exists()
         self._act_clear_results.setEnabled(bool(has_project and (stored or db_there)))
+        self._act_design_basis.setEnabled(has_project)
+        self._act_direct_analysis.setEnabled(has_project)
+        self._act_member_classification.setEnabled(has_project)
+        self._act_base_plates.setEnabled(has_project)
+        self._act_joint_connections.setEnabled(has_project)
         self._act_steel_check.setEnabled(has_project)
         self._act_steel_workflow.setEnabled(has_project)
         self._act_concrete_check.setEnabled(has_project)

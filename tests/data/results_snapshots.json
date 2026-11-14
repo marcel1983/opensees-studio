@@ -137,7 +137,7 @@
     "combination": "CQC",
     "disp_max": [
      0.1109555692,
-     1.026306205e-15,
+     1.082481686e-15,
      0.0003641172582
     ],
     "disp_norm": 0.4277019906,
@@ -157,11 +157,11 @@
     ],
     "reaction_max": [
      1578380.464,
-     1.541554792e-08,
+     1.718143443e-08,
      408008.0281,
-     1.16888861e-08,
+     1.245525106e-08,
      1128736.539,
-     9.671968247e-09
+     1.077845137e-08
     ],
     "reaction_norm": 4176696.511
    }
@@ -614,22 +614,22 @@
    },
    "3": {
     "final_disp_max": [
-     0.199038,
-     0.0892168,
-     0.000693452
+     0.199125,
+     0.0892164,
+     0.000693755
     ],
-    "final_disp_norm": 0.2181197921,
+    "final_disp_norm": 0.2181990214,
     "kind": "TransientResults",
     "n_steps": 1000,
     "n_steps_requested": 1000,
     "peak_disp_max": [
-     0.594721,
-     0.0892168,
-     0.00206077
+     0.594637,
+     0.0892164,
+     0.00206048
     ],
-    "peak_disp_norm": 5.658021466,
-    "peak_force_max": 30628.9,
-    "peak_force_norm": 271803.4183,
+    "peak_disp_norm": 5.65756733,
+    "peak_force_max": 30624.7,
+    "peak_force_norm": 271778.2667,
     "time_final": 10.0
    }
   },
@@ -723,21 +723,21 @@
    "3": {
     "final_disp_max": [
      0.278973,
-     0.0733618,
-     0.000969169
+     0.0733612,
+     0.000969167
     ],
-    "final_disp_norm": 0.2884594039,
+    "final_disp_norm": 0.2884592513,
     "kind": "TransientResults",
     "n_steps": 1000,
     "n_steps_requested": 1000,
     "peak_disp_max": [
-     0.402587,
-     0.0733618,
-     0.00139713
+     0.40257,
+     0.0733612,
+     0.00139707
     ],
-    "peak_disp_norm": 4.456766671,
-    "peak_force_max": 28827.7,
-    "peak_force_norm": 289380.6141,
+    "peak_disp_norm": 4.456621431,
+    "peak_force_max": 28826.3,
+    "peak_force_norm": 289368.8514,
     "time_final": 10.0
    }
   },
@@ -884,23 +884,23 @@
    },
    "3": {
     "final_disp_max": [
-     1.49039,
-     0.00905251,
-     0.00158789
+     0.378417,
+     0.0383472,
+     0.0011438
     ],
-    "final_disp_norm": 2.10666012,
+    "final_disp_norm": 0.5362974911,
     "kind": "TransientResults",
-    "n_steps": 37,
+    "n_steps": 1000,
     "n_steps_requested": 1000,
     "peak_disp_max": [
-     1.52205,
-     0.0471922,
-     0.0016006
+     2.29176,
+     0.0799158,
+     0.00174551
     ],
-    "peak_disp_norm": 8.097402943,
-    "peak_force_max": 112228.0,
-    "peak_force_norm": 1005564.422,
-    "time_final": 0.37
+    "peak_disp_norm": 29.65740708,
+    "peak_force_max": 112607.0,
+    "peak_force_norm": 3050969.758,
+    "time_final": 10.0
    }
   },
   "ex4_portal2d_inelastic_section": {
@@ -938,22 +938,22 @@
    },
    "3": {
     "final_disp_max": [
-     0.60892,
-     0.0852234,
-     0.00243956
+     0.607367,
+     0.0852164,
+     0.00243866
     ],
-    "final_disp_norm": 0.8683113966,
+    "final_disp_norm": 0.866132644,
     "kind": "TransientResults",
     "n_steps": 1000,
     "n_steps_requested": 1000,
     "peak_disp_max": [
-     2.36725,
-     0.102047,
-     0.00304298
+     2.36568,
+     0.102039,
+     0.00304208
     ],
-    "peak_disp_norm": 31.76701578,
-    "peak_force_max": 132561.0,
-    "peak_force_norm": 3039682.254,
+    "peak_disp_norm": 31.73500854,
+    "peak_force_max": 135138.0,
+    "peak_force_norm": 3039623.484,
     "time_final": 10.0
    }
   },
@@ -1144,23 +1144,23 @@
   "rc_frame_earthquake": {
    "1": {
     "final_disp_max": [
-     1.27482,
-     0.0471874,
-     0.0070795
+     0.121485,
+     0.0217348,
+     0.000784245
     ],
-    "final_disp_norm": 1.803582597,
+    "final_disp_norm": 0.1743835162,
     "kind": "TransientResults",
-    "n_steps": 98,
+    "n_steps": 400,
     "n_steps_requested": 400,
     "peak_disp_max": [
-     1.27482,
-     0.0471874,
-     0.0070795
+     1.64423,
+     0.0939533,
+     0.00802416
     ],
-    "peak_disp_norm": 7.173848221,
-    "peak_force_max": 5165.87,
-    "peak_force_norm": 52117.79839,
-    "time_final": 0.98
+    "peak_disp_norm": 18.81867192,
+    "peak_force_max": 5188.52,
+    "peak_force_norm": 116827.2451,
+    "time_final": 4.0
    }
   },
   "rc_frame_gravity": {
@@ -1311,7 +1311,7 @@
     "combination": "SRSS",
     "disp_max": [
      0.01403494056,
-     1.479098212e-15,
+     1.478669097e-15,
      6.88993552e-05
     ],
     "disp_norm": 0.03016092837,
@@ -1328,11 +1328,11 @@
     ],
     "reaction_max": [
      37327.78946,
-     3.514774826e-09,
+     3.514002355e-09,
      37368.30017,
-     9.027801087e-09,
+     9.030647971e-09,
      98558.6476,
-     2.146953448e-09
+     2.148624333e-09
     ],
     "reaction_norm": 223638.6437
    }
