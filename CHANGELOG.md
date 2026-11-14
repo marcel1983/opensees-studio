@@ -11,6 +11,12 @@ refused instead of silently downgraded).
 
 ### Added
 
+- **Distributed loads as line diagrams.** Uniform and trapezoidal/partial member
+  loads are now drawn as a load diagram: short line shafts with V-shaped heads
+  on the member, joined by a top line through their tips. The old row of 3D
+  arrow glyphs is gone; the diagram follows the Load arrows size percentage and
+  rebuilds on zoom.
+
 - **Connections by joint.** Design → Connections by Joint lists every member end
   of the frame and classifies it by what it frames into: beam to column flange
   or web (from the column's depth direction), beam to girder, brace, column
