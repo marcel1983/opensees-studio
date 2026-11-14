@@ -58,6 +58,7 @@ from opensees_studio.core.design.aisc341 import (
 )
 from opensees_studio.core.design.aisc360 import (
     I_SHAPE_FAMILIES,
+    BuiltUpIShape,
     Demand,
     IShape,
     MemberCheck,
@@ -85,6 +86,8 @@ from opensees_studio.core.design.brace_connections import (
     gusset_weld_check,
     gusset_weld_required_leg,
 )
+from opensees_studio.core.design.built_up import built_up_ishape
+from opensees_studio.core.design.built_up_model import BuiltUpShape
 from opensees_studio.core.design.calc import CalcStep, LimitStateCheck
 from opensees_studio.core.design.chapter_j import (
     bearing_strength,
@@ -359,14 +362,24 @@ CHECKED_FAMILIES = (
 )
 
 
-def shape_in_units(name: str, units: Any) -> SteelShape:
+def shape_in_units(
+    name: str, units: Any, built_up: Mapping[str, BuiltUpShape] | None = None
+) -> SteelShape:
     """The AISC shape ``name`` as the class of its family, in the project's ``units``.
 
+    ``built_up`` maps upper-case names to the project's built-up shapes
+    (``DesignSettings.built_up_by_name()``); a name found there is that welded
+    I-shape, already in project units.
+
     Raises:
-        KeyError: not an AISC v16 shape.
+        KeyError: not an AISC v16 shape (nor a built-up one).
         ValueError: a shape these provisions do not cover, or a table row
             missing a property the family needs.
     """
+    if built_up:
+        found = built_up.get(name.strip().upper())
+        if found is not None:
+            return built_up_ishape(found)
     shape = get_shape(shape_name(name))
     family = shape.family
     if family in I_SHAPE_FAMILIES:
@@ -454,6 +467,13 @@ def shape_in_units(name: str, units: Any) -> SteelShape:
         J=v["j"] * f**4,
         Cw=v["cw"] * f**6,
     )
+
+
+def shape_family(shape: Any) -> str:
+    """The steel grade family of a checked shape: ``BU`` for a built-up one, else its table family."""
+    if isinstance(shape, BuiltUpIShape):
+        return "BU"
+    return get_shape(shape.name).family
 
 
 def member_steel(
@@ -801,7 +821,7 @@ def member_lengths(project: Any, settings: DesignSettings | None = None) -> list
         section = sections.get(getattr(element, "section_id", -1))
         name = settings.member(element.id).shape or (getattr(section, "name", "") or "")
         try:
-            shape: Any = shape_in_units(name, project.meta.units)
+            shape: Any = shape_in_units(name, project.meta.units, settings.built_up_by_name())
         except (KeyError, ValueError):
             iz = float(getattr(section, "Iz", 1.0) or 1.0)
             iy = float(getattr(section, "Iy", 0.0) or 0.0)
@@ -928,7 +948,7 @@ def _capacity_alternatives(
         section = sections.get(getattr(element, "section_id", -1))
         name = overrides.shape or (getattr(section, "name", "") or "")
         try:
-            shape = shape_in_units(name, units)
+            shape = shape_in_units(name, units, settings.built_up_by_name())
         except (KeyError, ValueError) as exc:
             notes.append(f"Capacity design: brace {element.id} has no AISC shape ({exc}).")
             continue
@@ -1360,14 +1380,14 @@ def steel_frame_check(
         section = sections.get(getattr(element, "section_id", -1))
         name = overrides.shape or (getattr(section, "name", "") or "")
         try:
-            shape = shape_in_units(name, units)
+            shape = shape_in_units(name, units, settings.built_up_by_name())
         except (KeyError, ValueError) as exc:
             reason = exc.args[0] if exc.args else str(exc)
             result.notes.append(f"No AISC shape to check with: {reason}")
             continue
         result.shape = shape.name
         member_fy, member_fu, result.grade = member_steel(
-            settings, get_shape(shape.name).family, overrides, units
+            settings, shape_family(shape), overrides, units
         )
         k_major, k_minor = overrides.k_major, overrides.k_minor
         if direct and (k_major != 1.0 or k_minor != 1.0):
@@ -1815,7 +1835,7 @@ def _ishape_members(
         section = sections.get(getattr(element, "section_id", -1))
         name = overrides.shape or (getattr(section, "name", "") or "")
         try:
-            shape = shape_in_units(name, units)
+            shape = shape_in_units(name, units, settings.built_up_by_name())
         except (KeyError, ValueError):
             continue
         if not isinstance(shape, IShape):
@@ -2017,7 +2037,7 @@ def _connection_results(
         section = sections.get(getattr(beam, "section_id", -1))
         name = getattr(section, "name", "") or ""
         try:
-            shape = shape_in_units(name, units)
+            shape = shape_in_units(name, units, settings.built_up_by_name())
         except (KeyError, ValueError) as exc:
             result.status = "invalid"
             result.notes.append(f"No AISC shape for the beam: {exc}")
@@ -2109,7 +2129,9 @@ def _connection_results(
                     column_section = sections.get(getattr(column, "section_id", -1))
                     column_name = getattr(column_section, "name", "") or ""
                     try:
-                        column_shape = shape_in_units(column_name, units)
+                        column_shape = shape_in_units(
+                            column_name, units, settings.built_up_by_name()
+                        )
                     except (KeyError, ValueError):
                         column_shape = None
                     column_depth = float(getattr(column_shape, "d", 0.0) or 0.0)
@@ -2214,7 +2236,7 @@ def _scbf_protected_zones(
         section = sections.get(getattr(element, "section_id", -1))
         name = getattr(section, "name", "") or ""
         try:
-            shape = shape_in_units(name, units)
+            shape = shape_in_units(name, units, settings.built_up_by_name())
         except (KeyError, ValueError):
             continue
         depth = float(getattr(shape, "d", getattr(shape, "H", getattr(shape, "D", 0.0))))
@@ -2283,7 +2305,7 @@ def _scbf_beam_column_joints(
         section = sections.get(getattr(element, "section_id", -1))
         name = overrides.shape or (getattr(section, "name", "") or "")
         try:
-            return shape_in_units(name, units)
+            return shape_in_units(name, units, settings.built_up_by_name())
         except (KeyError, ValueError):
             return None
 
@@ -2391,7 +2413,7 @@ def _column_splice_results(
             section = sections.get(getattr(element, "section_id", -1))
             name = overrides.shape or (getattr(section, "name", "") or "")
             try:
-                return shape_in_units(name, units)
+                return shape_in_units(name, units, settings.built_up_by_name())
             except (KeyError, ValueError):
                 return None
 
@@ -2456,7 +2478,7 @@ def _gusset_results(
         section = sections.get(getattr(brace, "section_id", -1))
         name = getattr(section, "name", "") or ""
         try:
-            shape = shape_in_units(name, units)
+            shape = shape_in_units(name, units, settings.built_up_by_name())
         except (KeyError, ValueError) as exc:
             result.status = "invalid"
             result.notes.append(f"No AISC shape for the brace: {exc}")

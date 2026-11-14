@@ -637,6 +637,7 @@ class MainWindow(QMainWindow):
         self._act_member_classification = QAction("&Member Classification…", self)
         self._act_base_plates = QAction("Base &Plates (Column Bases)…", self)
         self._act_joint_connections = QAction("Connections by &Joint…", self)
+        self._act_built_up = QAction("B&uilt-Up Shapes…", self)
         self._act_steel_check = QAction("&Steel Frame Check (AISC 360-16)…", self)
         self._act_concrete_check = QAction("Co&ncrete Frame Check (ACI 318-19)…", self)
         self._act_base_plate = QAction("&Base Plate && Anchors (DG1, ACI 318)…", self)
@@ -947,6 +948,7 @@ class MainWindow(QMainWindow):
         m_design.addAction(self._act_design_basis)
         m_design.addAction(self._act_direct_analysis)
         m_design.addAction(self._act_member_classification)
+        m_design.addAction(self._act_built_up)
         m_design.addSeparator()
         m_design.addAction(self._act_steel_check)
         m_design.addAction(self._act_concrete_check)
@@ -1433,6 +1435,7 @@ class MainWindow(QMainWindow):
         self._act_member_classification.triggered.connect(self._on_member_classification)
         self._act_base_plates.triggered.connect(self._on_base_plates)
         self._act_joint_connections.triggered.connect(self._on_joint_connections)
+        self._act_built_up.triggered.connect(self._on_built_up)
         self._act_steel_check.triggered.connect(self._on_steel_check)
         self._act_concrete_check.triggered.connect(self._on_concrete_check)
         self._act_base_plate.triggered.connect(self._on_base_plate)
@@ -2993,6 +2996,34 @@ class MainWindow(QMainWindow):
                 f"Member classification: {dialog.member_count()} member(s), "
                 f"{chosen} element(s) with a role set by hand."
             )
+
+    def _on_built_up(self) -> None:
+        """Design → Built-Up Shapes: welded I-shapes, and their analysis sections, one undo step."""
+        from opensees_studio.views.dialogs.built_up_shapes import BuiltUpShapesDialog
+
+        project = self._vm.project
+        if project is None:
+            return
+        dialog = BuiltUpShapesDialog(project, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        settings = dialog.settings()
+        sections = dialog.new_sections()
+        if settings == (project.design or DesignSettings()) and not sections:
+            return
+        stack = self._vm.undo_stack
+        stack.beginMacro("Built-up shapes")
+        try:
+            if settings != (project.design or DesignSettings()):
+                self._vm.apply_command(SetDesignSettingsCommand(self._vm, settings))
+            if sections:
+                self._vm.apply_command(AddSectionsCommand(self._vm, sections))
+        finally:
+            stack.endMacro()
+        self._log(
+            f"Built-up shapes: {len(settings.built_up)} defined"
+            + (f", {len(sections)} analysis section(s) added." if sections else ".")
+        )
 
     def _on_joint_connections(self) -> None:
         """Design → Connections by Joint: topology of every member end, shear tabs checked."""
@@ -7196,6 +7227,7 @@ class MainWindow(QMainWindow):
         self._act_member_classification.setEnabled(has_project)
         self._act_base_plates.setEnabled(has_project)
         self._act_joint_connections.setEnabled(has_project)
+        self._act_built_up.setEnabled(has_project)
         self._act_steel_check.setEnabled(has_project)
         self._act_concrete_check.setEnabled(has_project)
         self._act_base_plate.setEnabled(has_project)

@@ -137,7 +137,9 @@ script o un notebook de Jupyter: la interfaz es una forma de usarlo, no la únic
   los marcos, rigidez ×0,8 (C2.3, τb = 1 con 0,001 α Yi) y las cargas ficticias
   `0,002 α Yi` de la gravedad factorizada de esa combinación; luego informa
   Δ2/Δ1 por piso (C2.2b(d)), y la verificación de acero lee esos casos con K = 1.
-  Design → Member Classification muestra los miembros físicos (elementos
+  Design → Built-Up Shapes define perfiles I soldados y vigas de alma llena a
+  partir de sus placas (límites de ala con kc, F4/F5, corte del alma con
+  rigidizadores). Design → Member Classification muestra los miembros físicos (elementos
   colineales de una misma sección), su rol y las longitudes no arriostradas Lx,
   Ly y Lb según sus puntos de arriostramiento; la verificación usa esas
   longitudes, así un miembro mallado conserva las reales.

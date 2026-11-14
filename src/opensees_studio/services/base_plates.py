@@ -143,7 +143,7 @@ def column_bases(project: Any, settings: DesignSettings | None = None) -> list[C
         section = sections.get(getattr(element, "section_id", -1))
         name = settings.member(element.id).shape or (getattr(section, "name", "") or "")
         try:
-            shape = shape_in_units(name, units)
+            shape = shape_in_units(name, units, settings.built_up_by_name())
         except (KeyError, ValueError):
             continue
         if isinstance(shape, IShape):
