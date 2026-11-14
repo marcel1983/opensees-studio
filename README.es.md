@@ -145,6 +145,7 @@ script o un notebook de Jupyter: la interfaz es una forma de usarlo, no la únic
   colineales de una misma sección), su rol y las longitudes no arriostradas Lx,
   Ly y Lb según sus puntos de arriostramiento; la verificación usa esas
   longitudes, así un miembro mallado conserva las reales.
+- **Flujo de diseño de acero**: Design → Steel Design Workflow recorre siete etapas: base de diseño AISC/ASCE, modelo y cargas, demandas, chequeo de miembros AISC 360, chequeo sísmico AISC 341, conexiones AISC 358/Capítulo J y detallado. Cada etapa muestra OK, PENDIENTE o REVISAR y abre el diálogo existente que la edita o ejecuta.
 - **Diseño**: Design → Steel Frame Check verifica según **AISC 360-16** (LRFD o
   ASD) los miembros de perfiles W, M, S y HP —y canales, tees, ángulos de alas
   iguales, HSS rectangulares y circulares y tubos—: tracción (D2), compresión

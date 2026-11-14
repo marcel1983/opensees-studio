@@ -7,6 +7,17 @@ that this is pre-alpha: minor and patch releases may change the `.osmodel`
 schema (it carries a `schema_version`, and a file from a newer build is now
 refused instead of silently downgraded).
 
+## [Unreleased]
+
+### Added
+
+- **Steel Design Workflow.** Design → Steel Design Workflow is a guided
+  seven-stage path: AISC/ASCE design basis, model and loads, demands, AISC 360
+  member check, AISC 341 seismic checks, AISC 358/Chapter J connections, and
+  detailing. Each stage shows OK, PENDING or REVIEW and opens the existing
+  dialog that edits or runs it; failing members, joints or connections send the
+  flow back to the stage that can fix them.
+
 ## [0.0.62] - 2026-11-13
 
 ### Added

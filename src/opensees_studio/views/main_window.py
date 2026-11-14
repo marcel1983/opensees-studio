@@ -234,6 +234,7 @@ from opensees_studio.views.dialogs import (
     S3dImportDialog,
     SectionLibraryDialog,
     SteelDesignDialog,
+    SteelWorkflowDialog,
     TclImportDialog,
     TrapezoidalLoadDialog,
     UniformExcitationDialog,
@@ -705,6 +706,7 @@ class MainWindow(QMainWindow):
         self._act_run_all = QAction("Run &All Cases", self, shortcut=QKeySequence("Shift+F5"))
         self._act_run_selected = QAction("Run Se&lected Cases…", self)
         self._act_clear_results = QAction("Delete &All Results…", self)
+        self._act_steel_workflow = QAction("Steel Design &Workflow.", self)
         self._act_design_basis = QAction("Design &Basis (AISC)…", self)
         self._act_direct_analysis = QAction("Direct &Analysis Method…", self)
         self._act_member_classification = QAction("&Member Classification…", self)
@@ -1018,6 +1020,7 @@ class MainWindow(QMainWindow):
         m_display.addAction(self._act_back_to_model)
 
         m_design = mb.addMenu("Desi&gn")
+        m_design.addAction(self._act_steel_workflow)
         m_design.addAction(self._act_design_basis)
         m_design.addAction(self._act_direct_analysis)
         m_design.addAction(self._act_member_classification)
@@ -1540,6 +1543,7 @@ class MainWindow(QMainWindow):
         self._act_joint_connections.triggered.connect(self._on_joint_connections)
         self._act_built_up.triggered.connect(self._on_built_up)
         self._act_steel_check.triggered.connect(self._on_steel_check)
+        self._act_steel_workflow.triggered.connect(self._on_steel_workflow)
         self._act_concrete_check.triggered.connect(self._on_concrete_check)
         self._act_base_plate.triggered.connect(self._on_base_plate)
         self._act_bolted.triggered.connect(self._on_bolted_connection)
@@ -3199,6 +3203,61 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(f"Selected {len(failing)} failing member(s).", 4000)
         if dialog.show_ratios_requested and report is not None:
             self._show_design_ratios(report, settings)
+
+    def _on_steel_workflow(self) -> None:
+        """Design → Steel Design Workflow: the guided seven-stage path."""
+        project = self._vm.project
+        if project is None:
+            return
+        dialog = SteelWorkflowDialog(
+            project,
+            lambda: dict(self._case_results.current(project)),
+            self,
+            self,
+        )
+        dialog.exec()
+        self._refresh_action_enablement()
+
+    # Controller methods used by SteelWorkflowDialog. They keep the guided
+    # flow on the existing dialogs instead of duplicating their logic.
+    def edit_steel_settings(self) -> None:
+        self._on_steel_check()
+
+    def open_analysis_cases(self) -> None:
+        self._on_case_manager()
+
+    def run_analysis(self) -> None:
+        self._on_run_analysis()
+
+    def open_member_check(self) -> None:
+        self._on_steel_check()
+
+    def open_connections(self) -> None:
+        self._on_connections()
+
+    def open_gussets(self) -> None:
+        self._on_gussets()
+
+    def open_column_splices(self) -> None:
+        self._on_column_splices()
+
+    def open_chapter_j(self) -> None:
+        self._on_chapter_j()
+
+    def show_steel_ratios(self) -> None:
+        self._on_steel_ratios()
+
+    def export_report(self) -> None:
+        self._on_export_report()
+
+    def open_calc_memory(self) -> None:
+        self._on_calc_memory()
+
+    def open_drift_check(self) -> None:
+        self._on_drift_check()
+
+    def open_notional_loads(self) -> None:
+        self._on_notional_loads()
 
     def _on_concrete_check(self) -> None:
         """Design → Concrete Frame Check: ACI 318-19 ratios over this session's results."""
@@ -7333,6 +7392,7 @@ class MainWindow(QMainWindow):
         self._act_joint_connections.setEnabled(has_project)
         self._act_built_up.setEnabled(has_project)
         self._act_steel_check.setEnabled(has_project)
+        self._act_steel_workflow.setEnabled(has_project)
         self._act_concrete_check.setEnabled(has_project)
         self._act_base_plate.setEnabled(has_project)
         self._act_bolted.setEnabled(has_project)

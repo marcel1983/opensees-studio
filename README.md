@@ -379,7 +379,8 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   Member Classification shows the physical members (collinear elements of one
   section), their role and the unbraced lengths Lx, Ly and Lb from their bracing
   points; the check uses those lengths, so a meshed member keeps its real ones.
-- **Design** — AISC 360-16 member check (LRFD or ASD) for W, M, S, HP,
+- **Steel Design Workflow** - Design → Steel Design Workflow is a guided seven-stage path: AISC/ASCE design basis, model and loads, demands, AISC 360 member check, AISC 341 seismic checks, AISC 358/Chapter J connections, and detailing. Each stage shows OK, PENDING or REVIEW and opens the existing dialog that edits or runs it.
+- **Design** - AISC 360-16 member check (LRFD or ASD) for W, M, S, HP,
   channels, tees, equal-leg angles, rectangular and round HSS and pipes:
   tension (D2), compression (E3, E4, E7), flexure (F2–F10), shear (G2–G6) and
   H1 interaction over the combinations already run, at 25 stations, with `Cb`
