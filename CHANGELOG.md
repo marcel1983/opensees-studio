@@ -16,6 +16,11 @@ refused instead of silently downgraded).
   on the member, joined by a top line through their tips. The old row of 3D
   arrow glyphs is gone; the diagram follows the Load arrows size percentage and
   rebuilds on zoom.
+- **Object snaps on members.** The left-hand icon bar toggles midpoint,
+  perpendicular and nearest-point snaps for the draw tools. The hover marker is
+  colour-coded (amber midpoint, blue perpendicular, green nearest point); after
+  the first point of Draw Frame / Draw Truss, perpendicular snaps to the foot
+  from that point to the member. The setting applies to every open viewport.
 
 - **Connections by joint.** Design → Connections by Joint lists every member end
   of the frame and classifies it by what it frames into: beam to column flange

@@ -33,6 +33,8 @@ sísmica, pero su interfaz nativa son scripts de Tcl/Python. OpenSees Studio le
 agrega una interfaz visual para:
 
 - Dibujar nodos, marcos, apoyos y cargas con clics sobre una grilla con snap.
+- OSNAP sobre barras: punto medio, pie de perpendicular y punto más cercano,
+  activables desde la barra de iconos de la izquierda, con marcador de color.
 - Medir la distancia entre dos nudos (Tools → Measure Distance, F7); el valor
   se copia al portapapeles.
 - Asignar materiales, secciones y patrones de carga desde diálogos.

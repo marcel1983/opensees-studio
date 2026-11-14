@@ -30,6 +30,8 @@ engineering, but its native interface is Tcl/Python scripts.
 OpenSees Studio adds a visual front-end so you can:
 
 - Click to draw nodes, frames, supports, and loads on a snapped grid.
+- Object snaps on frame members — midpoint, perpendicular foot and nearest
+  point — toggled from the left-hand icon bar, with a colour-coded hover marker.
 - Measure between two joints (Tools → Measure Distance, F7); the distance is
   copied to the clipboard.
 - Assign materials, sections, and load patterns through dialogs.

@@ -429,12 +429,22 @@ class ModelRenderer:
         self._deformation = deformation
         self._apply_mode_to_points()
 
-    def set_hover_snap(self, world_point: tuple[float, float, float] | None) -> None:
-        """Show / hide the yellow snap-target indicator.
+    #: Marker colour per snap kind; the grid preview keeps the amber default.
+    SNAP_COLORS: ClassVar[dict[str, tuple[float, float, float]]] = {
+        "midpoint": (1.0, 0.85, 0.0),  # amber
+        "perpendicular": (0.15, 0.75, 1.0),  # blue
+        "on_element": (0.35, 1.0, 0.45),  # green
+    }
+
+    def set_hover_snap(
+        self, world_point: tuple[float, float, float] | None, kind: str | None = None
+    ) -> None:
+        """Show / hide the snap-target indicator.
 
         Passing ``None`` removes the marker. Passing a world point
-        renders (or repositions) a single yellow sphere at that point —
-        the visual cue telling the user where a click would land.
+        renders (or repositions) a single sphere at that point — the
+        visual cue telling the user where a click would land. ``kind``
+        selects the member-snap colour; the grid preview stays amber.
         """
         # Remove any previous marker.
         if self._hover_actor is not None:
@@ -452,9 +462,10 @@ class ModelRenderer:
             theta_resolution=16,
             phi_resolution=16,
         )
+        colour = self.SNAP_COLORS.get(kind or "", (1.0, 0.85, 0.0))
         self._hover_actor = self._plotter.add_mesh(
             sphere,
-            color=(1.0, 0.85, 0.0),  # amber-yellow
+            color=colour,
             opacity=0.85,
             pickable=False,
             lighting=False,

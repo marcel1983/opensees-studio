@@ -261,6 +261,8 @@ Weight; Joints of Selected Elements, Elements between Selected Joints.
 
 # Draw
 - Select, Draw Node, Draw Frame, Draw Truss.
+- Object snaps on members (midpoint, perpendicular, nearest point) from the
+  left-hand icon bar.
 
 # Define
 - Geometry and building: Coordinate System/Grids, Grid Wizard, Add Node, Storeys, Groups,
@@ -2762,6 +2764,9 @@ rejects every click looks broken rather than empty.
 
 - Snapping follows the **working plane** (the level chosen in View → Top/Front/
   Right): only that level's lines and intersections are active.
+- The left-hand object-snap icons can also land the node on an existing member:
+  its midpoint (amber) or the point nearest the cursor (green). Perpendicular
+  needs a first point, so it is offered by the two-click draw tools.
 - The nodes are created in one command each, so Ctrl+Z removes them one at a time.
 - *F4*, not F1: **F1 is the contextual help** everywhere in the application.
 """,
@@ -2777,6 +2782,10 @@ The first click is one end, the second the other; each may be an existing node
 or a grid intersection (a node is created if there is none there). The view locks
 to the working plane while the tool is active, so clicks land where you expect.
 
+- The left-hand object-snap icons target existing members: **midpoint**
+  (amber), **perpendicular** (blue) and **nearest point** (green). After the
+  first point, the perpendicular snap drops the second point on the foot of the
+  perpendicular from that first point to the member under the cursor.
 - If the project has no section yet, a default elastic section is created with
   the member, in the same undo step.
 - The result is an `ElasticBeamColumn`. To make it force-based or
