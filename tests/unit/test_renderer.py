@@ -18,6 +18,7 @@ from opensees_studio.core import (  # noqa: E402
     Project,
     Steel01,
     TrussElement,
+    UniformElementLoad,
     make_grid_lines,
 )
 from opensees_studio.core.geometry.grid import GridSystem  # noqa: E402
@@ -120,6 +121,25 @@ def test_render_twice_does_not_leak_actors(offscreen_plotter, small_3d_project) 
     r.render(small_3d_project)
     aux2 = len(r._aux_actors)
     assert aux1 == aux2  # not doubled
+
+
+def test_uniform_load_is_one_line_diagram_actor(offscreen_plotter, small_3d_project) -> None:  # type: ignore[no-untyped-def]
+    project = small_3d_project.model_copy(deep=True)
+    project.load_patterns = [
+        PlainLoadPattern(
+            id=1,
+            time_series_id=1,
+            element_loads=[UniformElementLoad(element_id=1, wy=-5e3)],
+        )
+    ]
+    r = ModelRenderer(offscreen_plotter)
+    r.render(project)
+
+    actor = r._plotter.actors.get("loads_element")
+    assert actor is not None
+    # Shafts, V heads and the top line are one line cell set, not a glyph per
+    # station: a member load must not add one actor per arrow.
+    assert actor.GetMapper().GetInput().GetNumberOfCells() > 3
 
 
 # ──────────────────────── the origin reference ────────────────────────
