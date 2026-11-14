@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import contextlib
 import enum
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any, ClassVar
 
 import numpy as np
@@ -66,6 +66,159 @@ class RendererMode(enum.Enum):
     MODEL = "model"
     DEFORMED = "deformed"
     MODAL = "modal"
+
+
+def distributed_load_glyphs(
+    bases: Sequence[np.ndarray],
+    directions: Sequence[np.ndarray],
+    lengths: Sequence[float],
+    axis: np.ndarray,
+) -> tuple[np.ndarray, list[list[int]]]:
+    """Line geometry for one distributed load: shafts, arrowheads and top line.
+
+    The members' display already has enough solid geometry; a distributed load
+    reads better as a 2D-style diagram: one short line from the member to the
+    load line at every station, a V-shaped head on each, and a polyline joining
+    the tips (the "top line"). Everything is returned as one point array plus
+    polylines of indices, so the caller can draw the whole family in one actor.
+
+    ``bases`` lie on the member, ``directions`` are unit load vectors pointing
+    away from it and ``lengths`` scale each arrow. A zero length keeps the tip
+    on the member (a triangular load that starts at zero) and contributes to
+    the top line without drawing a shaft or head. ``axis`` is the member's
+    direction, used to put the arrowheads in the member/load plane.
+    """
+    base_array = np.asarray(bases, dtype=float)
+    direction_array = np.asarray(directions, dtype=float)
+    length_array = np.maximum(np.asarray(lengths, dtype=float), 0.0)
+    if base_array.ndim != 2 or base_array.shape[1] != 3:
+        raise ValueError("bases must be an N x 3 array")
+    if direction_array.shape != base_array.shape or length_array.shape != (len(base_array),):
+        raise ValueError("bases, directions and lengths must have one row per station")
+    axis = np.asarray(axis, dtype=float)
+    if axis.shape != (3,):
+        raise ValueError("axis must be a 3-vector")
+
+    count = len(base_array)
+    if count == 0:
+        return np.empty((0, 3), dtype=float), []
+
+    tips = base_array + direction_array * length_array[:, None]
+    dots = direction_array @ axis
+    sides = axis[None, :] - direction_array * dots[:, None]
+    norms = np.linalg.norm(sides, axis=1)
+    bad = norms <= 1e-12
+    if np.any(bad):
+        fallback = np.zeros_like(sides)
+        fallback[:, 2] = 1.0
+        along_z = np.abs(direction_array[:, 2]) > 0.9
+        fallback[along_z] = (1.0, 0.0, 0.0)
+        fallback_dots = np.einsum("ij,ij->i", fallback, direction_array)
+        fallback_sides = fallback - direction_array * fallback_dots[:, None]
+        fallback_norms = np.linalg.norm(fallback_sides, axis=1)
+        sides[bad] = fallback_sides[bad]
+        norms[bad] = fallback_norms[bad]
+    safe = norms > 1e-12
+    sides[safe] /= norms[safe, None]
+    sides[~safe] = 0.0
+
+    head_lengths = 0.45 * length_array
+    head_widths = 0.6 * head_lengths
+    heads = base_array + direction_array * head_lengths[:, None]
+    head_minus = heads - sides * head_widths[:, None]
+    head_plus = heads + sides * head_widths[:, None]
+
+    points = np.empty((count * 4, 3), dtype=float)
+    points[0::4] = base_array
+    points[1::4] = tips
+    points[2::4] = head_minus
+    points[3::4] = head_plus
+
+    polylines: list[list[int]] = []
+    for index, length in enumerate(length_array):
+        if length <= 0.0:
+            continue
+        base = index * 4
+        polylines.append([base, base + 1])
+        polylines.append([base, base + 2])
+        polylines.append([base, base + 3])
+    if count > 1:
+        polylines.append([index * 4 + 1 for index in range(count)])
+    return points, polylines
+
+
+def uniform_load_glyphs(
+    bases: np.ndarray,
+    directions: np.ndarray,
+    lengths: np.ndarray,
+    axes: np.ndarray,
+    stations: int,
+) -> tuple[np.ndarray, list[list[int]]]:
+    """Line geometry for a batch of uniform member loads, one top line per member.
+
+    This is the batched form of :func:`distributed_load_glyphs` for the dense
+    case (one uniform load on every member of a grid): the per-call numpy
+    overhead of a few hundred small arrays is what pushed the loaded benchmark
+    over its render budget. ``bases``/``directions``/``axes`` are ``N x 3``,
+    ``lengths`` is ``N``; each member gets ``stations`` stations along its axis.
+    """
+    if stations < 2:
+        raise ValueError("A load diagram needs at least two stations.")
+    bases = np.asarray(bases, dtype=float)
+    directions = np.asarray(directions, dtype=float)
+    axes = np.asarray(axes, dtype=float)
+    lengths = np.maximum(np.asarray(lengths, dtype=float), 0.0)
+    if bases.ndim != 2 or bases.shape[1] != 3:
+        raise ValueError("bases must be an N x 3 array")
+    if directions.shape != bases.shape or axes.shape != bases.shape:
+        raise ValueError("directions and axes must be N x 3 arrays")
+    if lengths.shape != (len(bases),):
+        raise ValueError("lengths must have one entry per member")
+    if len(bases) == 0:
+        return np.empty((0, 3), dtype=float), []
+
+    count = len(bases)
+    t = np.linspace(0.0, 1.0, stations)
+    base_points = bases[:, None, :] + t[None, :, None] * axes[:, None, :]
+    directions_b = np.broadcast_to(directions[:, None, :], base_points.shape)
+    lengths_b = np.broadcast_to(lengths[:, None], (count, stations))
+    tips = base_points + directions_b * lengths_b[..., None]
+
+    dots = np.einsum("nj,nj->n", directions, axes)
+    sides = axes - directions * dots[:, None]
+    norms = np.linalg.norm(sides, axis=1)
+    bad = norms <= 1e-12
+    if np.any(bad):
+        fallback = np.zeros_like(sides)
+        fallback[:, 2] = 1.0
+        along_z = np.abs(directions[:, 2]) > 0.9
+        fallback[along_z] = (1.0, 0.0, 0.0)
+        fallback_dots = np.einsum("nj,nj->n", fallback, directions)
+        fallback_sides = fallback - directions * fallback_dots[:, None]
+        fallback_norms = np.linalg.norm(fallback_sides, axis=1)
+        sides[bad] = fallback_sides[bad]
+        norms[bad] = fallback_norms[bad]
+    safe = norms > 1e-12
+    sides[safe] /= norms[safe, None]
+    sides[~safe] = 0.0
+
+    head_lengths = 0.45 * lengths_b
+    head_widths = 0.6 * head_lengths
+    heads = base_points + directions_b * head_lengths[..., None]
+    head_minus = heads - sides[:, None, :] * head_widths[..., None]
+    head_plus = heads + sides[:, None, :] * head_widths[..., None]
+    points = np.stack((base_points, tips, head_minus, head_plus), axis=2).reshape(-1, 3)
+
+    polylines: list[list[int]] = []
+    for index in range(count):
+        offset = index * stations * 4
+        for station in range(stations):
+            base = offset + station * 4
+            polylines.append([base, base + 1])
+            polylines.append([base, base + 2])
+            polylines.append([base, base + 3])
+        polylines.append([offset + station * 4 + 1 for station in range(stations)])
+    return points, polylines
 
 
 #: Colours of the origin reference: the usual X red, Y green, Z blue.
@@ -366,12 +519,22 @@ class ModelRenderer:
         self._deformation = deformation
         self._apply_mode_to_points()
 
-    def set_hover_snap(self, world_point: tuple[float, float, float] | None) -> None:
-        """Show / hide the yellow snap-target indicator.
+    #: Marker colour per snap kind; the grid preview keeps the amber default.
+    SNAP_COLORS: ClassVar[dict[str, tuple[float, float, float]]] = {
+        "midpoint": (1.0, 0.85, 0.0),  # amber
+        "perpendicular": (0.15, 0.75, 1.0),  # blue
+        "on_element": (0.35, 1.0, 0.45),  # green
+    }
+
+    def set_hover_snap(
+        self, world_point: tuple[float, float, float] | None, kind: str | None = None
+    ) -> None:
+        """Show / hide the snap-target indicator.
 
         Passing ``None`` removes the marker. Passing a world point
-        renders (or repositions) a single yellow sphere at that point —
-        the visual cue telling the user where a click would land.
+        renders (or repositions) a single sphere at that point — the
+        visual cue telling the user where a click would land. ``kind``
+        selects the member-snap colour; the grid preview stays amber.
         """
         # Remove any previous marker.
         if self._hover_actor is not None:
@@ -389,9 +552,10 @@ class ModelRenderer:
             theta_resolution=16,
             phi_resolution=16,
         )
+        colour = self.SNAP_COLORS.get(kind or "", (1.0, 0.85, 0.0))
         self._hover_actor = self._plotter.add_mesh(
             sphere,
-            color=(1.0, 0.85, 0.0),  # amber-yellow
+            color=colour,
             opacity=0.85,
             pickable=False,
             lighting=False,
@@ -1228,10 +1392,11 @@ class ModelRenderer:
     def _build_loads(self, project: Project) -> None:
         """Load arrows, one actor per family instead of one per arrow.
 
-        A pattern with a load on every joint and every member used to draw over
-        a thousand actors — each one a draw call and a freshly built arrow mesh.
-        The arrows now go into three point clouds (nodal, element, point) and a
-        single glyph places, rotates and scales every copy.
+        Nodal and point loads keep the 3D glyph; distributed member loads are
+        drawn as a 2D-style diagram — a row of line shafts with V-shaped heads
+        joined by a top line — because it reads as a load diagram rather than a
+        row of unrelated spears, and costs one line actor instead of a glyph
+        per station.
         """
         if not project.load_patterns or self._node_original_points is None:
             return
@@ -1239,13 +1404,33 @@ class ModelRenderer:
         load_color = (0.2, 0.85, 0.2)
         elem_load_color = (1.0, 0.55, 0.2)  # orange
         point_load_color = (0.85, 0.2, 0.75)  # magenta
-        n_arrows_per_elem = 5
+        distributed_stations = 5
 
         nodes = {node.id: node for node in project.nodes}
         elements = {element.id: element for element in project.elements}
         nodal: list[tuple[np.ndarray, np.ndarray]] = []
-        element: list[tuple[np.ndarray, np.ndarray, float]] = []
         point: list[tuple[np.ndarray, np.ndarray]] = []
+        distributed_points: list[np.ndarray] = []
+        distributed_polylines: list[list[int]] = []
+        uniform_bases: list[np.ndarray] = []
+        uniform_directions: list[np.ndarray] = []
+        uniform_lengths: list[float] = []
+        uniform_axes: list[np.ndarray] = []
+
+        def add_distributed(
+            bases: list[np.ndarray],
+            directions: list[np.ndarray],
+            lengths: list[float],
+            axis: np.ndarray,
+        ) -> None:
+            local_points, local_polylines = distributed_load_glyphs(
+                bases, directions, lengths, axis
+            )
+            offset = len(distributed_points)
+            distributed_points.extend(local_points)
+            distributed_polylines.extend(
+                [[index + offset for index in polyline] for polyline in local_polylines]
+            )
 
         for pattern in project.load_patterns:
             if not isinstance(pattern, PlainLoadPattern):
@@ -1263,7 +1448,7 @@ class ModelRenderer:
                     continue
                 nodal.append((np.asarray(node.coords, dtype=float), force / magnitude))
 
-            # Uniform load: a row of short arrows along the member.
+            # Uniform load: a line diagram along the whole member.
             for eload in pattern.element_loads:
                 if not isinstance(eload, UniformElementLoad):
                     continue
@@ -1279,13 +1464,14 @@ class ModelRenderer:
                 if magnitude < 1e-12:
                     continue
                 direction = load_vec / magnitude
-                arrow_len = max(0.4 * scale, length / (n_arrows_per_elem * 4))
-                for k in range(n_arrows_per_elem):
-                    t = (k + 0.5) / n_arrows_per_elem
-                    element.append((pi + t * axis, direction, arrow_len))
+                arrow_len = max(0.6 * scale, length / 12.0)
+                uniform_bases.append(pi)
+                uniform_directions.append(direction)
+                uniform_lengths.append(arrow_len)
+                uniform_axes.append(axis)
 
-            # Trapezoidal / partial: arrows over the loaded part, as long as the
-            # load there relative to the largest end value.
+            # Trapezoidal / partial: the top line follows the load intensity
+            # over the loaded part, so a triangular load shows its zero end.
             try:
                 member_loads = pattern_distributed_loads(project, pattern)
             except AreaLoadError:
@@ -1304,18 +1490,24 @@ class ModelRenderer:
                 peak = max(float(np.linalg.norm(w)) for w in ends)
                 if peak < 1e-12:
                     continue
-                full_len = max(0.4 * scale, length / (n_arrows_per_elem * 4))
-                for k in range(n_arrows_per_elem):
-                    t = (k + 0.5) / n_arrows_per_elem
+                full_len = max(0.6 * scale, length / 12.0)
+                bases = []
+                directions = []
+                lengths = []
+                for k in range(distributed_stations):
+                    t = k / (distributed_stations - 1)
                     wx, wy, wz = ends[0] + t * (ends[1] - ends[0])
                     load_vec = wx * x_local + wy * y_local + wz * z_local
                     magnitude = float(np.linalg.norm(load_vec))
-                    if magnitude < 1e-12 * peak:
-                        continue
                     x_at = dload.x_start + t * (dload.x_end - dload.x_start)
-                    element.append(
-                        (pi + x_at * axis, load_vec / magnitude, full_len * magnitude / peak)
-                    )
+                    bases.append(pi + x_at * axis)
+                    if magnitude < 1e-12 * peak:
+                        directions.append(np.zeros(3))
+                        lengths.append(0.0)
+                    else:
+                        directions.append(load_vec / magnitude)
+                        lengths.append(full_len * magnitude / peak)
+                add_distributed(bases, directions, lengths, axis)
 
             for pload in pattern.point_loads:
                 if not isinstance(pload, PointElementLoad):
@@ -1332,6 +1524,20 @@ class ModelRenderer:
                     continue
                 point.append((pi + pload.x * axis, load_vec / magnitude))
 
+        if uniform_bases:
+            batch_points, batch_polylines = uniform_load_glyphs(
+                np.asarray(uniform_bases),
+                np.asarray(uniform_directions),
+                np.asarray(uniform_lengths),
+                np.asarray(uniform_axes),
+                distributed_stations,
+            )
+            offset = len(distributed_points)
+            distributed_points.extend(batch_points)
+            distributed_polylines.extend(
+                [[index + offset for index in polyline] for polyline in batch_polylines]
+            )
+
         self._add_arrow_batch(
             [p for p, _ in nodal],
             [d for _, d in nodal],
@@ -1339,13 +1545,23 @@ class ModelRenderer:
             load_color,
             "loads_nodal",
         )
-        self._add_arrow_batch(
-            [p for p, _, _ in element],
-            [d for _, d, _ in element],
-            [length for _, _, length in element],
-            elem_load_color,
-            "loads_element",
-        )
+        if distributed_polylines:
+            cells: list[int] = []
+            for polyline in distributed_polylines:
+                cells.append(len(polyline))
+                cells.extend(polyline)
+            pd = pv.PolyData()
+            pd.points = np.asarray(distributed_points, dtype=float)
+            pd.lines = np.asarray(cells, dtype=np.int64)
+            actor = self._plotter.add_mesh(
+                pd,
+                color=elem_load_color,
+                line_width=2.0,
+                pickable=False,
+                lighting=False,
+                name="loads_element",
+            )
+            self._add_screen_actor(actor)
         self._add_arrow_batch(
             [p for p, _ in point],
             [d for _, d in point],
@@ -1486,12 +1702,28 @@ class ModelRenderer:
             if axes2 is None:
                 return None
             return pi, axis, axes2
+        angle = float(getattr(elem, "local_axis_angle", 0.0) or 0.0)
+        if angle == 0.0:
+            # The common case: compute the same axes frame_local_axes would,
+            # without rebuilding the axis and length it already has.
+            x = axis / length
+            vecxz = (
+                np.array([1.0, 0.0, 0.0])
+                if abs(float(x[2])) > abs(float(x[0]))
+                else np.array([0.0, 0.0, 1.0])
+            )
+            y = np.cross(vecxz, x)
+            y_norm = float(np.linalg.norm(y))
+            if y_norm < 1e-12:
+                return None
+            y /= y_norm
+            return pi, axis, (x, y, np.cross(x, y))
         # The same axes the runner emits (including a member's local-axis rotation).
         axes3 = frame_local_axes(
             3,
             node_i.coords,
             node_j.coords,
-            float(getattr(elem, "local_axis_angle", 0.0) or 0.0),
+            angle,
         )
         if axes3 is None:
             return None
