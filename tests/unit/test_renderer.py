@@ -162,6 +162,51 @@ def test_uniform_load_is_one_line_diagram_actor(offscreen_plotter, small_3d_proj
     assert actor.GetMapper().GetInput().GetNumberOfCells() > 3
 
 
+@pytest.mark.parametrize(
+    ("component", "value", "expected"),
+    [
+        # The fixture's member runs along +Z; its local axes are
+        # x=+Z, y=-Y, z=+X (OpenSees' 3D convention for a vertical member).
+        ("wx", 1.0, (0.0, 0.0, 1.0)),
+        ("wx", -1.0, (0.0, 0.0, -1.0)),
+        ("wy", 1.0, (0.0, -1.0, 0.0)),
+        ("wy", -1.0, (0.0, 1.0, 0.0)),
+        ("wz", 1.0, (1.0, 0.0, 0.0)),
+        ("wz", -1.0, (-1.0, 0.0, 0.0)),
+    ],
+)
+def test_rendered_load_points_along_the_requested_global_axis(
+    offscreen_plotter, small_3d_project, component, value, expected
+) -> None:  # type: ignore[no-untyped-def]
+    """The renderer must agree with the local-axis mapping for X, Y and Z.
+
+    Reads the first shaft cell of the ``loads_element`` actor: it runs from
+    the base on the member to the tail on the top line, so ``base - tail`` is
+    the world load direction. This is the second, independent check of the
+    pure-glyph test above.
+    """
+    project = small_3d_project.model_copy(deep=True)
+    project.load_patterns = [
+        PlainLoadPattern(
+            id=1,
+            time_series_id=1,
+            element_loads=[UniformElementLoad(element_id=1, **{component: value})],
+        )
+    ]
+    r = ModelRenderer(offscreen_plotter)
+    r.render(project)
+
+    actor = r._plotter.actors.get("loads_element")
+    assert actor is not None
+    pd = actor.GetMapper().GetInput()
+    point_ids = pd.GetCell(0).GetPointIds()
+    ids = [point_ids.GetId(index) for index in range(point_ids.GetNumberOfIds())]
+    base = np.asarray(pd.GetPoint(ids[0]), dtype=float)
+    tail = np.asarray(pd.GetPoint(ids[1]), dtype=float)
+    direction = (base - tail) / np.linalg.norm(base - tail)
+    np.testing.assert_allclose(direction, expected, atol=1e-9)
+
+
 # ──────────────────────── the origin reference ────────────────────────
 def test_the_origin_triad_marks_the_three_axes_from_the_origin(
     offscreen_plotter, small_3d_project
