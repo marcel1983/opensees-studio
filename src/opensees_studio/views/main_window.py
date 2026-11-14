@@ -18,8 +18,17 @@ from typing import Any, cast
 
 import numpy as np
 import shiboken6
-from PySide6.QtCore import QEvent, QPoint, QSettings, Qt
-from PySide6.QtGui import QAction, QActionGroup, QKeySequence
+from PySide6.QtCore import QEvent, QPoint, QPointF, QSettings, Qt
+from PySide6.QtGui import (
+    QAction,
+    QActionGroup,
+    QColor,
+    QIcon,
+    QKeySequence,
+    QPainter,
+    QPen,
+    QPixmap,
+)
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -169,7 +178,7 @@ from opensees_studio.services.steel_design import DesignReport, steel_frame_chec
 from opensees_studio.viewmodels import AnalysisRunner, ProjectViewModel
 from opensees_studio.viewmodels.case_results import CaseResultsCache
 from opensees_studio.viewmodels.stability_checker import StabilityChecker
-from opensees_studio.views.canvas3d import ModelCanvas
+from opensees_studio.views.canvas3d import ModelCanvas, SnapMode
 from opensees_studio.views.canvas3d.design_ratio_renderer import DesignRatioRenderer
 from opensees_studio.views.canvas3d.diagram_renderer import DiagramRenderer
 from opensees_studio.views.canvas3d.model_renderer import RendererMode
@@ -300,6 +309,42 @@ from opensees_studio.views.view_window import ViewWindow
 EXPORT_MODEL_ONLY = "Model only"
 
 
+def _snap_icon(kind: SnapMode) -> QIcon:
+    """A small vector icon for the object-snap bar (the app ships no image assets)."""
+    pixmap = QPixmap(24, 24)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    line = QPen(QColor("#c8ced8"), 1.7)
+    line.setCapStyle(Qt.PenCapStyle.RoundCap)
+    painter.setPen(line)
+    marker = {
+        SnapMode.MIDPOINT: QColor("#ffd54f"),
+        SnapMode.PERPENDICULAR: QColor("#26bfff"),
+        SnapMode.ON_ELEMENT: QColor("#59e07a"),
+    }[kind]
+    if kind is SnapMode.MIDPOINT:
+        painter.drawLine(QPointF(4, 19), QPointF(20, 5))
+        painter.setPen(QPen(Qt.PenStyle.NoPen))
+        painter.setBrush(marker)
+        painter.drawEllipse(QPointF(12, 12), 2.8, 2.8)
+    elif kind is SnapMode.PERPENDICULAR:
+        painter.drawLine(QPointF(4, 19), QPointF(20, 19))
+        painter.drawLine(QPointF(13, 19), QPointF(13, 5))
+        painter.drawLine(QPointF(13, 15), QPointF(17, 15))
+        painter.drawLine(QPointF(17, 15), QPointF(17, 19))
+        painter.setPen(QPen(Qt.PenStyle.NoPen))
+        painter.setBrush(marker)
+        painter.drawEllipse(QPointF(13, 19), 2.8, 2.8)
+    else:
+        painter.drawLine(QPointF(4, 19), QPointF(20, 5))
+        painter.setPen(QPen(Qt.PenStyle.NoPen))
+        painter.setBrush(marker)
+        painter.drawEllipse(QPointF(16, 8), 2.8, 2.8)
+    painter.end()
+    return QIcon(pixmap)
+
+
 def _add_actions(menu: QMenu, actions: Sequence[QAction | None]) -> None:
     """Add ``actions`` to ``menu``; ``None`` is a separator."""
     for action in actions:
@@ -354,6 +399,8 @@ class MainWindow(QMainWindow):
         self._busy_depth = 0
         #: Secondary viewports on the same project (View → New View Window).
         self._view_windows: list[ViewWindow] = []
+        #: Object snaps enabled in every viewport (the left icon bar).
+        self._snap_modes: set[SnapMode] = set(SnapMode)
 
         self._build_central_canvas()
         self._tool_controller = ToolController(self._canvas, self._vm, self)
@@ -372,6 +419,7 @@ class MainWindow(QMainWindow):
         self._build_menu_bar()
         self._build_view_toolbar()
         self._build_tools_toolbar()
+        self._build_snap_toolbar()
         self._build_status_bar()
         self._wire()
         self._refresh_action_enablement()
@@ -530,6 +578,31 @@ class MainWindow(QMainWindow):
         self._tool_group.addAction(self._act_tool_draw_truss)
         self._tool_group.addAction(self._act_tool_measure)
 
+        # Object snaps on frame members (independent checkable icons).
+        self._snap_actions: dict[SnapMode, QAction] = {}
+        for mode, label, tip in (
+            (
+                SnapMode.MIDPOINT,
+                "Snap to midpoint",
+                "Object snap: the midpoint of a member",
+            ),
+            (
+                SnapMode.PERPENDICULAR,
+                "Snap perpendicular",
+                "Object snap: the perpendicular foot from the previous point",
+            ),
+            (
+                SnapMode.ON_ELEMENT,
+                "Snap to member",
+                "Object snap: the nearest point on a member",
+            ),
+        ):
+            action = QAction(label, self, checkable=True, checked=True)
+            action.setIcon(_snap_icon(mode))
+            action.setToolTip(tip)
+            action.setStatusTip(tip)
+            self._snap_actions[mode] = action
+
         # Define
         self._act_grid = QAction("&Coordinate System/Grids…", self, shortcut="Ctrl+G")
         self._act_grid_wizard = QAction("Grid &Wizard…", self)
@@ -639,6 +712,7 @@ class MainWindow(QMainWindow):
         self._act_member_classification = QAction("&Member Classification…", self)
         self._act_base_plates = QAction("Base &Plates (Column Bases)…", self)
         self._act_joint_connections = QAction("Connections by &Joint…", self)
+        self._act_built_up = QAction("B&uilt-Up Shapes…", self)
         self._act_steel_check = QAction("&Steel Frame Check (AISC 360-16)…", self)
         self._act_concrete_check = QAction("Co&ncrete Frame Check (ACI 318-19)…", self)
         self._act_base_plate = QAction("&Base Plate && Anchors (DG1, ACI 318)…", self)
@@ -950,6 +1024,7 @@ class MainWindow(QMainWindow):
         m_design.addAction(self._act_design_basis)
         m_design.addAction(self._act_direct_analysis)
         m_design.addAction(self._act_member_classification)
+        m_design.addAction(self._act_built_up)
         m_design.addSeparator()
         m_design.addAction(self._act_steel_check)
         m_design.addAction(self._act_concrete_check)
@@ -1139,6 +1214,34 @@ class MainWindow(QMainWindow):
         tb.addAction(self._act_tool_draw_frame)
         tb.addAction(self._act_tool_draw_truss)
         tb.addAction(self._act_tool_measure)
+
+    def _build_snap_toolbar(self) -> None:
+        """The left-hand object-snap icon bar (midpoint / perpendicular / on member)."""
+        tb = QToolBar("Object Snap", self)
+        tb.setObjectName("objectSnapToolbar")
+        tb.setMovable(True)
+        tb.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+        self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, tb)
+        for action in self._snap_actions.values():
+            tb.addAction(action)
+        self._apply_snap_modes()
+
+    def _apply_snap_modes(self) -> None:
+        """Push the checked icon states to every viewport."""
+        self._snap_modes = {
+            mode for mode, action in self._snap_actions.items() if action.isChecked()
+        }
+        canvases = [self._main_canvas, *(window.canvas for window in self._view_windows)]
+        for canvas in canvases:
+            canvas.set_snap_modes(self._snap_modes)
+
+    def _on_snap_mode_toggled(self, _checked: bool = False) -> None:
+        """An object-snap icon changed: apply it and say what is enabled."""
+        self._apply_snap_modes()
+        enabled = [mode.value for mode in SnapMode if mode in self._snap_modes]
+        self.statusBar().showMessage(
+            "Object snaps: " + (", ".join(enabled) if enabled else "none"), 4000
+        )
 
     def _build_status_bar(self) -> None:
         self._status_label = QLabel("No project")
@@ -1344,6 +1447,8 @@ class MainWindow(QMainWindow):
         self._act_tool_draw_truss.triggered.connect(self._on_draw_truss_tool)
         self._act_tool_measure.triggered.connect(self._on_measure_tool)
         self._tool_controller.toolChanged.connect(self._on_tool_changed)
+        for action in self._snap_actions.values():
+            action.toggled.connect(self._on_snap_mode_toggled)
 
         # Define
         self._act_grid.triggered.connect(self._on_grid_system)
@@ -1436,6 +1541,7 @@ class MainWindow(QMainWindow):
         self._act_member_classification.triggered.connect(self._on_member_classification)
         self._act_base_plates.triggered.connect(self._on_base_plates)
         self._act_joint_connections.triggered.connect(self._on_joint_connections)
+        self._act_built_up.triggered.connect(self._on_built_up)
         self._act_steel_check.triggered.connect(self._on_steel_check)
         self._act_steel_workflow.triggered.connect(self._on_steel_workflow)
         self._act_concrete_check.triggered.connect(self._on_concrete_check)
@@ -2998,6 +3104,34 @@ class MainWindow(QMainWindow):
                 f"{chosen} element(s) with a role set by hand."
             )
 
+    def _on_built_up(self) -> None:
+        """Design → Built-Up Shapes: welded I-shapes, and their analysis sections, one undo step."""
+        from opensees_studio.views.dialogs.built_up_shapes import BuiltUpShapesDialog
+
+        project = self._vm.project
+        if project is None:
+            return
+        dialog = BuiltUpShapesDialog(project, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        settings = dialog.settings()
+        sections = dialog.new_sections()
+        if settings == (project.design or DesignSettings()) and not sections:
+            return
+        stack = self._vm.undo_stack
+        stack.beginMacro("Built-up shapes")
+        try:
+            if settings != (project.design or DesignSettings()):
+                self._vm.apply_command(SetDesignSettingsCommand(self._vm, settings))
+            if sections:
+                self._vm.apply_command(AddSectionsCommand(self._vm, sections))
+        finally:
+            stack.endMacro()
+        self._log(
+            f"Built-up shapes: {len(settings.built_up)} defined"
+            + (f", {len(sections)} analysis section(s) added." if sections else ".")
+        )
+
     def _on_joint_connections(self) -> None:
         """Design → Connections by Joint: topology of every member end, shear tabs checked."""
         from opensees_studio.views.dialogs.joint_connections import JointConnectionsDialog
@@ -3700,6 +3834,7 @@ class MainWindow(QMainWindow):
         # The right-click menu is the main window's, so every viewport gets the
         # same actions (assign, hide, delete) on the shared selection.
         window.canvas.contextMenuRequested.connect(self._on_canvas_context_menu)
+        window.canvas.set_snap_modes(self._snap_modes)
         self._view_windows.append(window)
         window.show_project(self._vm.project)
         window.show()
@@ -7255,6 +7390,7 @@ class MainWindow(QMainWindow):
         self._act_member_classification.setEnabled(has_project)
         self._act_base_plates.setEnabled(has_project)
         self._act_joint_connections.setEnabled(has_project)
+        self._act_built_up.setEnabled(has_project)
         self._act_steel_check.setEnabled(has_project)
         self._act_steel_workflow.setEnabled(has_project)
         self._act_concrete_check.setEnabled(has_project)

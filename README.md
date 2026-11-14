@@ -30,6 +30,8 @@ engineering, but its native interface is Tcl/Python scripts.
 OpenSees Studio adds a visual front-end so you can:
 
 - Click to draw nodes, frames, supports, and loads on a snapped grid.
+- Object snaps on frame members — midpoint, perpendicular foot and nearest
+  point — toggled from the left-hand icon bar, with a colour-coded hover marker.
 - Measure between two joints (Tools → Measure Distance, F7); the distance is
   copied to the clipboard.
 - Assign materials, sections, and load patterns through dialogs.
@@ -372,6 +374,8 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   ×0.8 (C2.3, τb = 1 with 0.001 α Yi), and the notional loads `0.002 α Yi` of
   that combination's own factored gravity; it then reports Δ2/Δ1 per storey
   (C2.2b(d)), and the steel check reads these cases with K = 1. Design →
+  Built-Up Shapes defines welded I-shapes and plate girders from their plates
+  (kc flange limits, F4/F5, web shear with stiffeners). Design →
   Member Classification shows the physical members (collinear elements of one
   section), their role and the unbraced lengths Lx, Ly and Lb from their bracing
   points; the check uses those lengths, so a meshed member keeps its real ones.

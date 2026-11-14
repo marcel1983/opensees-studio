@@ -163,7 +163,9 @@ class JointConnectionsDialog(FittedDialog):
         if key in self._tabs:
             return self._tabs[key]
         try:
-            beam = shape_in_units(result.beam_shape, self._project.meta.units)
+            beam = shape_in_units(
+                result.beam_shape, self._project.meta.units, self._settings.built_up_by_name()
+            )
         except (KeyError, ValueError):
             return None
         return default_tab(result.connection, beam, self._project.meta.units)  # type: ignore[arg-type]
@@ -206,7 +208,7 @@ class JointConnectionsDialog(FittedDialog):
             key = result.connection.key
             if key not in self._tabs or not result.beam_shape:
                 continue
-            beam = shape_in_units(result.beam_shape, units)
+            beam = shape_in_units(result.beam_shape, units, self._settings.built_up_by_name())
             if self._tabs[key] != default_tab(result.connection, beam, units):  # type: ignore[arg-type]
                 kept.append(self._tabs[key])
         return self._settings.model_copy(update={"shear_tabs": kept})
