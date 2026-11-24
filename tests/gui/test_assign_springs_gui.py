@@ -31,7 +31,7 @@ def test_assign_springs_to_the_selected_joints(qtbot, monkeypatch) -> None:  # t
         return 1
 
     monkeypatch.setattr(AssignSpringsDialog, "exec", _exec)
-    mw._on_assign_springs()
+    mw.joints.assign_springs()
     assert [n.spring for n in vm.project.nodes] == [(0.0, 0.0, 1500.0, 0.0, 0.0, 0.0)] * 2
     vm.undo_stack.undo()
     assert not any(n.has_spring for n in vm.project.nodes)

@@ -48,7 +48,7 @@ def test_the_action_writes_the_memory(qtbot, monkeypatch, tmp_path) -> None:  # 
     )
     target = tmp_path / "memory.html"
     monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: (str(target), ""))
-    window._on_calc_memory()
+    window.exports.calc_memory()
     assert target.exists()
     page = target.read_text(encoding="utf-8")
     assert "Calculation Memory" in page

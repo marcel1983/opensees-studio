@@ -51,40 +51,24 @@ from PySide6.QtWidgets import (
 
 from opensees_studio import __version__
 from opensees_studio.commands import (
-    AddElementsCommand,
-    AddEqualDOFConstraintCommand,
-    AddMaterialsCommand,
     AddNodesCommand,
     AddSectionsCommand,
     AssignMaterialCommand,
     AssignSectionCommand,
     DeleteElementsCommand,
     DeleteNodesCommand,
-    FixDuplicatesCommand,
-    MergeJointsCommand,
     MeshCommand,
-    ReplaceElementsCommand,
     SetCoordSystemsCommand,
     SetMassCommand,
     SetProjectMetaCommand,
     SetRestraintCommand,
-    SetSpringCommand,
 )
 from opensees_studio.commands.generated import insert_generated
-from opensees_studio.commands.groups import (
-    EditGroupMembersCommand,
-    SetGroupsCommand,
-    SetSectionCutsCommand,
-)
-from opensees_studio.commands.support_springs import SetSupportSpringsCommand
 from opensees_studio.commands.tables import ApplyModelTablesCommand
 from opensees_studio.core import (
-    SHELL_ELEMENT_CLASSES,
     SUPPORTED_NDF,
     ElasticSection,
     Project,
-    ShellDKGTElement,
-    ShellMITC4Element,
     UnitConverter,
     UnitSystem,
     build_portal_frame,
@@ -94,7 +78,6 @@ from opensees_studio.core import (
     make_default_slab_section,
     make_default_truss_material,
     shortcut_profiles,
-    with_shell_formulation,
 )
 from opensees_studio.core import selection as selection_queries
 from opensees_studio.core.combinations import model_fingerprint
@@ -103,12 +86,10 @@ from opensees_studio.core.connectivity import (
     joints_on_shell_edges,
     loose_joints,
 )
-from opensees_studio.core.default_materials import missing_default_materials
 from opensees_studio.core.design.settings import DesignSettings
 from opensees_studio.core.duplicates import default_tolerance
 from opensees_studio.core.generated import GeneratedModel
-from opensees_studio.core.geometry.ordering import QuadOrderError, order_quad_nodes
-from opensees_studio.core.groups import Group, colour_for, group_members
+from opensees_studio.core.groups import group_members
 from opensees_studio.core.help import ACTION_TOPICS, TOPIC_PROPERTY
 from opensees_studio.core.i18n import LANGUAGES
 from opensees_studio.core.materials.library import is_uniaxial
@@ -116,10 +97,7 @@ from opensees_studio.core.mesh import pre_run_auto_mesh
 from opensees_studio.core.model_check import Finding, check_model
 from opensees_studio.core.object_info import element_info, node_info
 from opensees_studio.core.reactions import ReactionRow, reaction_rows
-from opensees_studio.core.sections import SHELL_SECTION_CLASSES
-from opensees_studio.core.self_weight import section_weight_per_length
 from opensees_studio.core.view_settings import ViewSettings
-from opensees_studio.diagnostics.performance import perf
 from opensees_studio.services import (
     PROJECT_FILE_SUFFIX,
     engines,
@@ -150,7 +128,6 @@ from opensees_studio.services.element_forces import (
 from opensees_studio.services.element_forces import (
     auto_scale as force_diagram_auto_scale,
 )
-from opensees_studio.services.opensees_script import case_label, export_script
 from opensees_studio.services.result_store import load_results
 from opensees_studio.services.results import (
     CombinationResults,
@@ -164,7 +141,6 @@ from opensees_studio.services.results import (
 from opensees_studio.services.results_db import database_path, delete_all_results, record_results
 from opensees_studio.services.shell_fields import shell_elements
 from opensees_studio.services.stability import StabilityReport
-from opensees_studio.services.steel_design import DesignReport, steel_frame_check
 from opensees_studio.viewmodels import AnalysisRunner, ProjectViewModel
 from opensees_studio.viewmodels.case_results import CaseResultsCache
 from opensees_studio.viewmodels.stability_checker import StabilityChecker
@@ -176,68 +152,37 @@ from opensees_studio.views.canvas3d.diagram_renderer import DiagramRenderer
 from opensees_studio.views.canvas3d.model_renderer import RendererMode
 from opensees_studio.views.canvas3d.shell_contour_renderer import ShellContourRenderer
 from opensees_studio.views.controllers import Shell
+from opensees_studio.views.controllers.areas import AreasController
 from opensees_studio.views.controllers.building import BuildingController
 from opensees_studio.views.controllers.design import DesignController
+from opensees_studio.views.controllers.exports import ExportsController
+from opensees_studio.views.controllers.groups import GroupsController
+from opensees_studio.views.controllers.imports import ImportsController
+from opensees_studio.views.controllers.joints import JointsController
+from opensees_studio.views.controllers.library import LibraryController
 from opensees_studio.views.controllers.loads import LoadsController
+from opensees_studio.views.controllers.members import MembersController
+from opensees_studio.views.controllers.model_tools import ModelToolsController
+from opensees_studio.views.controllers.patterns import PatternsController
 from opensees_studio.views.controllers.transforms import TransformsController
 from opensees_studio.views.dialogs import (
     AddNodeDialog,
     AnalysisCaseManagerDialog,
-    AssignBeamIntegrationDialog,
-    AssignElastomericBearingDialog,
-    AssignEqualDOFDialog,
-    AssignGeomTransfDialog,
-    AssignHingeDialog,
-    AssignLocalAxesDialog,
-    AssignMassesDialog,
-    AssignMaterialDialog,
-    AssignSectionDialog,
-    AssignSupportDialog,
-    AssignZeroLengthDialog,
-    AssignZeroLengthSectionDialog,
-    CalculationMemoryDialog,
     CoordinateGridSystemsDialog,
     DisplayOptionsDialog,
-    DuplicatesDialog,
-    DxfImportDialog,
     ElementDiagramWindow,
-    FrameEndOffsetsDialog,
-    FrameInsertionDialog,
-    FrameModifiersDialog,
-    FrameReleasesDialog,
     FrameWizard,
-    FrictionLibraryDialog,
-    GroundMotionsDialog,
     InfluenceLineDialog,
-    LinearTimeSeriesDialog,
-    MaterialLibraryDialog,
-    MaterialTesterDialog,
-    MeshDialog,
     ModelCheckDialog,
     MoveDialog,
-    PathTimeSeriesDialog,
     PerformanceDialog,
-    PlainPatternDialog,
     ProjectInfoDialog,
     ReplicateDialog,
     RunAnalysisDialog,
-    S3dImportDialog,
-    SectionLibraryDialog,
-    TclImportDialog,
-    UniformExcitationDialog,
-    member_sections,
 )
-from opensees_studio.views.dialogs.assign_springs import AssignSpringsDialog
 from opensees_studio.views.dialogs.batch_run import BatchRunDialog
-from opensees_studio.views.dialogs.connect_joints import DivideFramesDialog, MergeJointsDialog
 from opensees_studio.views.dialogs.grid_line_view import GridLineViewDialog
 from opensees_studio.views.dialogs.grid_wizard import GridWizardDialog
-from opensees_studio.views.dialogs.groups import (
-    NEW_GROUP,
-    AssignGroupDialog,
-    GroupsDialog,
-    SectionCutsDialog,
-)
 from opensees_studio.views.dialogs.load_combinations import LoadCombinationsDialog
 from opensees_studio.views.dialogs.load_display import LoadDisplayDialog
 from opensees_studio.views.dialogs.model_tables import ModelTablesDialog
@@ -245,7 +190,6 @@ from opensees_studio.views.dialogs.object_info import ObjectInfoDialog
 from opensees_studio.views.dialogs.reactions import ReactionsDialog
 from opensees_studio.views.dialogs.run_cases import RunCasesDialog
 from opensees_studio.views.dialogs.solver_settings import SolverSettingsDialog
-from opensees_studio.views.dialogs.support_springs import SupportSpringDialog
 from opensees_studio.views.dialogs.view_colors import ViewColorsDialog
 from opensees_studio.views.docks import (
     DeformedShapeView,
@@ -264,7 +208,6 @@ from opensees_studio.views.docks import (
 from opensees_studio.views.help_window import HelpController
 from opensees_studio.views.i18n import stored_language, tr
 from opensees_studio.views.project_dock import ProjectDock
-from opensees_studio.views.report_pdf import write_pdf
 from opensees_studio.views.ribbon import RibbonBar, build_ribbon_tabs
 from opensees_studio.views.ribbon.icons import apply_command_icons
 from opensees_studio.views.run_status import RunStatusWidget
@@ -280,9 +223,6 @@ from opensees_studio.views.tools import (
     ToolController,
 )
 from opensees_studio.views.view_window import ViewWindow
-
-#: First entry of the export dialog's case list: no analysis block in the script.
-EXPORT_MODEL_ONLY = "Model only"
 
 #: Options → Autosave Recovery Copy: minutes between copies (0 = off), and where
 #: the choice is kept.
@@ -444,8 +384,6 @@ class MainWindow(QMainWindow):
         self._quick_shell_tool: DrawShellTool | None = None
         self._draw_shell_tool: DrawShellTool | None = None
         self._measure_tool: MeasureDistanceTool | None = None
-        self._material_tester_dlg: MaterialTesterDialog | None = None  # non-modal, reused
-        self._ground_motions_dlg: GroundMotionsDialog | None = None  # non-modal, reused
 
         shell = Shell(
             window=self,
@@ -462,7 +400,27 @@ class MainWindow(QMainWindow):
         )
 
         #: Storeys, mass source, seismic loads, diaphragms, rigid links.
+        self.areas = AreasController(shell)
         self.building = BuildingController(shell)
+        #: Assign → Frame: section, material, formulation, frame member options.
+        self.joints = JointsController(shell)
+        self.model_tools = ModelToolsController(
+            shell, select_rows=lambda nodes, elements: self._select_report_row(nodes, elements)
+        )
+        self.exports = ExportsController(
+            shell,
+            results=lambda: self._current_case_results(),
+            report_results=lambda: self.report_results(),
+        )
+        self.groups = GroupsController(shell)
+        self.imports = ImportsController(
+            shell,
+            confirm_discard=lambda action: self._confirm_discard_changes(action),
+            apply_view_settings=lambda: self._apply_project_view_settings(),
+        )
+        self.library = LibraryController(shell, new_project=lambda: self._on_new())
+        self.members = MembersController(shell)
+        self.patterns = PatternsController(shell, new_project=self._on_new)
         #: Loads on joints, frames and areas, joint patterns, Edit → Delete Loads.
         self.loads = LoadsController(shell)
         #: The Design menu: basis, members, steel and concrete checks, connections, footings.
@@ -661,11 +619,6 @@ class MainWindow(QMainWindow):
         self._act_select_shell_edge_joints = QAction("Joints on S&hell Edges", self)
 
         # Edit → transforms
-        self._act_check_duplicates = QAction("Check Model for &Duplicates…", self)
-        self._act_mesh = QAction("&Mesh…", self)
-        self._act_merge_joints = QAction("Merge &Joints…", self)
-        self._act_divide_frames = QAction("Divide Frames at &Joints…", self)
-        self._act_join_frames = QAction("Join &Frames", self)
 
         # Tools (exclusive)
         self._tool_group = QActionGroup(self)
@@ -721,14 +674,7 @@ class MainWindow(QMainWindow):
         self._act_grid_wizard = QAction("Grid &Wizard…", self)
         # No shortcut: Ctrl+N is File → New, and F4 draws nodes.
         self._act_add_node = QAction("Add &Node…", self)
-        self._act_groups = QAction("&Groups…", self)
-        self._act_section_cuts = QAction("Section &Cuts…", self)
         self._act_custom_commands = QAction("Custom OpenSees Co&mmands…", self)
-        self._act_assign_group = QAction("Assign to &Group…", self)
-        # Ctrl+G is Coordinate System/Grids: a shared shortcut fires neither.
-        self._act_assign_group.setShortcut("Ctrl+Shift+G")
-        self._act_create_shell = QAction("Create S&hell from 3 or 4 Nodes…", self)
-        self._act_shell_formulation = QAction("Shell &Formulation…", self)
         self._act_frame_wizard = QAction("Create Portal &Frame…", self)
         self._act_truss_wizard = QAction("Create &Truss…", self)
         self._act_warehouse_wizard = QAction("Create &Warehouse…", self)
@@ -736,39 +682,10 @@ class MainWindow(QMainWindow):
             "A 3D steel warehouse from a few numbers: portal frames, purlins, girts, "
             "bracing, roof loads and the combinations of a design code."
         )
-        self._act_material_library = QAction("&Material Library…", self, shortcut="Ctrl+Shift+M")
-        self._act_default_materials = QAction("Add &Default Materials", self)
-        self._act_default_materials.setToolTip(
-            "Add the default steels (A36, A572 Gr. 50, A992, A500 Gr. B, A653 sheet), "
-            "concretes (3000 and 4000 psi) and grouted block masonry the project lacks."
-        )
-        self._act_friction_library = QAction("&Friction Models…", self)
-        self._act_material_tester = QAction("Material &Tester…", self, shortcut="Ctrl+Shift+T")
-        # Ctrl+Shift+G is Assign to Group and Ctrl+Shift+S is Save As: an
-        # ambiguous shortcut fires neither (tests/gui/test_shortcuts.py).
-        self._act_ground_motions = QAction(
-            "&Ground Motions…", self, shortcut=QKeySequence("Ctrl+Shift+W")
-        )
-        self._act_section_library = QAction(
-            "&Section Library…", self, shortcut=QKeySequence("Ctrl+Shift+E")
-        )
-        self._act_concrete_section = QAction("&Concrete Section Wizard…", self)
-        self._act_steel_deck = QAction("Steel Deck Sla&b Wizard…", self)
-        self._act_mc2010 = QAction("Concrete Creep && Shrin&kage (fib MC2010)…", self)
-        self._act_section_designer = QAction("Section &Designer…", self)
-        self._act_add_linear_ts = QAction("Add &Linear TimeSeries…", self)
-        self._act_add_path_ts = QAction("Add &Path TimeSeries…", self)
-        self._act_add_function_ts = QAction(
-            "Add &Function TimeSeries (Constant, Trig, Pulse…)…", self
-        )
-        self._act_add_multi_support = QAction("Add &Multi-Support Excitation…", self)
-        self._act_add_plain_pattern = QAction("Add &Plain Load Pattern…", self)
-        self._act_add_uniform_excitation = QAction("Add &Uniform Excitation…", self)
         self._act_load_combinations = QAction("Load &Combinations…", self)
 
         # Assign
         # Assign — organized as Joint (nodes) / Frame (elements) for SAP2000 parity.
-        self._act_assign_support = QAction("&Restraints…", self, shortcut="Ctrl+R")
         # One click on the Restraints bar: the common supports, no dialog.
         self._act_restraint_fixed = QAction("&Fixed", self)
         self._act_restraint_pinned = QAction("&Pinned", self)
@@ -786,29 +703,6 @@ class MainWindow(QMainWindow):
             action.setStatusTip(text)
             action.setProperty("ownTip", text)
             action.setData(preset)
-        self._act_assign_masses = QAction("&Masses…", self)
-        self._act_assign_springs = QAction("S&prings…", self)
-        self._act_assign_equal_dof = QAction("&EqualDOF…", self)
-        self._act_assign_area_springs = QAction("&Area Springs…", self)
-        self._act_assign_edge_springs = QAction("&Edge Springs…", self)
-        self._act_assign_line_springs = QAction("&Line Springs…", self)
-        self._act_assign_zero_length = QAction("Zero-&Length Element…", self)
-        self._act_assign_zls = QAction("&Zero-Length Section…", self)
-        self._act_assign_bearing = QAction("&Bearing…", self)
-        self._act_assign_link = QAction("&Link (twoNodeLink / TFP)…", self)
-        self._act_assign_hinge = QAction("Plastic &Hinge…", self)
-        self._act_assign_section = QAction("S&ection…", self)
-        self._act_assign_material = QAction("&Material…", self)
-        self._act_assign_geom_transf = QAction("&Geometric Transformation…", self)
-        self._act_assign_local_axes = QAction("&Local Axes…", self)
-        self._act_assign_integration = QAction("Beam &Integration…", self)
-        self._act_assign_releases = QAction("&Releases/Partial Fixity…", self)
-        self._act_assign_end_offsets = QAction("&End (Length) Offsets…", self)
-        self._act_assign_insertion = QAction("I&nsertion Point…", self)
-        self._act_assign_modifiers = QAction("Property M&odifiers…", self)
-        self._act_assign_auto_mesh = QAction("&Auto Mesh…", self)
-        self._act_assign_wall = QAction("RC &Wall (MVLEM)…", self)
-        self._act_assign_pile = QAction("&Pile Soil Springs (p-y, t-z, q-z)…", self)
 
         # Display (post-processing)
         self._act_select_results = QAction("Show Results &Of…", self)
@@ -1053,11 +947,11 @@ class MainWindow(QMainWindow):
         )
         m_edit.addSeparator()
         m_edit.addAction(self._act_table_editing)
-        m_edit.addAction(self._act_check_duplicates)
-        m_edit.addAction(self._act_merge_joints)
-        m_edit.addAction(self._act_divide_frames)
-        m_edit.addAction(self._act_join_frames)
-        m_edit.addAction(self._act_mesh)
+        m_edit.addAction(self.action("edit.check_duplicates"))
+        m_edit.addAction(self.action("edit.merge_joints"))
+        m_edit.addAction(self.action("edit.divide_frames"))
+        m_edit.addAction(self.action("edit.join_frames"))
+        m_edit.addAction(self.action("edit.mesh"))
         m_edit.addSeparator()
         m_edit.addAction(self.action("edit.delete_loads"))
 
@@ -1068,42 +962,40 @@ class MainWindow(QMainWindow):
         m_define.addAction(self._act_grid)
         m_define.addAction(self._act_grid_wizard)
         m_define.addAction(self.action("define.storeys"))
-        m_define.addAction(self._act_groups)
+        m_define.addAction(self.action("define.groups"))
         m_define.addAction(self.action("define.joint_patterns"))
-        m_define.addAction(self._act_section_cuts)
+        m_define.addAction(self.action("define.section_cuts"))
         m_define.addAction(self.action("define.mass_source"))
         m_define.addAction(self.action("define.seismic_loads"))
         m_define.addAction(self._act_add_node)
-        m_define.addAction(self._act_create_shell)
+        m_define.addAction(self.action("define.create_shell"))
         m_define.addAction(self._act_frame_wizard)
         m_define.addAction(self._act_truss_wizard)
         m_define.addAction(self._act_warehouse_wizard)
         m_define.addSeparator()
         m_define.addActions(
             [
-                self._act_material_library,
-                self._act_default_materials,
-                self._act_mc2010,
-                self._act_friction_library,
-                self._act_material_tester,
-                self._act_ground_motions,
-                self._act_section_library,
-                self._act_concrete_section,
-                self._act_steel_deck,
-                self._act_section_designer,
+                self.action("define.material_library"),
+                self.action("define.default_materials"),
+                self.action("define.mc2010"),
+                self.action("define.friction_library"),
+                self.action("define.material_tester"),
+                self.action("define.ground_motions"),
+                self.action("define.section_library"),
+                self.action("define.concrete_section"),
+                self.action("define.steel_deck"),
+                self.action("define.section_designer"),
             ]
         )
         m_define.addSeparator()
         time_series_menu = m_define.addMenu("&Time Series")
-        time_series_menu.addAction(self._act_add_linear_ts)
-        time_series_menu.addAction(self._act_add_path_ts)
-        time_series_menu.addAction(self._act_add_function_ts)
-        self._act_constant_ts = time_series_menu.addAction(
-            "Add &Constant TimeSeries…", self._on_constant_ts
-        )
-        m_define.addAction(self._act_add_plain_pattern)
-        m_define.addAction(self._act_add_uniform_excitation)
-        m_define.addAction(self._act_add_multi_support)
+        time_series_menu.addAction(self.action("define.linear_ts"))
+        time_series_menu.addAction(self.action("define.path_ts"))
+        time_series_menu.addAction(self.action("define.function_ts"))
+        time_series_menu.addAction(self.action("define.constant_ts"))
+        m_define.addAction(self.action("define.plain_pattern"))
+        m_define.addAction(self.action("define.uniform_excitation"))
+        m_define.addAction(self.action("define.multi_support"))
         m_define.addSeparator()
         m_define.addAction(self._act_load_combinations)
         m_define.addSeparator()
@@ -1113,53 +1005,53 @@ class MainWindow(QMainWindow):
         # Joint submenu — operates on selected nodes.
         # The same lists feed the right-click menu of a selection (None = separator).
         self._joint_actions: list[QAction | None] = [
-            self._act_assign_support,
-            self._act_assign_masses,
-            self._act_assign_springs,
-            self._act_assign_equal_dof,
+            self.action("assign.support"),
+            self.action("assign.masses"),
+            self.action("assign.springs"),
+            self.action("assign.equal_dof"),
             self.action("assign.diaphragm"),
             self.action("assign.rigid_link"),
             self.action("assign.remove_constraints"),
             self.action("assign.load"),
             self.action("assign.imposed_displacement"),
-            self._act_assign_zero_length,
+            self.action("assign.zero_length"),
             self.action("assign.joint_pattern"),
-            self._act_assign_zls,
-            self._act_assign_bearing,
-            self._act_assign_link,
+            self.action("assign.zls"),
+            self.action("assign.bearing"),
+            self.action("assign.link"),
         ]
         self._frame_actions: list[QAction | None] = [
-            self._act_assign_section,
-            self._act_assign_material,
-            self._act_assign_geom_transf,
-            self._act_assign_local_axes,
-            self._act_assign_integration,
+            self.action("assign.section"),
+            self.action("assign.material"),
+            self.action("assign.geom_transf"),
+            self.action("assign.local_axes"),
+            self.action("assign.integration"),
             None,
-            self._act_assign_releases,
-            self._act_assign_end_offsets,
-            self._act_assign_insertion,
-            self._act_assign_modifiers,
-            self._act_assign_auto_mesh,
+            self.action("assign.releases"),
+            self.action("assign.end_offsets"),
+            self.action("assign.insertion"),
+            self.action("assign.modifiers"),
+            self.action("assign.auto_mesh"),
             None,
             self.action("assign.distributed_load"),
             self.action("assign.trapezoidal_load"),
             self.action("assign.frame_point_load"),
             self.action("assign.temperature_load"),
             self.action("assign.tendon"),
-            self._act_assign_hinge,
-            self._act_assign_wall,
+            self.action("assign.hinge"),
+            self.action("assign.wall"),
             None,
-            self._act_assign_line_springs,
-            self._act_assign_pile,
+            self.action("assign.line_springs"),
+            self.action("assign.pile"),
         ]
         self._area_actions: list[QAction | None] = [
-            self._act_shell_formulation,
+            self.action("assign.shell_formulation"),
             None,
             self.action("assign.surface_load"),
             self.action("assign.floor_load"),
             None,
-            self._act_assign_area_springs,
-            self._act_assign_edge_springs,
+            self.action("assign.area_springs"),
+            self.action("assign.edge_springs"),
         ]
         # Joint submenu — operates on selected nodes.
         m_joint = m_assign.addMenu("&Joint")
@@ -1173,7 +1065,7 @@ class MainWindow(QMainWindow):
         _add_actions(m_assign.addMenu("&Frame"), self._frame_actions)
         _add_actions(m_assign.addMenu("A&rea"), self._area_actions)
         m_assign.addSeparator()
-        m_assign.addAction(self._act_assign_group)
+        m_assign.addAction(self.action("assign.group"))
 
         m_analyze = mb.addMenu("&Analyze")
         m_analyze.addAction(self._act_case_manager)
@@ -1960,11 +1852,6 @@ class MainWindow(QMainWindow):
             ),
         ):
             action.triggered.connect(lambda _=False, query=query: self._select_from(query))
-        self._act_check_duplicates.triggered.connect(self._on_check_duplicates)
-        self._act_mesh.triggered.connect(self._on_mesh)
-        self._act_merge_joints.triggered.connect(self._on_merge_joints)
-        self._act_divide_frames.triggered.connect(self._on_divide_frames)
-        self._act_join_frames.triggered.connect(self._on_join_frames)
 
         # Tools
         self._act_tool_select.triggered.connect(self._on_select_tool)
@@ -1991,61 +1878,15 @@ class MainWindow(QMainWindow):
         self._canvas.lineSelectFinished.connect(lambda: self._act_select_line.setChecked(False))
         self._act_select_line.toggled.connect(self._on_select_line)
         self._act_add_node.triggered.connect(self._on_add_node)
-        self._act_create_shell.triggered.connect(self._on_create_shell)
-        self._act_shell_formulation.triggered.connect(self._on_shell_formulation)
         self._act_frame_wizard.triggered.connect(self._on_frame_wizard)
         self._act_truss_wizard.triggered.connect(self._on_truss_wizard)
         self._act_warehouse_wizard.triggered.connect(self._on_warehouse_wizard)
-        self._act_material_library.triggered.connect(self._on_material_library)
-        self._act_default_materials.triggered.connect(self._on_add_default_materials)
-        self._act_friction_library.triggered.connect(self._on_friction_library)
-        self._act_material_tester.triggered.connect(self._on_material_tester)
-        self._act_ground_motions.triggered.connect(self._on_ground_motions)
-        self._act_section_library.triggered.connect(self._on_section_library)
-        self._act_concrete_section.triggered.connect(self._on_concrete_section)
-        self._act_steel_deck.triggered.connect(self._on_steel_deck)
-        self._act_mc2010.triggered.connect(self._on_mc2010_concrete)
-        self._act_section_designer.triggered.connect(self._on_section_designer)
-        self._act_add_linear_ts.triggered.connect(self._on_add_linear_ts)
-        self._act_add_path_ts.triggered.connect(self._on_add_path_ts)
-        self._act_add_function_ts.triggered.connect(self._on_add_function_ts)
-        self._act_add_multi_support.triggered.connect(self._on_add_multi_support)
-        self._act_add_plain_pattern.triggered.connect(self._on_add_plain_pattern)
-        self._act_add_uniform_excitation.triggered.connect(
-            self._on_add_uniform_excitation,
-        )
         self._act_load_combinations.triggered.connect(self._on_load_combinations)
 
         # Assign
-        self._act_assign_support.triggered.connect(self._on_assign_support)
         for action in self._restraint_actions():
             action.triggered.connect(self._on_quick_restraint)
-        self._act_assign_masses.triggered.connect(self._on_assign_masses)
-        self._act_assign_springs.triggered.connect(self._on_assign_springs)
-        self._act_assign_equal_dof.triggered.connect(self._on_assign_equal_dof)
-        self._act_groups.triggered.connect(self._on_define_groups)
-        self._act_section_cuts.triggered.connect(self._on_define_section_cuts)
         self._act_custom_commands.triggered.connect(self._on_custom_commands)
-        self._act_assign_group.triggered.connect(self._on_assign_group)
-        self._act_assign_pile.triggered.connect(self._on_assign_pile_springs)
-        self._act_assign_area_springs.triggered.connect(lambda: self._on_assign_springs_of("area"))
-        self._act_assign_edge_springs.triggered.connect(lambda: self._on_assign_springs_of("edge"))
-        self._act_assign_line_springs.triggered.connect(lambda: self._on_assign_springs_of("line"))
-        self._act_assign_zero_length.triggered.connect(self._on_assign_zero_length)
-        self._act_assign_zls.triggered.connect(self._on_assign_zls)
-        self._act_assign_bearing.triggered.connect(self._on_assign_bearing)
-        self._act_assign_link.triggered.connect(self._on_assign_link)
-        self._act_assign_hinge.triggered.connect(self._on_assign_hinge)
-        self._act_assign_section.triggered.connect(self._on_assign_section)
-        self._act_assign_material.triggered.connect(self._on_assign_material)
-        self._act_assign_geom_transf.triggered.connect(self._on_assign_geom_transf)
-        self._act_assign_local_axes.triggered.connect(self._on_assign_local_axes)
-        self._act_assign_integration.triggered.connect(self._on_assign_integration)
-        self._act_assign_releases.triggered.connect(self._on_assign_releases)
-        self._act_assign_end_offsets.triggered.connect(self._on_assign_end_offsets)
-        self._act_assign_insertion.triggered.connect(self._on_assign_insertion)
-        self._act_assign_modifiers.triggered.connect(self._on_assign_modifiers)
-        self._act_assign_wall.triggered.connect(self._on_assign_wall)
 
         # Analyze
         self._act_case_manager.triggered.connect(self._on_case_manager)
@@ -2055,7 +1896,6 @@ class MainWindow(QMainWindow):
         self._act_run_selected.triggered.connect(self._on_run_selected_cases)
         self._act_clear_results.triggered.connect(self._on_clear_results)
         self._act_auto_mesh_frames.toggled.connect(self._on_toggle_auto_mesh_frames)
-        self._act_assign_auto_mesh.triggered.connect(self._on_assign_auto_mesh)
         self._act_dark_mode.toggled.connect(self._apply_dark_mode)
         self._act_check_stability.triggered.connect(self._on_check_stability)
         self._act_cancel_stability.triggered.connect(self._stability.cancel)
@@ -2547,52 +2387,6 @@ class MainWindow(QMainWindow):
         self._recent.add(out)
         return True
 
-    def _on_export_ifc(self) -> None:
-        """File → Export → IFC: the physical BIM model and the analytical model, IFC4."""
-        from opensees_studio.services.ifc_export import IfcExportError, export_ifc
-
-        if self._vm.project is None:
-            QMessageBox.information(self, "Export IFC", "Open or create a project first.")
-            return
-        default = (self._vm.path.stem if self._vm.path is not None else "model") + ".ifc"
-        path, _ = QFileDialog.getSaveFileName(self, "Export IFC", default, "IFC (*.ifc)")
-        if not path:
-            return
-        if not path.lower().endswith(".ifc"):
-            path += ".ifc"
-        try:
-            report = export_ifc(self._vm.project, path)
-        except (IfcExportError, OSError, ValueError) as exc:
-            QMessageBox.critical(self, "Export IFC failed", str(exc))
-            return
-        self._log(report.summary())
-        if report.notes:
-            QMessageBox.information(self, "Export IFC", report.summary())
-
-    def _on_export_s2k(self) -> None:
-        """File → Export → SAP2000 Text: the frame model as SAP2000 text tables."""
-        from opensees_studio.services.sap2000_text import Sap2000TextError, export_s2k
-
-        if self._vm.project is None:
-            QMessageBox.information(self, "Export SAP2000 Text", "Open or create a project first.")
-            return
-        default = (self._vm.path.stem if self._vm.path is not None else "model") + ".s2k"
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Export SAP2000 Text", default, "SAP2000 text (*.s2k *.$2k)"
-        )
-        if not path:
-            return
-        if not path.lower().endswith((".s2k", ".$2k")):
-            path += ".s2k"
-        try:
-            report = export_s2k(self._vm.project, path)
-        except Sap2000TextError as exc:
-            QMessageBox.critical(self, "Export SAP2000 Text failed", str(exc))
-            return
-        self._log(f"Exported {Path(path).name}: {report.summary()}")
-        if report.skipped:
-            QMessageBox.information(self, "Export SAP2000 Text", report.summary())
-
     def report_results(self) -> list[Any]:
         """The results the report includes: every current case, plus the one on screen."""
         project = self._vm.project
@@ -2604,211 +2398,6 @@ class MainWindow(QMainWindow):
             if fp == fingerprint:
                 current.setdefault(case_id, results)
         return list(current.values())
-
-    def _on_export_report(self) -> None:
-        """File → Export → Report: model, loads, cases and current results (PDF, Word, HTML)."""
-        from opensees_studio.services.report import build_report, report_sections, running_text
-        from opensees_studio.views.dialogs.report_options import (
-            ReportOptionsDialog,
-            load_options,
-            save_options,
-        )
-
-        project = self._vm.project
-        if project is None:
-            QMessageBox.information(self, "Export report", "Open or create a project first.")
-            return
-        results = self.report_results()
-        dialog = ReportOptionsDialog(report_sections(project, results), load_options(), self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        options = dialog.options()
-        save_options(options)
-        default = (self._vm.path.stem if self._vm.path is not None else "model") + "-report.pdf"
-        path, chosen = QFileDialog.getSaveFileName(
-            self,
-            "Export report",
-            default,
-            "PDF (*.pdf);;Word document (*.docx);;HTML page (*.html)",
-        )
-        if not path:
-            return
-        lower = path.lower()
-        if lower.endswith((".html", ".htm")):
-            fmt = "html"
-        elif lower.endswith(".docx"):
-            fmt = "docx"
-        elif lower.endswith(".pdf"):
-            fmt = "pdf"
-        else:
-            fmt = "html" if "HTML" in chosen else "docx" if "Word" in chosen else "pdf"
-            path += {"html": ".html", "docx": ".docx", "pdf": ".pdf"}[fmt]
-        page = build_report(project, results, options=options, paged=fmt == "pdf")
-        running = None
-        if options.header_footer:
-            running = running_text(
-                project, skip_first_page=options.cover, language=options.language
-            )
-        try:
-            if fmt == "html":
-                Path(path).write_text(page, encoding="utf-8")
-            elif fmt == "docx":
-                from opensees_studio.services.report_docx import docx_bytes
-                from opensees_studio.views.report_pdf import svg_to_png
-
-                Path(path).write_bytes(
-                    docx_bytes(
-                        page,
-                        running=running,
-                        keep_tables_together=options.keep_tables_together,
-                        rasterize=svg_to_png,
-                        language=options.language,
-                        title=project.meta.name,
-                    )
-                )
-            else:
-                write_pdf(
-                    page,
-                    path,
-                    running=running,
-                    keep_tables_together=options.keep_tables_together,
-                )
-        except OSError as exc:
-            QMessageBox.critical(self, "Export report failed", str(exc))
-            return
-        self._log(f"Report written: {path} ({len(results)} result set(s)).")
-
-    def _on_calc_memory(self) -> None:
-        """File → Export → Calculation Memory: member sheets in the chosen format."""
-        from opensees_studio.services.calc_memory import (
-            Language,
-            build_member_memory,
-            odt_bytes,
-        )
-
-        project = self._vm.project
-        if project is None:
-            QMessageBox.information(self, "Calculation memory", "Open or create a project first.")
-            return
-        dialog = CalculationMemoryDialog(self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        results = dict(self._case_results.current(project))
-        report = steel_frame_check(project, results, project.design)
-        members = report.members
-        chosen = dialog.member_filter()
-        if chosen == "selected":
-            ids = set(self._canvas.selection.elements)
-            members = [m for m in members if m.element_id in ids]
-        elif chosen == "ng":
-            members = [m for m in members if m.status == "NG"]
-        if not members:
-            QMessageBox.information(
-                self, "Calculation memory", "No member matches the chosen filter."
-            )
-            return
-        filtered = DesignReport(
-            members=members,
-            joints=report.joints,
-            connections=report.connections,
-            load_sets=report.load_sets,
-            notes=report.notes,
-        )
-        fmt = dialog.format()
-        extensions = {
-            "html": (".html", "HTML page (*.html)"),
-            "markdown": (".md", "Markdown (*.md)"),
-            "latex": (".tex", "LaTeX (*.tex)"),
-            "odt": (".odt", "OpenDocument text (*.odt)"),
-            "pdf": (".pdf", "PDF (*.pdf)"),
-        }
-        suffix, file_filter = extensions[fmt]
-        stem = self._vm.path.stem if self._vm.path is not None else "model"
-        path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Export calculation memory",
-            f"{stem}-calc-memory{suffix}",
-            file_filter,
-        )
-        if not path:
-            return
-        language = cast(Language, dialog.language())
-        try:
-            if fmt == "odt":
-                Path(path).write_bytes(odt_bytes(project, filtered, language=language))
-            elif fmt == "pdf":
-                page = build_member_memory(
-                    project,
-                    filtered,
-                    language=language,
-                    fmt="html",
-                )
-                write_pdf(page, path)
-            else:
-                text = build_member_memory(
-                    project,
-                    filtered,
-                    language=language,
-                    fmt=cast(Any, fmt),
-                )
-                Path(path).write_text(text, encoding="utf-8")
-        except (OSError, ValueError) as exc:
-            QMessageBox.critical(self, "Calculation memory failed", str(exc))
-            return
-        self._log(f"Calculation memory written: {path} ({len(members)} member(s)).")
-
-    def _on_export_script(self) -> None:
-        """File → Export → OpenSees script: the model as plain OpenSeesPy.
-
-        The script is the command sequence the runner itself emits, so it
-        cannot drift from what the solver is given (see
-        ``services/opensees_script.py``).
-        """
-        if self._vm.project is None:
-            QMessageBox.information(self, "Export script", "Open or create a project first.")
-            return
-        chosen, case = self._ask_export_case()
-        if not chosen:
-            return
-        default = (self._vm.path.stem if self._vm.path is not None else "model") + ".py"
-        path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Export OpenSees script",
-            default,
-            "Python script (*.py)",
-        )
-        if not path:
-            return
-        try:
-            source = export_script(
-                self._vm.project, case, version=__version__, filename=Path(path).name
-            )
-            Path(path).write_text(source, encoding="utf-8")
-        except Exception as exc:
-            QMessageBox.critical(self, "Export failed", str(exc))
-            return
-        self._log(f"Exported OpenSees script: {path}")
-
-    def _ask_export_case(self) -> tuple[bool, Any]:
-        """Ask which case the script should run. ``(False, None)`` on cancel."""
-        project = self._vm.project
-        if project is None or not project.analyses:
-            return True, None
-        analyses = project.analyses
-        labels = [EXPORT_MODEL_ONLY, *(case_label(c) for c in analyses)]
-        choice, accepted = QInputDialog.getItem(
-            self,
-            "Export OpenSees script",
-            "Include which analysis case?",
-            labels,
-            0,
-            False,
-        )
-        if not accepted:
-            return False, None
-        if choice == EXPORT_MODEL_ONLY:
-            return True, None
-        return True, analyses[labels.index(choice) - 1]
 
     # ── slots: edit ──────────────────────────────────────────────────
     def _warn_case_references(self) -> None:
@@ -3315,167 +2904,6 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, "Grid update failed", str(exc))
 
-    def _on_create_shell(self) -> None:
-        """Define → Create Shell: a ShellMITC4 from four selected nodes, a ShellDKGT from three.
-
-        The selection carries no order, so the winding is derived from the
-        nodes' coordinates: a shell built from a scrambled list is inverted or
-        twisted, and the user has no way to express "counter-clockwise" by
-        clicking.
-        """
-        project = self._vm.project
-        if project is None:
-            QMessageBox.information(self, "Create shell", "Open or create a project first.")
-            return
-        selected = [n for n in project.nodes if n.id in self._canvas.selection.nodes]
-        if len(selected) not in (3, 4):
-            QMessageBox.information(
-                self,
-                "Create shell",
-                "Select four nodes (a quadrilateral) or three (a triangle) first "
-                f"(you have {len(selected)}).",
-            )
-            return
-        plate_sections = [s for s in project.sections if isinstance(s, SHELL_SECTION_CLASSES)]
-        if not plate_sections:
-            QMessageBox.information(
-                self,
-                "Create shell",
-                "A shell needs a plate section. Add one from Define → Section Library "
-                "(type 'Plate Section (shell)').",
-            )
-            return
-        if len(plate_sections) == 1:
-            section = plate_sections[0]
-        else:
-            labels = [f"#{s.id} {s.name} (h = {s.h:g})" for s in plate_sections]
-            choice, accepted = QInputDialog.getItem(
-                self, "Create shell", "Plate section:", labels, 0, False
-            )
-            if not accepted:
-                return
-            section = plate_sections[labels.index(choice)]
-        element_id = project.next_element_id()
-        if len(selected) == 3:
-            # Any three points wind one way or the other: keep the selection order.
-            corners = (selected[0].id, selected[1].id, selected[2].id)
-            tri = ShellDKGTElement(id=element_id, nodes=corners, section_id=section.id)
-            self._vm.apply_command(
-                AddElementsCommand(self._vm, [tri], text=f"Add shell {element_id}")
-            )
-            self._log(
-                f"Shell {element_id} (ShellDKGT): nodes {tri.nodes}, plate section {section.id}."
-            )
-            return
-        points = [
-            (float(node.coords[0]), float(node.coords[1]), float(node.coords[2]))
-            for node in selected
-        ]
-        try:
-            order = order_quad_nodes(points)
-        except QuadOrderError as exc:
-            QMessageBox.critical(self, "Cannot build the shell", str(exc))
-            return
-        ordered = [selected[index] for index in order]
-        nodes = (ordered[0].id, ordered[1].id, ordered[2].id, ordered[3].id)
-        try:
-            self._vm.apply_command(
-                AddElementsCommand(
-                    self._vm,
-                    [ShellMITC4Element(id=element_id, nodes=nodes, section_id=section.id)],
-                    text=f"Add shell {element_id}",
-                )
-            )
-        except Exception as exc:
-            QMessageBox.critical(self, "Cannot create the shell", str(exc))
-            return
-        self._log(
-            f"Shell {element_id}: nodes {nodes}, plate section {section.id} "
-            f"(winding ordered counter-clockwise)."
-        )
-
-    def _on_mc2010_concrete(self) -> None:
-        """Define → Concrete Creep & Shrinkage: a TDConcreteMC10 material from the mix."""
-        from opensees_studio.views.dialogs.mc2010_concrete import Mc2010ConcreteDialog
-
-        if self._vm.project is None:
-            self._on_new()
-        project = self._vm.project
-        if project is None:
-            return
-        dialog = Mc2010ConcreteDialog(project, self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        material = dialog.material()
-        self._vm.apply_command(AddMaterialsCommand(self._vm, [material]))
-        self._log(f"Material {material.id} ({material.name}): TDConcreteMC10 after fib MC2010.")
-
-    def _on_shell_formulation(self) -> None:
-        """Assign → Area → Shell Formulation: MITC4, DKGQ or NLDKGQ (quads), DKGT or NLDKGT."""
-        project = self._vm.project
-        if project is None:
-            return
-        selected = set(self._canvas.selection.elements)
-        shells = [
-            e for e in project.elements if e.id in selected and isinstance(e, SHELL_ELEMENT_CLASSES)
-        ]
-        if not shells:
-            QMessageBox.information(self, "Shell Formulation", "Select one or more shells first.")
-            return
-        quads = [e for e in shells if len(e.nodes) == 4]
-        tris = [e for e in shells if len(e.nodes) == 3]
-        choices: list[tuple[str, str, str]] = [
-            ("MITC4 / DKGT — the default pair", "ShellMITC4", "ShellDKGT"),
-            ("DKGQ / DKGT — thin plates, drilling stiffness", "ShellDKGQ", "ShellDKGT"),
-            ("NLDKGQ / NLDKGT — large displacements", "ShellNLDKGQ", "ShellNLDKGT"),
-        ]
-        labels = [c[0] for c in choices]
-        choice, accepted = QInputDialog.getItem(
-            self,
-            "Shell Formulation",
-            f"{len(quads)} quadrilateral and {len(tris)} triangular shell(s):",
-            labels,
-            0,
-            False,
-        )
-        if not accepted:
-            return
-        _label, quad_kind, tri_kind = choices[labels.index(choice)]
-        replaced = [
-            with_shell_formulation(e, quad_kind if len(e.nodes) == 4 else tri_kind) for e in shells
-        ]
-        replaced = [new for new, old in zip(replaced, shells, strict=True) if new.type != old.type]
-        if not replaced:
-            self._log("Shell formulation: nothing to change.")
-            return
-        self._vm.apply_command(ReplaceElementsCommand(self._vm, replaced))
-        self._log(f"Shell formulation: {len(replaced)} shell(s) are now {choice.split(' — ')[0]}.")
-        self._canvas.render()
-
-    def _on_check_duplicates(self) -> None:
-        """Edit → Check Model for Duplicates: report, then repair on request.
-
-        The dialog reports; :class:`FixDuplicatesCommand` repairs and recomputes
-        the element duplicates *after* merging the nodes, because merging two
-        coincident nodes can turn two members into the same member.
-        """
-        project = self._vm.project
-        if project is None:
-            QMessageBox.information(self, "Duplicates", "Open or create a project first.")
-            return
-        dlg = DuplicatesDialog(project, on_select=self._select_report_row, parent=self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        command = FixDuplicatesCommand(self._vm, tolerance=dlg.tolerance())
-        try:
-            self._vm.apply_command(command)
-        except Exception as exc:
-            QMessageBox.critical(self, "Could not fix the duplicates", str(exc))
-            return
-        self._canvas.selection.clear()
-        self._canvas.render()
-        self._log(f"Duplicates: {command.report.summary()}")
-
     def _select_report_row(self, node_ids: Sequence[int], element_ids: Sequence[int]) -> None:
         """Highlight the nodes/elements of a report row so they can be inspected."""
         self._canvas.selection.clear()
@@ -3484,205 +2912,6 @@ class MainWindow(QMainWindow):
         for element_id in element_ids:
             self._canvas.selection.select_element(element_id, additive=True)
         self._canvas.render()
-
-    def _on_import_dxf(self) -> None:
-        """File → Import → DXF Drawing: bars from a drawing, in one undo step.
-
-        The dialog decides what the drawing means (layers, units, plane); this
-        inserts the result the same way the frame wizard does, so a bad import is
-        one Ctrl+Z away.
-        """
-        project = self._vm.project
-        if project is None:
-            QMessageBox.information(self, "Import DXF", "Open or create a project first.")
-            return
-
-        dialog = DxfImportDialog(project, sections=member_sections(project), parent=self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        section_id = dialog.section_choice()
-        if section_id is None:
-            # Section ids are allocated inside the macro, so the models must be
-            # built there too: the dialog is asked for the drawing, not for bars.
-            section_id = project.next_section_id()
-
-        self._vm.undo_stack.beginMacro("Import DXF")
-        try:
-            if dialog.section_choice() is None:
-                self._vm.apply_command(
-                    AddSectionsCommand(self._vm, [make_default_section(section_id, project)])
-                )
-            bars = dialog.imported_bars(section_id)
-            if bars is None:
-                return
-            self._vm.apply_command(AddNodesCommand(self._vm, bars.nodes))
-            self._vm.apply_command(AddElementsCommand(self._vm, bars.elements))
-        except Exception as exc:
-            QMessageBox.critical(self, "Could not import the drawing", str(exc))
-            return
-        finally:
-            self._vm.undo_stack.endMacro()
-
-        self._canvas.selection.clear()
-        for node in bars.nodes:
-            self._canvas.selection.select_node(node.id, additive=True)
-        source = dialog.source()
-        self._log(f"Imported {bars.summary()} from {source.name if source else 'the drawing'}.")
-        drawing = dialog.drawing()
-        if drawing is not None and drawing.skipped_summary():
-            self._log(drawing.skipped_summary())
-
-    def _on_import_s3d(self) -> None:
-        """File → Import → PORTICO Model: a ``.s3d`` file as a new, unsaved project.
-
-        The whole model is replaced, so this asks about unsaved changes like Open
-        does. What the file has and the import cannot carry is written to the log.
-        """
-        if not self._confirm_discard_changes("Importing a PORTICO model"):
-            return
-        dialog = S3dImportDialog(parent=self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        imported = dialog.imported()
-        if imported is None:
-            return
-        self._vm.adopt(imported.project)
-        self._apply_project_view_settings()
-        source = dialog.source()
-        self._log(
-            f"Imported {source.name if source else 'the PORTICO model'} "
-            f"({imported.source_units} → {imported.project.meta.units.value}): "
-            f"{imported.summary()}"
-        )
-        for note in imported.notes:
-            self._log(note)
-
-    def _on_import_s2k(self) -> None:
-        """File → Import → SAP2000 Text: a ``.s2k`` / ``.$2k`` file as a new, unsaved project.
-
-        The whole model is replaced, so this asks about unsaved changes like Open
-        does. What the file has and the import cannot carry is written to the log.
-        """
-        from opensees_studio.services.sap2000_text import (
-            Sap2000TextError,
-            import_s2k,
-            read_s2k,
-        )
-
-        if not self._confirm_discard_changes("Importing a SAP2000 text file"):
-            return
-        path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Import SAP2000 Text",
-            "",
-            "SAP2000 text (*.s2k *.$2k *.S2K *.$2K);;All files (*)",
-        )
-        if not path:
-            return
-        subdivisions: int | None = None
-        try:
-            if read_s2k(path).rows("FRAME SECTION PROPERTIES 05 - NONPRISMATIC"):
-                subdivisions, ok = QInputDialog.getInt(
-                    self,
-                    "Nonprismatic members",
-                    "Pieces per nonprismatic member (minimum 12):",
-                    12,
-                    12,
-                    200,
-                )
-                if not ok:
-                    return
-        except Sap2000TextError as exc:
-            QMessageBox.critical(self, "Import SAP2000 Text failed", str(exc))
-            return
-        try:
-            with perf.span("ui.import_s2k"):
-                imported = import_s2k(path, nonprismatic_subdivisions=subdivisions)
-        except Sap2000TextError as exc:
-            QMessageBox.critical(self, "Import SAP2000 Text failed", str(exc))
-            return
-        self._vm.adopt(imported.project)
-        self._apply_project_view_settings()
-        self._log(
-            f"Imported {Path(path).name} ({imported.source_units} → "
-            f"{imported.project.meta.units.value}): {imported.summary()}"
-        )
-        for note in imported.notes:
-            self._log(note)
-
-    def _on_import_ifc(self) -> None:
-        """File → Import → IFC: the analytical or the physical model as a new, unsaved project.
-
-        The file is read once to say what it holds; the dialog chooses which model
-        to build from. The whole model is replaced, so this asks about unsaved
-        changes like Open does, and what the file has that the import cannot carry
-        is written to the log.
-        """
-        from opensees_studio.services.ifc_import import IfcImportError, import_ifc, inspect_ifc
-        from opensees_studio.views.dialogs.ifc_import import IfcImportDialog
-
-        if not self._confirm_discard_changes("Importing an IFC file"):
-            return
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Import IFC", "", "IFC (*.ifc *.IFC *.ifczip *.ifcZIP);;All files (*)"
-        )
-        if not path:
-            return
-        try:
-            with perf.span("ui.inspect_ifc"):
-                inventory = inspect_ifc(path)
-        except IfcImportError as exc:
-            QMessageBox.critical(self, "Import IFC failed", str(exc))
-            return
-        dialog = IfcImportDialog(inventory, parent=self)
-        try:
-            if dialog.exec() != QDialog.DialogCode.Accepted:
-                return
-            options = dialog.options()
-        finally:
-            dialog.deleteLater()
-        try:
-            with perf.span("ui.import_ifc"):
-                imported = import_ifc(path, options)
-        except IfcImportError as exc:
-            QMessageBox.critical(self, "Import IFC failed", str(exc))
-            return
-        self._vm.adopt(imported.project)
-        self._apply_project_view_settings()
-        self._log(f"Imported {Path(path).name}: {imported.summary()}")
-        for note in imported.notes:
-            self._log(note)
-        report = check_model(imported.project)
-        if not report.is_clean:
-            self._log(f"{report.summary()} See Analyze → Check Model.")
-
-    def _on_import_tcl(self) -> None:
-        """File → Import → OpenSees Tcl Script: a ``.tcl`` file as a new project.
-
-        Tcl has no unit metadata, so the dialog asks which system the numbers
-        are in. The whole model is replaced, so this asks about unsaved changes
-        like Open does; what the file has and the import cannot carry is logged.
-        """
-        if not self._confirm_discard_changes("Importing an OpenSees Tcl script"):
-            return
-        project = self._vm.project
-        default_units = project.meta.units if project is not None else UnitSystem.SI_M_N
-        dialog = TclImportDialog(parent=self, default_units=default_units)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        imported = dialog.imported()
-        if imported is None:
-            return
-        self._vm.adopt(imported.project)
-        self._apply_project_view_settings()
-        source = dialog.source()
-        self._log(
-            f"Imported {source.name if source else 'the Tcl script'} "
-            f"({imported.source_units} → {imported.project.meta.units.value}): "
-            f"{imported.summary()}"
-        )
-        for note in imported.notes:
-            self._log(note)
 
     def _on_influence_line(self) -> None:
         """Display → Influence Line: one response of the influence-line case on screen."""
@@ -3756,125 +2985,6 @@ class MainWindow(QMainWindow):
             else f"Steel ratios · AISC 360-16 {settings.method}"
         )
         self._canvas.render()
-
-    def _on_mesh(self) -> None:
-        """Edit → Mesh: subdivide members and shells, and join the mesh up.
-
-        The plan comes from ``core.mesh`` (pure geometry, tested on its own) and
-        is applied by one command, so a mesh is a single undo step.
-        """
-        project = self._vm.project
-        if project is None:
-            QMessageBox.information(self, "Mesh", "Open or create a project first.")
-            return
-        selected = set(self._canvas.selection.elements)
-        dialog = MeshDialog(
-            project,
-            selected_element_ids=selected,
-            has_selection=bool(selected),
-            parent=self,
-        )
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        plan = dialog.plan()
-        if plan.is_empty:
-            return
-        try:
-            self._vm.apply_command(MeshCommand(self._vm, plan))
-        except Exception as exc:
-            QMessageBox.critical(self, "Could not mesh the model", str(exc))
-            return
-        self._canvas.selection.clear()
-        for node in plan.new_nodes:
-            self._canvas.selection.select_node(node.id, additive=True)
-        self._canvas.render()
-        self._log(f"Mesh: {plan.summary()}")
-
-    def _on_merge_joints(self) -> None:
-        """Edit → Merge Joints: joints closer than a tolerance become one, one undo step."""
-        project = self._vm.project
-        if project is None:
-            return
-        dialog = MergeJointsDialog(
-            project, selected_nodes=set(self._canvas.selection.nodes), parent=self
-        )
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        command = MergeJointsCommand(
-            self._vm, tolerance=dialog.tolerance(), node_ids=dialog.scope_ids()
-        )
-        try:
-            self._vm.apply_command(command)
-        except Exception as exc:
-            QMessageBox.critical(self, "Could not merge the joints", str(exc))
-            return
-        self._canvas.selection.clear()
-        report = command.report
-        self._log(
-            f"Merge Joints: {report.merged_node_groups} group(s), {report.removed_nodes} "
-            f"joint(s) removed, {report.removed_elements} repeated member(s) removed."
-        )
-
-    def _on_divide_frames(self) -> None:
-        """Edit → Divide Frames at Joints: split members at the joints inside them."""
-        project = self._vm.project
-        if project is None:
-            return
-        dialog = DivideFramesDialog(
-            project, selected_elements=set(self._canvas.selection.elements), parent=self
-        )
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        plan = dialog.plan()
-        if plan.is_empty:
-            return
-        try:
-            self._vm.apply_command(MeshCommand(self._vm, plan))
-        except Exception as exc:
-            QMessageBox.critical(self, "Could not divide the frames", str(exc))
-            return
-        self._canvas.selection.set_selection(set(), {e.id for e in plan.new_elements})
-        self._log(f"Divide Frames at Joints: {plan.summary()}")
-
-    def _on_join_frames(self) -> None:
-        """Edit → Join Frames: merge selected members that continue each other."""
-        from opensees_studio.commands import JoinFramesCommand
-
-        if self._vm.project is None:
-            return
-        command = JoinFramesCommand(self._vm, set(self._canvas.selection.elements))
-        if not self._dry_join_finds_something():
-            return
-        try:
-            self._vm.apply_command(command)
-        except Exception as exc:
-            QMessageBox.critical(self, "Join Frames failed", str(exc))
-            return
-        report = command.report
-        survivors = {e.id for e in self._vm.project.elements} & set(self._canvas.selection.elements)
-        self._canvas.selection.set_selection(set(), survivors)
-        self._log(f"Join Frames: {report.summary()}")
-        for node_id, reason in sorted(report.kept.items()):
-            self._log(f"  joint {node_id} kept: {reason}.")
-        self.statusBar().showMessage(f"Join Frames: {report.summary()}", 6000)
-
-    def _dry_join_finds_something(self) -> bool:
-        """Try the join on a copy first: nothing to join is a message, not an undo step."""
-        from opensees_studio.core.geometry.join import join_frames
-
-        project = self._vm.project
-        assert project is not None
-        trial = join_frames(project.model_copy(deep=True), set(self._canvas.selection.elements))
-        if trial.joined:
-            return True
-        reasons = sorted(set(trial.kept.values()))
-        QMessageBox.information(
-            self,
-            "Join Frames",
-            "Nothing to join: select two or more members that meet end to end in a "
-            "straight line." + (f"\n\nKept because {'; '.join(reasons)}." if reasons else ""),
-        )
-        return False
 
     def _on_frame_wizard(self) -> None:
         """Define → Create Portal Frame: a parametric 2D frame, one undo step.
@@ -4640,7 +3750,7 @@ class MainWindow(QMainWindow):
             _add_actions(menu if len(wanted) == 1 else menu.addMenu(title), actions)
         if wanted:
             menu.addSeparator()
-        menu.addAction(self._act_assign_group)
+        menu.addAction(self.action("assign.group"))
         menu.addSeparator()
         menu.addActions(
             [self.action("edit.move"), self.action("edit.replicate"), self.action("edit.mirror")]
@@ -4771,250 +3881,7 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, "Add Node failed", str(exc))
 
-    def _on_constant_ts(self) -> None:
-        if self._vm.project is None:
-            return
-        from opensees_studio.views.dialogs.constant_time_series import ConstantTimeSeriesDialog
-
-        ConstantTimeSeriesDialog(self._vm, self).exec()
-
-    def _on_add_linear_ts(self) -> None:
-        """Define → Add Linear TimeSeries…"""
-        from opensees_studio.commands import AddTimeSeriesCommand
-
-        if self._vm.project is None:
-            self._on_new()
-        proj = self._vm.project
-        assert proj is not None
-        dlg = LinearTimeSeriesDialog(
-            next_ts_id=proj.next_time_series_id(),
-            parent=self,
-        )
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            ts = dlg.time_series()
-            self._vm.apply_command(AddTimeSeriesCommand(self._vm, ts))
-            self._log(
-                f"Added LinearTimeSeries #{ts.id} '{ts.name}' (factor={ts.factor:g}).",
-            )
-        except Exception as exc:
-            QMessageBox.critical(self, "Add Linear TimeSeries failed", str(exc))
-
-    def _on_add_path_ts(self) -> None:
-        """Define → Add Path TimeSeries… — ground-motion import."""
-        from opensees_studio.commands import AddTimeSeriesCommand
-
-        if self._vm.project is None:
-            self._on_new()
-        proj = self._vm.project
-        assert proj is not None
-        dlg = PathTimeSeriesDialog(
-            next_ts_id=proj.next_time_series_id(),
-            parent=self,
-        )
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            ts = dlg.time_series()
-            self._vm.apply_command(AddTimeSeriesCommand(self._vm, ts))
-            self._log(
-                f"Added PathTimeSeries #{ts.id} '{ts.name}' "
-                f"({len(ts.values)} points, Δt={ts.dt:g} s, "
-                f"factor={ts.factor:g}).",
-            )
-        except Exception as exc:
-            QMessageBox.critical(self, "Add Path TimeSeries failed", str(exc))
-
-    def _on_add_plain_pattern(self) -> None:
-        """Define → Add Plain Load Pattern…"""
-        from opensees_studio.commands import AddLoadPatternCommand
-
-        if self._vm.project is None:
-            self._on_new()
-        proj = self._vm.project
-        assert proj is not None
-        if not proj.time_series:
-            QMessageBox.warning(
-                self,
-                "Add Plain Load Pattern",
-                "Define a TimeSeries first (Define → Add Linear TimeSeries… "
-                "or Define → Add Path TimeSeries…) so the pattern has a "
-                "time-series reference.",
-            )
-            return
-        dlg = PlainPatternDialog(
-            project=proj,
-            next_pattern_id=proj.next_pattern_id(),
-            parent=self,
-        )
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            pat = dlg.pattern()
-            self._vm.apply_command(AddLoadPatternCommand(self._vm, pat))
-            self._log(
-                f"Added PlainLoadPattern #{pat.id} '{pat.name}' (series #{pat.time_series_id}).",
-            )
-        except Exception as exc:
-            QMessageBox.critical(self, "Add Plain Load Pattern failed", str(exc))
-
-    def _on_add_function_ts(self) -> None:
-        """Define → Add Function TimeSeries: Constant, Trig, Triangle, Rectangular, Pulse."""
-        from opensees_studio.commands import AddTimeSeriesCommand
-        from opensees_studio.views.dialogs.function_time_series import FunctionTimeSeriesDialog
-
-        if self._vm.project is None:
-            self._on_new()
-        proj = self._vm.project
-        assert proj is not None
-        dlg = FunctionTimeSeriesDialog(next_ts_id=proj.next_time_series_id(), parent=self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            ts = dlg.time_series()
-            self._vm.apply_command(AddTimeSeriesCommand(self._vm, ts))
-            self._log(f"Added {ts.type} TimeSeries #{ts.id} '{ts.name}'.")
-        except Exception as exc:
-            QMessageBox.critical(self, "Add TimeSeries failed", str(exc))
-
-    def _on_add_multi_support(self) -> None:
-        """Define → Add Multi-Support Excitation: imposed motion of the selected supports."""
-        from opensees_studio.commands import AddLoadPatternCommand
-        from opensees_studio.views.dialogs.uniform_excitation import MultiSupportExcitationDialog
-
-        proj = self._vm.project
-        if proj is None:
-            return
-        nodes = sorted(self._canvas.selection.nodes)
-        if not nodes:
-            QMessageBox.information(
-                self, "Multi-Support Excitation", "Select the supports to drive first."
-            )
-            return
-        if not proj.time_series:
-            QMessageBox.information(
-                self,
-                "Multi-Support Excitation",
-                "Define a displacement time series first (Define → Add Path TimeSeries…).",
-            )
-            return
-        dlg = MultiSupportExcitationDialog(proj, proj.next_pattern_id(), nodes, self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            pat = dlg.pattern()
-            self._vm.apply_command(AddLoadPatternCommand(self._vm, pat))
-            self._log(
-                f"Added MultipleSupport pattern #{pat.id} '{pat.name}' on "
-                f"{len(pat.node_ids)} support(s), DOF {pat.direction}."
-            )
-        except Exception as exc:
-            QMessageBox.critical(self, "Add Multi-Support Excitation failed", str(exc))
-
-    def _on_add_uniform_excitation(self) -> None:
-        """Define → Add Uniform Excitation… — base ground-motion pattern."""
-        from opensees_studio.commands import AddLoadPatternCommand
-
-        if self._vm.project is None:
-            self._on_new()
-        proj = self._vm.project
-        assert proj is not None
-        if not proj.time_series:
-            QMessageBox.warning(
-                self,
-                "Add Uniform Excitation",
-                "Define a Path TimeSeries first (Define → Add Path "
-                "TimeSeries…) so the pattern has a ground-motion record "
-                "to reference.",
-            )
-            return
-        dlg = UniformExcitationDialog(
-            project=proj,
-            next_pattern_id=proj.next_pattern_id(),
-            parent=self,
-        )
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            pat = dlg.pattern()
-            self._vm.apply_command(AddLoadPatternCommand(self._vm, pat))
-            self._log(
-                f"Added UniformExcitation pattern #{pat.id} '{pat.name}' "
-                f"(DOF {pat.direction}, series #{pat.accel_series_id}, "
-                f"factor {pat.factor:g}).",
-            )
-        except Exception as exc:
-            QMessageBox.critical(
-                self,
-                "Add Uniform Excitation failed",
-                str(exc),
-            )
-
-    # ── slots: assign ────────────────────────────────────────────────
-    def _on_assign_support(self) -> None:
-        sel_nodes = set(self._canvas.selection.nodes)
-        if not sel_nodes:
-            QMessageBox.information(self, "Assign Support", "Select one or more nodes first.")
-            return
-        project = self._vm.project
-        dlg = AssignSupportDialog(len(sel_nodes), self, ndm=project.ndm if project else 3)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            self._vm.apply_command(SetRestraintCommand(self._vm, sel_nodes, dlg.restraint()))
-        except Exception as exc:
-            QMessageBox.critical(self, "Assign Support failed", str(exc))
-
-    def _on_assign_equal_dof(self) -> None:
-        sel = sorted(self._canvas.selection.nodes)
-        if len(sel) != 2 or self._vm.project is None:
-            QMessageBox.information(
-                self,
-                "Assign EqualDOF",
-                "Select exactly two nodes first.",
-            )
-            return
-        dlg = AssignEqualDOFDialog(
-            sel, ndf=self._vm.project.ndf, parent=self, ndm=self._vm.project.ndm
-        )
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            self._vm.apply_command(AddEqualDOFConstraintCommand(self._vm, dlg.constraint()))
-            self._log(f"Added equalDOF constraint between nodes {sel[0]} and {sel[1]}.")
-        except Exception as exc:
-            QMessageBox.critical(self, "Assign EqualDOF failed", str(exc))
-
     # ── define and assign: groups, section cuts, custom commands ────
-    def _on_define_groups(self) -> None:
-        """Define → Groups: add, rename, recolour or remove groups."""
-        project = self._vm.project
-        if project is None:
-            return
-        dlg = GroupsDialog(project, self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            self._vm.apply_command(SetGroupsCommand(self._vm, dlg.groups()))
-            self._log(f"Groups set: {len(project.groups)}.")
-        except Exception as exc:
-            QMessageBox.critical(self, "Define Groups failed", str(exc))
-
-    def _on_define_section_cuts(self) -> None:
-        """Define → Section Cuts: resultant forces through a group."""
-        project = self._vm.project
-        if project is None:
-            return
-        dlg = SectionCutsDialog(project, self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            self._vm.apply_command(SetSectionCutsCommand(self._vm, dlg.section_cuts()))
-            self._log(f"Section cuts set: {len(project.section_cuts)}. Re-run static cases.")
-        except Exception as exc:
-            QMessageBox.critical(self, "Define Section Cuts failed", str(exc))
-
     def _on_custom_commands(self) -> None:
         """Define → Custom OpenSees Commands: Python blocks run while the model is built."""
         from opensees_studio.commands import SetCustomCommandsCommand
@@ -5032,44 +3899,6 @@ class MainWindow(QMainWindow):
             self._log(f"Custom command blocks: {len(project.custom_commands)} ({enabled} enabled).")
         except Exception as exc:
             QMessageBox.critical(self, "Custom OpenSees Commands failed", str(exc))
-
-    def _on_assign_group(self) -> None:
-        """Assign → Assign to Group: add the selection to a group, remove it, or replace."""
-        project = self._vm.project
-        if project is None:
-            return
-        sel = self._canvas.selection
-        nodes, elements = sorted(sel.nodes), sorted(sel.elements)
-        if not nodes and not elements:
-            QMessageBox.information(self, "Assign to Group", "Select joints or elements first.")
-            return
-        dlg = AssignGroupDialog(project, len(nodes), len(elements), self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        group_id, mode = dlg.group_id, dlg.mode
-        try:
-            self._vm.undo_stack.beginMacro("Assign to group")
-            try:
-                if group_id == NEW_GROUP:
-                    group_id = project.next_group_id()
-                    group = Group(
-                        id=group_id,
-                        name=dlg.new_name.text().strip(),
-                        colour=colour_for(len(project.groups)),
-                    )
-                    self._vm.apply_command(SetGroupsCommand(self._vm, [*project.groups, group]))
-                self._vm.apply_command(
-                    EditGroupMembersCommand(self._vm, group_id, nodes, elements, mode=mode)
-                )
-            finally:
-                self._vm.undo_stack.endMacro()
-            group = next(g for g in project.groups if g.id == group_id)
-            self._log(
-                f"Group {group.name}: {len(group.node_ids)} joint(s), "
-                f"{len(group.element_ids)} element(s)."
-            )
-        except Exception as exc:
-            QMessageBox.critical(self, "Assign to Group failed", str(exc))
 
     def _on_apply_mass(self, node_id: int, mass) -> None:  # type: ignore[no-untyped-def]
         """Callback from the property editor — dispatch as an undoable command."""
@@ -5216,166 +4045,6 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, "Edit element failed", str(exc))
 
-    def _on_assign_zls(self) -> None:
-        """Assign → Joint → Zero-Length Section: wrap 2 coincident nodes."""
-        from opensees_studio.commands import AddElementsCommand
-        from opensees_studio.core import ZeroLengthSectionElement
-
-        sel = sorted(self._canvas.selection.nodes)
-        if len(sel) != 2 or self._vm.project is None:
-            QMessageBox.information(
-                self,
-                "Assign Zero-Length Section",
-                "Select exactly two coincident nodes first.",
-            )
-            return
-        # Verify coincidence — differ by more than 1e-6 in any axis is
-        # a modelling error; zeroLengthSection needs coincident nodes.
-        n1, n2 = (next(n for n in self._vm.project.nodes if n.id == sel[i]) for i in (0, 1))
-        if any(abs(n1.coords[k] - n2.coords[k]) > 1e-6 for k in range(3)):
-            QMessageBox.warning(
-                self,
-                "Assign Zero-Length Section",
-                f"Nodes {sel[0]} and {sel[1]} are not coincident. "
-                "Move one onto the other before creating the element.",
-            )
-            return
-        if not self._vm.project.sections:
-            QMessageBox.warning(
-                self,
-                "Assign Zero-Length Section",
-                "Define a section first (Define → Section Library).",
-            )
-            return
-        dlg = AssignZeroLengthSectionDialog(
-            self._vm.project,
-            (sel[0], sel[1]),
-            parent=self,
-        )
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        sec_id = dlg.section_id()
-        if sec_id is None:
-            return
-        try:
-            eid = self._vm.project.next_element_id()
-            elem = ZeroLengthSectionElement(
-                id=eid,
-                nodes=(sel[0], sel[1]),
-                section_id=int(sec_id),
-            )
-            self._vm.apply_command(AddElementsCommand(self._vm, [elem]))
-            self._log(
-                f"Created ZeroLengthSection {eid} "
-                f"between nodes {sel[0]}-{sel[1]} (section {sec_id})."
-            )
-        except Exception as exc:
-            QMessageBox.critical(self, "Assign Zero-Length Section failed", str(exc))
-
-    def _on_assign_zero_length(self) -> None:
-        """Assign > Joint > Zero-Length Element: one material per global DOF."""
-        from opensees_studio.commands import AddElementsCommand
-
-        sel = sorted(self._canvas.selection.nodes)
-        project = self._vm.project
-        if len(sel) != 2 or project is None:
-            QMessageBox.information(
-                self,
-                "Assign Zero-Length Element",
-                "Select exactly two coincident joints first.",
-            )
-            return
-        n1, n2 = (project.node(node_id) for node_id in sel)
-        if any(abs(n1.coords[k] - n2.coords[k]) > 1e-6 for k in range(3)):
-            QMessageBox.warning(
-                self,
-                "Assign Zero-Length Element",
-                f"Joints {sel[0]} and {sel[1]} are not coincident. "
-                "Move one onto the other before creating the element.",
-            )
-            return
-        if not any(is_uniaxial(material) for material in project.materials):
-            QMessageBox.warning(
-                self,
-                "Assign Zero-Length Element",
-                "Define a uniaxial material first (Material Library).",
-            )
-            return
-        dlg = AssignZeroLengthDialog(project, (sel[0], sel[1]), parent=self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            element = dlg.build_element(project.next_element_id())
-            self._vm.apply_command(AddElementsCommand(self._vm, [element]))
-            dofs = ", ".join(str(dof) for dof in element.dofs)
-            self._log(
-                f"Created {element.type} {element.id} between joints "
-                f"{element.nodes[0]}-{element.nodes[1]} (DOFs {dofs})."
-            )
-        except Exception as exc:
-            QMessageBox.critical(self, "Assign Zero-Length Element failed", str(exc))
-
-    def _on_assign_bearing(self) -> None:
-        """Assign > Joint > Bearing: elastomeric or sliding isolator between two joints."""
-
-        sel = sorted(self._canvas.selection.nodes)
-        if len(sel) != 2 or self._vm.project is None:
-            QMessageBox.information(
-                self,
-                "Assign Bearing",
-                "Select exactly two nodes first (bottom, then top).",
-            )
-            return
-        dlg = AssignElastomericBearingDialog(self._vm.project, (sel[0], sel[1]), parent=self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        self._create_bearing_from_dialog(dlg)
-
-    def _on_assign_link(self) -> None:
-        """Assign > Joint > Link: a twoNodeLink or a Triple Friction Pendulum between two joints."""
-        from opensees_studio.commands import AddElementsCommand
-        from opensees_studio.views.dialogs.assign_link import AssignLinkDialog
-
-        sel = sorted(self._canvas.selection.nodes)
-        project = self._vm.project
-        if len(sel) != 2 or project is None:
-            QMessageBox.information(self, "Assign Link", "Select exactly two joints first.")
-            return
-        dlg = AssignLinkDialog(project, (sel[0], sel[1]), parent=self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            element = dlg.build_element(project.next_element_id())
-            self._vm.apply_command(AddElementsCommand(self._vm, [element]))
-            self._log(f"Created {element.type} {element.id} between joints {sel[0]}-{sel[1]}.")
-        except Exception as exc:
-            QMessageBox.critical(self, "Assign Link failed", str(exc))
-
-    def _create_bearing_from_dialog(self, dlg: AssignElastomericBearingDialog) -> bool:
-        """Build the bearing the dialog describes and add it undoably."""
-        from opensees_studio.commands import AddElementsCommand
-        from opensees_studio.core import SLIDING_BEARING_CLASSES
-
-        if self._vm.project is None:
-            return False
-        try:
-            eid = self._vm.project.next_element_id()
-            elem = dlg.build_element(eid)
-            self._vm.apply_command(AddElementsCommand(self._vm, [elem]))
-        except Exception as exc:
-            QMessageBox.critical(self, "Assign Bearing failed", str(exc))
-            return False
-        if isinstance(elem, SLIDING_BEARING_CLASSES):
-            detail = f"Kinit {elem.k_init:g}, friction model {elem.friction_model_id}"
-            if elem.type == "SingleFPBearing":
-                detail += f", Reff {elem.r_eff:g}"
-        else:
-            detail = f"Kinit {elem.k_init:g}, Qd {elem.qd:g}, alpha1 {elem.alpha1:g}"
-        self._log(
-            f"Created {elem.type} {eid} between nodes {elem.nodes[0]}-{elem.nodes[1]} ({detail})."
-        )
-        return True
-
     def node_tooltip(self, node_id: int) -> str | None:
         """Hover text for a joint: where it is, its restraint, mass, members and loads."""
         from opensees_studio.core.hover import node_summary
@@ -5508,579 +4177,9 @@ class MainWindow(QMainWindow):
             lines.append(f"eta = {el.eta:g}, beta = {el.beta:g}, gamma = {el.gamma:g}")
         return "\n".join(lines)
 
-    def _on_assign_masses(self) -> None:
-        """Assign → Joint → Masses: bulk-set mass on every selected node."""
-        sel_nodes = set(self._canvas.selection.nodes)
-        if not sel_nodes or self._vm.project is None:
-            QMessageBox.information(
-                self,
-                "Assign Masses",
-                "Select one or more nodes first.",
-            )
-            return
-        dlg = AssignMassesDialog(
-            len(sel_nodes), ndf=self._vm.project.ndf, ndm=self._vm.project.ndm, parent=self
-        )
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            self._vm.apply_command(SetMassCommand(self._vm, sel_nodes, dlg.mass_vector()))
-            self._log(f"Assigned mass to {len(sel_nodes)} node(s).")
-        except Exception as exc:
-            QMessageBox.critical(self, "Assign Masses failed", str(exc))
-
-    def _on_assign_springs(self) -> None:
-        """Assign → Joint → Springs: elastic support springs on every selected joint."""
-        project = self._vm.project
-        sel_nodes = set(self._canvas.selection.nodes)
-        if not sel_nodes or project is None:
-            QMessageBox.information(self, "Assign Springs", "Select one or more joints first.")
-            return
-        first = next(n for n in project.nodes if n.id in sel_nodes)
-        labels = labels_for(project.meta.units)
-        dlg = AssignSpringsDialog(
-            len(sel_nodes),
-            project.ndm,
-            project.ndf,
-            current=first.spring,
-            units=(f"{labels.force}/{labels.length}", f"{labels.moment}/rad"),
-            parent=self,
-        )
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            self._vm.apply_command(SetSpringCommand(self._vm, sel_nodes, dlg.spring_vector()))
-            self._log(f"Assigned support springs to {len(sel_nodes)} joint(s).")
-        except Exception as exc:
-            QMessageBox.critical(self, "Assign Springs failed", str(exc))
-
-    def _on_assign_wall(self) -> None:
-        """Assign → Frame → RC Wall: selected vertical members to MVLEM, one undo step."""
-        from opensees_studio.commands import AddMaterialsCommand, ReplaceElementsCommand
-        from opensees_studio.views.dialogs.assign_wall import AssignWallDialog
-
-        project = self._vm.project
-        selected = set(self._canvas.selection.elements)
-        if project is None or not selected:
-            QMessageBox.information(
-                self, "RC Wall", "Select the vertical members of the wall first."
-            )
-            return
-        dialog = AssignWallDialog(project, selected, self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        conversion = dialog.conversion()
-        if conversion is None or not conversion.elements:
-            return
-        stack = self._vm.undo_stack
-        stack.beginMacro("Assign RC wall")
-        try:
-            if conversion.materials:
-                self._vm.apply_command(AddMaterialsCommand(self._vm, conversion.materials))
-            self._vm.apply_command(ReplaceElementsCommand(self._vm, conversion.elements))
-        finally:
-            stack.endMacro()
-        self._log(
-            f"RC wall: {len(conversion.elements)} member(s) became MVLEM segments"
-            + (f", {len(conversion.skipped)} left as they were." if conversion.skipped else ".")
-        )
-
-    def _on_assign_pile_springs(self) -> None:
-        """Assign → Frame → Pile Soil Springs: p-y, t-z and q-z springs along the pile."""
-        from opensees_studio.views.dialogs.pile_springs import PileSpringsDialog
-
-        project = self._vm.project
-        selected = set(self._canvas.selection.elements)
-        if project is None or not selected:
-            QMessageBox.information(self, "Pile Soil Springs", "Select the pile's members first.")
-            return
-        dialog = PileSpringsDialog(project, selected, self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        springs = dialog.springs()
-        if springs is None or not springs.elements:
-            return
-        stack = self._vm.undo_stack
-        stack.beginMacro("Assign pile soil springs")
-        try:
-            self._vm.apply_command(AddNodesCommand(self._vm, springs.nodes))
-            self._vm.apply_command(AddMaterialsCommand(self._vm, springs.materials))
-            self._vm.apply_command(AddElementsCommand(self._vm, springs.elements))
-        finally:
-            stack.endMacro()
-        self._log("Pile soil springs: " + " ".join(springs.notes))
-
-    def _on_assign_hinge(self) -> None:
-        from opensees_studio.core import BeamWithHingesElement
-
-        sel_elements = set(self._canvas.selection.elements)
-        if not sel_elements or self._vm.project is None:
-            QMessageBox.information(
-                self,
-                "Assign Hinge",
-                "Select one or more elements first.",
-            )
-            return
-        if not self._vm.project.sections:
-            QMessageBox.warning(
-                self,
-                "Assign Hinge",
-                "No sections defined. Add a section before assigning hinges.",
-            )
-            return
-        dlg = AssignHingeDialog(len(sel_elements), self._vm.project, self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        vals = dlg.values()
-        replacements = []
-        for el in self._vm.project.elements:
-            if el.id in sel_elements:
-                replacements.append(
-                    BeamWithHingesElement(
-                        id=el.id,
-                        name=el.name,
-                        nodes=el.nodes,
-                        section_i_id=vals["section_i_id"],
-                        section_j_id=vals["section_j_id"],
-                        lp_i=vals["lp_i"],
-                        lp_j=vals["lp_j"],
-                        E=vals["E"],
-                        A=vals["A"],
-                        Iz=vals["Iz"],
-                        Iy=vals["Iy"],
-                        G=vals["G"],
-                        J=vals["J"],
-                        geom_transf=getattr(el, "geom_transf", "Linear"),
-                        # Keep the member's weight per length: gamma on the new A.
-                        unit_weight=section_weight_per_length(
-                            self._vm.project, getattr(el, "section_id", 0)
-                        )
-                        / vals["A"],
-                    )
-                )
-        self._vm.apply_command(ReplaceElementsCommand(self._vm, replacements))
-        self._log(f"Converted {len(sel_elements)} element(s) to BeamWithHinges.")
-
     # ── slots: define ────────────────────────────────────────────────
-    def _on_add_default_materials(self) -> None:
-        """Define → Add Default Materials: the default steels, concretes and masonry it lacks."""
-        project = self._vm.project
-        if project is None:
-            return
-        missing = missing_default_materials(project, project.meta.units)
-        if not missing:
-            self.statusBar().showMessage(
-                tr("The project already has every default material."), 6000
-            )
-            return
-        self._vm.apply_command(AddMaterialsCommand(self._vm, missing))
-        self._log(f"Default materials added: {', '.join(m.name for m in missing)}.")
-
-    def _on_material_library(self) -> None:
-        if self._vm.project is None:
-            self._on_new()
-        MaterialLibraryDialog(self._vm, self).exec()
-
-    def _on_friction_library(self) -> None:
-        """Define > Friction Models: friction models for the sliding bearings."""
-        if self._vm.project is None:
-            self._on_new()
-        FrictionLibraryDialog(self._vm, self).exec()
-
-    def _on_material_tester(self) -> None:
-        # Non-modal and reused: a second trigger raises the open dialog.
-        if self._vm.project is None:
-            self._on_new()
-        if self._material_tester_dlg is None:
-            self._material_tester_dlg = MaterialTesterDialog(self._vm, self)
-        self._material_tester_dlg.show()
-        self._material_tester_dlg.raise_()
-        self._material_tester_dlg.activateWindow()
-
-    def _on_ground_motions(self) -> None:
-        # Non-modal and reused: a second trigger raises the open dialog.
-        if self._vm.project is None:
-            self._on_new()
-        if self._ground_motions_dlg is None:
-            self._ground_motions_dlg = GroundMotionsDialog(self._vm, self)
-        self._ground_motions_dlg.show()
-        self._ground_motions_dlg.raise_()
-        self._ground_motions_dlg.activateWindow()
-
-    def _on_section_library(self) -> None:
-        if self._vm.project is None:
-            self._on_new()
-        SectionLibraryDialog(self._vm, self).exec()
-
-    def _on_concrete_section(self) -> None:
-        """Define → Concrete Section Wizard: materials and sections in one undo step."""
-        from opensees_studio.views.dialogs.concrete_section import ConcreteSectionDialog
-
-        if self._vm.project is None:
-            self._on_new()
-        project = self._vm.project
-        if project is None:
-            return
-        dialog = ConcreteSectionDialog(project, self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        result = dialog.built_section()
-        if result is None:
-            return
-        sections = [s for s in (result.fiber, result.elastic) if s is not None]
-        self._add_materials_and_sections("Concrete section", result.materials, sections)
-
-    def _on_steel_deck(self) -> None:
-        """Define → Steel Deck Slab Wizard: orthotropic layered shell, one undo step."""
-        from opensees_studio.views.dialogs.steel_deck import SteelDeckDialog
-
-        if self._vm.project is None:
-            self._on_new()
-        project = self._vm.project
-        if project is None:
-            return
-        dialog = SteelDeckDialog(project, self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        result = dialog.built_deck()
-        if result is not None:
-            self._add_materials_and_sections("Steel deck slab", result.materials, [result.section])
-
-    def _on_section_designer(self) -> None:
-        """Define → Section Designer: a drawn or imported section, added in one undo step."""
-        from opensees_studio.views.dialogs.section_designer import SectionDesignerDialog
-
-        if self._vm.project is None:
-            self._on_new()
-        project = self._vm.project
-        if project is None:
-            return
-        dialog = SectionDesignerDialog(project, self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        section = dialog.built_section()
-        if section is not None:
-            self._add_materials_and_sections("Designed section", [], [section])
-
-    def _add_materials_and_sections(
-        self, text: str, materials: list[Any], sections: list[Any]
-    ) -> None:
-        """Add ``materials`` then ``sections`` as one undo step, and say what was added."""
-        from opensees_studio.commands import AddMaterialsCommand
-
-        stack = self._vm.undo_stack
-        stack.beginMacro(text)
-        try:
-            if materials:
-                self._vm.apply_command(AddMaterialsCommand(self._vm, materials))
-            if sections:
-                self._vm.apply_command(AddSectionsCommand(self._vm, sections))
-        finally:
-            stack.endMacro()
-        names = ", ".join(f"#{s.id} {s.name}" for s in sections)
-        self._log(f"{text}: added {len(materials)} material(s) and section(s) {names}.")
-
     # ── slots: assign property ──────────────────────────────────────
-    def _on_assign_section(self) -> None:
-        if self._vm.project is None:
-            return
-        sel_elements = set(self._canvas.selection.elements)
-        if not sel_elements:
-            QMessageBox.information(
-                self, "Assign Section", "Select one or more frame elements first."
-            )
-            return
-        dlg = AssignSectionDialog(self._vm.project.sections, len(sel_elements), self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            self._vm.apply_command(AssignSectionCommand(self._vm, sel_elements, dlg.section_id()))
-        except Exception as exc:
-            QMessageBox.critical(self, "Assign Section failed", str(exc))
-
-    def _on_assign_material(self) -> None:
-        if self._vm.project is None:
-            return
-        sel_elements = set(self._canvas.selection.elements)
-        if not sel_elements:
-            QMessageBox.information(
-                self, "Assign Material", "Select one or more truss/zero-length elements first."
-            )
-            return
-        dlg = AssignMaterialDialog(self._vm.project.materials, len(sel_elements), self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            self._vm.apply_command(AssignMaterialCommand(self._vm, sel_elements, dlg.material_id()))
-        except Exception as exc:
-            QMessageBox.critical(self, "Assign Material failed", str(exc))
-
-    def _selected_accepting(self, fields: dict[str, Any]) -> set[int]:
-        """Selected elements that declare every one of ``fields`` (frames for a transformation)."""
-        from opensees_studio.commands import AssignElementFieldsCommand
-
-        project = self._vm.project
-        if project is None:
-            return set()
-        selected = set(self._canvas.selection.elements)
-        return {
-            el.id
-            for el in project.elements
-            if el.id in selected and AssignElementFieldsCommand.accepts(el, fields)
-        }
-
-    def _assign_element_fields(self, title: str, ids: set[int], fields: dict[str, Any]) -> None:
-        from opensees_studio.commands import AssignElementFieldsCommand
-
-        try:
-            self._vm.apply_command(AssignElementFieldsCommand(self._vm, ids, fields))
-            self._log(f"{title}: {fields} on {len(ids)} element(s).")
-        except Exception as exc:
-            QMessageBox.critical(self, f"{title} failed", str(exc))
-
-    def _on_assign_geom_transf(self) -> None:
-        """Assign > Frame > Geometric Transformation: Linear, PDelta or Corotational."""
-        project = self._vm.project
-        ids = self._selected_accepting({"geom_transf": "Linear"})
-        if project is None or not ids:
-            QMessageBox.information(
-                self, "Geometric Transformation", "Select one or more frame elements first."
-            )
-            return
-        current = {project.element(i).geom_transf for i in ids}  # type: ignore[union-attr]
-        dlg = AssignGeomTransfDialog(
-            len(ids), project.ndm, current.pop() if len(current) == 1 else None, self
-        )
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        self._assign_element_fields(
-            "Geometric Transformation", ids, {"geom_transf": dlg.transf_type()}
-        )
-
-    def _on_assign_local_axes(self) -> None:
-        """Assign > Frame > Local Axes: rotate the member's section about its axis."""
-        project = self._vm.project
-        ids = self._selected_accepting({"local_axis_angle": 0.0})
-        if project is None or not ids:
-            QMessageBox.information(self, "Local Axes", "Select one or more frame elements first.")
-            return
-        current = {float(getattr(project.element(i), "local_axis_angle", 0.0) or 0.0) for i in ids}
-        dlg = AssignLocalAxesDialog(
-            len(ids),
-            project.ndm,
-            current.pop() if len(current) == 1 else None,
-            self,
-        )
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        self._assign_element_fields("Local Axes", ids, {"local_axis_angle": dlg.angle()})
-
-    def _on_assign_integration(self) -> None:
-        """Assign > Frame > Beam Integration: rule and points of force/disp beam-columns."""
-        project = self._vm.project
-        ids = self._selected_accepting({"integration": "Lobatto", "integration_points": 5})
-        if project is None or not ids:
-            QMessageBox.information(
-                self,
-                "Beam Integration",
-                "Select one or more force or displacement beam-column elements first.",
-            )
-            return
-        frames = [project.element(i) for i in ids]
-        rules = {el.integration for el in frames}  # type: ignore[union-attr]
-        points = {el.integration_points for el in frames}  # type: ignore[union-attr]
-        dlg = AssignBeamIntegrationDialog(
-            len(ids),
-            rules.pop() if len(rules) == 1 else None,
-            points.pop() if len(points) == 1 else None,
-            self,
-        )
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        self._assign_element_fields(
-            "Beam Integration",
-            ids,
-            {"integration": dlg.rule(), "integration_points": dlg.points()},
-        )
-
-    def _frame_option_dialog(self, title: str, field: str) -> tuple[set[int], Any] | None:
-        """Selected frame members and the value of ``field`` they share (None when they differ)."""
-        from opensees_studio.core import FrameMember
-
-        project = self._vm.project
-        selected = set(self._canvas.selection.elements)
-        frames = (
-            []
-            if project is None
-            else [
-                el for el in project.elements if el.id in selected and isinstance(el, FrameMember)
-            ]
-        )
-        if not frames:
-            QMessageBox.information(self, title, "Select one or more frame elements first.")
-            return None
-        values = [getattr(el, field) for el in frames]
-        shared = values[0] if all(v == values[0] for v in values) else None
-        return {el.id for el in frames}, shared
-
     # ── area loads and imposed displacements ─────────────────────────
-    def _on_assign_springs_of(self, kind: str) -> None:
-        """Assign → Area → Area/Edge Springs, Assign → Frame → Line Springs."""
-        from opensees_studio.core.support_springs import AreaSpring, EdgeSpring, LineSpring
-        from opensees_studio.core.units import labels_for
-
-        project = self._vm.project
-        if project is None:
-            return
-        selected = set(self._canvas.selection.elements)
-        joints = set(self._canvas.selection.nodes)
-        targets: list[Any]
-        if kind == "line":
-            targets = [e for e in project.elements if e.id in selected and len(e.nodes) == 2]
-            what = "frame members"
-        else:
-            targets = [
-                e for e in project.elements if e.id in selected and isinstance(e, ShellMITC4Element)
-            ]
-            what = "shells"
-        if not targets:
-            QMessageBox.information(self, "Springs", f"Select one or more {what} first.")
-            return
-        edges: list[tuple[int, int]] = []
-        if kind == "edge":
-            edges = [
-                (e.id, k + 1)
-                for e in targets
-                for k in range(4)
-                if e.nodes[k] in joints and e.nodes[(k + 1) % 4] in joints
-            ]
-            if not edges:
-                QMessageBox.information(
-                    self,
-                    "Edge Springs",
-                    "Select the shells and the joints along the supported edge: an edge whose "
-                    "two joints are selected takes the spring.",
-                )
-                return
-        labels = labels_for(project.meta.units)
-        dlg = SupportSpringDialog(
-            kind,  # type: ignore[arg-type]
-            len(edges) if kind == "edge" else len(targets),
-            length_unit=labels.length,
-            force_unit=labels.force,
-            parent=self,
-        )
-        try:
-            if dlg.exec() != QDialog.DialogCode.Accepted:
-                return
-            values, mode = dlg.values(), dlg.mode()
-        finally:
-            dlg.deleteLater()
-        area, line, edge = (
-            list(project.area_springs),
-            list(project.line_springs),
-            list(project.edge_springs),
-        )
-        ids = {e.id for e in targets}
-        if kind == "area":
-            if mode != "add":
-                area = [s for s in area if s.element_id not in ids]
-            if mode != "delete":
-                area += [AreaSpring(element_id=i, **values) for i in sorted(ids)]  # type: ignore[arg-type]
-        elif kind == "line":
-            if mode != "add":
-                line = [s for s in line if s.element_id not in ids]
-            if mode != "delete":
-                line += [LineSpring(element_id=i, **values) for i in sorted(ids)]  # type: ignore[arg-type]
-        else:
-            chosen = set(edges)
-            if mode != "add":
-                edge = [s for s in edge if (s.element_id, s.edge) not in chosen]
-            if mode != "delete":
-                edge += [EdgeSpring(element_id=i, edge=k, **values) for i, k in edges]  # type: ignore[arg-type]
-        count = len(edges) if kind == "edge" else len(ids)
-        self._vm.apply_command(
-            SetSupportSpringsCommand(
-                self._vm, area, line, edge, f"{mode.capitalize()} {kind} springs on {count}"
-            )
-        )
-        self._canvas.render()
-        self._log(
-            f"{kind.capitalize()} springs: {mode} on {count} {'edge' if kind == 'edge' else 'element'}(s)."
-        )
-
-    def _on_assign_releases(self) -> None:
-        """Assign > Frame > Releases/Partial Fixity."""
-        picked = self._frame_option_dialog("Frame Releases", "releases")
-        if picked is None or self._vm.project is None:
-            return
-        ids, current = picked
-        dlg = FrameReleasesDialog(len(ids), self._vm.project.ndm, current, self)
-        if dlg.exec() == QDialog.DialogCode.Accepted:
-            self._assign_element_fields("Frame Releases", ids, {"releases": dlg.releases()})
-
-    def _on_assign_end_offsets(self) -> None:
-        """Assign > Frame > End (Length) Offsets."""
-        picked = self._frame_option_dialog("Frame End Offsets", "end_offsets")
-        if picked is None:
-            return
-        ids, current = picked
-        dlg = FrameEndOffsetsDialog(len(ids), current, self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        offsets = dlg.offsets()
-        if not dlg.automatic:
-            self._assign_element_fields("Frame End Offsets", ids, {"end_offsets": offsets})
-            return
-        from opensees_studio.commands import AssignElementFieldsCommand
-        from opensees_studio.core.frame_members import connectivity_offsets
-
-        project = self._vm.project
-        assert project is not None
-        try:
-            per_element = {}
-            for i in ids:
-                li, lj = connectivity_offsets(project, i)
-                per_element[i] = {
-                    "end_offsets": offsets.model_copy(update={"length_i": li, "length_j": lj})
-                }
-            self._vm.apply_command(
-                AssignElementFieldsCommand(
-                    self._vm,
-                    ids,
-                    {"end_offsets": offsets},
-                    per_element=per_element,
-                    text=f"Assign automatic end offsets to {len(ids)} element(s)",
-                )
-            )
-            self._log(f"Frame End Offsets (from connectivity) on {len(ids)} element(s).")
-        except Exception as exc:
-            QMessageBox.critical(self, "Frame End Offsets failed", str(exc))
-
-    def _on_assign_insertion(self) -> None:
-        """Assign > Frame > Insertion Point."""
-        picked = self._frame_option_dialog("Frame Insertion Point", "insertion")
-        if picked is None or self._vm.project is None:
-            return
-        ids, current = picked
-        dlg = FrameInsertionDialog(len(ids), self._vm.project.ndm, current, self)
-        if dlg.exec() == QDialog.DialogCode.Accepted:
-            self._assign_element_fields(
-                "Frame Insertion Point", ids, {"insertion": dlg.insertion()}
-            )
-
-    def _on_assign_modifiers(self) -> None:
-        """Assign > Frame > Property Modifiers."""
-        picked = self._frame_option_dialog("Frame Property Modifiers", "modifiers")
-        if picked is None:
-            return
-        ids, current = picked
-        dlg = FrameModifiersDialog(len(ids), current, self)
-        if dlg.exec() == QDialog.DialogCode.Accepted:
-            self._assign_element_fields(
-                "Frame Property Modifiers", ids, {"modifiers": dlg.modifiers()}
-            )
-
     # ── slots: analyze ──────────────────────────────────────────────
     def _on_check_stability(self) -> None:
         """Analyze → Check Model Stability: look for mechanisms before solving anything."""
@@ -6258,32 +4357,6 @@ class MainWindow(QMainWindow):
         if project is None or project.auto_mesh_frames == checked:
             return
         self._vm.apply_command(SetAutoMeshFramesCommand(self._vm, checked))
-
-    def _on_assign_auto_mesh(self) -> None:
-        """Assign > Frame > Auto Mesh: whether Run may divide the selected members."""
-        project = self._vm.project
-        ids = self._selected_accepting({"auto_mesh": True})
-        if project is None or not ids:
-            QMessageBox.information(
-                self, "Auto Mesh", "Select one or more frame or truss elements first."
-            )
-            return
-        choices = [
-            "Divide automatically where members end on it or cross it",
-            "Never divide automatically",
-        ]
-        current = all(getattr(project.element(i), "auto_mesh", True) for i in ids)
-        choice, ok = QInputDialog.getItem(
-            self,
-            "Auto Mesh",
-            f"{len(ids)} member(s):",
-            choices,
-            0 if current else 1,
-            False,
-        )
-        if not ok:
-            return
-        self._assign_element_fields("Auto Mesh", ids, {"auto_mesh": choice == choices[0]})
 
     def _review_model_before_run(self) -> bool:
         """Check the model on the way into Run; ``False`` means the run was called off.
@@ -7940,11 +6013,14 @@ class MainWindow(QMainWindow):
         has_pushover = isinstance(self._latest_results, PushoverResults)
         has_rs = isinstance(self._latest_results, ResponseSpectrumResults)
         n_sel = len(self._canvas.selection.nodes)
+        has_series = has_project and bool(self._vm.project and self._vm.project.time_series)
         self._actions.refresh(
             ActionState(
                 has_project=has_project,
                 has_selection=has_selection,
                 has_selected_nodes=has_selected_nodes,
+                has_two_selected_nodes=n_sel == 2,
+                has_time_series=has_series,
                 has_selected_elements=has_selected_elements,
             )
         )
@@ -7958,12 +6034,8 @@ class MainWindow(QMainWindow):
         self._act_frame_wizard.setEnabled(has_project)
         self._act_truss_wizard.setEnabled(has_project)
         self._act_warehouse_wizard.setEnabled(has_project)
-        self._act_create_shell.setEnabled(has_project and n_sel in (3, 4))
-        self._act_check_duplicates.setEnabled(has_project)
+        self.action("define.create_shell").setEnabled(has_project and n_sel in (3, 4))
         self._act_table_editing.setEnabled(has_project)
-        has_series = has_project and bool(self._vm.project and self._vm.project.time_series)
-        self._act_add_plain_pattern.setEnabled(has_series)
-        self._act_add_uniform_excitation.setEnabled(has_series)
         has_cases = has_project and bool(self._vm.project and self._vm.project.analyses)
         # Without a solver the model is still built, exported and reported; only
         # what calls OpenSees waits for one (Options → Solver).
@@ -7976,8 +6048,10 @@ class MainWindow(QMainWindow):
         run_batch.setStatusTip("" if solver else self._solver.summary())
         # The Material Tester and the stability check call OpenSees itself,
         # whatever engine runs the cases.
-        self._act_material_tester.setEnabled(opensees)
-        self._act_material_tester.setStatusTip("" if opensees else self._opensees.summary())
+        self.action("define.material_tester").setEnabled(opensees)
+        self.action("define.material_tester").setStatusTip(
+            "" if opensees else self._opensees.summary()
+        )
         batch_enabled = has_cases and solver and not self._runner.is_running
         self._act_run_all.setEnabled(batch_enabled)
         self._act_run_selected.setEnabled(batch_enabled)
@@ -8002,56 +6076,18 @@ class MainWindow(QMainWindow):
         # Only there while a check runs, rather than a permanent grey entry.
         self._act_cancel_stability.setVisible(self._stability.is_running)
         self._act_check_model.setEnabled(has_project)
-        self._act_mesh.setEnabled(has_project)
-        self._act_merge_joints.setEnabled(has_project)
-        self._act_divide_frames.setEnabled(has_project)
-        self._act_join_frames.setEnabled(has_project and len(self._canvas.selection.elements) >= 2)
-        self._act_assign_support.setEnabled(has_project and has_selected_nodes)
+        self.action("edit.join_frames").setEnabled(
+            has_project and len(self._canvas.selection.elements) >= 2
+        )
         for action in self._restraint_actions():
             action.setEnabled(has_project and has_selected_nodes)
-        self._act_add_multi_support.setEnabled(has_project and has_selected_nodes)
-        self._act_assign_masses.setEnabled(has_project and has_selected_nodes)
-        self._act_assign_springs.setEnabled(has_project and has_selected_nodes)
-        self._act_assign_equal_dof.setEnabled(has_project and n_sel == 2)
-        self.action("assign.rigid_link").setEnabled(has_project and n_sel == 2)
-        self._act_groups.setEnabled(has_project)
-        self._act_section_cuts.setEnabled(has_project)
         self._act_custom_commands.setEnabled(has_project)
-        self._act_assign_group.setEnabled(has_project and has_selection)
-        self._act_shell_formulation.setEnabled(has_project and has_selected_elements)
-        for action in (
-            self._act_assign_area_springs,
-            self._act_assign_edge_springs,
-            self._act_assign_line_springs,
-        ):
-            action.setEnabled(has_project and has_selected_elements)
         self.action("assign.floor_load").setEnabled(
             has_project
             and has_selected_nodes
             and self._vm.project is not None
             and self._vm.project.ndm == 3
         )
-        # Zero-length elements and sections need exactly two selected joints.
-        self._act_assign_zero_length.setEnabled(has_project and n_sel == 2)
-        self._act_assign_zls.setEnabled(has_project and n_sel == 2)
-        self._act_assign_bearing.setEnabled(has_project and n_sel == 2)
-        self._act_assign_link.setEnabled(has_project and n_sel == 2)
-        self._act_assign_hinge.setEnabled(has_project and has_selected_elements)
-        self._act_assign_geom_transf.setEnabled(has_project and has_selected_elements)
-        self._act_assign_local_axes.setEnabled(has_project and has_selected_elements)
-        self._act_assign_integration.setEnabled(has_project and has_selected_elements)
-        for action in (
-            self._act_assign_releases,
-            self._act_assign_end_offsets,
-            self._act_assign_insertion,
-            self._act_assign_modifiers,
-            self._act_assign_auto_mesh,
-            self._act_assign_wall,
-            self._act_assign_section,
-            self._act_assign_material,
-            self._act_assign_pile,
-        ):
-            action.setEnabled(has_project and has_selected_elements)
         self._act_delete.setEnabled(has_project and has_selection)
         self._act_hide_selected.setEnabled(has_project and has_selection)
         self._act_isolate_selected.setEnabled(has_project and has_selection)
@@ -8081,7 +6117,6 @@ class MainWindow(QMainWindow):
         self._act_display_options.setEnabled(has_project)
         self._act_show_load_assigns.setEnabled(has_project)
         self._act_lock_model.setEnabled(has_project)
-        self._act_default_materials.setEnabled(has_project)
         self._lock_button.setEnabled(has_project)
         self._act_show_local_axes.setEnabled(has_project)
         self._act_back_to_model.setEnabled(self._post_dock is not None)

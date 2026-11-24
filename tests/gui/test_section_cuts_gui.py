@@ -35,7 +35,7 @@ def test_define_a_cut_then_the_group_is_kept(qtbot, monkeypatch) -> None:  # typ
         return 1
 
     monkeypatch.setattr(SectionCutsDialog, "exec", _exec)
-    mw._on_define_section_cuts()
+    mw.groups.define_section_cuts()
     (cut,) = vm.project.section_cuts
     assert (cut.name, cut.group_id, cut.centre) == ("SCUT1", 3, (1.0, 2.0, 3.0))
 

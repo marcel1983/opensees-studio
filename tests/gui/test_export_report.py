@@ -53,7 +53,7 @@ def test_export_report(qtbot, monkeypatch, tmp_path: Path, name: str, chosen: st
     monkeypatch.setattr(
         QFileDialog, "getSaveFileName", staticmethod(lambda *a, **k: (str(target), chosen))
     )
-    mw._on_export_report()
+    mw.exports.report()
     if name.endswith(".html"):
         page = target.read_text(encoding="utf-8")
         assert "Model</a></h2>" in page and "No results for the model" in page
@@ -107,7 +107,7 @@ def test_export_report_leaves_out_what_the_dialog_unchecks(  # type: ignore[no-u
         "getSaveFileName",
         staticmethod(lambda *a, **k: (str(target), "HTML page (*.html)")),
     )
-    mw._on_export_report()
+    mw.exports.report()
     page = target.read_text(encoding="utf-8")
     assert "Materiales</a></h2>" not in page and "Secciones</a></h2>" in page
     assert '<div class="cover">' not in page
@@ -127,5 +127,5 @@ def test_cancelling_the_options_writes_nothing(qtbot, monkeypatch, tmp_path: Pat
     monkeypatch.setattr(
         QFileDialog, "getSaveFileName", staticmethod(lambda *a, **k: asked.append(a) or ("", ""))
     )
-    _window(qtbot)._on_export_report()
+    _window(qtbot).exports.report()
     assert asked == []

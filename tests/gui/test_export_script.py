@@ -42,7 +42,7 @@ def test_exporting_writes_a_runnable_model_script(
     target = tmp_path / "cantilever.py"
     _choose(monkeypatch, target, "Model only")
 
-    window_with_project._on_export_script()
+    window_with_project.exports.script()
 
     source = target.read_text(encoding="utf-8")
     assert "ops.model('basic', '-ndm', 3, '-ndf', 6)" in source
@@ -55,7 +55,7 @@ def test_exporting_can_include_a_case(qtbot, window_with_project, monkeypatch, t
     target = tmp_path / "cantilever_case.py"
     _choose(monkeypatch, target, case_label(case))
 
-    window_with_project._on_export_script()
+    window_with_project.exports.script()
 
     source = target.read_text(encoding="utf-8")
     assert f"# --- Analysis: case {case_label(case)} ---" in source
@@ -72,7 +72,7 @@ def test_cancelling_the_case_chooser_writes_nothing(
     )
     monkeypatch.setattr(QInputDialog, "getItem", staticmethod(lambda *a, **k: ("", False)))
 
-    window_with_project._on_export_script()
+    window_with_project.exports.script()
 
     assert not target.exists()
 
@@ -91,7 +91,7 @@ def test_without_a_project_it_says_so(qtbot, monkeypatch) -> None:  # type: igno
         QMessageBox, "information", staticmethod(lambda *a, **k: calls.append(a[1]))
     )
 
-    win._on_export_script()
+    win.exports.script()
 
     assert calls == ["Export script"]
 

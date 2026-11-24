@@ -136,3 +136,13 @@ def test_the_window_serves_every_declared_command(qtbot) -> None:  # type: ignor
         assert window.action("file.export_report").isEnabled()
     finally:
         window._help_controller.uninstall()
+
+
+def test_a_controller_name_does_not_hide_a_method_of_the_window() -> None:
+    # ``window.geometry`` would replace QWidget.geometry(): Qt and every caller
+    # of it would get a controller instead of a rectangle.
+    from PySide6.QtWidgets import QMainWindow
+
+    controllers = {spec.handler.split(".")[0] for spec in ALL_ACTIONS if "." in spec.handler}
+    assert controllers
+    assert sorted(name for name in controllers if hasattr(QMainWindow, name)) == []

@@ -201,8 +201,20 @@ These are non-obvious things that are easy to break if you don't know:
   at all, and `DesignController` (the whole Design menu) shows the hooks: it
   gets `results` (the current case results) and `show_ratios` (the overlay the
   window still owns) and runs in a test with no `MainWindow`; `LoadsController`
-  assigns and deletes loads. The rest of the window is being moved out the
-  same way.
+  assigns and deletes loads, `MembersController` assigns what a member is
+  made of and its frame options, `JointsController` what holds a joint
+  and what joins two (`Needs.TWO_NODES` is "exactly two joints selected"), and
+  `PatternsController` defines time series and load patterns
+  (`Needs.TIME_SERIES`; it gets `new_project` as a hook). `LibraryController`
+  (materials, friction models, records, sections) owns the Material Tester and
+  Ground Motions windows it keeps open. `ImportsController`
+  (File → Import) gets `confirm_discard` and `apply_view_settings`, and
+  `ExportsController` (File → Export) `results` and `report_results`; the window
+  passes a hook as a lambda, so a test that replaces the window's method still
+  reaches it. A controller's attribute must not be the name of a `QMainWindow`
+  method (`window.geometry` would replace `QWidget.geometry()`):
+  `tests/gui/test_action_registry.py` checks it, hence `model_tools`.
+  The rest of the window is being moved out the same way.
 - An unregistered material type is not a crash: `material_forms.form_for`
   returns a read-only placeholder, the same contract `section_forms` has.
 - Never hardcode how the analysis child is spawned. Every spawn site

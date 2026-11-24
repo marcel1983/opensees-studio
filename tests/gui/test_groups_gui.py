@@ -73,7 +73,7 @@ def test_assign_a_new_group_then_select_it_back(qtbot, monkeypatch) -> None:  # 
         d.new_name.setText("Bay A")
 
     _accept(monkeypatch, AssignGroupDialog, fill)
-    mw._on_assign_group()
+    mw.groups.assign_group()
     (group,) = mw._vm.project.groups
     assert (group.name, group.node_ids, group.element_ids) == ("Bay A", [1, 2], [1])
 
@@ -92,7 +92,7 @@ def test_remove_from_an_existing_group(qtbot, monkeypatch) -> None:  # type: ign
     mw = _window(qtbot)
     mw._canvas.selection.set_selection({1, 2, 3}, {1, 2})
     _accept(monkeypatch, AssignGroupDialog)
-    mw._on_assign_group()
+    mw.groups.assign_group()
     mw._canvas.selection.set_selection({3}, {2})
 
     def fill(d: AssignGroupDialog) -> None:
@@ -100,7 +100,7 @@ def test_remove_from_an_existing_group(qtbot, monkeypatch) -> None:  # type: ign
         next(b for b in d.mode_buttons.buttons() if b.property("mode") == "remove").setChecked(True)
 
     _accept(monkeypatch, AssignGroupDialog, fill)
-    mw._on_assign_group()
+    mw.groups.assign_group()
     (group,) = mw._vm.project.groups
     assert (group.node_ids, group.element_ids) == ([1, 2], [1])
 
@@ -115,7 +115,7 @@ def test_define_groups_renames_and_removes(qtbot, monkeypatch) -> None:  # type:
         d.table.item(0, 0).setText("Columns")
 
     _accept(monkeypatch, GroupsDialog, add_two)
-    mw._on_define_groups()
+    mw.groups.define_groups()
     assert [g.name for g in mw._vm.project.groups] == ["Columns", "GROUP2"]
     assert len({g.colour for g in mw._vm.project.groups}) == 2
 
@@ -127,7 +127,7 @@ def test_define_groups_renames_and_removes(qtbot, monkeypatch) -> None:  # type:
         d._on_remove()
 
     _accept(monkeypatch, GroupsDialog, repeat_name)
-    mw._on_define_groups()
+    mw.groups.define_groups()
     assert [g.name for g in mw._vm.project.groups] == ["Columns"]
 
 
@@ -137,7 +137,7 @@ def test_deleting_members_prunes_groups_and_undo_restores(qtbot, monkeypatch) ->
     vm = mw._vm
     mw._canvas.selection.set_selection({1, 2, 3}, {1, 2})
     _accept(monkeypatch, AssignGroupDialog)
-    mw._on_assign_group()
+    mw.groups.assign_group()
 
     vm.apply_command(DeleteElementsCommand(vm, {1}))
     assert vm.project.groups[0].element_ids == [2]

@@ -26,7 +26,7 @@ def _open(qtbot):  # type: ignore[no-untyped-def]
         ]
     )
     mw._act_material_tester.trigger()
-    dlg = mw._material_tester_dlg
+    dlg = mw.library.material_tester_dialog
     assert dlg is not None
     qtbot.addWidget(dlg)
     return mw, dlg
@@ -44,7 +44,7 @@ def test_action_is_in_define_menu_and_opens_non_modal_dialog(qtbot) -> None:  # 
     assert dlg.isVisible()
     assert not dlg.isModal()
     mw._act_material_tester.trigger()
-    assert mw._material_tester_dlg is dlg  # reused, not stacked
+    assert mw.library.material_tester_dialog is dlg  # reused, not stacked
 
 
 @pytest.mark.gui

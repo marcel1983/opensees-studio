@@ -55,7 +55,7 @@ def test_add_a_pulse_series(qtbot, monkeypatch) -> None:  # type: ignore[no-unty
         d.fields["period"].setValue(2.0)
 
     _accept(monkeypatch, FunctionTimeSeriesDialog, fill)
-    mw._on_add_function_ts()
+    mw.patterns.add_function_ts()
     (ts,) = mw._vm.project.time_series
     assert (ts.type, ts.period, ts.width) == ("Pulse", 2.0, 0.5)
 
@@ -82,7 +82,7 @@ def test_multi_support_motion_needs_restrained_supports(qtbot, monkeypatch) -> N
         d.pattern()
     mw._canvas.selection.set_selection({1}, set())
     _accept(monkeypatch, MultiSupportExcitationDialog)
-    mw._on_add_multi_support()
+    mw.patterns.add_multi_support()
     (pattern,) = vm.project.load_patterns
     assert (pattern.type, pattern.node_ids) == ("ImposedSupportMotion", [1])
 
@@ -100,7 +100,7 @@ def test_link_dialog_builds_a_two_node_link_and_a_tfp(qtbot, monkeypatch) -> Non
     mw._refresh_action_enablement()
     assert mw._act_assign_link.isEnabled()
     _accept(monkeypatch, AssignLinkDialog)
-    mw._on_assign_link()
+    mw.joints.assign_link()
     link = vm.project.elements[-1]
     assert (link.type, link.dirs, link.orient) == (
         "TwoNodeLink",
@@ -127,7 +127,7 @@ def test_zero_length_element_from_the_window(qtbot, monkeypatch) -> None:  # typ
     assert mw._act_assign_zero_length.isEnabled()
 
     _accept(monkeypatch, AssignZeroLengthDialog)
-    mw._on_assign_zero_length()
+    mw.joints.assign_zero_length()
 
     element = vm.project.elements[-1]
     assert (element.type, element.nodes, element.dofs, element.material_ids) == (
@@ -152,7 +152,7 @@ def test_zero_length_needs_coincident_joints(qtbot, monkeypatch) -> None:  # typ
     mw._canvas.selection.set_selection({1, 2}, set())
     monkeypatch.setattr(QMessageBox, "warning", lambda *args, **kwargs: None)
 
-    mw._on_assign_zero_length()
+    mw.joints.assign_zero_length()
 
     assert vm.project.elements == []
 

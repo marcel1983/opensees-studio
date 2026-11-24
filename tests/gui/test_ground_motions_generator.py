@@ -16,7 +16,7 @@ def _open(qtbot):  # type: ignore[no-untyped-def]
     qtbot.addWidget(mw)
     mw._vm.new_project()
     mw._act_ground_motions.trigger()
-    dlg = mw._ground_motions_dlg
+    dlg = mw.library.ground_motions_dialog
     assert dlg is not None
     qtbot.addWidget(dlg)
     return mw, dlg

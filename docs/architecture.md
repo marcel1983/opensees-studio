@@ -45,8 +45,8 @@ the reverse.
 A command of the window is declared once, as an `ActionSpec` in
 `views/actions/<area>.py`: its id (`"file.save"`), its text, the method that
 runs it, its shortcut and what it needs to be enabled (`Needs.PROJECT`,
-`Needs.SELECTED_NODES`, …). `ActionRegistry` builds the `QAction` objects from
-those tables, connects them and enables them; `MainWindow.action("file.save")`
+`Needs.SELECTED_NODES`, `Needs.TWO_NODES` for exactly two joints, `Needs.TIME_SERIES`, …).
+`ActionRegistry` builds the `QAction` objects from those tables, connects them and enables them; `MainWindow.action("file.save")`
 returns one. The spec tables are plain data with no Qt import, so a unit test
 checks that every command has a handler and a help page.
 
@@ -75,6 +75,15 @@ handler: `"transforms.move"` is `window.transforms.move`.
 | `BuildingController` | `building` | Define → Storeys, Mass Source, Seismic Loads; Assign → Diaphragm, Rigid Link, Remove Constraints |
 | `DesignController` | `design` | The Design menu (19 commands): basis, Direct Analysis, notional loads, members, steel and concrete checks, connections, base plates, footings |
 | `LoadsController` | `loads` | Assign → point, imposed displacement, distributed, trapezoidal, frame point, temperature, tendon, surface and floor loads; joint patterns; Edit → Delete Loads |
+| `MembersController` | `members` | Assign → section, material, geometric transformation, local axes, beam integration, releases, end offsets, insertion point, property modifiers, auto mesh; plastic hinge, RC wall, pile soil springs |
+| `ExportsController` | `exports` | File → Export: OpenSees script, IFC, SAP2000 text, report, calculation memory. Gets `results` and `report_results` as hooks (the window owns the results) |
+| `ImportsController` | `imports` | File → Import: DXF drawing (into the project), PORTICO, SAP2000 text, IFC and Tcl (a new project). Gets `confirm_discard` (the unsaved-changes prompt) and `apply_view_settings` as hooks |
+| `LibraryController` | `library` | Define → material library, default materials, MC2010 concrete, friction models, material tester, ground motions, section library, concrete section, steel deck and section designer. Owns the two windows it keeps open (`material_tester_dialog`, `ground_motions_dialog`); gets `new_project` as a hook |
+| `GroupsController` | `groups` | Define → Groups, Section Cuts; Assign → Assign to Group |
+| `ModelToolsController` | `model_tools` | Edit → Check Model for Duplicates, Merge Joints, Divide Frames at Joints, Join Frames, Mesh. Gets `select_rows` (select a report row in the viewport) as a hook |
+| `AreasController` | `areas` | Define → Create Shell; Assign → Shell Formulation, Area Springs, Edge Springs, Line Springs |
+| `PatternsController` | `patterns` | Define → linear, path, function and constant time series; plain load pattern, uniform excitation, multi-support excitation. Gets `new_project` as a hook (a series can be defined with no project open); `Needs.TIME_SERIES` enables the patterns |
+| `JointsController` | `joints` | Assign → restraints, masses, springs; EqualDOF, zero-length element and section, bearing, link (exactly two joints: `Needs.TWO_NODES`) |
 
 `DesignController` is the example of the named hooks: it is created with
 `results` (the case results computed on the project as it is now) and

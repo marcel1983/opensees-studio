@@ -41,7 +41,7 @@ def test_the_dialog_previews_and_the_window_adds_in_one_step(qtbot, monkeypatch)
     for eid in range(1, 6):
         window._canvas.selection.select_element(eid, additive=True)
     monkeypatch.setattr(PileSpringsDialog, "exec", lambda self: QDialog.DialogCode.Accepted)
-    window._on_assign_pile_springs()
+    window.members.assign_pile()
     project = window._vm.project
     assert len(project.nodes) == 12 and any(m.type == "QzSimple1" for m in project.materials)
     window._vm.undo_stack.undo()
