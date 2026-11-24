@@ -74,6 +74,19 @@ def test_wire_connects_each_action_to_its_handler(qapp) -> None:  # type: ignore
     assert target.calls == ["two", "one"]
 
 
+def test_a_dotted_handler_goes_through_an_attribute_of_the_target(qapp) -> None:  # type: ignore[no-untyped-def]
+    class _Window:
+        def __init__(self) -> None:
+            self.part = _Target()
+
+    owner, window = QObject(), _Window()
+    registry = ActionRegistry((ActionSpec("demo.one", "One", "part._on_two"),))
+    registry.create(owner)
+    registry.wire(window)
+    registry.action("demo.one").trigger()
+    assert window.part.calls == ["two"]
+
+
 def test_refresh_sets_only_the_actions_that_state_a_need(qapp) -> None:  # type: ignore[no-untyped-def]
     owner = QObject()
     registry = ActionRegistry(SPECS)

@@ -50,10 +50,25 @@ those tables, connects them and enables them; `MainWindow.action("file.save")`
 returns one. The spec tables are plain data with no Qt import, so a unit test
 checks that every command has a handler and a help page.
 
-The migration is by menu: File is declared this way, the other menus are still
-built by hand in `MainWindow._build_actions`. A declared action is also stored
-as `_act_<name>`, the name the ribbon layout, `core.help.ACTION_TOPICS` and the
-icon files use.
+The migration is by menu: File and part of Edit are declared this way, the
+other menus are still built by hand in `MainWindow._build_actions`. A declared
+action is also stored as `_act_<name>`, the name the ribbon layout,
+`core.help.ACTION_TOPICS` and the icon files use.
+
+## Controllers
+
+What a group of commands *does* lives in a controller, not in `MainWindow`:
+`views/controllers/<area>.py` holds a `QObject` that is given a `Shell` — the
+window as the parent of its dialogs, the view model, the focused canvas, the
+log and "refresh the commands" — and keeps the state of its area (the
+clipboard and the open Move/Replicate window, for `TransformsController`).
+Whatever else it needs from the window arrives as a named constructor argument
+(`arm_measure`, `release_measure`), so the coupling is visible where the
+controller is created. A command's spec names the controller method as its
+handler: `"transforms.move"` is `window.transforms.move`.
+
+`MainWindow` is being emptied this way, one area per pull request; it keeps
+the layout, the docks and the wiring.
 
 ## Wizards and generated models
 

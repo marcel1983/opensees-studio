@@ -70,10 +70,7 @@ from opensees_studio.commands import (
     FixDuplicatesCommand,
     MergeJointsCommand,
     MeshCommand,
-    MirrorCommand,
-    MoveNodesCommand,
     ReplaceElementsCommand,
-    ReplicateCommand,
     SetChapterJChecksCommand,
     SetColumnSplicesCommand,
     SetConnectionsCommand,
@@ -200,6 +197,8 @@ from opensees_studio.views.canvas3d.design_ratio_renderer import DesignRatioRend
 from opensees_studio.views.canvas3d.diagram_renderer import DiagramRenderer
 from opensees_studio.views.canvas3d.model_renderer import RendererMode
 from opensees_studio.views.canvas3d.shell_contour_renderer import ShellContourRenderer
+from opensees_studio.views.controllers import Shell
+from opensees_studio.views.controllers.transforms import TransformsController
 from opensees_studio.views.dialogs import (
     AddNodeDialog,
     AnalysisCaseManagerDialog,
@@ -238,7 +237,6 @@ from opensees_studio.views.dialogs import (
     MaterialLibraryDialog,
     MaterialTesterDialog,
     MeshDialog,
-    MirrorDialog,
     ModelCheckDialog,
     MoveDialog,
     NotionalLoadsDialog,
@@ -457,8 +455,6 @@ class MainWindow(QMainWindow):
         self._analysis_error_box: QMessageBox | None = None  # last failure report
         self._stability_box: QMessageBox | None = None  # last stability check answer
         self._run_dialog: RunAnalysisDialog | None = None  # open while a Run dialog is shown
-        #: Open Move/Replicate window: modeless, so Measure can fill its offset.
-        self._offset_dialog: MoveDialog | ReplicateDialog | None = None
         self._post_dock: QDockWidget | None = None  # the active post-processing dock
         self._post_mode: str | None = None  # "force"/"deformed"/"mode": what the canvas shows
         # What the viewport is displaying ("Deformed Shape"), ahead of the case name.
@@ -498,6 +494,20 @@ class MainWindow(QMainWindow):
         self._measure_tool: MeasureDistanceTool | None = None
         self._material_tester_dlg: MaterialTesterDialog | None = None  # non-modal, reused
         self._ground_motions_dlg: GroundMotionsDialog | None = None  # non-modal, reused
+
+        shell = Shell(
+            window=self,
+            vm=self._vm,
+            canvas=lambda: self._canvas,
+            log=self._log,
+            refresh_actions=self._refresh_action_enablement,
+        )
+        #: Edit → Copy, Paste, Move, Replicate, Mirror, Extrude.
+        self.transforms = TransformsController(
+            shell,
+            arm_measure=self._arm_measure_tool,
+            release_measure=self._release_measure_tool,
+        )
 
         self._build_docks()
         self._log(f"OpenSees Studio {__version__} started.")
@@ -661,17 +671,6 @@ class MainWindow(QMainWindow):
         )
         self._act_clear_selection = QAction("Clear &selection", self, shortcut="Esc")
         self._act_select_all = QAction("Select &all", self, shortcut="Ctrl+A")
-        # A text field with focus keeps Ctrl+C / Ctrl+V for itself (Qt's shortcut
-        # override), so these act on the model only when the viewport has focus.
-        self._act_copy = QAction(
-            "&Copy", self, shortcut=QKeySequence(QKeySequence.StandardKey.Copy)
-        )
-        self._act_paste = QAction(
-            "&Paste…", self, shortcut=QKeySequence(QKeySequence.StandardKey.Paste)
-        )
-        #: Edit → Copy: (id of the project, joints, elements); offset of the last paste.
-        self._clipboard: tuple[int, frozenset[int], frozenset[int]] | None = None
-        self._paste_offset: tuple[float, float, float] = (0.0, 0.0, 3.0)
         self._act_table_editing = QAction("Interactive &Table Editing…", self)
         self._act_table_editing.setShortcut("Ctrl+T")
 
@@ -699,16 +698,12 @@ class MainWindow(QMainWindow):
         self._act_select_shell_edge_joints = QAction("Joints on S&hell Edges", self)
 
         # Edit → transforms
-        self._act_move = QAction("&Move…", self, shortcut="Ctrl+M")
-        self._act_replicate = QAction("&Replicate…", self, shortcut="Ctrl+Shift+R")
         self._act_check_duplicates = QAction("Check Model for &Duplicates…", self)
         self._act_mesh = QAction("&Mesh…", self)
         self._act_delete_loads = QAction("Delete &Loads…", self)
         self._act_merge_joints = QAction("Merge &Joints…", self)
         self._act_divide_frames = QAction("Divide Frames at &Joints…", self)
         self._act_join_frames = QAction("Join &Frames", self)
-        self._act_mirror = QAction("Mirr&or…", self)
-        self._act_extrude = QAction("E&xtrude…", self)
 
         # Tools (exclusive)
         self._tool_group = QActionGroup(self)
@@ -1123,12 +1118,12 @@ class MainWindow(QMainWindow):
         m_edit = mb.addMenu("&Edit")
         m_edit.addActions([self._act_undo, self._act_redo])
         m_edit.addSeparator()
-        m_edit.addActions([self._act_copy, self._act_paste])
+        m_edit.addActions([act("edit.copy"), act("edit.paste")])
         m_edit.addSeparator()
         m_edit.addActions([self._act_delete, self._act_select_all, self._act_clear_selection])
         m_edit.addSeparator()
         m_edit.addActions(
-            [self._act_move, self._act_replicate, self._act_mirror, self._act_extrude]
+            [act("edit.move"), act("edit.replicate"), act("edit.mirror"), act("edit.extrude")]
         )
         m_edit.addSeparator()
         m_edit.addAction(self._act_table_editing)
@@ -2002,8 +1997,6 @@ class MainWindow(QMainWindow):
         )
         self._act_clear_selection.triggered.connect(self._on_clear_selection)
         self._act_select_all.triggered.connect(self._on_select_all)
-        self._act_copy.triggered.connect(self._on_copy)
-        self._act_paste.triggered.connect(self._on_paste)
         self._act_table_editing.triggered.connect(self._on_table_editing)
         self._act_invert_selection.triggered.connect(self._on_invert_selection)
         self._act_previous_selection.triggered.connect(self._on_previous_selection)
@@ -2033,16 +2026,12 @@ class MainWindow(QMainWindow):
             ),
         ):
             action.triggered.connect(lambda _=False, query=query: self._select_from(query))
-        self._act_move.triggered.connect(self._on_move)
-        self._act_replicate.triggered.connect(self._on_replicate)
         self._act_check_duplicates.triggered.connect(self._on_check_duplicates)
         self._act_mesh.triggered.connect(self._on_mesh)
         self._act_delete_loads.triggered.connect(self._on_delete_loads)
         self._act_merge_joints.triggered.connect(self._on_merge_joints)
         self._act_divide_frames.triggered.connect(self._on_divide_frames)
         self._act_join_frames.triggered.connect(self._on_join_frames)
-        self._act_mirror.triggered.connect(self._on_mirror)
-        self._act_extrude.triggered.connect(self._on_extrude)
 
         # Tools
         self._act_tool_select.triggered.connect(self._on_select_tool)
@@ -3182,253 +3171,6 @@ class MainWindow(QMainWindow):
         self._act_select_line.setChecked(False)
         self._act_zoom_window.setChecked(False)
 
-    # ── slots: edit → transforms ────────────────────────────────────
-    def _selection_nodes(self) -> set[int]:
-        """Selected nodes, plus the joints of every selected element.
-
-        A frame is defined by its joints, so selecting members and asking to
-        move, copy or mirror them means acting on those joints: the user does
-        not have to pick the nodes first. A joint shared with a member that is
-        not selected still moves, which is how a joint edit behaves in a frame
-        program — the connected member follows its joint.
-        """
-        project = self._vm.project
-        if project is None:
-            return set(self._canvas.selection.nodes)
-        return selection_queries.implied_node_ids(
-            project,
-            self._canvas.selection.nodes,
-            self._canvas.selection.elements,
-        )
-
-    def _on_copy(self) -> None:
-        """Edit → Copy: remember the selection (joints and the members between them)."""
-        project = self._vm.project
-        nodes = self._selection_nodes()
-        if project is None or not nodes:
-            return
-        elements = set(self._canvas.selection.elements) or {
-            el.id for el in project.elements if all(nid in nodes for nid in el.nodes)
-        }
-        self._clipboard = (id(project), frozenset(nodes), frozenset(elements))
-        self._refresh_action_enablement()
-        self.statusBar().showMessage(
-            f"Copied {len(nodes)} node(s) and {len(elements)} element(s): Edit → Paste "
-            "places them at an offset.",
-            5000,
-        )
-
-    def _clipboard_contents(self) -> tuple[set[int], set[int]]:
-        """The copied joints and elements that still exist in this project."""
-        project = self._vm.project
-        if project is None or self._clipboard is None or self._clipboard[0] != id(project):
-            return set(), set()
-        node_ids = {n.id for n in project.nodes} & self._clipboard[1]
-        element_ids = {e.id for e in project.elements} & self._clipboard[2]
-        return node_ids, element_ids
-
-    def _on_paste(self) -> None:
-        """Edit → Paste: a copy of the copied objects at an offset, then selected."""
-        from opensees_studio.views.dialogs.replicate import PasteDialog
-
-        project = self._vm.project
-        nodes, elements = self._clipboard_contents()
-        if project is None or not nodes:
-            return
-        dialog = PasteDialog(
-            len(nodes),
-            len(elements),
-            self._paste_offset,
-            self,
-            length_unit=labels_for(project.meta.units).length,
-        )
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        before_nodes = {n.id for n in project.nodes}
-        before_elements = {e.id for e in project.elements}
-        try:
-            self._vm.apply_command(ReplicateCommand(self._vm, nodes, elements, dialog.offset(), 1))
-        except Exception as exc:
-            QMessageBox.critical(self, "Paste failed", str(exc))
-            return
-        self._paste_offset = dialog.offset()
-        # The pasted copy becomes the selection, ready to move or paste again.
-        self._canvas.selection.set_selection(
-            {n.id for n in project.nodes} - before_nodes,
-            {e.id for e in project.elements} - before_elements,
-        )
-
-    def _on_move(self) -> None:
-        project = self._vm.project
-        sel_nodes = set(self._selection_nodes())
-        if project is None or not sel_nodes:
-            QMessageBox.information(self, "Move", "Select nodes or frame elements first.")
-            return
-        if self._raise_open_offset_dialog():
-            return
-        dlg = MoveDialog(len(sel_nodes), self, length_unit=labels_for(project.meta.units).length)
-        dlg.measureRequested.connect(lambda d=dlg: self._measure_for_offset_dialog(d))
-        dlg.accepted.connect(lambda d=dlg: self._apply_move(d, sel_nodes))
-        self._show_offset_dialog(dlg)
-
-    def _apply_move(self, dlg: MoveDialog, sel_nodes: set[int]) -> None:
-        try:
-            self._vm.apply_command(MoveNodesCommand(self._vm, sel_nodes, dlg.offset()))
-        except Exception as exc:
-            QMessageBox.critical(self, "Move failed", str(exc))
-
-    def _on_replicate(self) -> None:
-        project = self._vm.project
-        sel_nodes = set(self._selection_nodes())
-        sel_elements = set(self._canvas.selection.elements)
-        if project is None or not sel_nodes:
-            QMessageBox.information(self, "Replicate", "Select nodes or frame elements first.")
-            return
-        # Forgiving: if the user selected only nodes, include any element whose
-        # endpoints are all in the node selection.
-        if not sel_elements:
-            sel_elements = {
-                el.id for el in project.elements if all(nid in sel_nodes for nid in el.nodes)
-            }
-        if self._raise_open_offset_dialog():
-            return
-        dlg = ReplicateDialog(
-            len(sel_nodes),
-            len(sel_elements),
-            self,
-            length_unit=labels_for(project.meta.units).length,
-        )
-        dlg.measureRequested.connect(lambda d=dlg: self._measure_for_offset_dialog(d))
-        dlg.accepted.connect(lambda d=dlg: self._apply_replicate(d, sel_nodes, sel_elements))
-        self._show_offset_dialog(dlg)
-
-    def _apply_replicate(
-        self, dlg: ReplicateDialog, sel_nodes: set[int], sel_elements: set[int]
-    ) -> None:
-        try:
-            self._vm.apply_command(
-                ReplicateCommand(self._vm, sel_nodes, sel_elements, dlg.offset(), dlg.n_copies())
-            )
-        except Exception as exc:
-            QMessageBox.critical(self, "Replicate failed", str(exc))
-
-    def _show_offset_dialog(self, dialog: MoveDialog | ReplicateDialog) -> None:
-        """Show Move/Replicate modeless so the viewport, and Measure, stay usable."""
-        dialog.setModal(False)
-        dialog.finished.connect(lambda _code, d=dialog: self._on_offset_dialog_closed(d))
-        self._offset_dialog = dialog
-        dialog.show()
-
-    def _raise_open_offset_dialog(self) -> bool:
-        """Bring the open Move/Replicate window forward; one at a time."""
-        dialog = self._offset_dialog
-        if dialog is None or not dialog.isVisible():
-            return False
-        dialog.raise_()
-        dialog.activateWindow()
-        return True
-
-    def _measure_for_offset_dialog(self, dialog: MoveDialog | ReplicateDialog) -> None:
-        """Arm Measure Distance to fill ``dialog`` with the next two-joint vector."""
-        if not dialog.isVisible():
-            return
-        self._act_tool_measure.setChecked(True)
-        self._on_measure_tool()
-
-    def _on_offset_dialog_closed(self, dialog: MoveDialog | ReplicateDialog) -> None:
-        if self._offset_dialog is dialog:
-            self._offset_dialog = None
-        # Measure no longer has a target, and the tool goes back to Select so a
-        # stray click after the window closed does not pick points for nothing.
-        if self._measure_tool is not None:
-            self._measure_tool.stop_measuring_for()
-            if self._tool_controller.active is self._measure_tool:
-                self._act_tool_select.setChecked(True)
-                self._tool_controller.set_active(None)
-        dialog.deleteLater()
-
-    def _on_extrude(self) -> None:
-        """Edit → Extrude: selected frames into shells, or selected joints into frames."""
-        from opensees_studio.commands import ExtrudeCommand
-        from opensees_studio.commands.extrude import section_choices
-        from opensees_studio.core import FRAME_ELEMENT_CLASSES
-        from opensees_studio.views.dialogs.extrude import ExtrudeDialog
-
-        project = self._vm.project
-        if project is None:
-            return
-        frames = {
-            el.id
-            for el in project.elements
-            if el.id in self._canvas.selection.elements and isinstance(el, FRAME_ELEMENT_CLASSES)
-        }
-        into_shells = bool(frames)
-        nodes = set(self._canvas.selection.nodes)
-        sections = section_choices(project, shells=into_shells)
-        if not into_shells and not nodes:
-            QMessageBox.information(
-                self, "Extrude", "Select joints (into frames) or frame members (into shells)."
-            )
-            return
-        if not sections:
-            QMessageBox.information(
-                self,
-                "Extrude",
-                "Extruding frames into shells needs a plate section"
-                if into_shells
-                else "Extruding joints into frames needs a frame section",
-            )
-            return
-        dialog = ExtrudeDialog(
-            into_shells=into_shells,
-            n_objects=len(frames) if into_shells else len(nodes),
-            sections=sections,
-            parent=self,
-            length_unit=labels_for(project.meta.units).length,
-        )
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        command = ExtrudeCommand(
-            self._vm,
-            nodes,
-            frames,
-            dialog.offset(),
-            dialog.count(),
-            dialog.section_id(),
-        )
-        try:
-            self._vm.apply_command(command)
-        except Exception as exc:
-            QMessageBox.critical(self, "Extrude failed", str(exc))
-            return
-        self._canvas.selection.set_selection(set(), set(command.added_elements))
-        self._log(
-            f"Extruded into {len(command.added_elements)} "
-            f"{'shell' if into_shells else 'frame'}(s), {len(command.added_nodes)} new joint(s)."
-        )
-
-    def _on_mirror(self) -> None:
-        sel_nodes = self._selection_nodes()
-        sel_elements = set(self._canvas.selection.elements)
-        if not sel_nodes:
-            QMessageBox.information(self, "Mirror", "Select nodes or frame elements first.")
-            return
-        if not sel_elements and self._vm.project is not None:
-            sel_elements = {
-                el.id
-                for el in self._vm.project.elements
-                if all(nid in sel_nodes for nid in el.nodes)
-            }
-        dlg = MirrorDialog(len(sel_nodes), len(sel_elements), self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            self._vm.apply_command(
-                MirrorCommand(self._vm, sel_nodes, sel_elements, dlg.plane())  # type: ignore[arg-type]
-            )
-        except Exception as exc:
-            QMessageBox.critical(self, "Mirror failed", str(exc))
-
     # ── slots: tools ────────────────────────────────────────────────
     def _on_select_tool(self) -> None:
         self._tool_controller.set_active(None)
@@ -3585,7 +3327,7 @@ class MainWindow(QMainWindow):
         if self._measure_tool is None or self._measure_tool.canvas is not self._canvas:
             self._measure_tool = MeasureDistanceTool(self._canvas, self._vm, self)
             self._measure_tool.statusChanged.connect(lambda msg: self.statusBar().showMessage(msg))
-        dialog = self._offset_dialog
+        dialog = self.transforms.offset_dialog
         if dialog is not None and dialog.isVisible():
             # Measure is being used from the open Move/Replicate window: its
             # fields are the destination of the vector between the two joints.
@@ -3594,6 +3336,31 @@ class MainWindow(QMainWindow):
         else:
             self._measure_tool.stop_measuring_for()
         self._tool_controller.set_active(self._measure_tool)
+
+    def _arm_measure_tool(self) -> None:
+        """Switch to Measure Distance on behalf of the open Move/Replicate window."""
+        self._act_tool_measure.setChecked(True)
+        self._on_measure_tool()
+
+    def _release_measure_tool(self) -> None:
+        """That window closed: Measure has no target, and the tool goes back to Select.
+
+        A stray click after the window closed must not pick points for nothing.
+        """
+        if self._measure_tool is not None:
+            self._measure_tool.stop_measuring_for()
+            if self._tool_controller.active is self._measure_tool:
+                self._act_tool_select.setChecked(True)
+                self._tool_controller.set_active(None)
+
+    @property
+    def _offset_dialog(self) -> MoveDialog | ReplicateDialog | None:
+        """The open Move/Replicate window (now the transforms controller's)."""
+        return self.transforms.offset_dialog
+
+    @property
+    def _paste_offset(self) -> tuple[float, float, float]:
+        return self.transforms.paste_offset
 
     def _on_tool_changed(self, tool) -> None:  # type: ignore[no-untyped-def]
         drawing_shells = isinstance(tool, DrawShellTool)
@@ -5381,7 +5148,9 @@ class MainWindow(QMainWindow):
             menu.addSeparator()
         menu.addAction(self._act_assign_group)
         menu.addSeparator()
-        menu.addActions([self._act_move, self._act_replicate, self._act_mirror])
+        menu.addActions(
+            [self.action("edit.move"), self.action("edit.replicate"), self.action("edit.mirror")]
+        )
         menu.addSeparator()
         if elements:
             hide = menu.addAction("Hide Selected Elements")
@@ -9300,12 +9069,7 @@ class MainWindow(QMainWindow):
         self._act_hide_selected.setEnabled(has_project and has_selection)
         self._act_isolate_selected.setEnabled(has_project and has_selection)
         self._act_invert_visible.setEnabled(has_project)
-        self._act_move.setEnabled(has_project and has_selection)
-        self._act_replicate.setEnabled(has_project and has_selection)
-        self._act_mirror.setEnabled(has_project and has_selection)
-        self._act_extrude.setEnabled(has_project and has_selection)
-        self._act_copy.setEnabled(has_project and has_selection)
-        self._act_paste.setEnabled(bool(self._clipboard_contents()[0]))
+        self.action("edit.paste").setEnabled(bool(self.transforms.clipboard_contents()[0]))
         self._act_tool_draw_frame.setEnabled(has_project)
         self._act_tool_draw_node.setEnabled(has_project)
         self._act_tool_draw_truss.setEnabled(has_project)

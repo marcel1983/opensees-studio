@@ -59,9 +59,16 @@ class ActionRegistry:
             setattr(owner, spec.attribute, action)
 
     def wire(self, target: object) -> None:
-        """Connect every action to the method of ``target`` its spec names."""
+        """Connect every action to the method of ``target`` its spec names.
+
+        A dotted handler goes through an attribute of ``target`` first:
+        ``"transforms.move"`` is ``target.transforms.move``.
+        """
         for spec in self._specs.values():
-            self._actions[spec.id].triggered.connect(getattr(target, spec.handler))
+            handler = target
+            for name in spec.handler.split("."):
+                handler = getattr(handler, name)
+            self._actions[spec.id].triggered.connect(handler)
 
     def refresh(self, state: ActionState) -> None:
         """Enable or disable the actions whose spec states what they need."""

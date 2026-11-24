@@ -6,10 +6,11 @@ can check them; :mod:`.registry` is the part that builds ``QAction`` objects.
 
 from __future__ import annotations
 
+from opensees_studio.views.actions.edit import EDIT_ACTIONS
 from opensees_studio.views.actions.file import FILE_ACTIONS
 from opensees_studio.views.actions.spec import ActionSpec, ActionState, Needs
 
 #: Every declared command, in the order the areas were migrated.
-ALL_ACTIONS: tuple[ActionSpec, ...] = (*FILE_ACTIONS,)
+ALL_ACTIONS: tuple[ActionSpec, ...] = (*FILE_ACTIONS, *EDIT_ACTIONS)
 
 __all__ = ["ALL_ACTIONS", "ActionSpec", "ActionState", "Needs"]

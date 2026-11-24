@@ -52,4 +52,6 @@
 # The File menu commands are built by `views/actions` from `ActionSpec` tables;
 # the four `QAction(..., shortcut=StandardKey...)` lines that matched no overload
 # went with them: Linux 181 -> 177.
-177
+# Move and Replicate are declared the same way (their `shortcut="Ctrl+M"` strings
+# matched no `QAction` overload either): Linux 177 -> 175.
+175

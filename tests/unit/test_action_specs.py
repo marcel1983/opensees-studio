@@ -39,9 +39,42 @@ def test_no_two_commands_share_an_attribute() -> None:
     assert len(set(attributes)) == len(attributes)
 
 
-def test_every_handler_is_a_method_of_the_window() -> None:
-    methods = {node.name for node in _main_window_class().body if isinstance(node, ast.FunctionDef)}
-    assert [s.id for s in ALL_ACTIONS if s.handler not in methods] == []
+def _methods(tree: ast.AST, class_suffix: str) -> set[str]:
+    return {
+        item.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ClassDef) and node.name.endswith(class_suffix)
+        for item in node.body
+        if isinstance(item, ast.FunctionDef)
+    }
+
+
+def test_every_handler_is_a_method_of_the_window_or_of_its_controller() -> None:
+    window_methods = _methods(MAIN_WINDOW, "MainWindow")
+    window_attributes = {
+        target.attr
+        for node in ast.walk(_main_window_class())
+        if isinstance(node, ast.Assign)
+        for target in node.targets
+        if isinstance(target, ast.Attribute)
+    }
+    missing = []
+    for spec in ALL_ACTIONS:
+        controller, _, method = spec.handler.rpartition(".")
+        if not controller:
+            found = method in window_methods
+        else:
+            # "transforms.move": views/controllers/transforms.py, a method of its
+            # controller class, which the window keeps as ``self.transforms``.
+            module = VIEWS / "controllers" / f"{controller}.py"
+            found = (
+                module.is_file()
+                and controller in window_attributes
+                and method in _methods(ast.parse(module.read_text(encoding="utf-8")), "Controller")
+            )
+        if not found:
+            missing.append(spec.id)
+    assert missing == []
 
 
 def test_the_window_does_not_build_a_declared_action_itself() -> None:

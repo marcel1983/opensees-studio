@@ -181,11 +181,20 @@ These are non-obvious things that are easy to break if you don't know:
   the `Needs` that enable it); `ActionRegistry` builds the `QAction`, connects
   it and enables it, and also stores it as `_act_<name>`, which is how the
   ribbon layout, `ACTION_TOPICS`, the icon file and older tests find it. Ask
-  for it with `window.action("file.save")`. Only the File menu is migrated so
-  far: when you add a command, add a spec instead of new lines in
+  for it with `window.action("file.save")`. The File menu and part of Edit are
+  migrated so far: when you add a command, add a spec instead of new lines in
   `_build_actions`, `_wire` and `_refresh_action_enablement` (use `needs=None`
   when the condition is not a `Needs` flag and set it in the window). The spec
   tables import no Qt; `registry.py` is the only module there that does.
+- New behaviour does not go into `MainWindow`. An area of the menus is a
+  controller in `views/controllers/<area>.py`: a `QObject` that gets a `Shell`
+  (the window as dialog parent, the view model, the focused canvas, the log,
+  "refresh the commands") and owns its own state; anything else it needs from
+  the window is a named constructor argument, never the window's attributes.
+  Its commands name it in their spec (`handler="transforms.move"` is
+  `window.transforms.move`). `TransformsController` (Copy, Paste, Move,
+  Replicate, Mirror, Extrude) is the model to follow; the rest of the window
+  is being moved out the same way, one area per PR.
 - An unregistered material type is not a crash: `material_forms.form_for`
   returns a read-only placeholder, the same contract `section_forms` has.
 - Never hardcode how the analysis child is spawned. Every spawn site
