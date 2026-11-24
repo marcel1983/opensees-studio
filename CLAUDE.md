@@ -227,9 +227,9 @@ These are non-obvious things that are easy to break if you don't know:
   systems, Grid Wizard, Show Grids) gets `new_project` and `sync_actions`.
   `DisplayController` (the post-processing views of the Display menu, the
   design ratios, the mechanisms of Check Model) owns the dock of the open view
-  (`display.dock`), what the canvas shows (`display.mode`) and the viewports'
-  caption; the window enables its commands from the results on screen
-  (`needs=None`). The results in memory are `window.results`, a
+  (`display.dock`), what the canvas shows (`display.mode`), the viewports'
+  caption, the hover text and the member diagram windows; the window enables
+  its commands from the results on screen (`needs=None`). The results in memory are `window.results`, a
   `viewmodels.results_session.ResultsSession` (`latest` on screen, `cases` for
   the combinations, `extra` for the report only): ask it, do not add a
   `_latest_results` to the window. `ModelLockController` (Options → Lock Model)

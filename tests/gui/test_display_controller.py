@@ -11,9 +11,10 @@ import pytest
 pytest.importorskip("PySide6")
 pytest.importorskip("pyvistaqt")
 
+from PySide6.QtCore import QPoint
 from PySide6.QtWidgets import QMainWindow, QMessageBox
 
-from opensees_studio.core import ElasticBeamColumn, Node, Project
+from opensees_studio.core import ElasticBeamColumn, Node, Project, UnitSystem
 from opensees_studio.services.results import StaticResults
 from opensees_studio.viewmodels.project_vm import ProjectViewModel
 from opensees_studio.viewmodels.results_session import ResultsSession
@@ -51,6 +52,13 @@ class _Canvas:
     def set_result_label(self, text: str | None) -> None:
         self.label = text
 
+    def mapFromGlobal(self, pos: QPoint) -> QPoint:
+        return pos
+
+    def frame_element_at(self, x: float, _y: float) -> int | None:
+        """The member under the pointer: the only one, on the left half of the view."""
+        return 10 if x < 100 else None
+
     def render(self) -> None:
         self.renders += 1
 
@@ -61,12 +69,19 @@ class _Overlay:
     def __init__(self) -> None:
         self.drawn: list[tuple] = []  # type: ignore[type-arg]
         self.cleared = 0
+        self._shown = False
+
+    @property
+    def is_drawn(self) -> bool:
+        return self._shown
 
     def render(self, *args, **kwargs) -> None:  # type: ignore[no-untyped-def]
         self.drawn.append((args, kwargs))
+        self._shown = True
 
     def clear(self) -> None:
         self.cleared += 1
+        self._shown = False
 
 
 def _project() -> Project:
@@ -97,7 +112,7 @@ def _controller(qtbot):  # type: ignore[no-untyped-def]
     vm.adopt(_project())
     main, second = _Canvas(), _Canvas()
     overlays = SimpleNamespace(diagram=_Overlay(), contours=_Overlay(), ratios=_Overlay())
-    closed: list[int] = []
+    shown: list[object] = []
     results = ResultsSession()
     shell = Shell(
         window=parent,
@@ -115,9 +130,12 @@ def _controller(qtbot):  # type: ignore[no-untyped-def]
         canvases=lambda: [main, second],  # type: ignore[list-item]
         busy=lambda _message: contextlib.nullcontext(),
         select_rows=lambda _nodes, _elements: None,
-        close_member_windows=lambda: closed.append(1),
+        results_for_key=lambda _key: None,
+        show_results=shown.append,
+        display_units=lambda: UnitSystem.SI_M_N,
+        set_display_units=lambda _units: None,
     )
-    return controller, results, (main, second), overlays, closed, parent
+    return controller, results, (main, second), overlays, shown, parent
 
 
 def test_the_window_owns_one_controller_and_the_commands_point_at_it(qtbot) -> None:  # type: ignore[no-untyped-def]
@@ -154,7 +172,7 @@ def test_the_window_owns_one_controller_and_the_commands_point_at_it(qtbot) -> N
 
 
 def test_a_view_without_its_results_says_what_to_run(qtbot, monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    controller, _results_session, _canvases, overlays, _closed, _parent = _controller(qtbot)
+    controller, _results_session, _canvases, overlays, _shown, _parent = _controller(qtbot)
     told: list[str] = []
     monkeypatch.setattr(
         QMessageBox, "information", lambda _parent, title, _text, *a, **k: told.append(title)
@@ -189,7 +207,7 @@ def test_a_view_without_its_results_says_what_to_run(qtbot, monkeypatch) -> None
 
 
 def test_a_force_diagram_opens_a_dock_names_itself_and_back_to_model_undoes_it(qtbot) -> None:  # type: ignore[no-untyped-def]
-    controller, results, (main, second), overlays, closed, parent = _controller(qtbot)
+    controller, results, (main, second), overlays, _shown, parent = _controller(qtbot)
     results.latest = _results()
 
     controller.show_force_diagram()
@@ -209,10 +227,7 @@ def test_a_force_diagram_opens_a_dock_names_itself_and_back_to_model_undoes_it(q
     assert controller.refresh_units()
     assert len(overlays.diagram.drawn) == drawn + 1
 
-    # Replacing the view closes the member windows that belonged to it.
-    before = len(closed)
     controller.back_to_model()
-    assert len(closed) == before + 1
     assert (controller.dock, controller.mode, controller.title) == (None, None, None)
     assert main.label is None and second.label is None
     assert overlays.diagram.cleared == overlays.contours.cleared == overlays.ratios.cleared == 1
@@ -221,7 +236,7 @@ def test_a_force_diagram_opens_a_dock_names_itself_and_back_to_model_undoes_it(q
 
 
 def test_the_caption_carries_the_title_of_the_view(qtbot) -> None:  # type: ignore[no-untyped-def]
-    controller, results, (main, second), _overlays, _closed, _parent = _controller(qtbot)
+    controller, results, (main, second), _overlays, _shown, _parent = _controller(qtbot)
     controller.set_caption("GRAVITY  ·  Static")
     assert main.label == second.label == "GRAVITY  ·  Static"
     # Without results on screen a title alone changes nothing.
@@ -236,7 +251,7 @@ def test_the_caption_carries_the_title_of_the_view(qtbot) -> None:  # type: igno
 
 
 def test_the_hover_text_follows_the_view(qtbot) -> None:  # type: ignore[no-untyped-def]
-    controller, results, _canvases, _overlays, _closed, _parent = _controller(qtbot)
+    controller, results, _canvases, _overlays, _shown, _parent = _controller(qtbot)
     # In the model view a joint and a member say what they are.
     assert controller.node_tooltip(2).startswith("Joint 2")
     assert controller.element_tooltip(10).startswith("ElasticBeamColumn 10")
@@ -253,3 +268,23 @@ def test_the_hover_text_follows_the_view(qtbot) -> None:  # type: ignore[no-unty
     controller.mode = "mode"
     assert controller.node_tooltip(2).startswith("Joint 2")
     assert not controller.element_tooltips_enabled()
+
+
+def test_a_right_click_on_a_member_of_a_force_diagram_opens_its_window(qtbot) -> None:  # type: ignore[no-untyped-def]
+    controller, results, (main, second), _overlays, _shown, _parent = _controller(qtbot)
+    results.latest = _results()
+    on_the_member, off_it = QPoint(10, 10), QPoint(500, 10)
+    # In the model view the right-click stays the normal menu.
+    assert not controller.open_member_at(on_the_member, main)
+
+    controller.show_force_diagram()
+    assert not controller.open_member_at(off_it, main)
+    assert not controller.open_member_at(on_the_member, second)  # only the main viewport
+    assert controller.open_member_at(on_the_member, main)
+    assert [w.bundle.element_id for w in controller.member_windows] == [10]
+    controller.show_member(10)  # the same member: the same window
+    assert len(controller.member_windows) == 1
+
+    # The windows belong to the view: they close with it.
+    controller.back_to_model()
+    assert controller.member_windows == []

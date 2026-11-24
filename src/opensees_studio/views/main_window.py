@@ -84,11 +84,6 @@ from opensees_studio.services import (
 )
 from opensees_studio.services.batch import StoredResults, stored_results
 from opensees_studio.services.combination import MissingCaseResultsError
-from opensees_studio.services.element_diagrams import (
-    ElementDiagramBundle,
-    combine_element_bundles,
-    element_diagram_bundle,
-)
 from opensees_studio.services.result_store import load_results
 from opensees_studio.services.results import (
     CombinationResults,
@@ -96,7 +91,6 @@ from opensees_studio.services.results import (
     ModalResults,
     PushoverResults,
     ResponseSpectrumResults,
-    StaticResults,
     TransientResults,
 )
 from opensees_studio.services.results_db import database_path, delete_all_results, record_results
@@ -138,7 +132,6 @@ from opensees_studio.views.dialogs import (
     AddNodeDialog,
     AnalysisCaseManagerDialog,
     DisplayOptionsDialog,
-    ElementDiagramWindow,
     FrameWizard,
     ModelCheckDialog,
     MoveDialog,
@@ -288,7 +281,6 @@ class MainWindow(QMainWindow):
         self._analysis_error_box: QMessageBox | None = None  # last failure report
         self._stability_box: QMessageBox | None = None  # last stability check answer
         self._run_dialog: RunAnalysisDialog | None = None  # open while a Run dialog is shown
-        self._element_diagram_windows: list[ElementDiagramWindow] = []
         self._show_node_labels = False
         self._show_element_labels = False
         self._user_close_requested = False  # File → Quit sets this before close()
@@ -370,7 +362,10 @@ class MainWindow(QMainWindow):
             canvases=lambda: [self._main_canvas, *(w.canvas for w in self._view_windows)],
             busy=lambda message: self._busy(message),
             select_rows=lambda nodes, elements: self._select_report_row(nodes, elements),
-            close_member_windows=lambda: self._close_element_diagram_windows(),
+            results_for_key=lambda key: self._results_for_key(key),
+            show_results=lambda results: self._display_results(results),
+            display_units=lambda: self._current_display_units(),
+            set_display_units=lambda units: self._set_display_units(units),
         )
         #: Options → Lock Model: results make an edit of the model ask first.
         self.model_lock = ModelLockController(
@@ -1628,8 +1623,7 @@ class MainWindow(QMainWindow):
         # Active post-processing dock (diagram, deformed shape, plots).
         if not self.display.refresh_units() and self.results.latest is not None:
             self._canvas.render()
-        for window in self._element_diagram_windows:
-            window.set_units(converter)
+        self.display.set_member_units(converter)
         self._log(
             f"Displayed values converted to {converter.target.value} (model units unchanged).",
         )
@@ -2694,7 +2688,7 @@ class MainWindow(QMainWindow):
         a non-frame element - the menu is unchanged.
         """
         canvas = self._context_canvas()
-        if self._open_element_diagrams_at(pos, canvas):
+        if self.display.open_member_at(pos, canvas):
             return
         menu = self._context_menu_at(pos, canvas)
         menu.exec(pos)
@@ -2750,132 +2744,6 @@ class MainWindow(QMainWindow):
         """The viewport whose right-click emitted the signal (the active one if unknown)."""
         sender = self.sender()
         return sender if isinstance(sender, ModelCanvas) else self._canvas
-
-    def _open_element_diagrams_at(self, pos: QPoint, canvas: ModelCanvas) -> bool:
-        """Open the clicked member's window, or return False for the normal menu.
-
-        The behaviour belongs to the post-processing views: without a force
-        diagram or a deformed shape on screen the right-click stays what it
-        always was.
-        """
-        if self.display.mode not in ("force", "deformed"):
-            return False
-        if canvas is not self._main_canvas:
-            return False
-        if self.display.mode == "force" and not self._diagram_renderer.is_drawn:
-            return False
-        project = self._vm.project
-        if project is None or self.results.static() is None:
-            return False
-        local = canvas.mapFromGlobal(pos)
-        element_id = canvas.frame_element_at(local.x(), local.y())
-        if element_id is None:
-            return False
-        self._show_element_diagrams(element_id)
-        return True
-
-    def _show_element_diagrams(self, element_id: int) -> None:
-        """Build and show the diagram window of one frame member."""
-        bundle = self._element_diagram_bundle(element_id)
-        project = self._vm.project
-        if bundle is None or project is None:
-            return
-        converter = UnitConverter.of(project.meta)
-        choices = self.results.member_choices(self._vm.project)
-        current = self.results.current_key()
-        for window in self._element_diagram_windows:
-            if window.bundle.element_id == element_id:
-                window.set_bundle(bundle, converter)
-                window.set_result_choices(choices, current)
-                window.show()
-                window.raise_()
-                window.activateWindow()
-                return
-        window = ElementDiagramWindow(bundle, converter, self)
-        self._element_diagram_windows.append(window)
-        window.set_result_choices(choices, current)
-        window.resultChanged.connect(
-            lambda key, opened=window: self._on_element_diagram_result_changed(opened, key)
-        )
-        window.unitsChanged.connect(self._on_element_diagram_units_changed)
-        window.destroyed.connect(
-            lambda _object=None, opened=window: self._forget_element_diagram_window(opened)
-        )
-        window.show()
-        window.raise_()
-        window.activateWindow()
-        self._log(f"Element {element_id}: opened its diagram window.")
-
-    def _element_diagram_bundle(self, element_id: int) -> ElementDiagramBundle | None:
-        """The current result's bundle for one member, or None when it has none."""
-        project = self._vm.project
-        if project is None:
-            return None
-        results = self.results.latest
-        case_name = results.combination_name if isinstance(results, CombinationResults) else None
-        if isinstance(results, CombinationResults) and self.results.is_envelope():
-            return combine_element_bundles(
-                element_diagram_bundle(
-                    project,
-                    results.max,
-                    element_id,
-                    label="Max",
-                    case_name=case_name,
-                ),
-                element_diagram_bundle(
-                    project,
-                    results.min,
-                    element_id,
-                    label="Min",
-                    case_name=case_name,
-                ),
-            )
-        static = self.results.static()
-        if static is None:
-            return None
-        # Stations read a static case's loads back; a combination bound has no
-        # single load pattern, so its curves stay linear.
-        return element_diagram_bundle(
-            project,
-            static,
-            element_id,
-            stations=isinstance(results, StaticResults),
-            case_name=case_name,
-        )
-
-    def _on_element_diagram_result_changed(self, window: ElementDiagramWindow, key: str) -> None:
-        """Switch the result from the member window, keeping that window open."""
-        results = self._results_for_key(key)
-        if results is None or not isinstance(results, StaticResults | CombinationResults):
-            window.set_result_choices(
-                self.results.member_choices(self._vm.project), self.results.current_key()
-            )
-            return
-        self._display_results(results)
-        self.display.refresh_units()
-        bundle = self._element_diagram_bundle(window.bundle.element_id)
-        project = self._vm.project
-        if bundle is None or project is None:
-            return
-        window.set_bundle(bundle, UnitConverter.of(project.meta))
-        window.set_result_choices(
-            self.results.member_choices(self._vm.project), self.results.current_key()
-        )
-
-    def _forget_element_diagram_window(self, window: ElementDiagramWindow) -> None:
-        """Drop a closed window from the references that keep it alive."""
-        if window in self._element_diagram_windows:
-            self._element_diagram_windows.remove(window)
-
-    def _on_element_diagram_units_changed(self, value: str) -> None:
-        """Change the display units from the member window's picker."""
-        try:
-            chosen = UnitSystem(value)
-        except ValueError:
-            return
-        if chosen is self._current_display_units():
-            return
-        self._set_display_units(chosen)
 
     def _canvas_context_menu(self) -> QMenu:
         """What the right-click shows: the selection's options, or grids and view."""
@@ -3596,12 +3464,6 @@ class MainWindow(QMainWindow):
         apply = getattr(self, "_step_apply", None)
         if apply is not None:
             apply(self._step_index)
-
-    def _close_element_diagram_windows(self) -> None:
-        """Close the member windows of a view that is being replaced."""
-        for window in list(self._element_diagram_windows):
-            window.close()
-        self._element_diagram_windows.clear()
 
     # ── SAP2000-style view switching + working level ───────────────
     # ── autosave ────────────────────────────────────────────────────
