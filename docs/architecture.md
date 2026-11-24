@@ -84,6 +84,7 @@ handler: `"transforms.move"` is `window.transforms.move`.
 | `AreasController` | `areas` | Define → Create Shell; Assign → Shell Formulation, Area Springs, Edge Springs, Line Springs |
 | `PatternsController` | `patterns` | Define → linear, path, function and constant time series; plain load pattern, uniform excitation, multi-support excitation. Gets `new_project` as a hook (a series can be defined with no project open); `Needs.TIME_SERIES` enables the patterns |
 | `JointsController` | `joints` | Assign → restraints, masses, springs; EqualDOF, zero-length element and section, bearing, link (exactly two joints: `Needs.TWO_NODES`) |
+| `SelectController` | `select` | Select → all, invert, previous selection, the queries (joints, elements, supports, mass, self weight, loose joints, …) and the "By …" submenus, which it adds to the menu itself. Gets `action` (the window's `action(id)`): the menu enables three of its commands when it opens |
 
 `DesignController` is the example of the named hooks: it is created with
 `results` (the case results computed on the project as it is now) and

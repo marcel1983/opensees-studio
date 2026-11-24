@@ -11,6 +11,7 @@ from opensees_studio.views.actions.define import DEFINE_ACTIONS
 from opensees_studio.views.actions.design import DESIGN_ACTIONS
 from opensees_studio.views.actions.edit import EDIT_ACTIONS
 from opensees_studio.views.actions.file import FILE_ACTIONS
+from opensees_studio.views.actions.select import SELECT_ACTIONS
 from opensees_studio.views.actions.spec import ActionSpec, ActionState, Needs
 
 #: Every declared command, in the order the areas were migrated.
@@ -20,6 +21,7 @@ ALL_ACTIONS: tuple[ActionSpec, ...] = (
     *DEFINE_ACTIONS,
     *ASSIGN_ACTIONS,
     *DESIGN_ACTIONS,
+    *SELECT_ACTIONS,
 )
 
 __all__ = ["ALL_ACTIONS", "ActionSpec", "ActionState", "Needs"]

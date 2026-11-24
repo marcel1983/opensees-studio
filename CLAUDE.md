@@ -182,7 +182,7 @@ These are non-obvious things that are easy to break if you don't know:
   it and enables it, and also stores it as `_act_<name>`, which is how the
   ribbon layout, `ACTION_TOPICS`, the icon file and older tests find it. Ask
   for it with `window.action("file.save")`. The File and Design menus and parts of
-  Edit, Define and Assign are migrated so far: when you add a command, add a spec
+  Edit, Select, Define and Assign are migrated so far: when you add a command, add a spec
   instead of new lines in `_build_actions`, `_wire` and
   `_refresh_action_enablement` (use `needs=None` when the condition is not a
   `Needs` flag and set it in the window). `legacy_attribute` is only for a
@@ -211,7 +211,9 @@ These are non-obvious things that are easy to break if you don't know:
   (File → Import) gets `confirm_discard` and `apply_view_settings`, and
   `ExportsController` (File → Export) `results` and `report_results`; the window
   passes a hook as a lambda, so a test that replaces the window's method still
-  reaches it. A controller's attribute must not be the name of a `QMainWindow`
+  reaches it. `SelectController` (the Select menu) adds its own "By …" submenus
+  to the menu the window lays out, and gets `action` (the window's
+  `action(id)`) for the commands that menu enables when it opens. A controller's attribute must not be the name of a `QMainWindow`
   method (`window.geometry` would replace `QWidget.geometry()`):
   `tests/gui/test_action_registry.py` checks it, hence `model_tools`.
   The rest of the window is being moved out the same way.

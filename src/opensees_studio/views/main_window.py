@@ -79,17 +79,9 @@ from opensees_studio.core import (
     make_default_truss_material,
     shortcut_profiles,
 )
-from opensees_studio.core import selection as selection_queries
 from opensees_studio.core.combinations import model_fingerprint
-from opensees_studio.core.connectivity import (
-    joints_on_bars,
-    joints_on_shell_edges,
-    loose_joints,
-)
 from opensees_studio.core.design.settings import DesignSettings
-from opensees_studio.core.duplicates import default_tolerance
 from opensees_studio.core.generated import GeneratedModel
-from opensees_studio.core.groups import group_members
 from opensees_studio.core.help import ACTION_TOPICS, TOPIC_PROPERTY
 from opensees_studio.core.i18n import LANGUAGES
 from opensees_studio.core.materials.library import is_uniaxial
@@ -164,6 +156,7 @@ from opensees_studio.views.controllers.loads import LoadsController
 from opensees_studio.views.controllers.members import MembersController
 from opensees_studio.views.controllers.model_tools import ModelToolsController
 from opensees_studio.views.controllers.patterns import PatternsController
+from opensees_studio.views.controllers.select import SelectController
 from opensees_studio.views.controllers.transforms import TransformsController
 from opensees_studio.views.dialogs import (
     AddNodeDialog,
@@ -317,11 +310,6 @@ def _add_actions(menu: QMenu, actions: Sequence[QAction | None]) -> None:
             menu.addAction(action)
 
 
-def _pairs_selection(pairs: list[tuple[int, int]]) -> tuple[set[int], set[int]]:
-    """``(element, node)`` fault pairs as a selection: the joints and the members."""
-    return {node for _, node in pairs}, {element for element, _ in pairs}
-
-
 class MainWindow(QMainWindow):
     """Top-level application shell."""
 
@@ -421,6 +409,8 @@ class MainWindow(QMainWindow):
         self.library = LibraryController(shell, new_project=lambda: self._on_new())
         self.members = MembersController(shell)
         self.patterns = PatternsController(shell, new_project=self._on_new)
+        #: The Select menu: everything, inverted, the previous one, the queries.
+        self.select = SelectController(shell, action=lambda action_id: self.action(action_id))
         #: Loads on joints, frames and areas, joint patterns, Edit → Delete Loads.
         self.loads = LoadsController(shell)
         #: The Design menu: basis, members, steel and concrete checks, connections, footings.
@@ -591,32 +581,19 @@ class MainWindow(QMainWindow):
             "&Delete selection", self, shortcut=QKeySequence.StandardKey.Delete
         )
         self._act_clear_selection = QAction("Clear &selection", self, shortcut="Esc")
-        self._act_select_all = QAction("Select &all", self, shortcut="Ctrl+A")
         self._act_table_editing = QAction("Interactive &Table Editing…", self)
         self._act_table_editing.setShortcut("Ctrl+T")
 
         # Select menu: queries that add to (or invert) the current selection.
-        self._act_invert_selection = QAction("&Invert Selection", self, shortcut="Ctrl+I")
-        self._act_previous_selection = QAction("Get &Previous Selection", self, shortcut="Ctrl+P")
         self._act_select_line = QAction("Intersecting &Line", self, checkable=True)
         self._act_select_line.setToolTip(
             "Drag a line across the model: every member and shell it cuts is selected"
         )
         # SAP2000's side buttons read all / ps / clr / line.
-        self._act_select_all.setIconText("all")
-        self._act_previous_selection.setIconText("ps")
+        self.action("select.all").setIconText("all")
+        self.action("select.previous").setIconText("ps")
         self._act_clear_selection.setIconText("clr")
         self._act_select_line.setIconText("line")
-        self._act_select_all_joints = QAction("All &Joints", self)
-        self._act_select_all_elements = QAction("All &Elements", self)
-        self._act_select_supports = QAction("&Supported Joints", self)
-        self._act_select_joints_with_mass = QAction("Joints with &Mass", self)
-        self._act_select_joints_of_elements = QAction("Joints of Selected Elements", self)
-        self._act_select_elements_within_joints = QAction("Elements between Selected Joints", self)
-        self._act_select_weighted = QAction("Elements with Self &Weight", self)
-        self._act_select_loose_joints = QAction("&Loose Joints", self)
-        self._act_select_joints_in_bars = QAction("Joints &Inside Members", self)
-        self._act_select_shell_edge_joints = QAction("Joints on S&hell Edges", self)
 
         # Edit → transforms
 
@@ -940,7 +917,7 @@ class MainWindow(QMainWindow):
         m_edit.addSeparator()
         m_edit.addActions([act("edit.copy"), act("edit.paste")])
         m_edit.addSeparator()
-        m_edit.addActions([self._act_delete, self._act_select_all, self._act_clear_selection])
+        m_edit.addActions([self._act_delete, self.action("select.all"), self._act_clear_selection])
         m_edit.addSeparator()
         m_edit.addActions(
             [act("edit.move"), act("edit.replicate"), act("edit.mirror"), act("edit.extrude")]
@@ -1433,8 +1410,8 @@ class MainWindow(QMainWindow):
 
     def _selection_toolbar_actions(self) -> list[QAction]:
         return [
-            self._act_select_all,
-            self._act_previous_selection,
+            self.action("select.all"),
+            self.action("select.previous"),
             self._act_clear_selection,
             self._act_select_line,
         ]
@@ -1817,41 +1794,12 @@ class MainWindow(QMainWindow):
                 self._act_delete,
                 self._act_undo,
                 self._act_redo,
-                self._act_select_all,
+                self.action("select.all"),
                 self._act_clear_selection,
             ]
         )
         self._act_clear_selection.triggered.connect(self._on_clear_selection)
-        self._act_select_all.triggered.connect(self._on_select_all)
         self._act_table_editing.triggered.connect(self._on_table_editing)
-        self._act_invert_selection.triggered.connect(self._on_invert_selection)
-        self._act_previous_selection.triggered.connect(self._on_previous_selection)
-        q = selection_queries
-        for action, query in (
-            (self._act_select_all_joints, lambda p, sel: ({n.id for n in p.nodes}, set())),
-            (self._act_select_all_elements, lambda p, sel: (set(), {e.id for e in p.elements})),
-            (self._act_select_supports, lambda p, sel: (q.restrained_nodes(p), set())),
-            (self._act_select_joints_with_mass, lambda p, sel: (q.nodes_with_mass(p), set())),
-            (self._act_select_weighted, lambda p, sel: (set(), q.weighted_elements(p))),
-            (
-                self._act_select_joints_of_elements,
-                lambda p, sel: (q.nodes_of_elements(p, sel.elements), set()),
-            ),
-            (
-                self._act_select_elements_within_joints,
-                lambda p, sel: (set(), q.elements_within_nodes(p, sel.nodes)),
-            ),
-            (self._act_select_loose_joints, lambda p, sel: (set(loose_joints(p)), set())),
-            (
-                self._act_select_joints_in_bars,
-                lambda p, sel: _pairs_selection(joints_on_bars(p, default_tolerance(p))),
-            ),
-            (
-                self._act_select_shell_edge_joints,
-                lambda p, sel: _pairs_selection(joints_on_shell_edges(p, default_tolerance(p))),
-            ),
-        ):
-            action.triggered.connect(lambda _=False, query=query: self._select_from(query))
 
         # Tools
         self._act_tool_select.triggered.connect(self._on_select_tool)
@@ -2449,14 +2397,6 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, "Interactive Table Editing failed", str(exc))
 
-    def _on_select_all(self) -> None:
-        """Select all nodes AND all elements in the project."""
-        if self._vm.project is None:
-            return
-        node_ids = {n.id for n in self._vm.project.nodes}
-        elem_ids = {e.id for e in self._vm.project.elements}
-        self._canvas.selection.set_selection(node_ids, elem_ids)
-
     # ── slots: select menu ──────────────────────────────────────────
     def _build_select_menu(self, menu: Any) -> None:
         """Select: everything, by property, by load pattern, inverted or the previous one.
@@ -2465,188 +2405,32 @@ class MainWindow(QMainWindow):
         every query *adds* to the current selection (SAP2000 style), so "frames
         of section A" then "frames of section B" selects both.
         """
-        menu.addActions([self._act_select_all, self._act_clear_selection])
-        menu.addActions([self._act_invert_selection, self._act_previous_selection])
+        menu.addActions([self.action("select.all"), self._act_clear_selection])
+        menu.addActions([self.action("select.invert"), self.action("select.previous")])
         menu.addAction(self._act_select_line)
         menu.addSeparator()
-        menu.addActions([self._act_select_all_joints, self._act_select_all_elements])
-        self._menu_select_by_type = menu.addMenu("By Element &Type")
-        self._menu_select_by_section = menu.addMenu("By Se&ction")
-        self._menu_select_by_material = menu.addMenu("By Mate&rial")
-        self._menu_select_by_pattern = menu.addMenu("By &Load Pattern")
-        self._menu_select_by_group = menu.addMenu("By &Group")
+        menu.addActions([self.action("select.all_joints"), self.action("select.all_elements")])
+        self.select.add_by_menus(menu)
         menu.addSeparator()
         menu.addActions(
             [
-                self._act_select_supports,
-                self._act_select_joints_with_mass,
-                self._act_select_weighted,
+                self.action("select.supports"),
+                self.action("select.joints_with_mass"),
+                self.action("select.weighted"),
             ]
         )
         menu.addSeparator()
         menu.addActions(
             [
-                self._act_select_loose_joints,
-                self._act_select_joints_in_bars,
-                self._act_select_shell_edge_joints,
+                self.action("select.loose_joints"),
+                self.action("select.joints_in_bars"),
+                self.action("select.shell_edge_joints"),
             ]
         )
         menu.addSeparator()
         menu.addActions(
-            [self._act_select_joints_of_elements, self._act_select_elements_within_joints]
+            [self.action("select.joints_of_elements"), self.action("select.elements_within_joints")]
         )
-        for submenu, fill in (
-            (self._menu_select_by_type, self._fill_select_by_type),
-            (self._menu_select_by_section, self._fill_select_by_section),
-            (self._menu_select_by_material, self._fill_select_by_material),
-            (self._menu_select_by_pattern, self._fill_select_by_pattern),
-            (self._menu_select_by_group, self._fill_select_by_group),
-        ):
-            submenu.aboutToShow.connect(lambda submenu=submenu, fill=fill: fill(submenu))
-        menu.aboutToShow.connect(self._refresh_select_menu)
-
-    def _refresh_select_menu(self) -> None:
-        project = self._vm.project
-        has = project is not None
-        self._act_invert_selection.setEnabled(has)
-        self._act_previous_selection.setEnabled(has and any(self._canvas.selection.previous))
-        sel = self._canvas.selection
-        self._act_select_joints_of_elements.setEnabled(has and bool(sel.elements))
-        self._act_select_elements_within_joints.setEnabled(has and bool(sel.nodes))
-        for submenu in (
-            self._menu_select_by_type,
-            self._menu_select_by_section,
-            self._menu_select_by_material,
-            self._menu_select_by_pattern,
-            self._menu_select_by_group,
-        ):
-            submenu.setEnabled(has)
-
-    def _fill_submenu(self, submenu: Any, entries: list[tuple[str, Callable[[], None]]]) -> None:
-        submenu.clear()
-        if not entries:
-            submenu.addAction("(none in the model)").setEnabled(False)
-            return
-        for label, callback in entries:
-            # ``triggered`` passes ``checked``; keep it away from the callback.
-            submenu.addAction(label).triggered.connect(lambda _checked=False, cb=callback: cb())
-
-    def _fill_select_by_type(self, submenu: Any) -> None:
-        project = self._vm.project
-        if project is None:
-            return
-        entries = []
-        for element_type in selection_queries.element_types(project):
-            ids = selection_queries.elements_of_type(project, element_type)
-            entries.append(
-                (
-                    f"{element_type} ({len(ids)})",
-                    lambda ids=ids: self._add_to_selection(elements=ids),
-                )
-            )
-        self._fill_submenu(submenu, entries)
-
-    def _fill_select_by_section(self, submenu: Any) -> None:
-        project = self._vm.project
-        if project is None:
-            return
-        entries = []
-        for section in selection_queries.sections_in_use(project):
-            ids = selection_queries.elements_with_section(project, section.id)
-            entries.append(
-                (
-                    f"#{section.id} {section.name or section.type} ({len(ids)})",
-                    lambda ids=ids: self._add_to_selection(elements=ids),
-                )
-            )
-        self._fill_submenu(submenu, entries)
-
-    def _fill_select_by_material(self, submenu: Any) -> None:
-        project = self._vm.project
-        if project is None:
-            return
-        entries = []
-        for material in selection_queries.materials_in_use(project):
-            ids = selection_queries.elements_with_material(project, material.id)
-            entries.append(
-                (
-                    f"#{material.id} {material.name or material.type} ({len(ids)})",
-                    lambda ids=ids: self._add_to_selection(elements=ids),
-                )
-            )
-        self._fill_submenu(submenu, entries)
-
-    def _fill_select_by_pattern(self, submenu: Any) -> None:
-        project = self._vm.project
-        if project is None:
-            return
-        entries = []
-        for pattern in project.load_patterns:
-            nodes, elements = selection_queries.loaded_by_pattern(project, pattern.id)
-            if not nodes and not elements:
-                continue
-            entries.append(
-                (
-                    f"#{pattern.id} {pattern.name or pattern.type} "
-                    f"({len(nodes)} joint(s), {len(elements)} element(s))",
-                    lambda nodes=nodes, elements=elements: self._add_to_selection(
-                        nodes=nodes, elements=elements
-                    ),
-                )
-            )
-        self._fill_submenu(submenu, entries)
-
-    def _fill_select_by_group(self, submenu: Any) -> None:
-        project = self._vm.project
-        if project is None:
-            return
-        entries: list[tuple[str, Callable[[], None]]] = []
-        for group in project.groups:
-            nodes, elements = group_members(project, group.id)
-            entries.append(
-                (
-                    f"{group.name} ({len(nodes)} joint(s), {len(elements)} element(s))",
-                    partial(self._add_to_selection, nodes=nodes, elements=elements),
-                )
-            )
-        self._fill_submenu(submenu, entries)
-
-    def _select_from(self, query: Callable[[Project, Any], tuple[set[int], set[int]]]) -> None:
-        """Add what ``query(project, selection)`` returns to the selection."""
-        if self._vm.project is None:
-            return
-        nodes, elements = query(self._vm.project, self._canvas.selection)
-        self._add_to_selection(nodes=nodes, elements=elements)
-
-    def _add_to_selection(
-        self, *, nodes: set[int] | None = None, elements: set[int] | None = None
-    ) -> None:
-        """Add ``nodes`` / ``elements`` to what is selected and report the count."""
-        if self._vm.project is None:
-            return
-        sel = self._canvas.selection
-        new_nodes = set(sel.nodes) | set(nodes or ())
-        new_elements = set(sel.elements) | set(elements or ())
-        sel.set_selection(new_nodes, new_elements)
-        self.statusBar().showMessage(
-            f"Selected {len(new_nodes)} joint(s), {len(new_elements)} element(s).", 4000
-        )
-
-    def _on_invert_selection(self) -> None:
-        if self._vm.project is None:
-            return
-        sel = self._canvas.selection
-        nodes, elements = selection_queries.invert(self._vm.project, sel.nodes, sel.elements)
-        sel.set_selection(nodes, elements)
-
-    def _on_previous_selection(self) -> None:
-        nodes, elements = self._canvas.selection.previous
-        if self._vm.project is None:
-            return
-        # Drop ids deleted since (the previous selection can outlive them).
-        node_ids = {n.id for n in self._vm.project.nodes}
-        element_ids = {e.id for e in self._vm.project.elements}
-        self._canvas.selection.set_selection(set(nodes) & node_ids, set(elements) & element_ids)
 
     def _on_clear_selection(self) -> None:
         """Esc: clear selection AND reset any in-progress tool gesture."""
@@ -6025,7 +5809,7 @@ class MainWindow(QMainWindow):
             )
         )
         # The side "ps" button shows it, so it cannot wait for the Select menu.
-        self._act_previous_selection.setEnabled(
+        self.action("select.previous").setEnabled(
             has_project and any(self._canvas.selection.previous)
         )
         self._act_select_line.setEnabled(has_project)

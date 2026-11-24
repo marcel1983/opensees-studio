@@ -57,4 +57,5 @@
 # Point Loads is declared too (`shortcut="Ctrl+L"` matched no overload): Linux 175 -> 174.
 # Restraints is declared too (`shortcut="Ctrl+R"` matched no overload): Linux 174 -> 173.
 # Material Library and Material Tester are declared too (two more `shortcut=` strings): Linux 173 -> 171.
-171
+# The Select menu is declared too (three `shortcut=` strings went with it): Linux 171 -> 168.
+168
