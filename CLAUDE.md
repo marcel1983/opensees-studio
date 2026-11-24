@@ -223,8 +223,8 @@ These are non-obvious things that are easy to break if you don't know:
   same when a result depends on what ran earlier in the process.
 - Parametric generators plan, then insert. A wizard computes what the project
   gains without touching it and hands it over as a `core.generated.GeneratedModel`
-  (materials, sections, nodes, elements, groups, grid, cases, loads,
-  combinations, design settings); `commands.generated.insert_generated` checks
+  (materials, sections, nodes, elements, groups, storeys, diaphragms, grid,
+  cases, loads, combinations, mass source, design settings); `commands.generated.insert_generated` checks
   it against the project first (`model_problems`: ids taken, references to
   something that is not there) and only then pushes one macro, which it takes
   back whole if a command still refuses (an error inside `redo` is lost by

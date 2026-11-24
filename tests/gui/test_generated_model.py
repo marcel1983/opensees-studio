@@ -9,9 +9,12 @@ pytest.importorskip("PySide6")
 from opensees_studio.commands import AddNodesCommand
 from opensees_studio.commands.generated import insert_generated, model_problems
 from opensees_studio.core import ElasticUniaxial, Node, Project, TrussElement
+from opensees_studio.core.constraints import RigidDiaphragm
 from opensees_studio.core.generated import GeneratedModel
 from opensees_studio.core.geometry.grid import CoordinateGridSystem
 from opensees_studio.core.groups import Group
+from opensees_studio.core.mass_source import MassSource, MassSourcePattern
+from opensees_studio.core.storeys import Storey
 from opensees_studio.viewmodels import ProjectViewModel
 
 
@@ -144,4 +147,68 @@ def test_apply_writes_the_same_model_without_an_undo_stack() -> None:
     assert [n.id for n in project.nodes] == [1, 2]
     assert [m.id for m in project.materials] == [1]
     assert len(project.coord_systems) == systems + 1
+    project.validate_references()
+
+
+def _floor() -> GeneratedModel:
+    """One storey: four joints at +3, their retained node, a diaphragm and a mass source."""
+    corners = [(0, 0), (4, 0), (4, 4), (0, 4)]
+    return GeneratedModel(
+        nodes=[Node(id=i + 1, coords=(x, y, 3.0)) for i, (x, y) in enumerate(corners)]
+        + [Node(id=5, coords=(2.0, 2.0, 3.0))],
+        storeys=[Storey(id=1, name="L1", elevation=3.0)],
+        diaphragms=[RigidDiaphragm(id=1, retained_node=5, constrained_nodes=(1, 2, 3, 4))],
+        mass_source=MassSource(),
+    )
+
+
+def test_storeys_diaphragms_and_the_mass_source_go_in_the_same_step() -> None:
+    vm = _vm()
+    project = vm.project
+    assert project is not None
+    before = project.model_dump()
+
+    insert_generated(vm, _floor(), text="Create floor")
+
+    assert vm.undo_stack.count() == 1
+    assert [s.name for s in project.storeys] == ["L1"]
+    assert [d.retained_node for d in project.diaphragms] == [5]
+    assert project.mass_source is not None
+    project.validate_references()
+    vm.undo_stack.undo()
+    assert project.model_dump() == before
+
+
+def test_a_generated_storey_is_added_to_the_ones_the_project_has() -> None:
+    vm = _vm()
+    project = vm.project
+    assert project is not None
+    project.storeys.append(Storey(id=7, name="Existing", elevation=6.0))
+    model = _floor()
+    model.storeys = [Storey(id=8, name="L1", elevation=3.0)]
+    insert_generated(vm, model, text="Create floor")
+    assert [s.name for s in project.storeys] == ["Existing", "L1"]
+
+
+def test_a_diaphragm_or_a_mass_source_that_points_nowhere_is_a_problem() -> None:
+    project = Project()
+    model = _floor()
+    model.nodes = model.nodes[:4]  # the retained node is missing
+    model.diaphragms.append(RigidDiaphragm(id=2, retained_node=1, storey_id=9))
+    model.mass_source = MassSource(patterns=[MassSourcePattern(pattern_id=3)])
+    assert model_problems(project, model) == [
+        "Missing node(s): [5].",
+        "Missing storey(s): [9].",
+        "Missing load pattern(s): [3].",
+    ]
+    model.storeys = [Storey(id=1, name="L1", elevation=3.0), Storey(id=1, name="L1b", elevation=6)]
+    assert "Storey id(s) already in use: [1]." in model_problems(project, model)
+
+
+def test_apply_writes_the_floor_without_an_undo_stack() -> None:
+    project = Project()
+    _floor().apply(project)
+    assert [s.id for s in project.storeys] == [1]
+    assert [d.id for d in project.diaphragms] == [1]
+    assert project.mass_source is not None
     project.validate_references()

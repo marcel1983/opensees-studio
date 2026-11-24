@@ -91,12 +91,14 @@ A wizard does not edit the project. Its geometry lives in `core` as a pure
 function (`core.frames.build_portal_frame`, `core.trusses.build_truss`,
 `core.templates`, `core.warehouse.plan_warehouse`), and what the project gains
 is collected in a `core.generated.GeneratedModel`: materials, sections, joints,
-members, groups, a grid, cases, loads, combinations. One function inserts it,
+members, groups, storeys, diaphragms, a grid, cases, loads, combinations, the
+mass source and the design settings. One function inserts it,
 `commands.generated.insert_generated(vm, model, text=...)`:
 
 1. `model_problems` checks the model against the project (ids already taken,
-   a member whose section, material or joint exists nowhere, a grid name in
-   use) and raises before anything is pushed;
+   a member whose section, material or joint exists nowhere, a diaphragm
+   without its joints or its storey, a mass source naming a pattern that is not
+   there, a grid name in use) and raises before anything is pushed;
 2. the parts go in as one macro, so one Ctrl+Z takes the whole structure back;
 3. if a command still refuses, the macro is undone and removed from the stack.
 

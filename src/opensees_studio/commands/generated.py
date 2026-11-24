@@ -12,7 +12,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from opensees_studio.commands.analysis import AddAnalysisCasesCommand
-from opensees_studio.commands.buildings import SetDesignSettingsCommand
+from opensees_studio.commands.buildings import (
+    AddDiaphragmCommand,
+    SetDesignSettingsCommand,
+    SetMassSourceCommand,
+    SetStoreysCommand,
+)
 from opensees_studio.commands.combinations import AddCombinationsCommand
 from opensees_studio.commands.elements import AddElementsCommand
 from opensees_studio.commands.grid import SetCoordSystemsCommand
@@ -51,6 +56,8 @@ def model_problems(project: Project, model: GeneratedModel) -> list[str]:
     clash("Node", model.nodes, project.nodes)
     clash("Element", model.elements, project.elements)
     clash("Group", model.groups, project.groups)
+    clash("Storey", model.storeys, project.storeys)
+    clash("Diaphragm", model.diaphragms, project.diaphragms)
     clash("Time series", model.time_series, project.time_series)
     clash("Load pattern", model.patterns, project.load_patterns)
     clash("Analysis case", model.cases, project.analyses)
@@ -80,6 +87,26 @@ def model_problems(project: Project, model: GeneratedModel) -> list[str]:
         {n for element in model.elements for n in getattr(element, "nodes", ())},
         {n.id for n in (*project.nodes, *model.nodes)},
     )
+    missing(
+        "node",
+        {
+            node_id
+            for diaphragm in model.diaphragms
+            for node_id in (diaphragm.retained_node, *diaphragm.constrained_nodes)
+        },
+        {n.id for n in (*project.nodes, *model.nodes)},
+    )
+    missing(
+        "storey",
+        {d.storey_id for d in model.diaphragms if d.storey_id is not None},
+        {s.id for s in (*project.storeys, *model.storeys)},
+    )
+    if model.mass_source is not None:
+        missing(
+            "load pattern",
+            {entry.pattern_id for entry in model.mass_source.patterns},
+            {p.id for p in (*project.load_patterns, *model.patterns)},
+        )
     plain = {
         p.id for p in (*project.load_patterns, *model.patterns) if isinstance(p, PlainLoadPattern)
     }
@@ -137,6 +164,10 @@ def insert_generated(vm: ProjectViewModel, model: GeneratedModel, *, text: str) 
             vm.apply_command(AddElementsCommand(vm, model.elements))
         if model.groups:
             vm.apply_command(SetGroupsCommand(vm, [*project.groups, *model.groups]))
+        if model.storeys:
+            vm.apply_command(SetStoreysCommand(vm, [*project.storeys, *model.storeys]))
+        for diaphragm in model.diaphragms:
+            vm.apply_command(AddDiaphragmCommand(vm, diaphragm))
         if model.grid is not None:
             kept = [] if model.replace_grids else project.coord_systems
             vm.apply_command(SetCoordSystemsCommand(vm, [*kept, model.grid]))
@@ -150,6 +181,8 @@ def insert_generated(vm: ProjectViewModel, model: GeneratedModel, *, text: str) 
             vm.apply_command(AddPatternLoadsCommand(vm, list_name, loads, pattern_id))
         if model.combinations:
             vm.apply_command(AddCombinationsCommand(vm, model.combinations))
+        if model.mass_source is not None:
+            vm.apply_command(SetMassSourceCommand(vm, model.mass_source))
         if model.design is not None:
             vm.apply_command(SetDesignSettingsCommand(vm, model.design))
     except Exception:
