@@ -18,11 +18,11 @@ FILE_ACTIONS: tuple[ActionSpec, ...] = (
     ActionSpec(
         "file.project_info", "Project &Information…", "_on_project_info", needs=Needs.PROJECT
     ),
-    ActionSpec("file.import_dxf", "&DXF Drawing…", "_on_import_dxf", needs=Needs.PROJECT),
-    ActionSpec("file.import_s3d", "&PORTICO Model (.s3d)…", "_on_import_s3d"),
-    ActionSpec("file.import_s2k", "SAP2000 &Text (.s2k / .$2k)…", "_on_import_s2k"),
-    ActionSpec("file.import_ifc", "&IFC (.ifc)…", "_on_import_ifc"),
-    ActionSpec("file.import_tcl", "OpenSees &Tcl Script (.tcl)…", "_on_import_tcl"),
+    ActionSpec("file.import_dxf", "&DXF Drawing…", "imports.dxf", needs=Needs.PROJECT),
+    ActionSpec("file.import_s3d", "&PORTICO Model (.s3d)…", "imports.s3d"),
+    ActionSpec("file.import_s2k", "SAP2000 &Text (.s2k / .$2k)…", "imports.s2k"),
+    ActionSpec("file.import_ifc", "&IFC (.ifc)…", "imports.ifc"),
+    ActionSpec("file.import_tcl", "OpenSees &Tcl Script (.tcl)…", "imports.tcl"),
     ActionSpec(
         "file.export_script", "OpenSees &script (.py)…", "_on_export_script", needs=Needs.PROJECT
     ),

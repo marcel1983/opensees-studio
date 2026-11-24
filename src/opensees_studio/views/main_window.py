@@ -116,7 +116,6 @@ from opensees_studio.core.object_info import element_info, node_info
 from opensees_studio.core.reactions import ReactionRow, reaction_rows
 from opensees_studio.core.sections import SHELL_SECTION_CLASSES
 from opensees_studio.core.view_settings import ViewSettings
-from opensees_studio.diagnostics.performance import perf
 from opensees_studio.services import (
     PROJECT_FILE_SUFFIX,
     engines,
@@ -175,6 +174,7 @@ from opensees_studio.views.canvas3d.shell_contour_renderer import ShellContourRe
 from opensees_studio.views.controllers import Shell
 from opensees_studio.views.controllers.building import BuildingController
 from opensees_studio.views.controllers.design import DesignController
+from opensees_studio.views.controllers.imports import ImportsController
 from opensees_studio.views.controllers.joints import JointsController
 from opensees_studio.views.controllers.loads import LoadsController
 from opensees_studio.views.controllers.members import MembersController
@@ -187,7 +187,6 @@ from opensees_studio.views.dialogs import (
     CoordinateGridSystemsDialog,
     DisplayOptionsDialog,
     DuplicatesDialog,
-    DxfImportDialog,
     ElementDiagramWindow,
     FrameWizard,
     FrictionLibraryDialog,
@@ -202,10 +201,7 @@ from opensees_studio.views.dialogs import (
     ProjectInfoDialog,
     ReplicateDialog,
     RunAnalysisDialog,
-    S3dImportDialog,
     SectionLibraryDialog,
-    TclImportDialog,
-    member_sections,
 )
 from opensees_studio.views.dialogs.batch_run import BatchRunDialog
 from opensees_studio.views.dialogs.connect_joints import DivideFramesDialog, MergeJointsDialog
@@ -444,6 +440,11 @@ class MainWindow(QMainWindow):
         self.building = BuildingController(shell)
         #: Assign → Frame: section, material, formulation, frame member options.
         self.joints = JointsController(shell)
+        self.imports = ImportsController(
+            shell,
+            confirm_discard=lambda action: self._confirm_discard_changes(action),
+            apply_view_settings=lambda: self._apply_project_view_settings(),
+        )
         self.members = MembersController(shell)
         self.patterns = PatternsController(shell, new_project=self._on_new)
         #: Loads on joints, frames and areas, joint patterns, Edit → Delete Loads.
@@ -3407,205 +3408,6 @@ class MainWindow(QMainWindow):
         for element_id in element_ids:
             self._canvas.selection.select_element(element_id, additive=True)
         self._canvas.render()
-
-    def _on_import_dxf(self) -> None:
-        """File → Import → DXF Drawing: bars from a drawing, in one undo step.
-
-        The dialog decides what the drawing means (layers, units, plane); this
-        inserts the result the same way the frame wizard does, so a bad import is
-        one Ctrl+Z away.
-        """
-        project = self._vm.project
-        if project is None:
-            QMessageBox.information(self, "Import DXF", "Open or create a project first.")
-            return
-
-        dialog = DxfImportDialog(project, sections=member_sections(project), parent=self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        section_id = dialog.section_choice()
-        if section_id is None:
-            # Section ids are allocated inside the macro, so the models must be
-            # built there too: the dialog is asked for the drawing, not for bars.
-            section_id = project.next_section_id()
-
-        self._vm.undo_stack.beginMacro("Import DXF")
-        try:
-            if dialog.section_choice() is None:
-                self._vm.apply_command(
-                    AddSectionsCommand(self._vm, [make_default_section(section_id, project)])
-                )
-            bars = dialog.imported_bars(section_id)
-            if bars is None:
-                return
-            self._vm.apply_command(AddNodesCommand(self._vm, bars.nodes))
-            self._vm.apply_command(AddElementsCommand(self._vm, bars.elements))
-        except Exception as exc:
-            QMessageBox.critical(self, "Could not import the drawing", str(exc))
-            return
-        finally:
-            self._vm.undo_stack.endMacro()
-
-        self._canvas.selection.clear()
-        for node in bars.nodes:
-            self._canvas.selection.select_node(node.id, additive=True)
-        source = dialog.source()
-        self._log(f"Imported {bars.summary()} from {source.name if source else 'the drawing'}.")
-        drawing = dialog.drawing()
-        if drawing is not None and drawing.skipped_summary():
-            self._log(drawing.skipped_summary())
-
-    def _on_import_s3d(self) -> None:
-        """File → Import → PORTICO Model: a ``.s3d`` file as a new, unsaved project.
-
-        The whole model is replaced, so this asks about unsaved changes like Open
-        does. What the file has and the import cannot carry is written to the log.
-        """
-        if not self._confirm_discard_changes("Importing a PORTICO model"):
-            return
-        dialog = S3dImportDialog(parent=self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        imported = dialog.imported()
-        if imported is None:
-            return
-        self._vm.adopt(imported.project)
-        self._apply_project_view_settings()
-        source = dialog.source()
-        self._log(
-            f"Imported {source.name if source else 'the PORTICO model'} "
-            f"({imported.source_units} → {imported.project.meta.units.value}): "
-            f"{imported.summary()}"
-        )
-        for note in imported.notes:
-            self._log(note)
-
-    def _on_import_s2k(self) -> None:
-        """File → Import → SAP2000 Text: a ``.s2k`` / ``.$2k`` file as a new, unsaved project.
-
-        The whole model is replaced, so this asks about unsaved changes like Open
-        does. What the file has and the import cannot carry is written to the log.
-        """
-        from opensees_studio.services.sap2000_text import (
-            Sap2000TextError,
-            import_s2k,
-            read_s2k,
-        )
-
-        if not self._confirm_discard_changes("Importing a SAP2000 text file"):
-            return
-        path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Import SAP2000 Text",
-            "",
-            "SAP2000 text (*.s2k *.$2k *.S2K *.$2K);;All files (*)",
-        )
-        if not path:
-            return
-        subdivisions: int | None = None
-        try:
-            if read_s2k(path).rows("FRAME SECTION PROPERTIES 05 - NONPRISMATIC"):
-                subdivisions, ok = QInputDialog.getInt(
-                    self,
-                    "Nonprismatic members",
-                    "Pieces per nonprismatic member (minimum 12):",
-                    12,
-                    12,
-                    200,
-                )
-                if not ok:
-                    return
-        except Sap2000TextError as exc:
-            QMessageBox.critical(self, "Import SAP2000 Text failed", str(exc))
-            return
-        try:
-            with perf.span("ui.import_s2k"):
-                imported = import_s2k(path, nonprismatic_subdivisions=subdivisions)
-        except Sap2000TextError as exc:
-            QMessageBox.critical(self, "Import SAP2000 Text failed", str(exc))
-            return
-        self._vm.adopt(imported.project)
-        self._apply_project_view_settings()
-        self._log(
-            f"Imported {Path(path).name} ({imported.source_units} → "
-            f"{imported.project.meta.units.value}): {imported.summary()}"
-        )
-        for note in imported.notes:
-            self._log(note)
-
-    def _on_import_ifc(self) -> None:
-        """File → Import → IFC: the analytical or the physical model as a new, unsaved project.
-
-        The file is read once to say what it holds; the dialog chooses which model
-        to build from. The whole model is replaced, so this asks about unsaved
-        changes like Open does, and what the file has that the import cannot carry
-        is written to the log.
-        """
-        from opensees_studio.services.ifc_import import IfcImportError, import_ifc, inspect_ifc
-        from opensees_studio.views.dialogs.ifc_import import IfcImportDialog
-
-        if not self._confirm_discard_changes("Importing an IFC file"):
-            return
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Import IFC", "", "IFC (*.ifc *.IFC *.ifczip *.ifcZIP);;All files (*)"
-        )
-        if not path:
-            return
-        try:
-            with perf.span("ui.inspect_ifc"):
-                inventory = inspect_ifc(path)
-        except IfcImportError as exc:
-            QMessageBox.critical(self, "Import IFC failed", str(exc))
-            return
-        dialog = IfcImportDialog(inventory, parent=self)
-        try:
-            if dialog.exec() != QDialog.DialogCode.Accepted:
-                return
-            options = dialog.options()
-        finally:
-            dialog.deleteLater()
-        try:
-            with perf.span("ui.import_ifc"):
-                imported = import_ifc(path, options)
-        except IfcImportError as exc:
-            QMessageBox.critical(self, "Import IFC failed", str(exc))
-            return
-        self._vm.adopt(imported.project)
-        self._apply_project_view_settings()
-        self._log(f"Imported {Path(path).name}: {imported.summary()}")
-        for note in imported.notes:
-            self._log(note)
-        report = check_model(imported.project)
-        if not report.is_clean:
-            self._log(f"{report.summary()} See Analyze → Check Model.")
-
-    def _on_import_tcl(self) -> None:
-        """File → Import → OpenSees Tcl Script: a ``.tcl`` file as a new project.
-
-        Tcl has no unit metadata, so the dialog asks which system the numbers
-        are in. The whole model is replaced, so this asks about unsaved changes
-        like Open does; what the file has and the import cannot carry is logged.
-        """
-        if not self._confirm_discard_changes("Importing an OpenSees Tcl script"):
-            return
-        project = self._vm.project
-        default_units = project.meta.units if project is not None else UnitSystem.SI_M_N
-        dialog = TclImportDialog(parent=self, default_units=default_units)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        imported = dialog.imported()
-        if imported is None:
-            return
-        self._vm.adopt(imported.project)
-        self._apply_project_view_settings()
-        source = dialog.source()
-        self._log(
-            f"Imported {source.name if source else 'the Tcl script'} "
-            f"({imported.source_units} → {imported.project.meta.units.value}): "
-            f"{imported.summary()}"
-        )
-        for note in imported.notes:
-            self._log(note)
 
     def _on_influence_line(self) -> None:
         """Display → Influence Line: one response of the influence-line case on screen."""

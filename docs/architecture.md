@@ -76,6 +76,7 @@ handler: `"transforms.move"` is `window.transforms.move`.
 | `DesignController` | `design` | The Design menu (19 commands): basis, Direct Analysis, notional loads, members, steel and concrete checks, connections, base plates, footings |
 | `LoadsController` | `loads` | Assign → point, imposed displacement, distributed, trapezoidal, frame point, temperature, tendon, surface and floor loads; joint patterns; Edit → Delete Loads |
 | `MembersController` | `members` | Assign → section, material, geometric transformation, local axes, beam integration, releases, end offsets, insertion point, property modifiers, auto mesh; plastic hinge, RC wall, pile soil springs |
+| `ImportsController` | `imports` | File → Import: DXF drawing (into the project), PORTICO, SAP2000 text, IFC and Tcl (a new project). Gets `confirm_discard` (the unsaved-changes prompt) and `apply_view_settings` as hooks |
 | `PatternsController` | `patterns` | Define → linear, path, function and constant time series; plain load pattern, uniform excitation, multi-support excitation. Gets `new_project` as a hook (a series can be defined with no project open); `Needs.TIME_SERIES` enables the patterns |
 | `JointsController` | `joints` | Assign → restraints, masses, springs; EqualDOF, zero-length element and section, bearing, link (exactly two joints: `Needs.TWO_NODES`) |
 

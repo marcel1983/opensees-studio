@@ -205,7 +205,10 @@ These are non-obvious things that are easy to break if you don't know:
   made of and its frame options, `JointsController` what holds a joint
   and what joins two (`Needs.TWO_NODES` is "exactly two joints selected"), and
   `PatternsController` defines time series and load patterns
-  (`Needs.TIME_SERIES`; it gets `new_project` as a hook).
+  (`Needs.TIME_SERIES`; it gets `new_project` as a hook). `ImportsController`
+  (File → Import) gets `confirm_discard` and `apply_view_settings`; the window
+  passes a hook as a lambda, so a test that replaces the window's method still
+  reaches it.
   The rest of the window is being moved out the same way.
 - An unregistered material type is not a crash: `material_forms.form_for`
   returns a read-only placeholder, the same contract `section_forms` has.
