@@ -24,6 +24,7 @@ This module is part of ``core``: no Qt, no OpenSees.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -145,9 +146,48 @@ def surface_nodal_loads(project: Project, loads: list[SurfaceLoad]) -> dict[int,
 
 
 # ─────────────────────────── floor panels ───────────────────────────
-def _panel(project: Project, load: FloorLoad) -> np.ndarray:
-    """The four corners, checked: distinct, horizontal, a rectangle."""
+@dataclass(frozen=True)
+class _Frames:
+    """The two-node frame members of a project and where they are, read once.
+
+    A building has a panel per bay and floor, and each of its four edges looks
+    for the members lying on it. With the member ends at hand as arrays,
+    sorted by elevation, an edge only looks at the members of its own level,
+    in one pass of numpy, instead of looping over every element of the model.
+    """
+
+    coords: dict[int, np.ndarray]
+    """Node id -> coordinates."""
+    elements: tuple[Any, ...]
+    ends: np.ndarray
+    """``(member, end, axis)``: the coordinates of both ends of each member."""
+    by_elevation: np.ndarray
+    """Member indices, sorted by the elevation of the lower end."""
+    low: np.ndarray
+    """The elevation of the lower end of each member, in that order."""
+    axes: dict[int, Any] = field(default_factory=dict)
+    """Element id -> its local axes, kept as the panels ask for them."""
+
+
+def _frames(project: Project) -> _Frames:
     coords = {n.id: np.asarray(n.coords, dtype=float) for n in project.nodes}
+    elements = tuple(
+        e
+        for e in project.elements
+        if isinstance(e, FRAME_ELEMENT_CLASSES)
+        and len(e.nodes) == 2
+        and e.nodes[0] in coords
+        and e.nodes[1] in coords
+    )
+    ends = np.array([[coords[e.nodes[0]], coords[e.nodes[1]]] for e in elements], dtype=float)
+    ends = ends.reshape(len(elements), 2, 3)
+    low = ends[:, :, VERTICAL_AXIS].min(axis=1)
+    order = np.argsort(low, kind="stable")
+    return _Frames(coords, elements, ends, order, low[order])
+
+
+def _panel(coords: dict[int, np.ndarray], load: FloorLoad) -> np.ndarray:
+    """The four corners, checked: distinct, horizontal, a rectangle."""
     missing = [n for n in load.nodes if n not in coords]
     if missing:
         raise AreaLoadError(f"Floor load: missing node(s) {missing}.")
@@ -190,17 +230,34 @@ def edge_profile(
 
 
 def _edge_members(
-    project: Project, start: np.ndarray, end: np.ndarray, tol: float
+    frames: _Frames, start: np.ndarray, end: np.ndarray, tol: float
 ) -> list[tuple[Any, float, float]]:
     """Frame members lying on segment start→end: ``(element, t_i, t_j)``, distances from start."""
-    coords = {n.id: np.asarray(n.coords, dtype=float) for n in project.nodes}
+    coords = frames.coords
     axis = end - start
     length = float(np.linalg.norm(axis))
     unit = axis / length
     found: list[tuple[Any, float, float]] = []
-    for element in project.elements:
-        if not isinstance(element, FRAME_ELEMENT_CLASSES) or len(element.nodes) != 2:
-            continue
+    # A member on the edge has its lower end within the edge's elevations.
+    # One pass over those, with twice the tolerance, leaves the few that can
+    # lie on the edge; the loop below decides, member by member and in the
+    # order of the model, as it always did.
+    slack = 2.0 * tol
+    z0, z1 = sorted((float(start[VERTICAL_AXIS]), float(end[VERTICAL_AXIS])))
+    level = frames.by_elevation[
+        np.searchsorted(frames.low, z0 - slack, side="left") : np.searchsorted(
+            frames.low, z1 + slack, side="right"
+        )
+    ]
+    candidates: Any = ()
+    if len(level):
+        rel = frames.ends[level] - start
+        along = rel @ unit
+        off = np.linalg.norm(rel - along[..., None] * unit, axis=2)
+        near = (off <= slack) & (along >= -slack) & (along <= length + slack)
+        candidates = np.sort(level[near.all(axis=1)])
+    for index in candidates:
+        element = frames.elements[int(index)]
         ts: list[float] = []
         for nid in element.nodes:
             rel = coords[nid] - start
@@ -226,9 +283,17 @@ def _edge_members(
     return found
 
 
-def floor_member_loads(project: Project, load: FloorLoad) -> list[TrapezoidalElementLoad]:
-    """The trapezoidal member loads a floor panel hands to the frames on its edges."""
-    points = _panel(project, load)
+def floor_member_loads(
+    project: Project, load: FloorLoad, *, frames: _Frames | None = None
+) -> list[TrapezoidalElementLoad]:
+    """The trapezoidal member loads a floor panel hands to the frames on its edges.
+
+    ``frames`` is the project's members as :func:`_frames` reads them, for a
+    caller that resolves many panels of the same project.
+    """
+    if frames is None:
+        frames = _frames(project)
+    points = _panel(frames.coords, load)
     lengths = [float(np.linalg.norm(points[(k + 1) % 4] - points[k])) for k in range(4)]
     size = max(lengths)
     tol = GEOMETRY_REL_TOL * size
@@ -244,17 +309,19 @@ def floor_member_loads(project: Project, load: FloorLoad) -> list[TrapezoidalEle
         for k in ((span_edge + 1) % 4, (span_edge + 3) % 4):
             profiles[k] = [(0.0, lengths[k], q * span / 2.0, q * span / 2.0)]
     down = gravity_direction(project.ndm)
-    coords = {n.id: np.asarray(n.coords, dtype=float) for n in project.nodes}
+    coords = frames.coords
     out: list[TrapezoidalElementLoad] = []
     for k, pieces in profiles.items():
         start, end = points[k], points[(k + 1) % 4]
-        for element, ti, tj in _edge_members(project, start, end, tol):
-            axes = frame_local_axes(
-                project.ndm,
-                coords[element.nodes[0]].tolist(),
-                coords[element.nodes[1]].tolist(),
-                float(getattr(element, "local_axis_angle", 0.0) or 0.0),
-            )
+        for element, ti, tj in _edge_members(frames, start, end, tol):
+            if element.id not in frames.axes:
+                frames.axes[element.id] = frame_local_axes(
+                    project.ndm,
+                    coords[element.nodes[0]].tolist(),
+                    coords[element.nodes[1]].tolist(),
+                    float(getattr(element, "local_axis_angle", 0.0) or 0.0),
+                )
+            axes = frames.axes[element.id]
             if axes is None:
                 continue
             x, y, z = axes
@@ -292,15 +359,19 @@ def floor_member_loads(project: Project, load: FloorLoad) -> list[TrapezoidalEle
 
 def floor_area(project: Project, load: FloorLoad) -> float:
     """Plan area of a floor panel."""
-    points = _panel(project, load)
+    coords = {n.id: np.asarray(n.coords, dtype=float) for n in project.nodes}
+    points = _panel(coords, load)
     return float(np.linalg.norm(points[1] - points[0]) * np.linalg.norm(points[2] - points[1]))
 
 
 def pattern_distributed_loads(project: Project, pattern: Any) -> list[TrapezoidalElementLoad]:
     """A pattern's trapezoidal member loads, its floor panels' included."""
     loads = list(getattr(pattern, "distributed_loads", ()))
-    for floor in getattr(pattern, "floor_loads", ()):
-        loads.extend(floor_member_loads(project, floor))
+    floors = getattr(pattern, "floor_loads", ())
+    if floors:
+        frames = _frames(project)
+        for floor in floors:
+            loads.extend(floor_member_loads(project, floor, frames=frames))
     return loads
 
 
@@ -323,6 +394,7 @@ def floor_panels(
     size = float(np.max(np.ptp(np.array([coords[n] for n in chosen]), axis=0))) or 1.0
     tol = GEOMETRY_REL_TOL * size
     panels: list[tuple[int, int, int, int]] = []
+    frames = _frames(project)
     seen: set[frozenset[int]] = set()
     by_level: dict[float, list[int]] = {}
     for nid in chosen:
@@ -350,7 +422,7 @@ def floor_panels(
                         continue
                     try:
                         for p, q in ((a, b), (b, c), (c, d), (d, a)):
-                            _edge_members(project, coords[p], coords[q], tol)
+                            _edge_members(frames, coords[p], coords[q], tol)
                     except AreaLoadError:
                         continue
                     found = (a, b, c, d)

@@ -146,6 +146,17 @@ OCCUPANCY_LIVE_KPA: dict[str, dict[str, tuple[float, float]]] = {
 #: The uses a floor can have (``"roof"`` is the roof slab, not a use).
 OCCUPANCIES: tuple[str, ...] = ("residential", "classrooms", "hospital", "office", "assembly")
 
+#: The design codes a building can be loaded by, of ``CODE_PRESETS``: the ones
+#: with a table of live loads by use.
+BUILDING_CODES: tuple[str, ...] = tuple(
+    key
+    for key in CODE_PRESETS
+    if ("asce7" if key.startswith("asce7") else key) in OCCUPANCY_LIVE_KPA
+)
+#: The seismic methods a building can take, of ``SEISMIC_METHODS``: the ones
+#: with an equivalent lateral force over the height (key -> clause).
+BUILDING_SEISMIC_METHODS: dict[str, str] = {key: SEISMIC_METHODS[key] for key in _ELF_CODE}
+
 
 class BuildingError(ValueError):
     """The numbers do not describe a building, or the project cannot take one."""
@@ -509,6 +520,11 @@ class BuildingSeismic:
     def __post_init__(self) -> None:
         if self.method not in SEISMIC_METHODS:
             raise BuildingError(f"Unknown seismic method {self.method!r}.")
+        if self.method not in _ELF_CODE:
+            raise BuildingError(
+                f"{SEISMIC_METHODS[self.method]} has no equivalent lateral force for a "
+                "building here; choose one of " + ", ".join(BUILDING_SEISMIC_METHODS.values()) + "."
+            )
         if self.reduction <= 0.0:
             raise BuildingError("The seismic reduction factor must be positive.")
         if self.period_x < 0.0 or self.period_y < 0.0:
@@ -645,7 +661,10 @@ def occupancy_loads(code: str, occupancy: str, units: UnitSystem) -> dict[str, f
     """The live loads of a use by a code, as :class:`BuildingLoads` fields in project units."""
     from opensees_studio.core.warehouse import pressure_from_kpa
 
-    table = OCCUPANCY_LIVE_KPA[live_load_family(code)]
+    family = live_load_family(code)
+    if family not in OCCUPANCY_LIVE_KPA:
+        raise BuildingError(f"No table of live loads by use for the design code {code!r}.")
+    table = OCCUPANCY_LIVE_KPA[family]
     if occupancy not in OCCUPANCIES:
         raise BuildingError(f"Unknown use {occupancy!r}.")
     floor, floor_seismic = table[occupancy]
@@ -957,10 +976,13 @@ def _plan_diaphragms(
 ) -> None:
     """A rigid diaphragm per floor, its retained node at the centre of the floor's mass."""
     from opensees_studio.core.constraints import RigidDiaphragm
-    from opensees_studio.core.mass_source import diaphragm_centre_of_mass
+    from opensees_studio.core.mass_source import diaphragm_centre_of_mass, effective_nodal_masses
 
     building = plan.building
     tied = {d.storey_id for d in project.diaphragms if d.storey_id is not None}
+    # Weighed once: a diaphragm added below moves the mass of its own floor
+    # only, so the floors still to come weigh the same before and after it.
+    masses = effective_nodal_masses(scratch)
     for level in range(1, building.spec.n_storeys + 1):
         storey = storey_at[level]
         if storey.id in tied:
@@ -969,7 +991,7 @@ def _plan_diaphragms(
                 "building's floor joins it."
             )
             continue
-        x, y, _z = diaphragm_centre_of_mass(scratch, building.floor_nodes(level))
+        x, y, _z = diaphragm_centre_of_mass(scratch, building.floor_nodes(level), masses=masses)
         # Exactly in the floor: OpenSees warns about every joint of a diaphragm
         # whose retained node is a rounding error above or below it.
         z = building.spec.origin[2] + building.spec.zs[level]
@@ -1016,6 +1038,7 @@ def _plan_lateral_and_combinations(
         nodal_forces,
     )
     from opensees_studio.core.loads import NodalLoad
+    from opensees_studio.core.mass_source import effective_nodal_masses
 
     preset = CODE_PRESETS[loads.code]
     spec = plan.building.spec
@@ -1033,11 +1056,13 @@ def _plan_lateral_and_combinations(
                 "earthquake cases."
             )
         taken = {p.name for p in scratch.load_patterns} | {c.name for c in scratch.analyses}
+        # Weighed once: the cases added below carry no load of the mass source.
+        masses = effective_nodal_masses(scratch)
         for direction in seismic.directions:
             parameters, source = elf_parameters(seismic, spec, units, direction)
             try:
                 result = equivalent_lateral_forces(
-                    scratch, SEISMIC_DIRECTIONS.index(direction), parameters
+                    scratch, SEISMIC_DIRECTIONS.index(direction), parameters, masses=masses
                 )
             except ElfError as exc:
                 raise BuildingError(str(exc)) from exc
@@ -1049,7 +1074,7 @@ def _plan_lateral_and_combinations(
                 wanted, series, patterns, cases, strict=True
             ):
                 _add_case(plan, scratch, one_series, pattern, case)
-                forces = nodal_forces(scratch, result, sign, ratio)
+                forces = nodal_forces(scratch, result, sign, ratio, masses=masses)
                 plan.pattern_loads.append(
                     (
                         pattern.id,
@@ -1139,7 +1164,9 @@ def _plan_lateral_and_combinations(
 
 __all__ = [
     "ACCIDENTAL_ECCENTRICITY",
+    "BUILDING_CODES",
     "BUILDING_NDF",
+    "BUILDING_SEISMIC_METHODS",
     "DEFAULT_CONCRETE_MM",
     "DEFAULT_STEEL_SHAPES",
     "FLOOR_LIVE_CASE",

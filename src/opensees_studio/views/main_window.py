@@ -156,6 +156,7 @@ from opensees_studio.views.controllers.areas import AreasController
 from opensees_studio.views.controllers.building import BuildingController
 from opensees_studio.views.controllers.design import DesignController
 from opensees_studio.views.controllers.exports import ExportsController
+from opensees_studio.views.controllers.generators import GeneratorsController
 from opensees_studio.views.controllers.groups import GroupsController
 from opensees_studio.views.controllers.imports import ImportsController
 from opensees_studio.views.controllers.joints import JointsController
@@ -402,6 +403,8 @@ class MainWindow(QMainWindow):
         #: Storeys, mass source, seismic loads, diaphragms, rigid links.
         self.areas = AreasController(shell)
         self.building = BuildingController(shell)
+        #: Define → Create Building.
+        self.generators = GeneratorsController(shell)
         #: Assign → Frame: section, material, formulation, frame member options.
         self.joints = JointsController(shell)
         self.model_tools = ModelToolsController(
@@ -972,6 +975,7 @@ class MainWindow(QMainWindow):
         m_define.addAction(self._act_frame_wizard)
         m_define.addAction(self._act_truss_wizard)
         m_define.addAction(self._act_warehouse_wizard)
+        m_define.addAction(self.action("define.building_wizard"))
         m_define.addSeparator()
         m_define.addActions(
             [
@@ -2052,6 +2056,8 @@ class MainWindow(QMainWindow):
             self._create_portal_frame(with_grid=True)
         elif key == "warehouse":
             self._on_warehouse_wizard()
+        elif key == "building":
+            self.generators.create_building()
         elif key in ("beam", "frame3d"):
             project = self._vm.project
             assert project is not None

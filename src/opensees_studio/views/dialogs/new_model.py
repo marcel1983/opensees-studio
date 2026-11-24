@@ -1,7 +1,7 @@
 """File → New Model: pick the units and a template, as SAP2000's New Model does.
 
-Blank, Grid Only, Beam, 2D Truss, 2D Frame and 3D Frame. The Beam and 3D Frame
-ask their numbers here; Grid Only, 2D Truss and 2D Frame open their wizard
+Blank, Grid Only, Beam, 2D Truss, 2D Frame, 3D Frame, Warehouse and Building.
+The Beam and 3D Frame ask their numbers here; the others open their wizard
 after the model is created, so this dialog only collects the choice.
 """
 
@@ -38,6 +38,10 @@ _HINTS = {
     "warehouse": (
         "A 3D model, then the Warehouse Wizard: portal frames, purlins, girts, bracing, "
         "roof loads and the combinations of a design code."
+    ),
+    "building": (
+        "A 3D model, then the Building Wizard: a multi-storey frame with its storeys, "
+        "rigid diaphragms, floor loads, the earthquake and the combinations of a design code."
     ),
 }
 

@@ -214,6 +214,19 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   volcanic ash of RNC-07 Art. 14 and NSCM 7.3 (20 kg/m²) or the snow of ASCE
   7-16 chapter 7 or EN 1991-1-3, balanced and unbalanced, as loads on the plan
   of the roof.
+- **A building wizard** (Define → Create Building, or File → New Model →
+  Building): a regular multi-storey frame building from a few numbers, with
+  the same live preview. Bays each way (equal or a list of widths), storeys
+  with their own first storey height, a steel or a concrete frame, and a
+  two-way or one-way slab that is not modelled: its weight and the live load
+  of a use (residential, classrooms, hospital, offices, assembly, by RNC-07,
+  NSCM or ASCE 7-16) are floor panels on the beams. Every floor gets its
+  storey and a rigid diaphragm at its centre of mass, the mass source is the
+  dead load plus the live load the code counts, and an earthquake page adds
+  the equivalent lateral force of RNC-07 Art. 32, NSCM 8.2.1 or ASCE 7-16 12.8
+  as `EQ X ±e` and `EQ Y ±e` (accidental eccentricity to each side), with the
+  combinations of the code. The last page shows the seismic weight and the
+  base shear before anything is created.
 - **Materials** — `Steel01`, `Steel02`, `Concrete01`, `Concrete02`,
   `Concrete04` (Popovics), `ElasticPP`, `Hardening`, `Hysteretic`,
   `HystereticSM`, elastic uniaxial and `ElasticIsotropic`.
