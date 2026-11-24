@@ -1,0 +1,30 @@
+# Ceilings on the length of the Python files of src/opensees_studio, checked by
+# tests/tools/test_file_size_budget.py.
+#
+# A file not listed here may have up to 1500 lines. A file that was already
+# longer when the budget was recorded has its own ceiling below: its length
+# rounded up, with a little room for the wiring a change needs.
+#
+# This is a ratchet. When a listed file shrinks, lower its ceiling in the same
+# commit (the test asks for it once the file is 150 lines under), and delete its
+# line when it fits under 1500. Do not raise a ceiling and do not add a file to
+# make a change fit: split the file instead (a controller in
+# views/controllers, a widget of its own, a module per case type or per code).
+#
+# `exempt` is for files that are not logic: generated code, and the help pages
+# until they become data files (phase 4 of the maintainability plan).
+#
+# path (from src/opensees_studio)            max lines
+core/help.py                                 exempt
+core/catalog/generated/fiber.py              exempt
+services/sap2000_text.py                     3550
+services/opensees_runner.py                  3050
+views/main_window.py                         2950
+services/steel_design.py                     2750
+views/canvas3d/model_renderer.py             2750
+core/warehouse.py                            2600
+services/ifc_import.py                       2600
+services/tcl_import.py                       2100
+services/calc_memory.py                      1800
+views/canvas3d/model_canvas.py               1650
+services/stability.py                        1650
