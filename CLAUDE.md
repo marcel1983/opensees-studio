@@ -214,7 +214,11 @@ These are non-obvious things that are easy to break if you don't know:
   (`Warehouse.rafter_elements`); every purlin braces it, and the bottom chord is
   braced only at its tie lines. The cases the plan creates use
   `core.warehouse.CASE_SYSTEM` (UmfPack): BandGeneral takes tens of seconds per
-  case on a model with that many released members.
+  case on a model with that many released members. What a plan writes out of
+  square roots, sines or dot products (purlin angle, loads, unbraced lengths)
+  goes through `core.warehouse.portable` (12 significant digits): the last
+  digit of those differs between processors and C libraries, and the committed
+  examples must regenerate byte for byte on every CI runner.
 - `Entity.id` is `PositiveInt` (>0). The sentinel `999999` is reserved
   for in-flight / temporary objects that haven't been assigned a real id.
 - Eigen determinism rule. ARPACK keeps its random start vector across

@@ -205,6 +205,16 @@ _DEFAULT_SYSTEM = "BandGeneral"
 #: From this many nodes the plan says so when a case of the project keeps the band solver.
 SLOW_SOLVER_NODES = 150
 
+#: Significant digits of the derived numbers a plan writes (the angle of a
+#: purlin, loads, unbraced lengths, the properties of the default purlin).
+#: They come out of square roots, sines and dot products, whose last digit
+#: depends on the processor and on the C library: unrounded, the same
+#: warehouse saves different bytes on two machines.
+PORTABLE_DIGITS = 12
+#: A component of a load this many times smaller than its largest one is the
+#: round-off of a projection onto the member's axes, not a load.
+NEGLIGIBLE_COMPONENT = 1e-9
+
 #: The groups only a roof truss has.
 TRUSS_GROUPS: tuple[str, ...] = (
     "top_chords",
@@ -406,6 +416,33 @@ class WarehouseSpec:
         return [z for z in levels if z < self.ridge_height - END_GIRT_CLEARANCE * step]
 
 
+def portable(value: float) -> float:
+    """``value`` to :data:`PORTABLE_DIGITS` significant digits (and never ``-0.0``)."""
+    return float(f"{value:.{PORTABLE_DIGITS}g}") + 0.0
+
+
+def _portable_model(model: Any) -> Any:
+    """``model`` (a load, a section) with its numbers rounded by :func:`portable`."""
+    update: dict[str, Any] = {}
+    for name, value in model:
+        if isinstance(value, float):
+            rounded: Any = portable(value)
+        elif isinstance(value, tuple) and value and all(isinstance(v, float) for v in value):
+            rounded = tuple(portable(v) for v in value)
+        else:
+            continue
+        if repr(rounded) != repr(value):
+            update[name] = rounded
+    return model.model_copy(update=update) if update else model
+
+
+def _components(vector: Iterable[float]) -> tuple[float, ...]:
+    """The components of a load, without the round-off of its projection."""
+    values = [float(v) for v in vector]
+    floor = NEGLIGIBLE_COMPONENT * max(abs(v) for v in values)
+    return tuple(0.0 if abs(v) <= floor else v for v in values)
+
+
 def _distinct(values: Iterable[float]) -> list[float]:
     out: list[float] = []
     for value in sorted(values):
@@ -565,7 +602,7 @@ def roof_stations(spec: WarehouseSpec) -> list[RoofStation]:
         # A purlin runs along +Y, so its local z is Z turned about Y by the
         # element angle: (sin a, 0, cos a). At the ridge the two normals average
         # to the vertical and the web stands plumb.
-        angle = math.degrees(math.atan2(normal[0], normal[2]))
+        angle = portable(math.degrees(math.atan2(normal[0], normal[2])))
         stations.append(
             RoofStation(
                 x=x,
@@ -1108,8 +1145,10 @@ def roof_pressure_loads(warehouse: Warehouse, pressure: float, *, projected: boo
     for element_id, k in warehouse.purlin_station.items():
         station = warehouse.stations[k]
         width = station.tributary_plan if projected else station.tributary_slope
-        _wx, wy, wz = _gravity_components(nodes, purlins[element_id]) * pressure * width
-        loads.append(UniformElementLoad(element_id=element_id, wy=float(wy), wz=float(wz)))
+        _wx, wy, wz = _components(
+            _gravity_components(nodes, purlins[element_id]) * pressure * width
+        )
+        loads.append(UniformElementLoad(element_id=element_id, wy=wy, wz=wz))
     return loads
 
 
@@ -1142,13 +1181,13 @@ def midspan_point_loads(warehouse: Warehouse, force: float) -> tuple[list[Any], 
                 continue
             k = max(i for i, s in enumerate(stations) if s.x < x)
             element = elements[rafters[k]]
-            px, py, pz = _gravity_components(nodes, element) * force
+            px, py, pz = _components(_gravity_components(nodes, element) * force)
             inside.append(
                 PointElementLoad(
                     element_id=element.id,
-                    px=float(px),
-                    py=float(py),
-                    pz=float(pz),
+                    px=px,
+                    py=py,
+                    pz=pz,
                     x=(x - stations[k].x) / (stations[k + 1].x - stations[k].x),
                 )
             )
@@ -1371,9 +1410,9 @@ def wind_loads(warehouse: Warehouse, case: WindCase, units: UnitSystem) -> list[
             element.local_axis_angle,
         )
         assert axes is not None  # a warehouse has no zero-length member
-        wx, wy, wz = (float(axis @ forces[element_id]) for axis in axes)
-        if max(abs(wx), abs(wy), abs(wz)) == 0.0:
+        if not forces[element_id].any():
             continue
+        wx, wy, wz = _components(axis @ forces[element_id] for axis in axes)
         loads.append(UniformElementLoad(element_id=element_id, wx=wx, wy=wy, wz=wz))
     return loads
 
@@ -1389,7 +1428,9 @@ def member_design_overrides(warehouse: Warehouse) -> list[Any]:
     from opensees_studio.core.design.settings import SteelMemberDesign
 
     return [
-        SteelMemberDesign(element_id=element_id, length_minor=length, length_ltb=length)
+        SteelMemberDesign(
+            element_id=element_id, length_minor=portable(length), length_ltb=portable(length)
+        )
         for element_id, length in sorted(warehouse.unbraced.items())
     ]
 
@@ -1525,15 +1566,18 @@ def default_section(key: str, project: Project, section_id: int) -> Any:
             t=size["t"] * mm,
             r=size["r"] * mm,
         )
-        return cold_formed_section(
-            shape,
-            section_id=section_id,
-            ndm=project.ndm,
-            name="C150X50X15X2.38",
-            material=default_cold_formed_material(project),
-            units=units,
-            elastic_modulus=e,
-            shear_modulus=g,
+        # Its properties come out of the arcs of the corners (sines, tangents).
+        return _portable_model(
+            cold_formed_section(
+                shape,
+                section_id=section_id,
+                ndm=project.ndm,
+                name="C150X50X15X2.38",
+                material=default_cold_formed_material(project),
+                units=units,
+                elastic_modulus=e,
+                shear_modulus=g,
+            )
         )
     section = shape_to_elastic_section(
         get_shape(DEFAULT_AISC_SHAPES[key]),
@@ -1681,6 +1725,10 @@ def plan_warehouse(
 
     if loads is not None:
         _plan_loads(plan, project, scratch, loads)
+        plan.pattern_loads[:] = [
+            (pattern_id, list_name, [_portable_model(item) for item in items])
+            for pattern_id, list_name, items in plan.pattern_loads
+        ]
     return plan
 
 
@@ -1881,6 +1929,7 @@ __all__ = [
     "member_design_overrides",
     "midspan_point_loads",
     "plan_warehouse",
+    "portable",
     "pressure_from_kpa",
     "roof_pressure_loads",
     "roof_stations",

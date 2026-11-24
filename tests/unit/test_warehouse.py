@@ -236,7 +236,8 @@ def test_the_design_overrides_carry_the_unbraced_lengths() -> None:
     assert rafters <= set(overrides)
     for element_id in rafters:
         override = overrides[element_id]
-        assert override.length_ltb == override.length_minor == warehouse.unbraced[element_id]
+        assert override.length_ltb == override.length_minor
+        assert override.length_minor == pytest.approx(warehouse.unbraced[element_id], rel=1e-11)
         assert override.length_major is None  # in the frame's plane: as modelled
     # A girt without an angle does not brace the column either: the full height.
     columns = set(overrides) - rafters

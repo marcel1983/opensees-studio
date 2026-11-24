@@ -71,6 +71,14 @@ refused instead of silently downgraded).
   the project already had keeps its solver, and the log says so on a large
   model. `examples/warehouse_gable.osmodel` and `warehouse_wind.osmodel` were
   regenerated with it; their pinned results did not move.
+- **A warehouse from the wizard is the same file on every machine.** The angle
+  of the purlins, the loads on the members, the unbraced lengths and the
+  properties of the default purlin are written with 12 significant digits, and a
+  load component that is only round-off of its projection is zero. They come out
+  of square roots, sines and dot products, whose last digit depends on the
+  processor and on the C library, so the same warehouse used to save different
+  bytes on two machines. The three warehouse examples were regenerated; their
+  pinned results did not move.
 
 ## [0.0.78] - 2026-11-23
 
