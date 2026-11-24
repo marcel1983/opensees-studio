@@ -223,6 +223,17 @@ These are non-obvious things that are easy to break if you don't know:
   (`seismic_coefficient`, no period), as nodal loads from the weight lumped on
   each joint (`seismic_loads`); its cases go to the generator as role `E`, both
   signs, never as `peak_cases`.
+  `core.building.plan_building` is the same idea for a multi-storey building
+  (`BuildingPlan`; no command or dialog yet, `plan.apply(project)` in a script).
+  The slab is never modelled: it is `FloorLoad` panels, the mass is the mass
+  source (`DEAD` plus the live load the code counts), and the earthquake is
+  `core.equivalent_lateral` on the project's storeys, applied at each
+  diaphragm's retained node, which the plan puts at the centre of the floor's
+  mass and exactly at the storey's elevation. The `±e` cases of one direction
+  are alternatives: pass `EARTHQUAKE_DIRECTIONS` to the combination generator,
+  or the 100 % + 30 % rule pairs `EQ X +e` with `EQ X -e`. The plan keeps a
+  scratch copy of the project for ids and masses; what goes into it is a copy,
+  never the object the plan returns.
 - `Entity.id` is `PositiveInt` (>0). The sentinel `999999` is reserved
   for in-flight / temporary objects that haven't been assigned a real id.
 - Eigen determinism rule. ARPACK keeps its random start vector across

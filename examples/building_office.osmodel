@@ -1,0 +1,6384 @@
+{
+  "schema_version": 3,
+  "meta": {
+    "name": "Office building 18 x 15 m, Managua",
+    "description": "",
+    "author": "",
+    "units": "SI (m, N, kg, s, Pa)"
+  },
+  "ndm": 3,
+  "ndf": 6,
+  "coord_systems": [
+    {
+      "name": "Global",
+      "coord": {
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_deg": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "grid": {
+        "x_grid_lines": [],
+        "y_grid_lines": [],
+        "z_grid_lines": [],
+        "visible": true,
+        "is_general": false,
+        "hide_all": false,
+        "glue_to_grid": false,
+        "bubble_size": 20
+      }
+    },
+    {
+      "name": "Building",
+      "coord": {
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_deg": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "grid": {
+        "x_grid_lines": [
+          {
+            "id": "X1",
+            "ordinate": 0.0,
+            "line_type": "Primary",
+            "visible": true,
+            "bubble_loc": "End",
+            "color": "#808080"
+          },
+          {
+            "id": "X2",
+            "ordinate": 6.0,
+            "line_type": "Primary",
+            "visible": true,
+            "bubble_loc": "End",
+            "color": "#808080"
+          },
+          {
+            "id": "X3",
+            "ordinate": 12.0,
+            "line_type": "Primary",
+            "visible": true,
+            "bubble_loc": "End",
+            "color": "#808080"
+          },
+          {
+            "id": "X4",
+            "ordinate": 18.0,
+            "line_type": "Primary",
+            "visible": true,
+            "bubble_loc": "End",
+            "color": "#808080"
+          }
+        ],
+        "y_grid_lines": [
+          {
+            "id": "Y1",
+            "ordinate": 0.0,
+            "line_type": "Primary",
+            "visible": true,
+            "bubble_loc": "End",
+            "color": "#808080"
+          },
+          {
+            "id": "Y2",
+            "ordinate": 5.0,
+            "line_type": "Primary",
+            "visible": true,
+            "bubble_loc": "End",
+            "color": "#808080"
+          },
+          {
+            "id": "Y3",
+            "ordinate": 10.0,
+            "line_type": "Primary",
+            "visible": true,
+            "bubble_loc": "End",
+            "color": "#808080"
+          },
+          {
+            "id": "Y4",
+            "ordinate": 15.0,
+            "line_type": "Primary",
+            "visible": true,
+            "bubble_loc": "End",
+            "color": "#808080"
+          }
+        ],
+        "z_grid_lines": [
+          {
+            "id": "Z1",
+            "ordinate": 0.0,
+            "line_type": "Primary",
+            "visible": true,
+            "bubble_loc": "End",
+            "color": "#808080"
+          },
+          {
+            "id": "Z2",
+            "ordinate": 3.5,
+            "line_type": "Primary",
+            "visible": true,
+            "bubble_loc": "End",
+            "color": "#808080"
+          },
+          {
+            "id": "Z3",
+            "ordinate": 6.5,
+            "line_type": "Primary",
+            "visible": true,
+            "bubble_loc": "End",
+            "color": "#808080"
+          },
+          {
+            "id": "Z4",
+            "ordinate": 9.5,
+            "line_type": "Primary",
+            "visible": true,
+            "bubble_loc": "End",
+            "color": "#808080"
+          }
+        ],
+        "visible": true,
+        "is_general": false,
+        "hide_all": false,
+        "glue_to_grid": false,
+        "bubble_size": 20
+      }
+    }
+  ],
+  "storeys": [
+    {
+      "id": 1,
+      "name": "Storey 1",
+      "elevation": 3.5
+    },
+    {
+      "id": 2,
+      "name": "Storey 2",
+      "elevation": 6.5
+    },
+    {
+      "id": 3,
+      "name": "Roof",
+      "elevation": 9.5
+    }
+  ],
+  "nodes": [
+    {
+      "id": 1,
+      "name": "",
+      "coords": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ]
+    },
+    {
+      "id": 2,
+      "name": "",
+      "coords": [
+        6.0,
+        0.0,
+        0.0
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ]
+    },
+    {
+      "id": 3,
+      "name": "",
+      "coords": [
+        12.0,
+        0.0,
+        0.0
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ]
+    },
+    {
+      "id": 4,
+      "name": "",
+      "coords": [
+        18.0,
+        0.0,
+        0.0
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ]
+    },
+    {
+      "id": 5,
+      "name": "",
+      "coords": [
+        0.0,
+        5.0,
+        0.0
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ]
+    },
+    {
+      "id": 6,
+      "name": "",
+      "coords": [
+        6.0,
+        5.0,
+        0.0
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ]
+    },
+    {
+      "id": 7,
+      "name": "",
+      "coords": [
+        12.0,
+        5.0,
+        0.0
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ]
+    },
+    {
+      "id": 8,
+      "name": "",
+      "coords": [
+        18.0,
+        5.0,
+        0.0
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ]
+    },
+    {
+      "id": 9,
+      "name": "",
+      "coords": [
+        0.0,
+        10.0,
+        0.0
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ]
+    },
+    {
+      "id": 10,
+      "name": "",
+      "coords": [
+        6.0,
+        10.0,
+        0.0
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ]
+    },
+    {
+      "id": 11,
+      "name": "",
+      "coords": [
+        12.0,
+        10.0,
+        0.0
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ]
+    },
+    {
+      "id": 12,
+      "name": "",
+      "coords": [
+        18.0,
+        10.0,
+        0.0
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ]
+    },
+    {
+      "id": 13,
+      "name": "",
+      "coords": [
+        0.0,
+        15.0,
+        0.0
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ]
+    },
+    {
+      "id": 14,
+      "name": "",
+      "coords": [
+        6.0,
+        15.0,
+        0.0
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ]
+    },
+    {
+      "id": 15,
+      "name": "",
+      "coords": [
+        12.0,
+        15.0,
+        0.0
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ]
+    },
+    {
+      "id": 16,
+      "name": "",
+      "coords": [
+        18.0,
+        15.0,
+        0.0
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ]
+    },
+    {
+      "id": 17,
+      "name": "",
+      "coords": [
+        0.0,
+        0.0,
+        3.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 18,
+      "name": "",
+      "coords": [
+        6.0,
+        0.0,
+        3.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 19,
+      "name": "",
+      "coords": [
+        12.0,
+        0.0,
+        3.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 20,
+      "name": "",
+      "coords": [
+        18.0,
+        0.0,
+        3.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 21,
+      "name": "",
+      "coords": [
+        0.0,
+        5.0,
+        3.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 22,
+      "name": "",
+      "coords": [
+        6.0,
+        5.0,
+        3.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 23,
+      "name": "",
+      "coords": [
+        12.0,
+        5.0,
+        3.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 24,
+      "name": "",
+      "coords": [
+        18.0,
+        5.0,
+        3.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 25,
+      "name": "",
+      "coords": [
+        0.0,
+        10.0,
+        3.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 26,
+      "name": "",
+      "coords": [
+        6.0,
+        10.0,
+        3.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 27,
+      "name": "",
+      "coords": [
+        12.0,
+        10.0,
+        3.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 28,
+      "name": "",
+      "coords": [
+        18.0,
+        10.0,
+        3.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 29,
+      "name": "",
+      "coords": [
+        0.0,
+        15.0,
+        3.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 30,
+      "name": "",
+      "coords": [
+        6.0,
+        15.0,
+        3.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 31,
+      "name": "",
+      "coords": [
+        12.0,
+        15.0,
+        3.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 32,
+      "name": "",
+      "coords": [
+        18.0,
+        15.0,
+        3.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 33,
+      "name": "",
+      "coords": [
+        0.0,
+        0.0,
+        6.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 34,
+      "name": "",
+      "coords": [
+        6.0,
+        0.0,
+        6.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 35,
+      "name": "",
+      "coords": [
+        12.0,
+        0.0,
+        6.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 36,
+      "name": "",
+      "coords": [
+        18.0,
+        0.0,
+        6.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 37,
+      "name": "",
+      "coords": [
+        0.0,
+        5.0,
+        6.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 38,
+      "name": "",
+      "coords": [
+        6.0,
+        5.0,
+        6.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 39,
+      "name": "",
+      "coords": [
+        12.0,
+        5.0,
+        6.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 40,
+      "name": "",
+      "coords": [
+        18.0,
+        5.0,
+        6.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 41,
+      "name": "",
+      "coords": [
+        0.0,
+        10.0,
+        6.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 42,
+      "name": "",
+      "coords": [
+        6.0,
+        10.0,
+        6.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 43,
+      "name": "",
+      "coords": [
+        12.0,
+        10.0,
+        6.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 44,
+      "name": "",
+      "coords": [
+        18.0,
+        10.0,
+        6.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 45,
+      "name": "",
+      "coords": [
+        0.0,
+        15.0,
+        6.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 46,
+      "name": "",
+      "coords": [
+        6.0,
+        15.0,
+        6.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 47,
+      "name": "",
+      "coords": [
+        12.0,
+        15.0,
+        6.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 48,
+      "name": "",
+      "coords": [
+        18.0,
+        15.0,
+        6.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 49,
+      "name": "",
+      "coords": [
+        0.0,
+        0.0,
+        9.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 50,
+      "name": "",
+      "coords": [
+        6.0,
+        0.0,
+        9.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 51,
+      "name": "",
+      "coords": [
+        12.0,
+        0.0,
+        9.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 52,
+      "name": "",
+      "coords": [
+        18.0,
+        0.0,
+        9.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 53,
+      "name": "",
+      "coords": [
+        0.0,
+        5.0,
+        9.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 54,
+      "name": "",
+      "coords": [
+        6.0,
+        5.0,
+        9.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 55,
+      "name": "",
+      "coords": [
+        12.0,
+        5.0,
+        9.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 56,
+      "name": "",
+      "coords": [
+        18.0,
+        5.0,
+        9.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 57,
+      "name": "",
+      "coords": [
+        0.0,
+        10.0,
+        9.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 58,
+      "name": "",
+      "coords": [
+        6.0,
+        10.0,
+        9.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 59,
+      "name": "",
+      "coords": [
+        12.0,
+        10.0,
+        9.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 60,
+      "name": "",
+      "coords": [
+        18.0,
+        10.0,
+        9.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 61,
+      "name": "",
+      "coords": [
+        0.0,
+        15.0,
+        9.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 62,
+      "name": "",
+      "coords": [
+        6.0,
+        15.0,
+        9.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 63,
+      "name": "",
+      "coords": [
+        12.0,
+        15.0,
+        9.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 64,
+      "name": "",
+      "coords": [
+        18.0,
+        15.0,
+        9.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 65,
+      "name": "",
+      "coords": [
+        9.0,
+        7.5,
+        3.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 66,
+      "name": "",
+      "coords": [
+        9.0,
+        7.5,
+        6.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 67,
+      "name": "",
+      "coords": [
+        9.0,
+        7.5,
+        9.5
+      ],
+      "mass": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "restraint": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    }
+  ],
+  "materials": [
+    {
+      "id": 1,
+      "name": "A36",
+      "type": "ElasticIsotropic",
+      "E": 199947961501.88248,
+      "nu": 0.3,
+      "rho": 7849.047053240468,
+      "Fy": 248211262.554061,
+      "Fu": 399895923.0037649
+    },
+    {
+      "id": 2,
+      "name": "A572Gr50",
+      "type": "ElasticIsotropic",
+      "E": 199947961501.88248,
+      "nu": 0.3,
+      "rho": 7849.047053240468,
+      "Fy": 344737864.65841806,
+      "Fu": 448159224.0559435
+    },
+    {
+      "id": 3,
+      "name": "A992",
+      "type": "ElasticIsotropic",
+      "E": 199947961501.88248,
+      "nu": 0.3,
+      "rho": 7849.047053240468,
+      "Fy": 344737864.65841806,
+      "Fu": 448159224.0559435
+    },
+    {
+      "id": 4,
+      "name": "A500GrB",
+      "type": "ElasticIsotropic",
+      "E": 199947961501.88248,
+      "nu": 0.3,
+      "rho": 7849.047053240468,
+      "Fy": 317158835.4857446,
+      "Fu": 399895923.0037649
+    },
+    {
+      "id": 5,
+      "name": "A653SSGr33",
+      "type": "ElasticIsotropic",
+      "E": 203395340148.46667,
+      "nu": 0.3,
+      "rho": 7849.047053240468,
+      "Fy": 227526990.67455593,
+      "Fu": 310264078.1925762
+    },
+    {
+      "id": 6,
+      "name": "A653SSGr50",
+      "type": "ElasticIsotropic",
+      "E": 203395340148.46667,
+      "nu": 0.3,
+      "rho": 7849.047053240468,
+      "Fy": 344737864.65841806,
+      "Fu": 448159224.0559435
+    },
+    {
+      "id": 7,
+      "name": "4000Psi",
+      "type": "ElasticIsotropic",
+      "E": 24855576134.93502,
+      "nu": 0.2,
+      "rho": 2402.769506094021,
+      "fc": 27579029.172673445
+    },
+    {
+      "id": 8,
+      "name": "3000Psi",
+      "type": "ElasticIsotropic",
+      "E": 21525560358.55196,
+      "nu": 0.2,
+      "rho": 2402.769506094021,
+      "fc": 20684271.879505087
+    },
+    {
+      "id": 9,
+      "name": "CMU-Grouted1500",
+      "type": "ElasticIsotropic",
+      "E": 9307922345.777288,
+      "nu": 0.25,
+      "rho": 2242.5848723544195,
+      "fc": 10342135.939752543
+    }
+  ],
+  "sections": [
+    {
+      "id": 1,
+      "name": "COL 500x500",
+      "type": "ElasticSection",
+      "E": 24855576134.93502,
+      "A": 0.25,
+      "Iz": 0.005208333333333333,
+      "Iy": 0.005208333333333333,
+      "G": 10356490056.222925,
+      "J": 0.008802083333333334,
+      "material_id": 7,
+      "shape": {
+        "kind": "rect",
+        "d": 0.5,
+        "b": 0.5
+      },
+      "unit_weight": 23563.11957693693
+    },
+    {
+      "id": 2,
+      "name": "BEAM 300x600",
+      "type": "ElasticSection",
+      "E": 24855576134.93502,
+      "A": 0.18,
+      "Iz": 0.0013499999999999996,
+      "Iy": 0.0053999999999999986,
+      "G": 10356490056.222925,
+      "J": 0.003707859374999999,
+      "material_id": 7,
+      "shape": {
+        "kind": "rect",
+        "d": 0.6,
+        "b": 0.3
+      },
+      "unit_weight": 23563.11957693693
+    }
+  ],
+  "friction_models": [],
+  "elements": [
+    {
+      "id": 1,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        1,
+        17
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 2,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        2,
+        18
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 3,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        3,
+        19
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 4,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        4,
+        20
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 5,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        5,
+        21
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 6,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        6,
+        22
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 7,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        7,
+        23
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 8,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        8,
+        24
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 9,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        9,
+        25
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 10,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        10,
+        26
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 11,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        11,
+        27
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 12,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        12,
+        28
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 13,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        13,
+        29
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 14,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        14,
+        30
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 15,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        15,
+        31
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 16,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        16,
+        32
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 17,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        17,
+        18
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 18,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        18,
+        19
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 19,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        19,
+        20
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 20,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        21,
+        22
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 21,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        22,
+        23
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 22,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        23,
+        24
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 23,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        25,
+        26
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 24,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        26,
+        27
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 25,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        27,
+        28
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 26,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        29,
+        30
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 27,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        30,
+        31
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 28,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        31,
+        32
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 29,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        17,
+        21
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 30,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        21,
+        25
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 31,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        25,
+        29
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 32,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        18,
+        22
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 33,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        22,
+        26
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 34,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        26,
+        30
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 35,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        19,
+        23
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 36,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        23,
+        27
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 37,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        27,
+        31
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 38,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        20,
+        24
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 39,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        24,
+        28
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 40,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        28,
+        32
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 41,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        17,
+        33
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 42,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        18,
+        34
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 43,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        19,
+        35
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 44,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        20,
+        36
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 45,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        21,
+        37
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 46,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        22,
+        38
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 47,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        23,
+        39
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 48,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        24,
+        40
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 49,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        25,
+        41
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 50,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        26,
+        42
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 51,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        27,
+        43
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 52,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        28,
+        44
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 53,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        29,
+        45
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 54,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        30,
+        46
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 55,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        31,
+        47
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 56,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        32,
+        48
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 57,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        33,
+        34
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 58,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        34,
+        35
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 59,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        35,
+        36
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 60,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        37,
+        38
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 61,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        38,
+        39
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 62,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        39,
+        40
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 63,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        41,
+        42
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 64,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        42,
+        43
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 65,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        43,
+        44
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 66,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        45,
+        46
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 67,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        46,
+        47
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 68,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        47,
+        48
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 69,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        33,
+        37
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 70,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        37,
+        41
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 71,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        41,
+        45
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 72,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        34,
+        38
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 73,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        38,
+        42
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 74,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        42,
+        46
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 75,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        35,
+        39
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 76,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        39,
+        43
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 77,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        43,
+        47
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 78,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        36,
+        40
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 79,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        40,
+        44
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 80,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        44,
+        48
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 81,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        33,
+        49
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 82,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        34,
+        50
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 83,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        35,
+        51
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 84,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        36,
+        52
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 85,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        37,
+        53
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 86,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        38,
+        54
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 87,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        39,
+        55
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 88,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        40,
+        56
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 89,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        41,
+        57
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 90,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        42,
+        58
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 91,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        43,
+        59
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 92,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        44,
+        60
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 93,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        45,
+        61
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 94,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        46,
+        62
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 95,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        47,
+        63
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 96,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        48,
+        64
+      ],
+      "section_id": 1,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 97,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        49,
+        50
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 98,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        50,
+        51
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 99,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        51,
+        52
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 100,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        53,
+        54
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 101,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        54,
+        55
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 102,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        55,
+        56
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 103,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        57,
+        58
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 104,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        58,
+        59
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 105,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        59,
+        60
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 106,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        61,
+        62
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 107,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        62,
+        63
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 108,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        63,
+        64
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 109,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        49,
+        53
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 110,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        53,
+        57
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 111,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        57,
+        61
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 112,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        50,
+        54
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 113,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        54,
+        58
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 114,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        58,
+        62
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 115,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        51,
+        55
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 116,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        55,
+        59
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 117,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        59,
+        63
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 118,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        52,
+        56
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 119,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        56,
+        60
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    },
+    {
+      "id": 120,
+      "name": "",
+      "type": "ElasticBeamColumn",
+      "nodes": [
+        60,
+        64
+      ],
+      "section_id": 2,
+      "geom_transf": "Linear",
+      "rho": 0.0,
+      "consistent_mass": false
+    }
+  ],
+  "mp_constraints": [],
+  "diaphragms": [
+    {
+      "id": 1,
+      "name": "Diaphragm Storey 1",
+      "perp_dirn": 3,
+      "retained_node": 65,
+      "constrained_nodes": [],
+      "storey_id": 1
+    },
+    {
+      "id": 2,
+      "name": "Diaphragm Storey 2",
+      "perp_dirn": 3,
+      "retained_node": 66,
+      "constrained_nodes": [],
+      "storey_id": 2
+    },
+    {
+      "id": 3,
+      "name": "Diaphragm Roof",
+      "perp_dirn": 3,
+      "retained_node": 67,
+      "constrained_nodes": [],
+      "storey_id": 3
+    }
+  ],
+  "mass_source": {
+    "element_self_mass": false,
+    "patterns": [
+      {
+        "pattern_id": 1,
+        "factor": 1.0
+      },
+      {
+        "pattern_id": 2,
+        "factor": 0.15
+      },
+      {
+        "pattern_id": 3,
+        "factor": 0.15
+      }
+    ],
+    "include_vertical": false,
+    "lump_at_diaphragms": true
+  },
+  "time_series": [
+    {
+      "id": 1,
+      "name": "DEAD",
+      "type": "Linear",
+      "factor": 1.0
+    },
+    {
+      "id": 2,
+      "name": "LIVE",
+      "type": "Linear",
+      "factor": 1.0
+    },
+    {
+      "id": 3,
+      "name": "ROOF LIVE",
+      "type": "Linear",
+      "factor": 1.0
+    },
+    {
+      "id": 4,
+      "name": "EQ X +e",
+      "type": "Linear",
+      "factor": 1.0
+    },
+    {
+      "id": 5,
+      "name": "EQ X -e",
+      "type": "Linear",
+      "factor": 1.0
+    },
+    {
+      "id": 6,
+      "name": "EQ Y +e",
+      "type": "Linear",
+      "factor": 1.0
+    },
+    {
+      "id": 7,
+      "name": "EQ Y -e",
+      "type": "Linear",
+      "factor": 1.0
+    }
+  ],
+  "load_patterns": [
+    {
+      "id": 1,
+      "name": "DEAD",
+      "type": "Plain",
+      "time_series_id": 1,
+      "nodal_loads": [],
+      "element_loads": [],
+      "floor_loads": [
+        {
+          "nodes": [
+            17,
+            18,
+            22,
+            21
+          ],
+          "value": 4500.0,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            18,
+            19,
+            23,
+            22
+          ],
+          "value": 4500.0,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            19,
+            20,
+            24,
+            23
+          ],
+          "value": 4500.0,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            21,
+            22,
+            26,
+            25
+          ],
+          "value": 4500.0,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            22,
+            23,
+            27,
+            26
+          ],
+          "value": 4500.0,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            23,
+            24,
+            28,
+            27
+          ],
+          "value": 4500.0,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            25,
+            26,
+            30,
+            29
+          ],
+          "value": 4500.0,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            26,
+            27,
+            31,
+            30
+          ],
+          "value": 4500.0,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            27,
+            28,
+            32,
+            31
+          ],
+          "value": 4500.0,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            33,
+            34,
+            38,
+            37
+          ],
+          "value": 4500.0,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            34,
+            35,
+            39,
+            38
+          ],
+          "value": 4500.0,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            35,
+            36,
+            40,
+            39
+          ],
+          "value": 4500.0,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            37,
+            38,
+            42,
+            41
+          ],
+          "value": 4500.0,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            38,
+            39,
+            43,
+            42
+          ],
+          "value": 4500.0,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            39,
+            40,
+            44,
+            43
+          ],
+          "value": 4500.0,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            41,
+            42,
+            46,
+            45
+          ],
+          "value": 4500.0,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            42,
+            43,
+            47,
+            46
+          ],
+          "value": 4500.0,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            43,
+            44,
+            48,
+            47
+          ],
+          "value": 4500.0,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            49,
+            50,
+            54,
+            53
+          ],
+          "value": 3500.0,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            50,
+            51,
+            55,
+            54
+          ],
+          "value": 3500.0,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            51,
+            52,
+            56,
+            55
+          ],
+          "value": 3500.0,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            53,
+            54,
+            58,
+            57
+          ],
+          "value": 3500.0,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            54,
+            55,
+            59,
+            58
+          ],
+          "value": 3500.0,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            55,
+            56,
+            60,
+            59
+          ],
+          "value": 3500.0,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            57,
+            58,
+            62,
+            61
+          ],
+          "value": 3500.0,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            58,
+            59,
+            63,
+            62
+          ],
+          "value": 3500.0,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            59,
+            60,
+            64,
+            63
+          ],
+          "value": 3500.0,
+          "distribution": "two_way"
+        }
+      ],
+      "self_weight": 1.0
+    },
+    {
+      "id": 2,
+      "name": "LIVE",
+      "type": "Plain",
+      "time_series_id": 2,
+      "nodal_loads": [],
+      "element_loads": [],
+      "floor_loads": [
+        {
+          "nodes": [
+            17,
+            18,
+            22,
+            21
+          ],
+          "value": 2451.6625,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            18,
+            19,
+            23,
+            22
+          ],
+          "value": 2451.6625,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            19,
+            20,
+            24,
+            23
+          ],
+          "value": 2451.6625,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            21,
+            22,
+            26,
+            25
+          ],
+          "value": 2451.6625,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            22,
+            23,
+            27,
+            26
+          ],
+          "value": 2451.6625,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            23,
+            24,
+            28,
+            27
+          ],
+          "value": 2451.6625,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            25,
+            26,
+            30,
+            29
+          ],
+          "value": 2451.6625,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            26,
+            27,
+            31,
+            30
+          ],
+          "value": 2451.6625,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            27,
+            28,
+            32,
+            31
+          ],
+          "value": 2451.6625,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            33,
+            34,
+            38,
+            37
+          ],
+          "value": 2451.6625,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            34,
+            35,
+            39,
+            38
+          ],
+          "value": 2451.6625,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            35,
+            36,
+            40,
+            39
+          ],
+          "value": 2451.6625,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            37,
+            38,
+            42,
+            41
+          ],
+          "value": 2451.6625,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            38,
+            39,
+            43,
+            42
+          ],
+          "value": 2451.6625,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            39,
+            40,
+            44,
+            43
+          ],
+          "value": 2451.6625,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            41,
+            42,
+            46,
+            45
+          ],
+          "value": 2451.6625,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            42,
+            43,
+            47,
+            46
+          ],
+          "value": 2451.6625,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            43,
+            44,
+            48,
+            47
+          ],
+          "value": 2451.6625,
+          "distribution": "two_way"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "ROOF LIVE",
+      "type": "Plain",
+      "time_series_id": 3,
+      "nodal_loads": [],
+      "element_loads": [],
+      "floor_loads": [
+        {
+          "nodes": [
+            49,
+            50,
+            54,
+            53
+          ],
+          "value": 980.665,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            50,
+            51,
+            55,
+            54
+          ],
+          "value": 980.665,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            51,
+            52,
+            56,
+            55
+          ],
+          "value": 980.665,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            53,
+            54,
+            58,
+            57
+          ],
+          "value": 980.665,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            54,
+            55,
+            59,
+            58
+          ],
+          "value": 980.665,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            55,
+            56,
+            60,
+            59
+          ],
+          "value": 980.665,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            57,
+            58,
+            62,
+            61
+          ],
+          "value": 980.665,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            58,
+            59,
+            63,
+            62
+          ],
+          "value": 980.665,
+          "distribution": "two_way"
+        },
+        {
+          "nodes": [
+            59,
+            60,
+            64,
+            63
+          ],
+          "value": 980.665,
+          "distribution": "two_way"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "EQ X +e",
+      "type": "Plain",
+      "time_series_id": 4,
+      "nodal_loads": [
+        {
+          "node_id": 65,
+          "forces": [
+            174510.540608,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -130882.905456
+          ]
+        },
+        {
+          "node_id": 66,
+          "forces": [
+            320588.737984,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -240441.553488
+          ]
+        },
+        {
+          "node_id": 67,
+          "forces": [
+            366245.809289,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -274684.356967
+          ]
+        }
+      ],
+      "element_loads": []
+    },
+    {
+      "id": 5,
+      "name": "EQ X -e",
+      "type": "Plain",
+      "time_series_id": 5,
+      "nodal_loads": [
+        {
+          "node_id": 65,
+          "forces": [
+            174510.540608,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            130882.905456
+          ]
+        },
+        {
+          "node_id": 66,
+          "forces": [
+            320588.737984,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            240441.553488
+          ]
+        },
+        {
+          "node_id": 67,
+          "forces": [
+            366245.809289,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            274684.356967
+          ]
+        }
+      ],
+      "element_loads": []
+    },
+    {
+      "id": 6,
+      "name": "EQ Y +e",
+      "type": "Plain",
+      "time_series_id": 6,
+      "nodal_loads": [
+        {
+          "node_id": 65,
+          "forces": [
+            0.0,
+            174510.540608,
+            0.0,
+            0.0,
+            0.0,
+            157059.486547
+          ]
+        },
+        {
+          "node_id": 66,
+          "forces": [
+            0.0,
+            320588.737984,
+            0.0,
+            0.0,
+            0.0,
+            288529.864186
+          ]
+        },
+        {
+          "node_id": 67,
+          "forces": [
+            0.0,
+            366245.809289,
+            0.0,
+            0.0,
+            0.0,
+            329621.22836
+          ]
+        }
+      ],
+      "element_loads": []
+    },
+    {
+      "id": 7,
+      "name": "EQ Y -e",
+      "type": "Plain",
+      "time_series_id": 7,
+      "nodal_loads": [
+        {
+          "node_id": 65,
+          "forces": [
+            0.0,
+            174510.540608,
+            0.0,
+            0.0,
+            0.0,
+            -157059.486547
+          ]
+        },
+        {
+          "node_id": 66,
+          "forces": [
+            0.0,
+            320588.737984,
+            0.0,
+            0.0,
+            0.0,
+            -288529.864186
+          ]
+        },
+        {
+          "node_id": 67,
+          "forces": [
+            0.0,
+            366245.809289,
+            0.0,
+            0.0,
+            0.0,
+            -329621.22836
+          ]
+        }
+      ],
+      "element_loads": []
+    }
+  ],
+  "spectra": [],
+  "ground_motions": [],
+  "target_spectra": [],
+  "analyses": [
+    {
+      "id": 1,
+      "name": "DEAD",
+      "type": "Static",
+      "pattern_ids": [
+        1
+      ],
+      "n_steps": 1,
+      "load_factor_increment": 1.0,
+      "system": "UmfPack",
+      "constraints": "Plain",
+      "integrator": "LoadControl",
+      "algorithm": "Linear",
+      "test": "NormDispIncr",
+      "tolerance": 1e-08,
+      "max_iter": 25
+    },
+    {
+      "id": 2,
+      "name": "LIVE",
+      "type": "Static",
+      "pattern_ids": [
+        2
+      ],
+      "n_steps": 1,
+      "load_factor_increment": 1.0,
+      "system": "UmfPack",
+      "constraints": "Plain",
+      "integrator": "LoadControl",
+      "algorithm": "Linear",
+      "test": "NormDispIncr",
+      "tolerance": 1e-08,
+      "max_iter": 25
+    },
+    {
+      "id": 3,
+      "name": "ROOF LIVE",
+      "type": "Static",
+      "pattern_ids": [
+        3
+      ],
+      "n_steps": 1,
+      "load_factor_increment": 1.0,
+      "system": "UmfPack",
+      "constraints": "Plain",
+      "integrator": "LoadControl",
+      "algorithm": "Linear",
+      "test": "NormDispIncr",
+      "tolerance": 1e-08,
+      "max_iter": 25
+    },
+    {
+      "id": 4,
+      "name": "EQ X +e",
+      "type": "Static",
+      "pattern_ids": [
+        4
+      ],
+      "n_steps": 1,
+      "load_factor_increment": 1.0,
+      "system": "UmfPack",
+      "constraints": "Plain",
+      "integrator": "LoadControl",
+      "algorithm": "Linear",
+      "test": "NormDispIncr",
+      "tolerance": 1e-08,
+      "max_iter": 25
+    },
+    {
+      "id": 5,
+      "name": "EQ X -e",
+      "type": "Static",
+      "pattern_ids": [
+        5
+      ],
+      "n_steps": 1,
+      "load_factor_increment": 1.0,
+      "system": "UmfPack",
+      "constraints": "Plain",
+      "integrator": "LoadControl",
+      "algorithm": "Linear",
+      "test": "NormDispIncr",
+      "tolerance": 1e-08,
+      "max_iter": 25
+    },
+    {
+      "id": 6,
+      "name": "EQ Y +e",
+      "type": "Static",
+      "pattern_ids": [
+        6
+      ],
+      "n_steps": 1,
+      "load_factor_increment": 1.0,
+      "system": "UmfPack",
+      "constraints": "Plain",
+      "integrator": "LoadControl",
+      "algorithm": "Linear",
+      "test": "NormDispIncr",
+      "tolerance": 1e-08,
+      "max_iter": 25
+    },
+    {
+      "id": 7,
+      "name": "EQ Y -e",
+      "type": "Static",
+      "pattern_ids": [
+        7
+      ],
+      "n_steps": 1,
+      "load_factor_increment": 1.0,
+      "system": "UmfPack",
+      "constraints": "Plain",
+      "integrator": "LoadControl",
+      "algorithm": "Linear",
+      "test": "NormDispIncr",
+      "tolerance": 1e-08,
+      "max_iter": 25
+    }
+  ],
+  "combinations": [
+    {
+      "id": 1,
+      "name": "1.4CM",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 1.4
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "1.2CM+1.6CV+0.5CVT",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 1.2
+        },
+        {
+          "ref_id": 2,
+          "factor": 1.6
+        },
+        {
+          "ref_id": 3,
+          "factor": 0.5
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "1.2CM+1.6CVT+CV",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 1.2
+        },
+        {
+          "ref_id": 3,
+          "factor": 1.6
+        },
+        {
+          "ref_id": 2,
+          "factor": 1.0
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "1.29534CM+Eh:EQ X +e+0.3Eh:EQ Y +e+CV",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 1.29534
+        },
+        {
+          "ref_id": 4,
+          "factor": 1.0
+        },
+        {
+          "ref_id": 6,
+          "factor": 0.3
+        },
+        {
+          "ref_id": 2,
+          "factor": 1.0
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "1.29534CM+Eh:EQ X +e-0.3Eh:EQ Y +e+CV",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 1.29534
+        },
+        {
+          "ref_id": 4,
+          "factor": 1.0
+        },
+        {
+          "ref_id": 6,
+          "factor": -0.3
+        },
+        {
+          "ref_id": 2,
+          "factor": 1.0
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "1.29534CM-Eh:EQ X +e+0.3Eh:EQ Y +e+CV",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 1.29534
+        },
+        {
+          "ref_id": 4,
+          "factor": -1.0
+        },
+        {
+          "ref_id": 6,
+          "factor": 0.3
+        },
+        {
+          "ref_id": 2,
+          "factor": 1.0
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "name": "1.29534CM-Eh:EQ X +e-0.3Eh:EQ Y +e+CV",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 1.29534
+        },
+        {
+          "ref_id": 4,
+          "factor": -1.0
+        },
+        {
+          "ref_id": 6,
+          "factor": -0.3
+        },
+        {
+          "ref_id": 2,
+          "factor": 1.0
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "name": "1.29534CM+Eh:EQ X +e+0.3Eh:EQ Y -e+CV",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 1.29534
+        },
+        {
+          "ref_id": 4,
+          "factor": 1.0
+        },
+        {
+          "ref_id": 7,
+          "factor": 0.3
+        },
+        {
+          "ref_id": 2,
+          "factor": 1.0
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "name": "1.29534CM+Eh:EQ X +e-0.3Eh:EQ Y -e+CV",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 1.29534
+        },
+        {
+          "ref_id": 4,
+          "factor": 1.0
+        },
+        {
+          "ref_id": 7,
+          "factor": -0.3
+        },
+        {
+          "ref_id": 2,
+          "factor": 1.0
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "name": "1.29534CM-Eh:EQ X +e+0.3Eh:EQ Y -e+CV",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 1.29534
+        },
+        {
+          "ref_id": 4,
+          "factor": -1.0
+        },
+        {
+          "ref_id": 7,
+          "factor": 0.3
+        },
+        {
+          "ref_id": 2,
+          "factor": 1.0
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "name": "1.29534CM-Eh:EQ X +e-0.3Eh:EQ Y -e+CV",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 1.29534
+        },
+        {
+          "ref_id": 4,
+          "factor": -1.0
+        },
+        {
+          "ref_id": 7,
+          "factor": -0.3
+        },
+        {
+          "ref_id": 2,
+          "factor": 1.0
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "name": "1.29534CM+Eh:EQ X -e+0.3Eh:EQ Y +e+CV",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 1.29534
+        },
+        {
+          "ref_id": 5,
+          "factor": 1.0
+        },
+        {
+          "ref_id": 6,
+          "factor": 0.3
+        },
+        {
+          "ref_id": 2,
+          "factor": 1.0
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "name": "1.29534CM+Eh:EQ X -e-0.3Eh:EQ Y +e+CV",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 1.29534
+        },
+        {
+          "ref_id": 5,
+          "factor": 1.0
+        },
+        {
+          "ref_id": 6,
+          "factor": -0.3
+        },
+        {
+          "ref_id": 2,
+          "factor": 1.0
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "name": "1.29534CM-Eh:EQ X -e+0.3Eh:EQ Y +e+CV",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 1.29534
+        },
+        {
+          "ref_id": 5,
+          "factor": -1.0
+        },
+        {
+          "ref_id": 6,
+          "factor": 0.3
+        },
+        {
+          "ref_id": 2,
+          "factor": 1.0
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "name": "1.29534CM-Eh:EQ X -e-0.3Eh:EQ Y +e+CV",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 1.29534
+        },
+        {
+          "ref_id": 5,
+          "factor": -1.0
+        },
+        {
+          "ref_id": 6,
+          "factor": -0.3
+        },
+        {
+          "ref_id": 2,
+          "factor": 1.0
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "name": "1.29534CM+Eh:EQ X -e+0.3Eh:EQ Y -e+CV",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 1.29534
+        },
+        {
+          "ref_id": 5,
+          "factor": 1.0
+        },
+        {
+          "ref_id": 7,
+          "factor": 0.3
+        },
+        {
+          "ref_id": 2,
+          "factor": 1.0
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "name": "1.29534CM+Eh:EQ X -e-0.3Eh:EQ Y -e+CV",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 1.29534
+        },
+        {
+          "ref_id": 5,
+          "factor": 1.0
+        },
+        {
+          "ref_id": 7,
+          "factor": -0.3
+        },
+        {
+          "ref_id": 2,
+          "factor": 1.0
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "name": "1.29534CM-Eh:EQ X -e+0.3Eh:EQ Y -e+CV",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 1.29534
+        },
+        {
+          "ref_id": 5,
+          "factor": -1.0
+        },
+        {
+          "ref_id": 7,
+          "factor": 0.3
+        },
+        {
+          "ref_id": 2,
+          "factor": 1.0
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "name": "1.29534CM-Eh:EQ X -e-0.3Eh:EQ Y -e+CV",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 1.29534
+        },
+        {
+          "ref_id": 5,
+          "factor": -1.0
+        },
+        {
+          "ref_id": 7,
+          "factor": -0.3
+        },
+        {
+          "ref_id": 2,
+          "factor": 1.0
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "name": "1.29534CM+Eh:EQ Y +e+0.3Eh:EQ X +e+CV",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 1.29534
+        },
+        {
+          "ref_id": 6,
+          "factor": 1.0
+        },
+        {
+          "ref_id": 4,
+          "factor": 0.3
+        },
+        {
+          "ref_id": 2,
+          "factor": 1.0
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "name": "1.29534CM+Eh:EQ Y +e-0.3Eh:EQ X +e+CV",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 1.29534
+        },
+        {
+          "ref_id": 6,
+          "factor": 1.0
+        },
+        {
+          "ref_id": 4,
+          "factor": -0.3
+        },
+        {
+          "ref_id": 2,
+          "factor": 1.0
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "name": "1.29534CM-Eh:EQ Y +e+0.3Eh:EQ X +e+CV",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 1.29534
+        },
+        {
+          "ref_id": 6,
+          "factor": -1.0
+        },
+        {
+          "ref_id": 4,
+          "factor": 0.3
+        },
+        {
+          "ref_id": 2,
+          "factor": 1.0
+        }
+      ]
+    },
+    {
+      "id": 23,
+      "name": "1.29534CM-Eh:EQ Y +e-0.3Eh:EQ X +e+CV",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 1.29534
+        },
+        {
+          "ref_id": 6,
+          "factor": -1.0
+        },
+        {
+          "ref_id": 4,
+          "factor": -0.3
+        },
+        {
+          "ref_id": 2,
+          "factor": 1.0
+        }
+      ]
+    },
+    {
+      "id": 24,
+      "name": "1.29534CM+Eh:EQ Y +e+0.3Eh:EQ X -e+CV",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 1.29534
+        },
+        {
+          "ref_id": 6,
+          "factor": 1.0
+        },
+        {
+          "ref_id": 5,
+          "factor": 0.3
+        },
+        {
+          "ref_id": 2,
+          "factor": 1.0
+        }
+      ]
+    },
+    {
+      "id": 25,
+      "name": "1.29534CM+Eh:EQ Y +e-0.3Eh:EQ X -e+CV",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 1.29534
+        },
+        {
+          "ref_id": 6,
+          "factor": 1.0
+        },
+        {
+          "ref_id": 5,
+          "factor": -0.3
+        },
+        {
+          "ref_id": 2,
+          "factor": 1.0
+        }
+      ]
+    },
+    {
+      "id": 26,
+      "name": "1.29534CM-Eh:EQ Y +e+0.3Eh:EQ X -e+CV",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 1.29534
+        },
+        {
+          "ref_id": 6,
+          "factor": -1.0
+        },
+        {
+          "ref_id": 5,
+          "factor": 0.3
+        },
+        {
+          "ref_id": 2,
+          "factor": 1.0
+        }
+      ]
+    },
+    {
+      "id": 27,
+      "name": "1.29534CM-Eh:EQ Y +e-0.3Eh:EQ X -e+CV",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 1.29534
+        },
+        {
+          "ref_id": 6,
+          "factor": -1.0
+        },
+        {
+          "ref_id": 5,
+          "factor": -0.3
+        },
+        {
+          "ref_id": 2,
+          "factor": 1.0
+        }
+      ]
+    },
+    {
+      "id": 28,
+      "name": "1.29534CM+Eh:EQ Y -e+0.3Eh:EQ X +e+CV",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 1.29534
+        },
+        {
+          "ref_id": 7,
+          "factor": 1.0
+        },
+        {
+          "ref_id": 4,
+          "factor": 0.3
+        },
+        {
+          "ref_id": 2,
+          "factor": 1.0
+        }
+      ]
+    },
+    {
+      "id": 29,
+      "name": "1.29534CM+Eh:EQ Y -e-0.3Eh:EQ X +e+CV",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 1.29534
+        },
+        {
+          "ref_id": 7,
+          "factor": 1.0
+        },
+        {
+          "ref_id": 4,
+          "factor": -0.3
+        },
+        {
+          "ref_id": 2,
+          "factor": 1.0
+        }
+      ]
+    },
+    {
+      "id": 30,
+      "name": "1.29534CM-Eh:EQ Y -e+0.3Eh:EQ X +e+CV",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 1.29534
+        },
+        {
+          "ref_id": 7,
+          "factor": -1.0
+        },
+        {
+          "ref_id": 4,
+          "factor": 0.3
+        },
+        {
+          "ref_id": 2,
+          "factor": 1.0
+        }
+      ]
+    },
+    {
+      "id": 31,
+      "name": "1.29534CM-Eh:EQ Y -e-0.3Eh:EQ X +e+CV",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 1.29534
+        },
+        {
+          "ref_id": 7,
+          "factor": -1.0
+        },
+        {
+          "ref_id": 4,
+          "factor": -0.3
+        },
+        {
+          "ref_id": 2,
+          "factor": 1.0
+        }
+      ]
+    },
+    {
+      "id": 32,
+      "name": "1.29534CM+Eh:EQ Y -e+0.3Eh:EQ X -e+CV",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 1.29534
+        },
+        {
+          "ref_id": 7,
+          "factor": 1.0
+        },
+        {
+          "ref_id": 5,
+          "factor": 0.3
+        },
+        {
+          "ref_id": 2,
+          "factor": 1.0
+        }
+      ]
+    },
+    {
+      "id": 33,
+      "name": "1.29534CM+Eh:EQ Y -e-0.3Eh:EQ X -e+CV",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 1.29534
+        },
+        {
+          "ref_id": 7,
+          "factor": 1.0
+        },
+        {
+          "ref_id": 5,
+          "factor": -0.3
+        },
+        {
+          "ref_id": 2,
+          "factor": 1.0
+        }
+      ]
+    },
+    {
+      "id": 34,
+      "name": "1.29534CM-Eh:EQ Y -e+0.3Eh:EQ X -e+CV",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 1.29534
+        },
+        {
+          "ref_id": 7,
+          "factor": -1.0
+        },
+        {
+          "ref_id": 5,
+          "factor": 0.3
+        },
+        {
+          "ref_id": 2,
+          "factor": 1.0
+        }
+      ]
+    },
+    {
+      "id": 35,
+      "name": "1.29534CM-Eh:EQ Y -e-0.3Eh:EQ X -e+CV",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 1.29534
+        },
+        {
+          "ref_id": 7,
+          "factor": -1.0
+        },
+        {
+          "ref_id": 5,
+          "factor": -0.3
+        },
+        {
+          "ref_id": 2,
+          "factor": 1.0
+        }
+      ]
+    },
+    {
+      "id": 36,
+      "name": "0.80466CM+Eh:EQ X +e+0.3Eh:EQ Y +e",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 0.80466
+        },
+        {
+          "ref_id": 4,
+          "factor": 1.0
+        },
+        {
+          "ref_id": 6,
+          "factor": 0.3
+        }
+      ]
+    },
+    {
+      "id": 37,
+      "name": "0.80466CM+Eh:EQ X +e-0.3Eh:EQ Y +e",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 0.80466
+        },
+        {
+          "ref_id": 4,
+          "factor": 1.0
+        },
+        {
+          "ref_id": 6,
+          "factor": -0.3
+        }
+      ]
+    },
+    {
+      "id": 38,
+      "name": "0.80466CM-Eh:EQ X +e+0.3Eh:EQ Y +e",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 0.80466
+        },
+        {
+          "ref_id": 4,
+          "factor": -1.0
+        },
+        {
+          "ref_id": 6,
+          "factor": 0.3
+        }
+      ]
+    },
+    {
+      "id": 39,
+      "name": "0.80466CM-Eh:EQ X +e-0.3Eh:EQ Y +e",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 0.80466
+        },
+        {
+          "ref_id": 4,
+          "factor": -1.0
+        },
+        {
+          "ref_id": 6,
+          "factor": -0.3
+        }
+      ]
+    },
+    {
+      "id": 40,
+      "name": "0.80466CM+Eh:EQ X +e+0.3Eh:EQ Y -e",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 0.80466
+        },
+        {
+          "ref_id": 4,
+          "factor": 1.0
+        },
+        {
+          "ref_id": 7,
+          "factor": 0.3
+        }
+      ]
+    },
+    {
+      "id": 41,
+      "name": "0.80466CM+Eh:EQ X +e-0.3Eh:EQ Y -e",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 0.80466
+        },
+        {
+          "ref_id": 4,
+          "factor": 1.0
+        },
+        {
+          "ref_id": 7,
+          "factor": -0.3
+        }
+      ]
+    },
+    {
+      "id": 42,
+      "name": "0.80466CM-Eh:EQ X +e+0.3Eh:EQ Y -e",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 0.80466
+        },
+        {
+          "ref_id": 4,
+          "factor": -1.0
+        },
+        {
+          "ref_id": 7,
+          "factor": 0.3
+        }
+      ]
+    },
+    {
+      "id": 43,
+      "name": "0.80466CM-Eh:EQ X +e-0.3Eh:EQ Y -e",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 0.80466
+        },
+        {
+          "ref_id": 4,
+          "factor": -1.0
+        },
+        {
+          "ref_id": 7,
+          "factor": -0.3
+        }
+      ]
+    },
+    {
+      "id": 44,
+      "name": "0.80466CM+Eh:EQ X -e+0.3Eh:EQ Y +e",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 0.80466
+        },
+        {
+          "ref_id": 5,
+          "factor": 1.0
+        },
+        {
+          "ref_id": 6,
+          "factor": 0.3
+        }
+      ]
+    },
+    {
+      "id": 45,
+      "name": "0.80466CM+Eh:EQ X -e-0.3Eh:EQ Y +e",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 0.80466
+        },
+        {
+          "ref_id": 5,
+          "factor": 1.0
+        },
+        {
+          "ref_id": 6,
+          "factor": -0.3
+        }
+      ]
+    },
+    {
+      "id": 46,
+      "name": "0.80466CM-Eh:EQ X -e+0.3Eh:EQ Y +e",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 0.80466
+        },
+        {
+          "ref_id": 5,
+          "factor": -1.0
+        },
+        {
+          "ref_id": 6,
+          "factor": 0.3
+        }
+      ]
+    },
+    {
+      "id": 47,
+      "name": "0.80466CM-Eh:EQ X -e-0.3Eh:EQ Y +e",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 0.80466
+        },
+        {
+          "ref_id": 5,
+          "factor": -1.0
+        },
+        {
+          "ref_id": 6,
+          "factor": -0.3
+        }
+      ]
+    },
+    {
+      "id": 48,
+      "name": "0.80466CM+Eh:EQ X -e+0.3Eh:EQ Y -e",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 0.80466
+        },
+        {
+          "ref_id": 5,
+          "factor": 1.0
+        },
+        {
+          "ref_id": 7,
+          "factor": 0.3
+        }
+      ]
+    },
+    {
+      "id": 49,
+      "name": "0.80466CM+Eh:EQ X -e-0.3Eh:EQ Y -e",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 0.80466
+        },
+        {
+          "ref_id": 5,
+          "factor": 1.0
+        },
+        {
+          "ref_id": 7,
+          "factor": -0.3
+        }
+      ]
+    },
+    {
+      "id": 50,
+      "name": "0.80466CM-Eh:EQ X -e+0.3Eh:EQ Y -e",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 0.80466
+        },
+        {
+          "ref_id": 5,
+          "factor": -1.0
+        },
+        {
+          "ref_id": 7,
+          "factor": 0.3
+        }
+      ]
+    },
+    {
+      "id": 51,
+      "name": "0.80466CM-Eh:EQ X -e-0.3Eh:EQ Y -e",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 0.80466
+        },
+        {
+          "ref_id": 5,
+          "factor": -1.0
+        },
+        {
+          "ref_id": 7,
+          "factor": -0.3
+        }
+      ]
+    },
+    {
+      "id": 52,
+      "name": "0.80466CM+Eh:EQ Y +e+0.3Eh:EQ X +e",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 0.80466
+        },
+        {
+          "ref_id": 6,
+          "factor": 1.0
+        },
+        {
+          "ref_id": 4,
+          "factor": 0.3
+        }
+      ]
+    },
+    {
+      "id": 53,
+      "name": "0.80466CM+Eh:EQ Y +e-0.3Eh:EQ X +e",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 0.80466
+        },
+        {
+          "ref_id": 6,
+          "factor": 1.0
+        },
+        {
+          "ref_id": 4,
+          "factor": -0.3
+        }
+      ]
+    },
+    {
+      "id": 54,
+      "name": "0.80466CM-Eh:EQ Y +e+0.3Eh:EQ X +e",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 0.80466
+        },
+        {
+          "ref_id": 6,
+          "factor": -1.0
+        },
+        {
+          "ref_id": 4,
+          "factor": 0.3
+        }
+      ]
+    },
+    {
+      "id": 55,
+      "name": "0.80466CM-Eh:EQ Y +e-0.3Eh:EQ X +e",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 0.80466
+        },
+        {
+          "ref_id": 6,
+          "factor": -1.0
+        },
+        {
+          "ref_id": 4,
+          "factor": -0.3
+        }
+      ]
+    },
+    {
+      "id": 56,
+      "name": "0.80466CM+Eh:EQ Y +e+0.3Eh:EQ X -e",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 0.80466
+        },
+        {
+          "ref_id": 6,
+          "factor": 1.0
+        },
+        {
+          "ref_id": 5,
+          "factor": 0.3
+        }
+      ]
+    },
+    {
+      "id": 57,
+      "name": "0.80466CM+Eh:EQ Y +e-0.3Eh:EQ X -e",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 0.80466
+        },
+        {
+          "ref_id": 6,
+          "factor": 1.0
+        },
+        {
+          "ref_id": 5,
+          "factor": -0.3
+        }
+      ]
+    },
+    {
+      "id": 58,
+      "name": "0.80466CM-Eh:EQ Y +e+0.3Eh:EQ X -e",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 0.80466
+        },
+        {
+          "ref_id": 6,
+          "factor": -1.0
+        },
+        {
+          "ref_id": 5,
+          "factor": 0.3
+        }
+      ]
+    },
+    {
+      "id": 59,
+      "name": "0.80466CM-Eh:EQ Y +e-0.3Eh:EQ X -e",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 0.80466
+        },
+        {
+          "ref_id": 6,
+          "factor": -1.0
+        },
+        {
+          "ref_id": 5,
+          "factor": -0.3
+        }
+      ]
+    },
+    {
+      "id": 60,
+      "name": "0.80466CM+Eh:EQ Y -e+0.3Eh:EQ X +e",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 0.80466
+        },
+        {
+          "ref_id": 7,
+          "factor": 1.0
+        },
+        {
+          "ref_id": 4,
+          "factor": 0.3
+        }
+      ]
+    },
+    {
+      "id": 61,
+      "name": "0.80466CM+Eh:EQ Y -e-0.3Eh:EQ X +e",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 0.80466
+        },
+        {
+          "ref_id": 7,
+          "factor": 1.0
+        },
+        {
+          "ref_id": 4,
+          "factor": -0.3
+        }
+      ]
+    },
+    {
+      "id": 62,
+      "name": "0.80466CM-Eh:EQ Y -e+0.3Eh:EQ X +e",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 0.80466
+        },
+        {
+          "ref_id": 7,
+          "factor": -1.0
+        },
+        {
+          "ref_id": 4,
+          "factor": 0.3
+        }
+      ]
+    },
+    {
+      "id": 63,
+      "name": "0.80466CM-Eh:EQ Y -e-0.3Eh:EQ X +e",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 0.80466
+        },
+        {
+          "ref_id": 7,
+          "factor": -1.0
+        },
+        {
+          "ref_id": 4,
+          "factor": -0.3
+        }
+      ]
+    },
+    {
+      "id": 64,
+      "name": "0.80466CM+Eh:EQ Y -e+0.3Eh:EQ X -e",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 0.80466
+        },
+        {
+          "ref_id": 7,
+          "factor": 1.0
+        },
+        {
+          "ref_id": 5,
+          "factor": 0.3
+        }
+      ]
+    },
+    {
+      "id": 65,
+      "name": "0.80466CM+Eh:EQ Y -e-0.3Eh:EQ X -e",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 0.80466
+        },
+        {
+          "ref_id": 7,
+          "factor": 1.0
+        },
+        {
+          "ref_id": 5,
+          "factor": -0.3
+        }
+      ]
+    },
+    {
+      "id": 66,
+      "name": "0.80466CM-Eh:EQ Y -e+0.3Eh:EQ X -e",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 0.80466
+        },
+        {
+          "ref_id": 7,
+          "factor": -1.0
+        },
+        {
+          "ref_id": 5,
+          "factor": 0.3
+        }
+      ]
+    },
+    {
+      "id": 67,
+      "name": "0.80466CM-Eh:EQ Y -e-0.3Eh:EQ X -e",
+      "combination_type": "LinearAdd",
+      "terms": [
+        {
+          "ref_id": 1,
+          "factor": 0.80466
+        },
+        {
+          "ref_id": 7,
+          "factor": -1.0
+        },
+        {
+          "ref_id": 5,
+          "factor": -0.3
+        }
+      ]
+    },
+    {
+      "id": 68,
+      "name": "NSCM LRFD envelope",
+      "combination_type": "Envelope",
+      "terms": [
+        {
+          "source": "combination",
+          "ref_id": 1,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 2,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 3,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 4,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 5,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 6,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 7,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 8,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 9,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 10,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 11,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 12,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 13,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 14,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 15,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 16,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 17,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 18,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 19,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 20,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 21,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 22,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 23,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 24,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 25,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 26,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 27,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 28,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 29,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 30,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 31,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 32,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 33,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 34,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 35,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 36,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 37,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 38,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 39,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 40,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 41,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 42,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 43,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 44,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 45,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 46,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 47,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 48,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 49,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 50,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 51,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 52,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 53,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 54,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 55,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 56,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 57,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 58,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 59,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 60,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 61,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 62,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 63,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 64,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 65,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 66,
+          "factor": 1.0
+        },
+        {
+          "source": "combination",
+          "ref_id": 67,
+          "factor": 1.0
+        }
+      ]
+    }
+  ],
+  "groups": [
+    {
+      "id": 1,
+      "name": "Building columns",
+      "node_ids": [],
+      "element_ids": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54,
+        55,
+        56,
+        81,
+        82,
+        83,
+        84,
+        85,
+        86,
+        87,
+        88,
+        89,
+        90,
+        91,
+        92,
+        93,
+        94,
+        95,
+        96
+      ],
+      "colour": "#4363d8"
+    },
+    {
+      "id": 2,
+      "name": "Beams along X",
+      "node_ids": [],
+      "element_ids": [
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        57,
+        58,
+        59,
+        60,
+        61,
+        62,
+        63,
+        64,
+        65,
+        66,
+        67,
+        68,
+        97,
+        98,
+        99,
+        100,
+        101,
+        102,
+        103,
+        104,
+        105,
+        106,
+        107,
+        108
+      ],
+      "colour": "#e6194b"
+    },
+    {
+      "id": 3,
+      "name": "Beams along Y",
+      "node_ids": [],
+      "element_ids": [
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        69,
+        70,
+        71,
+        72,
+        73,
+        74,
+        75,
+        76,
+        77,
+        78,
+        79,
+        80,
+        109,
+        110,
+        111,
+        112,
+        113,
+        114,
+        115,
+        116,
+        117,
+        118,
+        119,
+        120
+      ],
+      "colour": "#f58231"
+    }
+  ]
+}
