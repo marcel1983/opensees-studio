@@ -42,6 +42,7 @@ DECLARED = {
     "assign.insertion": "_act_assign_insertion",
     "assign.modifiers": "_act_assign_modifiers",
     "assign.auto_mesh": "_act_assign_auto_mesh",
+    "assign.tension_only": "_act_tension_only",
     "assign.hinge": "_act_assign_hinge",
     "assign.wall": "_act_assign_wall",
     "assign.pile": "_act_assign_pile",
@@ -160,6 +161,24 @@ def test_auto_mesh_takes_frames_and_trusses(qtbot, monkeypatch) -> None:  # type
     assert asked == [("2 member(s):", 0)]
     assert [vm.project.element(i).auto_mesh for i in (1, 2)] == [False, False]
     assert vm.undo_stack.count() == 1
+
+
+def test_tension_only_takes_the_elastic_frames_only(qtbot, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    controller, vm, _log = _controller(qtbot, {1, 2})
+    asked: list[tuple[str, int]] = []
+
+    def get_item(_parent, _title, label, items, current, _editable):  # type: ignore[no-untyped-def]
+        asked.append((label, current))
+        return items[1], True
+
+    monkeypatch.setattr(QInputDialog, "getItem", get_item)
+    controller.assign_tension_only()
+    assert asked == [("1 member(s):", 0)]  # the truss is left out
+    assert vm.project.element(1).tension_only
+    assert "tension_only" in vm.project.element(1).model_dump()
+    assert vm.undo_stack.count() == 1
+    vm.undo_stack.undo()
+    assert "tension_only" not in vm.project.element(1).model_dump()  # the default is not saved
 
 
 def test_a_cancelled_dialog_is_not_an_undo_step(qtbot, monkeypatch) -> None:  # type: ignore[no-untyped-def]

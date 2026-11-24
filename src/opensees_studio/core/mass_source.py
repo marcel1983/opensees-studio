@@ -117,8 +117,8 @@ def self_weight_per_node(project: Project, multiplier: float = 1.0) -> dict[int,
     out: dict[int, float] = {}
     for element in project.elements:
         w = weight_per_length(project, element)
-        if not w or len(element.nodes) != 2:
-            continue
+        if not w or len(element.nodes) != 2 or getattr(element, "tension_only", False):
+            continue  # a tension-only frame is weighed with the trusses, below
         i, j = element.nodes
         half = 0.5 * w * multiplier * float(np.linalg.norm(coords[j] - coords[i]))
         out[i] = out.get(i, 0.0) + half

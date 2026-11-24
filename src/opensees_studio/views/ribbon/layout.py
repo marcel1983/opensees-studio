@@ -234,6 +234,7 @@ RIBBON_LAYOUT: tuple[tuple[str, str, tuple[tuple[str, tuple[str, ...]], ...]], .
                     "_act_assign_insertion",
                     "_act_assign_modifiers",
                     "_act_assign_auto_mesh",
+                    "_act_tension_only",
                 ),
             ),
             (

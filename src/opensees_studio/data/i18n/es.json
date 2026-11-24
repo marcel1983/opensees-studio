@@ -2473,5 +2473,12 @@
  "The floor live load in the seismic weight cannot exceed the floor live load": "La carga viva de entrepiso en el peso sísmico no puede superar la carga viva de entrepiso",
  "The roof live load in the seismic weight cannot exceed the roof live load": "La carga viva de techo en el peso sísmico no puede superar la carga viva de techo",
  "Opens Define → Section Library to add shapes of the AISC library, cold-formed profiles or sections of your own; they are then offered here": "Abre Definir → Biblioteca de secciones para agregar perfiles de la biblioteca AISC, perfiles formados en frío o secciones propias; después se ofrecen en esta página",
- "(unnamed)": "(sin nombre)"
+ "(unnamed)": "(sin nombre)",
+ "Braces work in tension only": "Arriostres y tensores trabajan solo a tensión",
+ "Rods and slender angles buckle at once in compression: each X then holds with the diagonal the load stretches. The braces become tension-only members, and each load combination is analysed as a case of its own (Newton iteration), because which diagonal works depends on the whole load. Untick for braces that also take compression": "Las varillas y los ángulos esbeltos pandean enseguida en compresión: cada X trabaja entonces con la diagonal que la carga estira. Los arriostres pasan a ser barras solo a tensión, y cada combinación de cargas se analiza como un caso propio (iteración de Newton), porque qué diagonal trabaja depende de la carga completa. Desmarcalo para arriostres que también toman compresión",
+ "Tension Only": "Solo tensión",
+ "{n} member(s)": "{n} barra(s)",
+ "Select one or more elastic frame elements first": "Seleccione primero una o más barras elásticas",
+ "Frame member (tension and compression)": "Barra (tensión y compresión)",
+ "Tension only (a truss that goes slack in compression)": "Solo tensión (una barra articulada que se afloja en compresión)"
 }

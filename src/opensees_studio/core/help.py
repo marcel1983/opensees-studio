@@ -400,6 +400,7 @@ ACTION_TOPICS: dict[str, str] = {
     "_act_clear_results": "analyze.clear_results",
     "_act_auto_mesh_frames": "analyze.auto_mesh",
     "_act_assign_auto_mesh": "analyze.auto_mesh",
+    "_act_tension_only": "assign.tension_only",
     "_act_check_stability": "analyze.stability",
     "_act_cancel_stability": "analyze.stability",
     # ── Display ─────────────────────────────────────────────────────

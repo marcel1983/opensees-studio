@@ -258,6 +258,13 @@ These are non-obvious things that are easy to break if you don't know:
   method (`window.geometry` would replace `QWidget.geometry()`):
   `tests/gui/test_action_registry.py` checks it, hence `model_tools`.
   The rest of the window is being moved out the same way.
+- A frame member with `tension_only` is not a frame in OpenSees: its plan
+  (`services.frame_members.TensionOnlyBar`) emits `element truss` on its own
+  `uniaxialMaterial Elastic E 0 E*1e-6`, so no releases, offsets or loads along
+  it (its self weight is nodal, `core.self_weight`; the runner refuses the rest),
+  and the runner switches a Linear static case to Newton. Combinations of such a
+  model do not superpose: `core.combination_cases` turns each one into its own
+  static case (the warehouse plan does when its braces are tension only).
 - What a material, section or element sends to OpenSees is its emitter
   (`services/material_emitters.py`, `section_emitters.py`,
   `element_emitters.py`, registered by type or class); a new kind is an

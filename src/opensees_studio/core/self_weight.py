@@ -120,7 +120,7 @@ def self_weight_loads(
         if element_ids is not None and element.id not in element_ids:
             continue
         w = weight_per_length(project, element) * multiplier
-        if w == 0.0 or len(element.nodes) != 2:
+        if w == 0.0 or len(element.nodes) != 2 or getattr(element, "tension_only", False):
             continue
         axes = frame_local_axes(
             project.ndm,
@@ -158,8 +158,9 @@ def nodal_self_weight_loads(
 ) -> dict[int, np.ndarray]:
     """Node id -> global force (Fx, Fy, Fz) of the weight carried as nodal loads, summed.
 
-    The shells (consistent nodal forces) and the truss bars (half to each end):
-    the members a ``-beamUniform`` load cannot reach. ``element_ids`` limits it to
+    The shells (consistent nodal forces), the truss bars and the tension-only
+    frames, which run as truss bars (half to each end): the members a
+    ``-beamUniform`` load cannot reach. ``element_ids`` limits it to
     those elements, as in :func:`self_weight_loads`.
     """
     if multiplier == 0.0:
@@ -181,6 +182,8 @@ def nodal_self_weight_loads(
                 add(node_id, q * share)
             continue
         w = truss_weight_per_length(element) * multiplier
+        if getattr(element, "tension_only", False):
+            w = weight_per_length(project, element) * multiplier
         if w != 0.0:
             i, j = element.nodes[0], element.nodes[-1]
             half = 0.5 * w * float(np.linalg.norm(coords[j] - coords[i]))

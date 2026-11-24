@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import itertools
 import math
 
@@ -551,3 +552,36 @@ def test_run_s_auto_mesh_leaves_purlins_girts_and_braces_whole(roof_structure: s
     for element in project.elements:
         element.auto_mesh = True
     assert not pre_run_auto_mesh(project).is_empty
+
+
+def test_tension_only_braces_analyse_each_combination_as_a_case() -> None:
+    from opensees_studio.core.warehouse import BRACING_GROUPS, CASE_SYSTEM
+
+    project = _project()
+    spec = WarehouseSpec(
+        span=12.0, eave_height=5.0, frame_spacing=6.0, n_frames=3, tension_only_braces=True
+    )
+    linear = plan_warehouse(
+        project, dataclasses.replace(spec, tension_only_braces=False), loads=_loads(project)
+    )
+    plan = plan_warehouse(project, spec, loads=_loads(project))
+
+    braces = {eid for g in BRACING_GROUPS for eid in plan.warehouse.members[g]}
+    assert {e.id for e in plan.warehouse.elements if e.tension_only} == braces
+    assert not any(e.tension_only for e in linear.warehouse.elements)
+    sums = [c for c in linear.combinations if c.combination_type == "LinearAdd"]
+    added = plan.cases[len(linear.cases) :]
+    assert [c.name for c in added] == [f"Comb: {c.name}" for c in sums]
+    assert all(c.system == CASE_SYSTEM and c.algorithm == "Newton" for c in added)
+    assert [c.name for c in plan.combinations] == [c.name for c in linear.combinations]
+    assert any("tension only" in note for note in plan.notes)
+    plan.apply(project)
+    project.validate_references()
+
+    # Without bracing there is nothing to iterate on: the combinations stay sums.
+    bare = plan_warehouse(
+        _project(),
+        dataclasses.replace(spec, roof_bracing=False, wall_bracing=False),
+        loads=_loads(project),
+    )
+    assert not any(c.name.startswith("Comb: ") for c in bare.cases)

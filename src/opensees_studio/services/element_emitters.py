@@ -120,8 +120,13 @@ def _corot_truss(el: CorotTrussElement, ctx: ElementContext) -> None:
 # ─────────────────────── frames ───────────────────────
 @element_emitter(ElasticBeamColumn)
 def _elastic_beam_column(el: ElasticBeamColumn, ctx: ElementContext) -> None:
-    tag = ctx.transf_tags[el.id]
     member = ctx.frame_plan.members.get(el.id)
+    if member is not None and member.tension_only is not None:
+        bar = member.tension_only
+        ctx.ops.uniaxialMaterial("Elastic", bar.material_tag, bar.E, 0.0, bar.e_negative)
+        ctx.ops.element("truss", el.id, *el.nodes, bar.A, bar.material_tag, "-rho", bar.rho)
+        return
+    tag = ctx.transf_tags[el.id]
     rho = member.rho if member is not None and member.rho is not None else el.rho
     ebc_args: list[Any] = [ctx.frame_section(el), tag, "-mass", rho]
     if el.consistent_mass:

@@ -117,6 +117,17 @@ Mesh), so Run does not cut the two diagonals of an X where they cross, nor a
 purlin or girt where a diagonal passes over it. A purlin spans from rafter to
 rafter and a brace from corner to corner.
 
+**Braces work in tension only** (ticked by default) is for rods and slender
+angles, which buckle as soon as they are pushed: each X then holds with the
+diagonal the load stretches. The braces become tension-only members (Assign →
+Frame → Tension Only), and since which diagonal works depends on the whole load,
+the results of separate cases cannot be added: **each combination is analysed
+as a case of its own**, named "Comb: " and the combination's name, under its
+factored patterns, by Newton iteration. The combinations keep their names and
+each one reads its case, so the envelopes and the steel check work as before.
+Untick it for braces that also take compression (the two diagonals of an X then
+share the load and the combinations add the cases).
+
 # Sections
 One section per kind of member. Choose one the project has, or let the wizard
 create the default. **Section Library…** opens Define → Section Library over the
@@ -343,7 +354,5 @@ of the snow that ASCE 7-16 12.7.2 counts as seismic weight.
 
 # Not included yet
 Haunches, and trusses with a Warren web without
-verticals. The X braces are modelled as bars that also take compression:
-the steel check reports the compressed diagonal of each X, which in a
-tension-only bracing is ignored. RNC-07 Art. 11 also asks
+verticals. RNC-07 Art. 11 also asks
 each purlin for 100 kg at mid-span: check the purlins for it separately.

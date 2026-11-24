@@ -85,6 +85,12 @@ ASSIGN_ACTIONS: tuple[ActionSpec, ...] = (
     _member("insertion", "I&nsertion Point…"),
     _member("modifiers", "Property M&odifiers…"),
     _member("auto_mesh", "&Auto Mesh…"),
+    ActionSpec(
+        "assign.tension_only",
+        "&Tension Only…",
+        "members.assign_tension_only",
+        needs=_ELEMENTS,
+    ),
     # What turns a member into something else.
     _member("hinge", "Plastic &Hinge…"),
     _member("wall", "RC &Wall (MVLEM)…"),
