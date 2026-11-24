@@ -249,3 +249,23 @@ that all required pieces exist before a run can be requested:
 
 Any deviation from this order is a runtime error in OpenSees. The runner
 asserts the order at the service boundary; the UI never has to think about it.
+
+### Emitters
+
+The runner orders the commands; what each object's command says is an emitter
+of its own, one module per kind:
+
+| Module | Registry | Dispatch |
+|---|---|---|
+| `services/material_emitters.py` (and `catalog_emitters.py` for the generated catalog) | `EMITTERS` | the material's `type` |
+| `services/section_emitters.py` | `SECTION_EMITTERS` | the section's class, first match in order |
+| `services/element_emitters.py` | `ELEMENT_EMITTERS` | the element's class, first match in order |
+
+A section emitter gets a `SectionContext` (`ops`, `ndm`, the torsion material
+an aggregator gives a fiber section); an element emitter gets an
+`ElementContext` (`ops`, the project, the frame plan of
+`services/frame_members.py` with its hidden release nodes and derived sections,
+and the `geomTransf` tag of each frame). Adding a section or an element type is
+an emitter registered with `@section_emitter(Cls)` or `@element_emitter(Cls)`:
+the runner does not change. `ops` is `openseespy.opensees`, the recorder of the
+script export, or a mock in a test, so an emitter only calls it.
