@@ -178,6 +178,7 @@ from opensees_studio.views.controllers.design import DesignController
 from opensees_studio.views.controllers.joints import JointsController
 from opensees_studio.views.controllers.loads import LoadsController
 from opensees_studio.views.controllers.members import MembersController
+from opensees_studio.views.controllers.patterns import PatternsController
 from opensees_studio.views.controllers.transforms import TransformsController
 from opensees_studio.views.dialogs import (
     AddNodeDialog,
@@ -192,22 +193,18 @@ from opensees_studio.views.dialogs import (
     FrictionLibraryDialog,
     GroundMotionsDialog,
     InfluenceLineDialog,
-    LinearTimeSeriesDialog,
     MaterialLibraryDialog,
     MaterialTesterDialog,
     MeshDialog,
     ModelCheckDialog,
     MoveDialog,
-    PathTimeSeriesDialog,
     PerformanceDialog,
-    PlainPatternDialog,
     ProjectInfoDialog,
     ReplicateDialog,
     RunAnalysisDialog,
     S3dImportDialog,
     SectionLibraryDialog,
     TclImportDialog,
-    UniformExcitationDialog,
     member_sections,
 )
 from opensees_studio.views.dialogs.batch_run import BatchRunDialog
@@ -448,6 +445,7 @@ class MainWindow(QMainWindow):
         #: Assign → Frame: section, material, formulation, frame member options.
         self.joints = JointsController(shell)
         self.members = MembersController(shell)
+        self.patterns = PatternsController(shell, new_project=self._on_new)
         #: Loads on joints, frames and areas, joint patterns, Edit → Delete Loads.
         self.loads = LoadsController(shell)
         #: The Design menu: basis, members, steel and concrete checks, connections, footings.
@@ -741,14 +739,6 @@ class MainWindow(QMainWindow):
         self._act_steel_deck = QAction("Steel Deck Sla&b Wizard…", self)
         self._act_mc2010 = QAction("Concrete Creep && Shrin&kage (fib MC2010)…", self)
         self._act_section_designer = QAction("Section &Designer…", self)
-        self._act_add_linear_ts = QAction("Add &Linear TimeSeries…", self)
-        self._act_add_path_ts = QAction("Add &Path TimeSeries…", self)
-        self._act_add_function_ts = QAction(
-            "Add &Function TimeSeries (Constant, Trig, Pulse…)…", self
-        )
-        self._act_add_multi_support = QAction("Add &Multi-Support Excitation…", self)
-        self._act_add_plain_pattern = QAction("Add &Plain Load Pattern…", self)
-        self._act_add_uniform_excitation = QAction("Add &Uniform Excitation…", self)
         self._act_load_combinations = QAction("Load &Combinations…", self)
 
         # Assign
@@ -1059,15 +1049,13 @@ class MainWindow(QMainWindow):
         )
         m_define.addSeparator()
         time_series_menu = m_define.addMenu("&Time Series")
-        time_series_menu.addAction(self._act_add_linear_ts)
-        time_series_menu.addAction(self._act_add_path_ts)
-        time_series_menu.addAction(self._act_add_function_ts)
-        self._act_constant_ts = time_series_menu.addAction(
-            "Add &Constant TimeSeries…", self._on_constant_ts
-        )
-        m_define.addAction(self._act_add_plain_pattern)
-        m_define.addAction(self._act_add_uniform_excitation)
-        m_define.addAction(self._act_add_multi_support)
+        time_series_menu.addAction(self.action("define.linear_ts"))
+        time_series_menu.addAction(self.action("define.path_ts"))
+        time_series_menu.addAction(self.action("define.function_ts"))
+        time_series_menu.addAction(self.action("define.constant_ts"))
+        m_define.addAction(self.action("define.plain_pattern"))
+        m_define.addAction(self.action("define.uniform_excitation"))
+        m_define.addAction(self.action("define.multi_support"))
         m_define.addSeparator()
         m_define.addAction(self._act_load_combinations)
         m_define.addSeparator()
@@ -1970,14 +1958,6 @@ class MainWindow(QMainWindow):
         self._act_steel_deck.triggered.connect(self._on_steel_deck)
         self._act_mc2010.triggered.connect(self._on_mc2010_concrete)
         self._act_section_designer.triggered.connect(self._on_section_designer)
-        self._act_add_linear_ts.triggered.connect(self._on_add_linear_ts)
-        self._act_add_path_ts.triggered.connect(self._on_add_path_ts)
-        self._act_add_function_ts.triggered.connect(self._on_add_function_ts)
-        self._act_add_multi_support.triggered.connect(self._on_add_multi_support)
-        self._act_add_plain_pattern.triggered.connect(self._on_add_plain_pattern)
-        self._act_add_uniform_excitation.triggered.connect(
-            self._on_add_uniform_excitation,
-        )
         self._act_load_combinations.triggered.connect(self._on_load_combinations)
 
         # Assign
@@ -4714,186 +4694,6 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, "Add Node failed", str(exc))
 
-    def _on_constant_ts(self) -> None:
-        if self._vm.project is None:
-            return
-        from opensees_studio.views.dialogs.constant_time_series import ConstantTimeSeriesDialog
-
-        ConstantTimeSeriesDialog(self._vm, self).exec()
-
-    def _on_add_linear_ts(self) -> None:
-        """Define → Add Linear TimeSeries…"""
-        from opensees_studio.commands import AddTimeSeriesCommand
-
-        if self._vm.project is None:
-            self._on_new()
-        proj = self._vm.project
-        assert proj is not None
-        dlg = LinearTimeSeriesDialog(
-            next_ts_id=proj.next_time_series_id(),
-            parent=self,
-        )
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            ts = dlg.time_series()
-            self._vm.apply_command(AddTimeSeriesCommand(self._vm, ts))
-            self._log(
-                f"Added LinearTimeSeries #{ts.id} '{ts.name}' (factor={ts.factor:g}).",
-            )
-        except Exception as exc:
-            QMessageBox.critical(self, "Add Linear TimeSeries failed", str(exc))
-
-    def _on_add_path_ts(self) -> None:
-        """Define → Add Path TimeSeries… — ground-motion import."""
-        from opensees_studio.commands import AddTimeSeriesCommand
-
-        if self._vm.project is None:
-            self._on_new()
-        proj = self._vm.project
-        assert proj is not None
-        dlg = PathTimeSeriesDialog(
-            next_ts_id=proj.next_time_series_id(),
-            parent=self,
-        )
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            ts = dlg.time_series()
-            self._vm.apply_command(AddTimeSeriesCommand(self._vm, ts))
-            self._log(
-                f"Added PathTimeSeries #{ts.id} '{ts.name}' "
-                f"({len(ts.values)} points, Δt={ts.dt:g} s, "
-                f"factor={ts.factor:g}).",
-            )
-        except Exception as exc:
-            QMessageBox.critical(self, "Add Path TimeSeries failed", str(exc))
-
-    def _on_add_plain_pattern(self) -> None:
-        """Define → Add Plain Load Pattern…"""
-        from opensees_studio.commands import AddLoadPatternCommand
-
-        if self._vm.project is None:
-            self._on_new()
-        proj = self._vm.project
-        assert proj is not None
-        if not proj.time_series:
-            QMessageBox.warning(
-                self,
-                "Add Plain Load Pattern",
-                "Define a TimeSeries first (Define → Add Linear TimeSeries… "
-                "or Define → Add Path TimeSeries…) so the pattern has a "
-                "time-series reference.",
-            )
-            return
-        dlg = PlainPatternDialog(
-            project=proj,
-            next_pattern_id=proj.next_pattern_id(),
-            parent=self,
-        )
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            pat = dlg.pattern()
-            self._vm.apply_command(AddLoadPatternCommand(self._vm, pat))
-            self._log(
-                f"Added PlainLoadPattern #{pat.id} '{pat.name}' (series #{pat.time_series_id}).",
-            )
-        except Exception as exc:
-            QMessageBox.critical(self, "Add Plain Load Pattern failed", str(exc))
-
-    def _on_add_function_ts(self) -> None:
-        """Define → Add Function TimeSeries: Constant, Trig, Triangle, Rectangular, Pulse."""
-        from opensees_studio.commands import AddTimeSeriesCommand
-        from opensees_studio.views.dialogs.function_time_series import FunctionTimeSeriesDialog
-
-        if self._vm.project is None:
-            self._on_new()
-        proj = self._vm.project
-        assert proj is not None
-        dlg = FunctionTimeSeriesDialog(next_ts_id=proj.next_time_series_id(), parent=self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            ts = dlg.time_series()
-            self._vm.apply_command(AddTimeSeriesCommand(self._vm, ts))
-            self._log(f"Added {ts.type} TimeSeries #{ts.id} '{ts.name}'.")
-        except Exception as exc:
-            QMessageBox.critical(self, "Add TimeSeries failed", str(exc))
-
-    def _on_add_multi_support(self) -> None:
-        """Define → Add Multi-Support Excitation: imposed motion of the selected supports."""
-        from opensees_studio.commands import AddLoadPatternCommand
-        from opensees_studio.views.dialogs.uniform_excitation import MultiSupportExcitationDialog
-
-        proj = self._vm.project
-        if proj is None:
-            return
-        nodes = sorted(self._canvas.selection.nodes)
-        if not nodes:
-            QMessageBox.information(
-                self, "Multi-Support Excitation", "Select the supports to drive first."
-            )
-            return
-        if not proj.time_series:
-            QMessageBox.information(
-                self,
-                "Multi-Support Excitation",
-                "Define a displacement time series first (Define → Add Path TimeSeries…).",
-            )
-            return
-        dlg = MultiSupportExcitationDialog(proj, proj.next_pattern_id(), nodes, self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            pat = dlg.pattern()
-            self._vm.apply_command(AddLoadPatternCommand(self._vm, pat))
-            self._log(
-                f"Added MultipleSupport pattern #{pat.id} '{pat.name}' on "
-                f"{len(pat.node_ids)} support(s), DOF {pat.direction}."
-            )
-        except Exception as exc:
-            QMessageBox.critical(self, "Add Multi-Support Excitation failed", str(exc))
-
-    def _on_add_uniform_excitation(self) -> None:
-        """Define → Add Uniform Excitation… — base ground-motion pattern."""
-        from opensees_studio.commands import AddLoadPatternCommand
-
-        if self._vm.project is None:
-            self._on_new()
-        proj = self._vm.project
-        assert proj is not None
-        if not proj.time_series:
-            QMessageBox.warning(
-                self,
-                "Add Uniform Excitation",
-                "Define a Path TimeSeries first (Define → Add Path "
-                "TimeSeries…) so the pattern has a ground-motion record "
-                "to reference.",
-            )
-            return
-        dlg = UniformExcitationDialog(
-            project=proj,
-            next_pattern_id=proj.next_pattern_id(),
-            parent=self,
-        )
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            pat = dlg.pattern()
-            self._vm.apply_command(AddLoadPatternCommand(self._vm, pat))
-            self._log(
-                f"Added UniformExcitation pattern #{pat.id} '{pat.name}' "
-                f"(DOF {pat.direction}, series #{pat.accel_series_id}, "
-                f"factor {pat.factor:g}).",
-            )
-        except Exception as exc:
-            QMessageBox.critical(
-                self,
-                "Add Uniform Excitation failed",
-                str(exc),
-            )
-
     # ── define and assign: groups, section cuts, custom commands ────
     def _on_define_groups(self) -> None:
         """Define → Groups: add, rename, recolour or remove groups."""
@@ -7295,12 +7095,14 @@ class MainWindow(QMainWindow):
         has_pushover = isinstance(self._latest_results, PushoverResults)
         has_rs = isinstance(self._latest_results, ResponseSpectrumResults)
         n_sel = len(self._canvas.selection.nodes)
+        has_series = has_project and bool(self._vm.project and self._vm.project.time_series)
         self._actions.refresh(
             ActionState(
                 has_project=has_project,
                 has_selection=has_selection,
                 has_selected_nodes=has_selected_nodes,
                 has_two_selected_nodes=n_sel == 2,
+                has_time_series=has_series,
                 has_selected_elements=has_selected_elements,
             )
         )
@@ -7317,9 +7119,6 @@ class MainWindow(QMainWindow):
         self._act_create_shell.setEnabled(has_project and n_sel in (3, 4))
         self._act_check_duplicates.setEnabled(has_project)
         self._act_table_editing.setEnabled(has_project)
-        has_series = has_project and bool(self._vm.project and self._vm.project.time_series)
-        self._act_add_plain_pattern.setEnabled(has_series)
-        self._act_add_uniform_excitation.setEnabled(has_series)
         has_cases = has_project and bool(self._vm.project and self._vm.project.analyses)
         # Without a solver the model is still built, exported and reported; only
         # what calls OpenSees waits for one (Options → Solver).
@@ -7364,7 +7163,6 @@ class MainWindow(QMainWindow):
         self._act_join_frames.setEnabled(has_project and len(self._canvas.selection.elements) >= 2)
         for action in self._restraint_actions():
             action.setEnabled(has_project and has_selected_nodes)
-        self._act_add_multi_support.setEnabled(has_project and has_selected_nodes)
         self._act_groups.setEnabled(has_project)
         self._act_section_cuts.setEnabled(has_project)
         self._act_custom_commands.setEnabled(has_project)

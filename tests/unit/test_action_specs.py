@@ -136,3 +136,10 @@ def test_two_joints_is_its_own_need() -> None:
     )
     assert exactly.allows(two)
     assert not ActionState(has_two_selected_nodes=True).allows(two)
+
+
+def test_a_time_series_is_its_own_need() -> None:
+    # A load pattern refers to a series: a project alone is not enough.
+    series = Needs.PROJECT | Needs.TIME_SERIES
+    assert not ActionState(has_project=True).allows(series)
+    assert ActionState(has_project=True, has_time_series=True).allows(series)

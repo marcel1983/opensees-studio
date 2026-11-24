@@ -45,7 +45,7 @@ the reverse.
 A command of the window is declared once, as an `ActionSpec` in
 `views/actions/<area>.py`: its id (`"file.save"`), its text, the method that
 runs it, its shortcut and what it needs to be enabled (`Needs.PROJECT`,
-`Needs.SELECTED_NODES`, `Needs.TWO_NODES` for exactly two joints, …).
+`Needs.SELECTED_NODES`, `Needs.TWO_NODES` for exactly two joints, `Needs.TIME_SERIES`, …).
 `ActionRegistry` builds the `QAction` objects from those tables, connects them and enables them; `MainWindow.action("file.save")`
 returns one. The spec tables are plain data with no Qt import, so a unit test
 checks that every command has a handler and a help page.
@@ -76,6 +76,7 @@ handler: `"transforms.move"` is `window.transforms.move`.
 | `DesignController` | `design` | The Design menu (19 commands): basis, Direct Analysis, notional loads, members, steel and concrete checks, connections, base plates, footings |
 | `LoadsController` | `loads` | Assign → point, imposed displacement, distributed, trapezoidal, frame point, temperature, tendon, surface and floor loads; joint patterns; Edit → Delete Loads |
 | `MembersController` | `members` | Assign → section, material, geometric transformation, local axes, beam integration, releases, end offsets, insertion point, property modifiers, auto mesh; plastic hinge, RC wall, pile soil springs |
+| `PatternsController` | `patterns` | Define → linear, path, function and constant time series; plain load pattern, uniform excitation, multi-support excitation. Gets `new_project` as a hook (a series can be defined with no project open); `Needs.TIME_SERIES` enables the patterns |
 | `JointsController` | `joints` | Assign → restraints, masses, springs; EqualDOF, zero-length element and section, bearing, link (exactly two joints: `Needs.TWO_NODES`) |
 
 `DesignController` is the example of the named hooks: it is created with

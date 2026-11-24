@@ -55,7 +55,7 @@ def test_add_a_pulse_series(qtbot, monkeypatch) -> None:  # type: ignore[no-unty
         d.fields["period"].setValue(2.0)
 
     _accept(monkeypatch, FunctionTimeSeriesDialog, fill)
-    mw._on_add_function_ts()
+    mw.patterns.add_function_ts()
     (ts,) = mw._vm.project.time_series
     assert (ts.type, ts.period, ts.width) == ("Pulse", 2.0, 0.5)
 
@@ -82,7 +82,7 @@ def test_multi_support_motion_needs_restrained_supports(qtbot, monkeypatch) -> N
         d.pattern()
     mw._canvas.selection.set_selection({1}, set())
     _accept(monkeypatch, MultiSupportExcitationDialog)
-    mw._on_add_multi_support()
+    mw.patterns.add_multi_support()
     (pattern,) = vm.project.load_patterns
     assert (pattern.type, pattern.node_ids) == ("ImposedSupportMotion", [1])
 

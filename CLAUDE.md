@@ -202,8 +202,10 @@ These are non-obvious things that are easy to break if you don't know:
   gets `results` (the current case results) and `show_ratios` (the overlay the
   window still owns) and runs in a test with no `MainWindow`; `LoadsController`
   assigns and deletes loads, `MembersController` assigns what a member is
-  made of and its frame options, and `JointsController` what holds a joint
-  and what joins two (`Needs.TWO_NODES` is "exactly two joints selected").
+  made of and its frame options, `JointsController` what holds a joint
+  and what joins two (`Needs.TWO_NODES` is "exactly two joints selected"), and
+  `PatternsController` defines time series and load patterns
+  (`Needs.TIME_SERIES`; it gets `new_project` as a hook).
   The rest of the window is being moved out the same way.
 - An unregistered material type is not a crash: `material_forms.form_for`
   returns a read-only placeholder, the same contract `section_forms` has.

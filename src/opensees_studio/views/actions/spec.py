@@ -31,6 +31,8 @@ class Needs(enum.Flag):
     SELECTED_ELEMENTS = enum.auto()
     #: Exactly two joints selected: what a link, a bearing or a constraint joins.
     TWO_NODES = enum.auto()
+    #: The project has a time series: what a load pattern refers to.
+    TIME_SERIES = enum.auto()
 
 
 @dataclass(frozen=True)
@@ -42,6 +44,7 @@ class ActionState:
     has_selected_nodes: bool = False
     has_selected_elements: bool = False
     has_two_selected_nodes: bool = False
+    has_time_series: bool = False
 
     def allows(self, needs: Needs) -> bool:
         """True when everything in ``needs`` is there."""
@@ -56,6 +59,8 @@ class ActionState:
             met |= Needs.SELECTED_ELEMENTS
         if self.has_two_selected_nodes:
             met |= Needs.TWO_NODES
+        if self.has_time_series:
+            met |= Needs.TIME_SERIES
         return needs & met == needs
 
 
