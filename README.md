@@ -209,7 +209,10 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   adds the static cases `EQ X` and `EQ Y` by RNC-07 Art. 32, NSCM 8.2.1 or
   ASCE 7-16 12.8: the coefficient of the plateau of the spectrum times the
   seismic weight (steel, roof dead load and the reduced roof live load), shared
-  between the joints by weight and height.
+  between the joints by weight and height. An ash and snow page adds the
+  volcanic ash of RNC-07 Art. 14 and NSCM 7.3 (20 kg/m²) or the snow of ASCE
+  7-16 chapter 7 or EN 1991-1-3, balanced and unbalanced, as loads on the plan
+  of the roof.
 - **Materials** — `Steel01`, `Steel02`, `Concrete01`, `Concrete02`,
   `Concrete04` (Popovics), `ElasticPP`, `Hardening`, `Hysteretic`,
   `HystereticSM`, elastic uniaxial and `ElasticIsotropic`.

@@ -537,6 +537,7 @@ def asce7_16_lrfd(
     omega0: float | None = None,
     sds: float = 1.0,
     directions: Mapping[int, str] | None = None,
+    alternatives: Iterable[str] = (),
 ) -> list[tuple[str, list[CombinationTerm]]]:
     """ASCE 7-16 Section 2.3.1 basic LRFD combinations, as ``(name, terms)`` pairs.
 
@@ -569,6 +570,10 @@ def asce7_16_lrfd(
 
     ``E`` there is the horizontal earthquake case (the 0.2 SDS D term is
     explicit), and ``sds`` is the design short-period spectral acceleration.
+
+    With ``"S"`` in ``alternatives`` the snow cases never act together (a
+    balanced and an unbalanced arrangement): ``0.2S`` is then one combination
+    per snow case, not their sum.
     """
     by_role = {role: list(dict.fromkeys(roles.get(role, ()))) for role in LOAD_ROLES}
     dead = by_role["D"]
@@ -642,13 +647,17 @@ def asce7_16_lrfd(
             )
     # 5. 1.2D + 1.0E + L + 0.2S
     snow = by_role["S"]
+    snows: list[tuple[str, list[int]]] = [("+0.2S" if snow else "", snow)]
+    if "S" in set(alternatives) and len(snow) > 1:
+        snows = [(f"+0.2{load('S', cid)}", [cid]) for cid in snow]
     for e in lateral_e:
-        out.append(
-            (
-                f"1.2D{signed(1.0, 'E', e)}{with_live}{'+0.2S' if snow else ''}",
-                terms((1.2, dead), *scaled_parts(1.0, e), (1.0, live), (0.2, snow)),
+        for s_name, s_cases in snows:
+            out.append(
+                (
+                    f"1.2D{signed(1.0, 'E', e)}{with_live}{s_name}",
+                    terms((1.2, dead), *scaled_parts(1.0, e), (1.0, live), (0.2, s_cases)),
+                )
             )
-        )
     # 6. 0.9D + 1.0W
     for w in lateral_w:
         out.append((f"0.9D{signed(1.0, 'W', w)}", terms((0.9, dead), *scaled_parts(1.0, w))))
@@ -661,17 +670,18 @@ def asce7_16_lrfd(
         uplift = 0.9 - 0.2 * sds
         for e in lateral_e:
             e_name = signed(omega0, "E", e)
-            out.append(
-                (
-                    f"Ω0: {gravity:g}D{e_name}{with_live}{'+0.2S' if snow else ''}",
-                    terms(
-                        (gravity, dead),
-                        *scaled_parts(omega0, e),
-                        (1.0, live),
-                        (0.2, snow),
-                    ),
+            for s_name, s_cases in snows:
+                out.append(
+                    (
+                        f"Ω0: {gravity:g}D{e_name}{with_live}{s_name}",
+                        terms(
+                            (gravity, dead),
+                            *scaled_parts(omega0, e),
+                            (1.0, live),
+                            (0.2, s_cases),
+                        ),
+                    )
                 )
-            )
             out.append(
                 (
                     f"Ω0: {uplift:g}D{e_name}",

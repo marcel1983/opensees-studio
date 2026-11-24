@@ -21,6 +21,7 @@ from opensees_studio.core.warehouse import (
     WarehouseError,
     WarehouseLoads,
     WarehouseSeismic,
+    WarehouseSnow,
     WarehouseSpec,
     WarehouseWind,
     build_warehouse,
@@ -480,6 +481,7 @@ def _planned(roof_structure: str) -> str:
         midspan_point=preset.midspan_point_kn * 1000.0,
         wind=WarehouseWind(),
         seismic=WarehouseSeismic(),
+        snow=WarehouseSnow(ground=700.0),
     )
     plan_warehouse(project, spec, loads=loads).apply(project)
     return project.model_dump_json(by_alias=True)

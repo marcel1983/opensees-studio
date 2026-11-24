@@ -3668,7 +3668,7 @@ case carries them: half of each bar's weight goes to each of its joints.
         "define.warehouse": _t(
             "Define → Create Warehouse",
             "Define",
-            "A 3D steel warehouse from a few numbers: loads, wind, earthquake, combinations.",
+            "A 3D steel warehouse from a few numbers: loads, wind, earthquake, ash or snow.",
             """
 Builds a warehouse (bodega, nave industrial) into the open 3D frame model as one
 undoable step: portal frames in X-Z planes repeated along Y, with rafters or
@@ -3909,6 +3909,45 @@ code: the displacements of these cases are those of the reduced forces.
 
 For the period, a response spectrum or other buildings use Define → Seismic
 Loads (Equivalent Lateral Force) and the response spectrum cases.
+
+# Ash and snow
+With **Create the ash or snow load cases** (off until you tick it) the wizard
+adds what settles on the roof, as a load per area of **horizontal projection**
+on the purlins. The **Rule** follows the design code and can be changed:
+
+- **Volcanic ash** — RNC-07 Art. 14 and NSCM 7.3: one case, `ASH`, uniform over
+  the roof. The load starts at 20 kg/m², the wet ash both codes recommend when
+  there is no local record; it is mandatory in León, Chinandega, Carazo,
+  Ometepe and Masaya and wherever ash can fall. NSCM has a load of its own for
+  it in the combinations (CCV); RNC-07 has none, so there the ash goes with the
+  live load (CV), "in addition to the live load" as Art. 14 says.
+- **ASCE 7-16 chapter 7** — from the ground snow load **pg**:
+  pf = 0.7 Ce Ct Is pg (Eq. 7.3-1) and ps = Cs pf, with the slope factor Cs of
+  Fig. 7.4-1 (a **slippery roof** sheds snow from a lower slope) and, under
+  15°, not less than the minimum of 7.3.4. `SNOW` is that balanced load. A
+  gable roof between 1/2 on 12 and 7 on 12 also gets `SNOW +X` and `SNOW -X`
+  (7.6.1), the drift on the side the wind blows to: 0.3 ps to windward, ps to
+  leeward and a surcharge hd γ / √S over 8 hd √S / 3 from the ridge.
+- **EN 1991-1-3** — s = μ Ce Ct sk (5.1) with the shape coefficients of Table
+  5.2: `SNOW` with μ1 everywhere, and on a duopitch roof `SNOW +X` and
+  `SNOW -X` (5.3.3), half the snow on one slope and all of it on the other, the
+  one named.
+
+Several naves stand under **one roof** (one ridge, or one slope, over the whole
+width), so the roof has no valleys and the cases are those of that one roof.
+
+**Ce**, **Ct** and **Is** are typed as numbers: the tool tips list the tables.
+Untick **Also the unbalanced arrangements** to keep the balanced case only.
+The summary on the page names the cases and the load on the roof.
+
+In the combinations the snow cases are **alternatives**: a balanced and an
+unbalanced case never enter the same one. A code without a snow load (RNC-07)
+gets the balanced case only, as a live load.
+
+Not included: the build-up against a parapet or a taller wall, the snow that
+slides onto a lower roof, the ash that gathers in valleys and gutters (both
+Nicaraguan codes ask you to estimate it), rain on snow, ponding, and the part
+of the snow that ASCE 7-16 12.7.2 counts as seismic weight.
 
 # Not included yet
 Haunches, and trusses with a Warren web without
