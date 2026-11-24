@@ -20,6 +20,8 @@ from opensees_studio.core.warehouse import (
     CODE_PRESETS,
     GROUPS,
     SECTION_KEYS,
+    TRUSS_GROUPS,
+    TRUSS_SECTION_KEYS,
     WarehouseError,
     WarehouseLoads,
     WarehouseSpec,
@@ -152,6 +154,8 @@ def test_every_member_is_in_one_group_with_its_section() -> None:
         "columns": 1, "rafters": 2, "purlins": 3, "girts": 4, "roof_bracing": 5, "wall_bracing": 5,
     }  # fmt: skip
     assert warehouse.members.pop("end_columns") == []  # none asked for
+    for group in TRUSS_GROUPS:
+        assert warehouse.members.pop(group) == []  # the roof is on rafters
     for group, ids in warehouse.members.items():
         assert ids, group
         assert {by_id[i].section_id for i in ids} == {section_of[group]}
@@ -232,7 +236,8 @@ def test_the_design_overrides_carry_the_unbraced_lengths() -> None:
     assert rafters <= set(overrides)
     for element_id in rafters:
         override = overrides[element_id]
-        assert override.length_ltb == override.length_minor == warehouse.unbraced[element_id]
+        assert override.length_ltb == override.length_minor
+        assert override.length_minor == pytest.approx(warehouse.unbraced[element_id], rel=1e-11)
         assert override.length_major is None  # in the frame's plane: as modelled
     # A girt without an angle does not brace the column either: the full height.
     columns = set(overrides) - rafters
@@ -338,7 +343,7 @@ def test_planning_does_not_touch_the_project_and_applying_builds_it() -> None:
     plan.apply(project)
     assert [s.name for s in plan.sections] == ["W14X48", "W16X40", "C150X50X15X2.38", "L3X3X1_4"]
     assert [g.name for g in project.groups] == [
-        name for key, name in GROUPS.items() if key != "end_columns"
+        name for key, name in GROUPS.items() if key not in ("end_columns", *TRUSS_GROUPS)
     ]
     assert project.coord_systems[-1].name == "Warehouse"
     assert [c.name for c in project.analyses] == ["DEAD", "LIVE"]
@@ -433,5 +438,7 @@ def test_the_default_sections_follow_the_project_units() -> None:
     for name, section in a.items():
         assert pytest.approx(section.A * 1e6) == b[name].A
     assert a["C150X50X15X2.38"].shape.d == pytest.approx(0.150)
-    assert set(SECTION_KEYS) == {"column", "rafter", "purlin", "girt", "brace", "end_column"}
+    assert set(SECTION_KEYS) == {
+        "column", "rafter", "purlin", "girt", "brace", "end_column", *TRUSS_SECTION_KEYS
+    }  # fmt: skip
     assert "W8X31" not in a  # the end wall column section only with end wall columns

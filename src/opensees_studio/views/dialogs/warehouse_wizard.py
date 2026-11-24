@@ -35,13 +35,18 @@ from PySide6.QtWidgets import (
 
 from opensees_studio.core.code_combinations import CODES
 from opensees_studio.core.help import TOPIC_PROPERTY
+from opensees_studio.core.trusses import TRUSS_TYPE_LABELS
 from opensees_studio.core.units import UnitSystem, labels_for
 from opensees_studio.core.warehouse import (
     CODE_PRESETS,
     DEFAULT_ROOF_DEAD_KPA,
     GROUP_COLOURS,
     GROUPS,
+    ROOF_STRUCTURES,
+    ROOF_TRUSS_TYPES,
     SECTION_KEYS,
+    TRUSS_BOTTOMS,
+    TRUSS_SECTION_KEYS,
     WIND_METHODS,
     Warehouse,
     WarehouseError,
@@ -73,6 +78,15 @@ from opensees_studio.views.screen_fit import fit_to_available_screen
 CREATE_DEFAULT = -1
 
 _COS30 = math.cos(math.radians(30.0))
+
+#: Labels of :data:`opensees_studio.core.warehouse.ROOF_STRUCTURES`, in its order.
+ROOF_STRUCTURE_LABELS: tuple[str, ...] = ("Rafters", "Roof trusses")
+
+#: Labels of :data:`opensees_studio.core.warehouse.TRUSS_BOTTOMS`, in its order.
+TRUSS_BOTTOM_LABELS: tuple[str, ...] = ("Horizontal chord", "Chord parallel to the roof")
+
+#: (label, type) of the web patterns a roof truss can have.
+ROOF_TRUSS_LABELS = [(label, kind) for label, kind in TRUSS_TYPE_LABELS if kind in ROOF_TRUSS_TYPES]
 
 #: Exposure choices per wind procedure: (key, label).
 WIND_EXPOSURES: dict[str, tuple[tuple[str, str], ...]] = {
@@ -257,6 +271,31 @@ class WarehouseWizard(QWizard):
         for label, _support in SUPPORT_CHOICES:
             self._support.addItem(tr(label))
         self._support.setCurrentIndex(1)
+        self._roof_structure = QComboBox()
+        for label in ROOF_STRUCTURE_LABELS:
+            self._roof_structure.addItem(tr(label))
+        self._roof_structure.setToolTip(
+            "What carries the roof in each frame: a rafter, or a truss whose top chord "
+            "follows the roof with a panel point under every purlin line."
+        )
+        self._truss_type = QComboBox()
+        for label, _kind in ROOF_TRUSS_LABELS:
+            self._truss_type.addItem(tr(label))
+        self._truss_type.setToolTip(
+            "Pratt: the diagonals run down towards mid-span, in tension under gravity. "
+            "Howe: up towards mid-span. Warren: alternating. All three have a vertical "
+            "under every purlin line."
+        )
+        self._truss_bottom = QComboBox()
+        for label in TRUSS_BOTTOM_LABELS:
+            self._truss_bottom.addItem(tr(label))
+        self._truss_depth = self._length(1.0)
+        self._truss_depth.setToolTip(
+            "Depth of the truss, measured plumb: at the eave with a horizontal bottom "
+            "chord, everywhere with a parallel one. The eave height stays the top of the "
+            "roof line, so the clear height under the truss is the eave height less this "
+            "depth."
+        )
 
         form.addRow("Roof:", self._roof)
         form.addRow("Nave span:", self._span)
@@ -266,16 +305,32 @@ class WarehouseWizard(QWizard):
         form.addRow("Eave height:", self._eave_height)
         form.addRow("Slope:", self._slope)
         form.addRow("Column bases:", self._support)
+        form.addRow("Roof structure:", self._roof_structure)
+        form.addRow("Truss web:", self._truss_type)
+        form.addRow("Bottom chord:", self._truss_bottom)
+        form.addRow("Truss depth:", self._truss_depth)
 
         self._geometry_summary = QLabel()
         self._geometry_summary.setWordWrap(True)
         form.addRow(self._geometry_summary)
 
-        for field in (self._span, self._frame_spacing, self._eave_height, self._slope):
+        for field in (
+            self._span,
+            self._frame_spacing,
+            self._eave_height,
+            self._slope,
+            self._truss_depth,
+        ):
             field.valueChanged.connect(self._refresh)
         for spin in (self._n_naves, self._n_frames):
             spin.valueChanged.connect(self._refresh)
-        for combo in (self._roof, self._support):
+        for combo in (
+            self._roof,
+            self._support,
+            self._roof_structure,
+            self._truss_type,
+            self._truss_bottom,
+        ):
             combo.currentIndexChanged.connect(self._refresh)
         self._page_geometry = page
 
@@ -318,6 +373,17 @@ class WarehouseWizard(QWizard):
             "purlin line, pinned at both ends. With end wall columns the end walls also get "
             "girts, at the girt spacing."
         )
+        self._chord_ties = QSpinBox()
+        self._chord_ties.setRange(0, 50)
+        self._chord_ties.setValue(4)
+        self._chord_ties.setSpecialValueText(tr("Columns and ridge only"))
+        self._chord_ties.setToolTip(
+            "With roof trusses: every n-th panel point of the bottom chord is tied to the "
+            "next frame; the column lines and the ridge always are. In the braced bays "
+            "each tie line gets a vertical X between the two chords. The steel check "
+            "takes the bottom chord's unbraced length between tie lines: it is the chord "
+            "in compression when the wind lifts the roof."
+        )
         self._roof_bracing = QCheckBox("X bracing in the roof")
         self._roof_bracing.setChecked(True)
         self._wall_bracing = QCheckBox("X bracing in the side walls")
@@ -334,6 +400,7 @@ class WarehouseWizard(QWizard):
         form.addRow("Girt spacing:", self._girt_spacing)
         form.addRow("Stabilising angle every (girts):", self._column_fly)
         form.addRow("End wall column spacing:", self._end_wall_spacing)
+        form.addRow("Bottom chord tie every (panel points):", self._chord_ties)
         form.addRow(self._roof_bracing)
         form.addRow(self._wall_bracing)
         form.addRow("Braced bays:", self._braced_bays)
@@ -350,7 +417,7 @@ class WarehouseWizard(QWizard):
 
         for field in (self._purlin_spacing, self._girt_spacing, self._end_wall_spacing):
             field.valueChanged.connect(self._refresh)
-        for spin in (self._rafter_fly, self._column_fly):
+        for spin in (self._rafter_fly, self._column_fly, self._chord_ties):
             spin.valueChanged.connect(self._refresh)
         for box in (self._roof_bracing, self._wall_bracing):
             box.toggled.connect(self._refresh)
@@ -371,13 +438,19 @@ class WarehouseWizard(QWizard):
             )
             for section in self._sections:
                 combo.addItem(f"#{section.id}  {section.name or '(unnamed)'}", userData=section.id)
+            # A long section name must not push the page wider than the wizard.
+            combo.setSizeAdjustPolicy(
+                QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+            )
+            combo.setMinimumContentsLength(24)
             self._section_combos[key] = combo
             form.addRow(tr(label) + ":", combo)
+        self._sections_form = form
         note = QLabel(
             "<i>The sections that do not exist yet are created with the warehouse, as the "
-            "same undoable step: columns, rafters and braces from the AISC library, purlins "
-            "and girts as a cold-formed lipped channel. The end wall column section is used "
-            "only when the warehouse has end wall columns.</i>"
+            "same undoable step: columns, rafters, truss members and braces from the AISC "
+            "library, purlins and girts as a cold-formed lipped channel. The end wall "
+            "column section is used only when the warehouse has end wall columns.</i>"
         )
         note.setWordWrap(True)
         form.addRow(note)
@@ -653,6 +726,13 @@ class WarehouseWizard(QWizard):
         self._wind_summary.setText(text)
         self._page_wind.completeChanged.emit()
 
+    def _has_truss(self) -> bool:
+        return ROOF_STRUCTURES[self._roof_structure.currentIndex()] == "truss"
+
+    def _uses_section(self, key: str) -> bool:
+        """The member kind ``key`` exists with the roof structure chosen."""
+        return key != "rafter" if self._has_truss() else key not in TRUSS_SECTION_KEYS
+
     def _bays(self) -> tuple[int, ...] | None:
         text = self._braced_bays.text().strip()
         if not text:
@@ -673,6 +753,15 @@ class WarehouseWizard(QWizard):
             WarehouseError: if they do not describe one.
         """
         _label, roof, has_slope = ROOF_CHOICES[self._roof.currentIndex()]
+        truss: dict[str, Any] = {}
+        if self._has_truss():
+            truss = {
+                "roof_structure": "truss",
+                "truss_type": ROOF_TRUSS_LABELS[self._truss_type.currentIndex()][1],
+                "truss_bottom": TRUSS_BOTTOMS[self._truss_bottom.currentIndex()],
+                "truss_depth": self._truss_depth.value(),
+                "bottom_chord_tie_every": self._chord_ties.value(),
+            }
         return WarehouseSpec(
             span=self._span.value(),
             eave_height=self._eave_height.value(),
@@ -690,9 +779,16 @@ class WarehouseWizard(QWizard):
             wall_bracing=self._wall_bracing.isChecked(),
             braced_bays=self._bays(),
             end_wall_column_spacing=self._end_wall_spacing.value(),
+            **truss,
         )
 
     def _refresh(self, *_args: object) -> None:
+        truss = self._has_truss()
+        for widget in (self._truss_type, self._truss_bottom, self._truss_depth, self._chord_ties):
+            widget.setEnabled(truss)
+        self._rafter_fly.setEnabled(not truss)
+        for key, combo in self._section_combos.items():
+            self._sections_form.setRowVisible(combo, self._uses_section(key))
         try:
             spec = self.spec()
             warehouse = build_warehouse(
@@ -707,26 +803,36 @@ class WarehouseWizard(QWizard):
         else:
             self._error = ""
             self._preview.set_warehouse(warehouse)
-            self._geometry_summary.setText(
+            summary = tr(
+                "Plan <b>{width} × {length} {unit}</b>, ridge at <b>{ridge} {unit}</b>, "
+                "{frames} frames."
+            ).format(
+                width=f"{spec.width:g}",
+                length=f"{spec.length:g}",
+                ridge=f"{spec.ridge_height:g}",
+                unit=self._unit,
+                frames=spec.n_frames,
+            )
+            if spec.has_truss:
+                summary += " " + tr(
+                    "Clear height under the trusses: <b>{clear} {unit}</b>."
+                ).format(clear=f"{spec.eave_height - spec.truss_depth:g}", unit=self._unit)
+            self._geometry_summary.setText(summary)
+            chord = warehouse.bottom_chord_elements if spec.has_truss else warehouse.rafter_elements
+            lengths = sorted({round(warehouse.unbraced[e], 9) for e in chord[0]})
+            text = (
                 tr(
-                    "Plan <b>{width} × {length} {unit}</b>, ridge at <b>{ridge} {unit}</b>, "
-                    "{frames} frames."
-                ).format(
-                    width=f"{spec.width:g}",
-                    length=f"{spec.length:g}",
-                    ridge=f"{spec.ridge_height:g}",
-                    unit=self._unit,
-                    frames=spec.n_frames,
+                    "<b>{lines}</b> purlin lines. Bottom chord unbraced length for the steel "
+                    "check: <b>{longest} {unit}</b>. {nodes} nodes, {elements} elements."
                 )
-            )
-            lengths = sorted(
-                {round(warehouse.unbraced[e], 9) for e in warehouse.rafter_elements[0]}
-            )
-            self._secondary_summary.setText(
-                tr(
+                if spec.has_truss
+                else tr(
                     "<b>{lines}</b> purlin lines. Rafter unbraced length for the steel "
                     "check: <b>{longest} {unit}</b>. {nodes} nodes, {elements} elements."
-                ).format(
+                )
+            )
+            self._secondary_summary.setText(
+                text.format(
                     lines=len(warehouse.stations),
                     longest=f"{lengths[-1]:.4g}",
                     unit=self._unit,
@@ -743,6 +849,8 @@ class WarehouseWizard(QWizard):
         """Section id per member kind; None means "create the default one"."""
         out: dict[str, int | None] = {}
         for key, combo in self._section_combos.items():
+            if not self._uses_section(key):
+                continue
             data = combo.currentData()
             out[key] = None if data in (None, CREATE_DEFAULT) else int(data)
         return out

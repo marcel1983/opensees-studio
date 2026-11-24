@@ -199,7 +199,7 @@ def test_a_girt_braces_an_end_wall_column_only_with_a_stabilising_angle() -> Non
     assert ridge_post(every) == pytest.approx([3.0, 3.0, 3.0, 3.0, 1.0])
     overrides = {m.element_id: m for m in member_design_overrides(every)}
     for element_id, _vertical in every.wall_columns["y0"]:
-        assert overrides[element_id].length_ltb == every.unbraced[element_id]
+        assert overrides[element_id].length_ltb == pytest.approx(every.unbraced[element_id])
 
 
 # ─────────────────────────── wind on the members ───────────────────────────
@@ -456,3 +456,73 @@ def test_each_code_combines_the_wind_its_own_way(
     for combination in with_wind:
         factors = [t.factor for t in combination.terms if t.ref_id in wind_ids]
         assert len(factors) == 1 and factors[0] > 0.0
+
+
+# ─────────────────────── the same bytes on every machine ───────────────────────
+def _planned(roof_structure: str) -> str:
+    project = _project()
+    spec = _spec(
+        slope=0.15,
+        purlin_spacing=1.5,
+        girt_spacing=1.5,
+        rafter_fly_brace_every=2,
+        end_wall_column_spacing=5.0,
+        roof_structure=roof_structure,
+        truss_depth=1.0 if roof_structure == "truss" else 0.0,
+    )
+    preset = CODE_PRESETS["rnc07"]
+    loads = WarehouseLoads(
+        code="rnc07",
+        roof_dead=100.0,
+        roof_live=preset.roof_live_kpa * 1000.0,
+        midspan_point=preset.midspan_point_kn * 1000.0,
+        wind=WarehouseWind(),
+    )
+    plan_warehouse(project, spec, loads=loads).apply(project)
+    return project.model_dump_json(by_alias=True)
+
+
+@pytest.mark.parametrize("roof_structure", ["rafter", "truss"])
+@pytest.mark.parametrize("towards", [math.inf, -math.inf])
+def test_the_plan_does_not_keep_the_last_digit_of_the_maths(
+    monkeypatch: pytest.MonkeyPatch, roof_structure: str, towards: float
+) -> None:
+    """Square roots, sines and dot products differ in the last digit between
+    processors and C libraries: what a plan writes is rounded, so the same
+    warehouse is the same file everywhere."""
+    from opensees_studio.core import warehouse as module
+
+    expected = _planned(roof_structure)
+
+    def nudged(function):  # type: ignore[no-untyped-def]
+        def call(*args):  # type: ignore[no-untyped-def]
+            value = function(*args)
+            return math.nextafter(value, towards) if value else value
+
+        return call
+
+    for name in ("hypot", "atan2", "atan", "degrees", "radians", "sin", "cos", "tan"):
+        monkeypatch.setattr(math, name, nudged(getattr(math, name)))
+
+    def axes(*args):  # type: ignore[no-untyped-def]
+        return tuple(np.nextafter(axis, towards) for axis in frame_local_axes(*args))
+
+    monkeypatch.setattr(module, "frame_local_axes", axes)
+
+    assert _planned(roof_structure) == expected
+
+
+def test_a_load_has_no_component_that_is_round_off() -> None:
+    project = _project()
+    plan = plan_warehouse(
+        project,
+        _spec(slope=0.15, end_wall_column_spacing=5.0),
+        loads=WarehouseLoads(code="rnc07", roof_dead=100.0, wind=WarehouseWind()),
+    )
+    for _pattern, list_name, loads in plan.pattern_loads:
+        if list_name != "element_loads":
+            continue
+        for load in loads:
+            components = [abs(c) for c in (load.wx, load.wy, load.wz) if c]
+            assert min(components) > 1e-6 * max(components)
+            assert "-0.0" not in repr((load.wx, load.wy, load.wz))

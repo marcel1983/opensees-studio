@@ -47,6 +47,38 @@ refused instead of silently downgraded).
   pressures of purlins, girts and cladding (RNC-07 Art. 58, ASCE 7 chapter 30).
   `core.wind` has the pressures for scripts; `examples/warehouse_wind.py` builds
   a warehouse with them.
+- **Roof trusses in the warehouse.** On the first page of the Warehouse Wizard,
+  **Roof structure** chooses rafters or roof trusses. A truss has its top chord
+  on the roof line with a panel point under every purlin line, a bottom chord
+  that is horizontal or parallel to the roof at the **truss depth**, a vertical
+  under every purlin and Pratt, Howe or Warren diagonals. The chords are
+  continuous and run into the columns, which go on up to the top chord, so the
+  truss and its columns work as a frame; the web members are pinned. The bottom
+  chord is tied to the next frame at the column lines, at the ridge and at
+  every n-th panel point, with a vertical X between the chords in the braced
+  bays, and the wizard writes the distance between tie lines as the bottom
+  chord's unbraced length for the steel check (every purlin braces the top
+  chord). Default sections: HSS6X6X1/4 chords, HSS3X3X3/16 web members and
+  HSS4X4X3/16 ties. The loads and the wind cases are those of the same building
+  on rafters. `examples/warehouse_truss.py` builds one.
+
+### Changed
+
+- **The load cases the Warehouse Wizard creates use the sparse solver
+  UmfPack** instead of BandGeneral. On a warehouse (hundreds of pinned members,
+  each with its own released rotations) the band solver takes tens of seconds
+  per case, the sparse one a fraction of a second, for the same result. A case
+  the project already had keeps its solver, and the log says so on a large
+  model. `examples/warehouse_gable.osmodel` and `warehouse_wind.osmodel` were
+  regenerated with it; their pinned results did not move.
+- **A warehouse from the wizard is the same file on every machine.** The angle
+  of the purlins, the loads on the members, the unbraced lengths and the
+  properties of the default purlin are written with 12 significant digits, and a
+  load component that is only round-off of its projection is zero. They come out
+  of square roots, sines and dot products, whose last digit depends on the
+  processor and on the C library, so the same warehouse used to save different
+  bytes on two machines. The three warehouse examples were regenerated; their
+  pinned results did not move.
 
 ## [0.0.78] - 2026-11-23
 

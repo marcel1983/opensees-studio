@@ -17,6 +17,7 @@ defining materials, sections, loads, and analysis cases.
 | `steel_frame_design.osmodel` | 9 | 10 | Static × 3, combinations × 3 | Design → Steel Frame Check (AISC 360-16) on W shapes from the Section Library, member overrides (Lb = 2 m on the beams), storeys for the drift check; walked through in [Tutorial 1](../docs/tutorials/01-steel-frame-design.md) |
 | `warehouse_gable.osmodel` | 138 | 261 | Static × 2, combinations × 3 | What Define → Create Warehouse builds: a 20 × 30 m gable warehouse of six pinned-base portal frames, purlins and girts at 1.5 m, X bracing in the end bays, groups per kind of member, the RNC-07 light-roof loads on the purlins and the unbraced lengths for the Steel Frame Check (every second purlin has a stabilising angle) |
 | `warehouse_wind.osmodel` | 239 | 454 | Static × 6, combinations × 11 | The Warehouse Wizard's wind page and end walls: a 24 × 36 m gable warehouse with end wall columns and their girts, stabilising angles on every second purlin and girt, and the four RNC-07 Título IV wind cases (zone 2, Group B, terrain R2) as pressures on the purlins, the girts and the end rafters, combined by RNC-07 Art. 15 with each wind in its own sign |
+| `warehouse_truss.osmodel` | 440 | 1067 | Static × 6, combinations × 11 | The Warehouse Wizard with roof trusses: a 30 × 36 m gable warehouse of seven frames, each a Pratt truss (HSS chords, 1 m deep at the columns and 3.25 m at the ridge, a panel point under every purlin) on two pinned-base columns; bottom chord ties at the columns, the ridge and every fourth panel point with sway bracing in the braced bays, end wall columns that are the verticals of the end trusses, and the RNC-07 wind cases. Every case uses the sparse solver UmfPack |
 | `bridge_influence_line.osmodel` | 9 | 8 | Influence line | Three-span continuous girder (20 + 25 + 20 m), a unit load walked over 81 stops, the HL-93 design truck as the case's vehicle; Display → Influence Line plots any reaction or member force and envelopes the truck both ways |
 | `sdof_pushover.osmodel` | 2 | 1 | Pushover, Modal | Monotonic pushover curve, HystereticMaterial |
 | `portal_pushover.osmodel` | 4 | 3 | Pushover, Modal | Fiber sections, BeamWithHinges, nonlinear pushover with yielding |
@@ -224,6 +225,7 @@ python examples/cantilever.py
 python examples/portal_frame.py
 python examples/warehouse_gable.py
 python examples/warehouse_wind.py
+python examples/warehouse_truss.py
 python examples/space_frame_3d.py
 python examples/sdof_pushover.py
 python examples/portal_pushover.py
