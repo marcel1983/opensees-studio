@@ -95,7 +95,7 @@ def test_switching_the_display_system_converts_the_open_tables(qtbot) -> None:  
     mw = _window(qtbot)
     shown_tab = mw._results_panel._tabs.currentIndex()
 
-    mw._set_display_units(UnitSystem.US_IN_KIP)
+    mw.units.set_display(UnitSystem.US_IN_KIP)
 
     # Headers and values moved together, without re-running anything.
     assert _header(mw, 1) == "U1 [in]"
@@ -106,7 +106,7 @@ def test_switching_the_display_system_converts_the_open_tables(qtbot) -> None:  
     assert mw._vm.project.meta.display_units is UnitSystem.US_IN_KIP
 
     # And back again.
-    mw._set_display_units(UnitSystem.SI_M_N)
+    mw.units.set_display(UnitSystem.SI_M_N)
     assert _header(mw, 1) == "U1 [m]"
     assert _cell(mw, 1, 1) == "0.006"
 
@@ -114,14 +114,14 @@ def test_switching_the_display_system_converts_the_open_tables(qtbot) -> None:  
 @pytest.mark.gui
 def test_the_status_bar_picker_follows_and_drives_the_display_system(qtbot) -> None:  # type: ignore[no-untyped-def]
     mw = _window(qtbot)
-    assert mw._current_display_units() is UnitSystem.SI_M_N
+    assert mw.units.current() is UnitSystem.SI_M_N
 
-    index = mw._units_combo.findData(UnitSystem.US_FT_KIP)
+    index = mw.units.combo.findData(UnitSystem.US_FT_KIP)
     assert index >= 0
-    mw._units_combo.setCurrentIndex(index)  # fires currentIndexChanged
+    mw.units.combo.setCurrentIndex(index)  # fires currentIndexChanged
 
     assert mw._vm.project.meta.display_units is UnitSystem.US_FT_KIP
-    assert mw._current_display_units() is UnitSystem.US_FT_KIP
+    assert mw.units.current() is UnitSystem.US_FT_KIP
     assert _header(mw, 1) == "U1 [ft]"  # the displacements tab is the open one
     mw._results_panel._tabs.setCurrentIndex(1)  # Reactions
     assert _header(mw, 1) == "F1 [kip]"
@@ -134,7 +134,7 @@ def test_a_display_change_does_not_mark_the_project_as_reinterpreted(qtbot) -> N
     """The conversion is a view setting: no node, element or load value changes."""
     mw = _window(qtbot)
     before = mw._vm.project.model_dump_json(exclude={"meta"})
-    mw._set_display_units(UnitSystem.US_IN_KIP)
+    mw.units.set_display(UnitSystem.US_IN_KIP)
     assert mw._vm.project.model_dump_json(exclude={"meta"}) == before
 
 
@@ -146,10 +146,10 @@ def test_the_deformed_shape_reports_the_peak_displacement_in_display_units(qtbot
     # 6 mm across, 8 mm down → a 10 mm magnitude, not 8 and not 6.
     assert view._peak_label.text() == "0.01 m"
 
-    mw._set_display_units(UnitSystem.SI_MM_N)
+    mw.units.set_display(UnitSystem.SI_MM_N)
     assert view._peak_label.text() == "10 mm"
 
-    mw._set_display_units(UnitSystem.US_IN_KIP)
+    mw.units.set_display(UnitSystem.US_IN_KIP)
     assert view._peak_label.text() == pytest.approx(f"{0.01 / IN_M:.4g} in")
 
 
@@ -165,7 +165,7 @@ def test_the_force_diagram_is_redrawn_in_the_new_units(qtbot) -> None:  # type: 
     assert view.current_component().is_moment  # the 10 kN·m root dominates
     assert "N·m" in view._units_label.text()
 
-    mw._set_display_units(UnitSystem.US_IN_KIP)
+    mw.units.set_display(UnitSystem.US_IN_KIP)
 
     assert "kip·in" in view._units_label.text()
     # The overlay was re-rendered, in the new units: colour bar values and the
@@ -185,7 +185,7 @@ def test_a_solved_model_shows_converted_element_forces(qtbot) -> None:  # type: 
     assert _cell(mw, 2, 2) == "M i"
     assert _raw(mw, 2, 4) == pytest.approx(10000.0)  # M i, N·m
 
-    mw._set_display_units(UnitSystem.US_IN_KIP)
+    mw.units.set_display(UnitSystem.US_IN_KIP)
 
     assert _cell(mw, 2, 3) == "kip·in"
     assert _raw(mw, 2, 4) == pytest.approx(10000.0 / KIP_N / IN_M)
@@ -202,7 +202,7 @@ def test_the_deformed_shape_tooltip_shows_the_joint_displacements(qtbot) -> None
     assert ">Ux<" in text and "0.006" in text and "-0.008" in text and ">Ry<" in text
     assert "&nbsp;m<" in text and "rad" in text
 
-    mw._set_display_units(UnitSystem.SI_MM_N)
+    mw.units.set_display(UnitSystem.SI_MM_N)
     text = mw.display.node_tooltip(2)
     assert "&nbsp;6<" in text and "&nbsp;-8<" in text and "&nbsp;mm<" in text
 

@@ -122,6 +122,7 @@ from opensees_studio.views.controllers.patterns import PatternsController
 from opensees_studio.views.controllers.property_edits import PropertyEditsController
 from opensees_studio.views.controllers.select import SelectController
 from opensees_studio.views.controllers.transforms import TransformsController
+from opensees_studio.views.controllers.units import UnitsController
 from opensees_studio.views.controllers.viewport import ViewportController
 from opensees_studio.views.dialogs import (
     AddNodeDialog,
@@ -340,6 +341,10 @@ class MainWindow(QMainWindow):
         self.patterns = PatternsController(shell, new_project=self._on_new)
         #: The camera, the working plane and its level, a grid line view, what is hidden.
         self.viewport = ViewportController(shell, action=lambda action_id: self.action(action_id))
+        #: The display units: Options → Set Display Units and the status bar's picker.
+        self.units = UnitsController(
+            shell, refresh=lambda converter: self._refresh_displayed_units(converter)
+        )
         #: The post-processing views of the Display menu and the dock each one opens.
         self.display = DisplayController(
             shell,
@@ -352,8 +357,8 @@ class MainWindow(QMainWindow):
             select_rows=lambda nodes, elements: self._select_report_row(nodes, elements),
             results_for_key=lambda key: self._results_for_key(key),
             show_results=lambda results: self._display_results(results),
-            display_units=lambda: self._current_display_units(),
-            set_display_units=lambda units: self._set_display_units(units),
+            display_units=lambda: self.units.current(),
+            set_display_units=lambda units: self.units.set_display(units),
         )
         #: Options → Lock Model: results make an edit of the model ask first.
         self.model_lock = ModelLockController(
@@ -758,7 +763,6 @@ class MainWindow(QMainWindow):
         self._act_help_contents = QAction("&Help Contents\tF1", self)
         self._act_shortcuts = QAction("&Keyboard Shortcuts…", self)
         self._act_performance = QAction("&Performance monitor…", self)
-        self._act_set_units = QAction("Set Display &Units…", self)
         self._act_solver_settings = QAction("&Solver…", self)
 
     def _annotate_help_topics(self) -> None:
@@ -1134,7 +1138,7 @@ class MainWindow(QMainWindow):
         )
 
         m_options = mb.addMenu("&Options")
-        m_options.addAction(self._act_set_units)
+        m_options.addAction(self.action("options.set_units"))
         m_options.addAction(self._act_solver_settings)
         m_options.addAction(self.action("options.lock_model"))
         m_options.addAction(self._act_use_ribbon)
@@ -1407,21 +1411,10 @@ class MainWindow(QMainWindow):
         self.model_lock.button.clicked.connect(self.action("options.lock_model").trigger)
         self.statusBar().addPermanentWidget(self.model_lock.button)
 
-        # SAP2000-style bottom-right unit picker. Drives the same state
-        # as Options → Set Display Units — changes here are instantly
-        # reflected in the menu dialog (and vice-versa).
-        self._units_combo = QComboBox()
-        self._units_combo.setToolTip(
-            "Display units — results, diagrams and tables convert to this "
-            "system. The model keeps the units its values were entered in."
-        )
-        for u in UnitSystem:
-            self._units_combo.addItem(u.value, u)
-        self._units_combo.currentIndexChanged.connect(
-            self._on_units_combo_changed,
-        )
+        # SAP2000-style bottom-right unit picker: the same state as
+        # Options → Set Display Units.
         self.statusBar().addPermanentWidget(QLabel("Units:"))
-        self.statusBar().addPermanentWidget(self._units_combo)
+        self.statusBar().addPermanentWidget(self.units.combo)
 
     # ── ribbon ────────────────────────────────────────────────────
     #: ribbon tab → the help page the Ayuda panel shows.
@@ -1565,87 +1558,6 @@ class MainWindow(QMainWindow):
 
         self.statusBar().showMessage(tr("Ready"))
 
-    def _on_units_combo_changed(self, _idx: int) -> None:
-        """Status-bar unit picker → ``project.meta.display_units``.
-
-        Qt stores the userData as a bare string (UnitSystem inherits
-        from str), so we re-cast to the enum before writing through
-        and logging. The model's own system is untouched, and every view
-        that shows a number is refreshed with the new conversion.
-        """
-        if self._vm.project is None:
-            return
-
-        raw = self._units_combo.currentData()
-        if raw is None:
-            return
-        chosen = raw if isinstance(raw, UnitSystem) else UnitSystem(str(raw))
-        if chosen is self._current_display_units():
-            return
-        self._set_display_units(chosen)
-
-    def _current_display_units(self) -> UnitSystem:
-        """The system results are shown in (the model's own when none was picked)."""
-        if self._vm.project is None:
-            return UnitSystem.SI_M_N
-        meta = self._vm.project.meta
-        return meta.display_units if meta.display_units is not None else meta.units
-
-    def _set_display_units(self, chosen: UnitSystem) -> None:
-        """Change the display system and refresh everything that shows a number."""
-        if self._vm.project is None:
-            return
-        self._vm.project.meta.display_units = chosen
-        self._vm.mark_dirty()
-        self._sync_units_combo()
-        self._log(f"Display units set to {chosen.value}.")
-        self._apply_display_units()
-
-    def _apply_display_units(self) -> None:
-        """Re-render every result view in the project's current display units.
-
-        The model is untouched — OpenSees numbers do not move — but each number
-        read off a diagram, table or curve is converted, so a unit change is
-        visible without re-running anything.
-        """
-        if self._vm.project is None:
-            return
-        converter = UnitConverter.of(self._vm.project.meta)
-        # Results panel: displacements, reactions, element forces, curves.
-        self._results_panel.refresh(self._vm.project)
-        # Active post-processing dock (diagram, deformed shape, plots).
-        if not self.display.refresh_units() and self.results.latest is not None:
-            self._canvas.render()
-        self.display.set_member_units(converter)
-        self._log(
-            f"Displayed values converted to {converter.target.value} (model units unchanged).",
-        )
-
-    def _sync_units_combo(self) -> None:
-        """Reflect the project's current display units in the status-bar combo.
-
-        Called after project load / menu-based unit change so the
-        status-bar widget stays consistent with the model state. When the
-        display system differs from the model's, the tooltip says so — the
-        typed values are in the model's system, not in the picker's.
-        """
-        if self._vm.project is None:
-            return
-        target = self._current_display_units()
-        idx = self._units_combo.findData(target)
-        if idx >= 0 and idx != self._units_combo.currentIndex():
-            self._units_combo.blockSignals(True)
-            self._units_combo.setCurrentIndex(idx)
-            self._units_combo.blockSignals(False)
-        model = self._vm.project.meta.units
-        tooltip = (
-            "Display units — results, diagrams and tables convert to this "
-            "system. The model keeps the units its values were entered in."
-        )
-        if target is not model:
-            tooltip += f"  Model units: {model.value} — typed values are unchanged."
-        self._units_combo.setToolTip(tooltip)
-
     def _wire(self) -> None:
         # File and every other declared command (views/actions).
         self._actions.wire(self)
@@ -1653,7 +1565,6 @@ class MainWindow(QMainWindow):
         self._act_help_contents.triggered.connect(self._on_help_contents)
         self._act_shortcuts.triggered.connect(self._on_shortcuts)
         self._act_performance.triggered.connect(self._on_performance)
-        self._act_set_units.triggered.connect(self._on_set_units)
         self._act_solver_settings.triggered.connect(self._on_solver_settings)
 
         # Edit
@@ -3234,6 +3145,15 @@ class MainWindow(QMainWindow):
         self._vm.adopt(project)
         self._log(f"Recovered the unsaved project from {snapshot} (not yet saved).")
 
+    def _refresh_displayed_units(self, converter: UnitConverter) -> None:
+        """Re-draw what shows a number, after the display units changed."""
+        # Results panel: displacements, reactions, element forces, curves.
+        self._results_panel.refresh(self._vm.project)
+        # Active post-processing dock (diagram, deformed shape, plots).
+        if not self.display.refresh_units() and self.results.latest is not None:
+            self._canvas.render()
+        self.display.set_member_units(converter)
+
     def _on_project_changed(self, project: Project | None) -> None:
         if project is None:
             self._start_page.refresh()
@@ -3278,7 +3198,7 @@ class MainWindow(QMainWindow):
         self._props.set_project(project)
         self._refresh_tree(project)
         self._refresh_status()
-        self._sync_units_combo()
+        self.units.sync_combo()
         self._refresh_action_enablement()
 
     def _on_model_mutated(self) -> None:
@@ -3365,41 +3285,6 @@ class MainWindow(QMainWindow):
         self._opensees = engines.opensees_status(settings)
         self._log_solver_status()
         self._refresh_action_enablement()
-
-    def _on_set_units(self) -> None:
-        """Options → Set Display Units — SAP2000 parity.
-
-        The selection is stored in ``project.meta.display_units`` and converts
-        every number a result view shows (force diagrams, displacements,
-        tables, curves). The model keeps ``project.meta.units``: the values an
-        engineer typed are never rewritten.
-        """
-        from PySide6.QtWidgets import QInputDialog
-
-        if self._vm.project is None:
-            QMessageBox.information(
-                self,
-                "Set Display Units",
-                "Open or create a project first.",
-            )
-            return
-        choices = [u.value for u in UnitSystem]
-        current_value = self._current_display_units().value
-        current_idx = choices.index(current_value)
-        choice, ok = QInputDialog.getItem(
-            self,
-            "Set Display Units",
-            "Unit system:",
-            choices,
-            current=current_idx,
-            editable=False,
-        )
-        if not ok:
-            return
-        new_units = next(u for u in UnitSystem if u.value == choice)
-        if new_units is self._current_display_units():
-            return
-        self._set_display_units(new_units)
 
     # ── helpers ──────────────────────────────────────────────────────
     def _refresh_tree(self, project: Project | None) -> None:

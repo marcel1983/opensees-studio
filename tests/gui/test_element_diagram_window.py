@@ -214,13 +214,13 @@ def test_the_units_picker_rewrites_the_window(qtbot) -> None:  # type: ignore[no
     mw.display.show_member(10)
 
     window = mw.display.member_windows[0]
-    assert mw._current_display_units() is UnitSystem.SI_M_N
+    assert mw.units.current() is UnitSystem.SI_M_N
 
     index = window._units.findData(UnitSystem.US_IN_KIP.value)
     assert index >= 0
     window._units.setCurrentIndex(index)
 
-    assert mw._current_display_units() is UnitSystem.US_IN_KIP
+    assert mw.units.current() is UnitSystem.US_IN_KIP
     assert "kip" in window._axial.value.text()
     assert "in" in window._distance.suffix()
 

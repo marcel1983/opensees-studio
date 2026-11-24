@@ -234,6 +234,8 @@ These are non-obvious things that are easy to break if you don't know:
   the combinations, `extra` for the report only): ask it, do not add a
   `_latest_results` to the window. `ModelLockController` (Options → Lock Model)
   owns the padlock of the status bar and gets `drop_results`.
+  `UnitsController` (Options → Set Display Units) owns the unit picker of the
+  status bar and gets `refresh`, the window's re-draw of what shows a number.
   `AnalysisController` (the Analyze menu: cases, Check Model, the stability
   check, Run and the batch doors) gets the window's `AnalysisRunner` and
   `StabilityChecker` as `runner` and `stability`; the window connects their

@@ -202,7 +202,7 @@ def test_a_display_unit_change_repaints_the_contour(qtbot) -> None:  # type: ign
         return original(*args, **kwargs)
 
     mw._contour_renderer.render = _spy  # type: ignore[method-assign]
-    mw._set_display_units(UnitSystem.US_IN_KIP)
+    mw.units.set_display(UnitSystem.US_IN_KIP)
 
     assert calls, "the contour was not repainted when the units changed"
     _args, kwargs = calls[-1]

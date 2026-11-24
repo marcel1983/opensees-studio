@@ -17,4 +17,6 @@ OPTIONS_ACTIONS: tuple[ActionSpec, ...] = (
             "an analysis has results; unlocking discards them."
         ),
     ),
+    # The same choice as the picker at the right of the status bar.
+    ActionSpec("options.set_units", "Set Display &Units…", "units.pick"),
 )
