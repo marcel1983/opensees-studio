@@ -137,7 +137,17 @@ script o un notebook de Jupyter: la interfaz es una forma de usarlo, no la únic
   proyección horizontal del techo; las correas van
   articuladas y solo arriostran la viga de techo donde llevan angular de
   estabilización, y el asistente escribe esas longitudes no arriostradas para la
-  verificación de acero); la losa **Slab 20cm** de concreto
+  verificación de acero); el **asistente de edificios** (Define → Create
+  Building, o File → New Model → Building: edificio regular de pórticos de
+  varios pisos, de acero o de concreto, con vanos iguales o una lista de
+  anchos, primer piso de otra altura, un piso y un diafragma rígido por
+  entrepiso en su centro de masa, la losa sin modelar, como paños de carga en
+  una o dos direcciones con la carga viva del uso según RNC-07, NSCM o ASCE
+  7-16, la fuente de masa con la carga viva que cuenta la norma, y el sismo por
+  fuerza lateral equivalente según RNC-07 Art. 32, NSCM 8.2.1 o ASCE 7-16 12.8
+  como `EQ X ±e` y `EQ Y ±e` con la excentricidad accidental, más las
+  combinaciones de la norma; la última página muestra el peso sísmico y el
+  cortante basal antes de crear nada); la losa **Slab 20cm** de concreto
   de 4000 psi en todo proyecto 3D nuevo, lista para Draw Shell; **muros de hormigón armado** (Assign → Frame → RC Wall:
   macroelementos MVLEM en modelos 2D); el **diseñador de secciones** (Define → Section
   Designer: cualquier sección dibujada con comandos —`rect`, `circle`, `poly`,

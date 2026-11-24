@@ -15,11 +15,9 @@ behind.
 
 from __future__ import annotations
 
-import math
 from typing import Any
 
-from PySide6.QtCore import QPointF, QSize
-from PySide6.QtGui import QColor, QPainter, QPaintEvent, QPen, QShowEvent
+from PySide6.QtGui import QShowEvent
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -83,13 +81,12 @@ from opensees_studio.views.dialogs.frame_wizard import (
     _CompletablePage,
     _field,
 )
+from opensees_studio.views.dialogs.wireframe_preview import WireframePreview
 from opensees_studio.views.i18n import tr
 from opensees_studio.views.screen_fit import fit_to_available_screen
 
 #: What a section combo reports for "create the default section".
 CREATE_DEFAULT = -1
-
-_COS30 = math.cos(math.radians(30.0))
 
 #: Labels of :data:`opensees_studio.core.warehouse.ROOF_STRUCTURES`, in its order.
 ROOF_STRUCTURE_LABELS: tuple[str, ...] = ("Rafters", "Roof trusses")
@@ -178,68 +175,21 @@ WIND_OPENINGS: tuple[str, ...] = (
 )
 
 
-class WarehousePreview(QWidget):
+class WarehousePreview(WireframePreview):
     """An isometric wireframe of the warehouse, one colour per member group."""
-
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self._lines: list[tuple[QColor, list[tuple[QPointF, QPointF]]]] = []
-        self._bounds = (0.0, 0.0, 1.0, 1.0)
-        self.setMinimumSize(300, 260)
-
-    def sizeHint(self) -> QSize:
-        return QSize(340, 320)
-
-    def line_count(self) -> int:
-        """Members drawn (for the tests)."""
-        return sum(len(lines) for _colour, lines in self._lines)
 
     def set_warehouse(self, warehouse: Warehouse | None) -> None:
         """Draw ``warehouse``; None clears the preview."""
-        self._lines = []
-        if warehouse is not None:
-            ox, oy, oz = warehouse.spec.origin
-
-            def project(coords: tuple[float, ...]) -> QPointF:
-                x, y, z = coords[0] - ox, coords[1] - oy, coords[2] - oz
-                return QPointF((x + y) * _COS30, (y - x) * 0.5 + z)
-
-            points = {node.id: project(node.coords) for node in warehouse.nodes}
-            ends = {e.id: e.nodes for e in warehouse.elements}
-            for key in GROUPS:
-                segments = [
-                    (points[ends[eid][0]], points[ends[eid][1]]) for eid in warehouse.members[key]
-                ]
-                if segments:
-                    self._lines.append((QColor(GROUP_COLOURS[key]), segments))
-            us = [p.x() for p in points.values()]
-            vs = [p.y() for p in points.values()]
-            self._bounds = (min(us), min(vs), max(us), max(vs))
-        self.update()
-
-    def paintEvent(self, _event: QPaintEvent) -> None:
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        painter.fillRect(self.rect(), self.palette().base())
-        if not self._lines:
+        if warehouse is None:
+            self.clear()
             return
-        u0, v0, u1, v1 = self._bounds
-        margin = 12.0
-        scale = min(
-            (self.width() - 2 * margin) / max(u1 - u0, 1e-9),
-            (self.height() - 2 * margin) / max(v1 - v0, 1e-9),
+        self.set_members(
+            warehouse.nodes,
+            warehouse.elements,
+            warehouse.members,
+            {key: GROUP_COLOURS[key] for key in GROUPS},
+            origin=warehouse.spec.origin,
         )
-        left = (self.width() - (u1 - u0) * scale) / 2.0
-        top = (self.height() - (v1 - v0) * scale) / 2.0
-
-        def screen(p: QPointF) -> QPointF:
-            return QPointF(left + (p.x() - u0) * scale, top + (v1 - p.y()) * scale)
-
-        for colour, segments in self._lines:
-            painter.setPen(QPen(colour, 1.2))
-            for a, b in segments:
-                painter.drawLine(screen(a), screen(b))
-        painter.end()
 
 
 class WarehouseWizard(QWizard):

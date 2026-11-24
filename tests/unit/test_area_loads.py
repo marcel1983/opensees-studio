@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 import json
 import math
 
@@ -23,6 +24,8 @@ from opensees_studio.core import (
 )
 from opensees_studio.core.area_loads import (
     AreaLoadError,
+    _edge_members,
+    _frames,
     edge_profile,
     floor_area,
     floor_member_loads,
@@ -116,6 +119,130 @@ def test_floor_panels_finds_each_framed_bay_once() -> None:
     project = _floor(split_first_beam=True)
     assert floor_panels(project, {1, 2, 3, 4, 9}) == [(1, 2, 3, 4)]
     assert floor_panels(project, {1, 2, 3}) == []
+
+
+def _skew_building(storeys: int = 3) -> Project:
+    """Two bays by two, turned 27 degrees in plan, with split beams, braces and columns."""
+    turn = math.radians(27.0)
+
+    def at(x: float, y: float, z: float) -> tuple[float, float, float]:
+        return (
+            x * math.cos(turn) - y * math.sin(turn),
+            x * math.sin(turn) + y * math.cos(turn),
+            z,
+        )
+
+    nodes: list[Node] = []
+    elements: list[ElasticBeamColumn] = []
+    ids: dict[tuple[float, float, int], int] = {}
+
+    def node(x: float, y: float, k: int) -> int:
+        if (x, y, k) not in ids:
+            ids[x, y, k] = len(nodes) + 1
+            nodes.append(Node(id=len(nodes) + 1, coords=at(x, y, 3.2 * k)))
+        return ids[x, y, k]
+
+    def member(a: int, b: int) -> None:
+        elements.append(ElasticBeamColumn(id=len(elements) + 1, nodes=(a, b), section_id=1))
+
+    xs, ys = (0.0, 5.0, 11.0), (0.0, 4.0, 8.5)
+    for k in range(1, storeys + 1):
+        for x in xs:
+            for y in ys:
+                member(node(x, y, k - 1), node(x, y, k))
+        for y in ys:  # beams along X, each split in two at an uneven point
+            for x0, x1 in itertools.pairwise(xs):
+                middle = node(x0 + 0.37 * (x1 - x0), y, k)
+                member(node(x0, y, k), middle)
+                member(node(x1, y, k), middle)  # against the edge
+        for x in xs:
+            for y0, y1 in itertools.pairwise(ys):
+                member(node(x, y0, k), node(x, y1, k))
+        member(node(xs[0], ys[0], k), node(xs[1], ys[1], k))  # a brace across a bay
+    return Project(
+        ndm=3,
+        ndf=6,
+        nodes=nodes,
+        elements=elements,
+        sections=[ElasticSection(id=1, E=1.0, A=1.0, Iz=1.0, Iy=1.0, G=1.0, J=1.0)],
+    )
+
+
+def _edge_members_one_by_one(project: Project, start, end, tol: float):  # type: ignore[no-untyped-def]
+    """The members on an edge, by asking every element of the model in turn."""
+    coords = {n.id: np.asarray(n.coords, dtype=float) for n in project.nodes}
+    length = float(np.linalg.norm(end - start))
+    unit = (end - start) / length
+    found = []
+    for element in project.elements:
+        ts = []
+        for nid in element.nodes:
+            rel = coords[nid] - start
+            t = float(rel @ unit)
+            if float(np.linalg.norm(rel - t * unit)) > tol or t < -tol or t > length + tol:
+                break
+            ts.append(min(max(t, 0.0), length))
+        else:
+            if abs(ts[1] - ts[0]) > tol:
+                found.append((element.id, ts[0], ts[1]))
+    return found
+
+
+def test_the_members_of_an_edge_are_the_ones_a_loop_over_the_model_finds() -> None:
+    """The search by level and in one pass keeps the members, their order and their numbers."""
+    project = _skew_building()
+    frames = _frames(project)
+    coords = frames.coords
+    by_place = {
+        (round(float(c[0]), 6), round(float(c[1]), 6), round(float(c[2]), 6)): n
+        for n, c in coords.items()
+    }
+    corners = [n for n in by_place.values() if coords[n][2] > 0.0]
+    checked = 0
+    for a in corners:
+        for b in corners:
+            if a == b or abs(coords[a][2] - coords[b][2]) > 1e-9:
+                continue
+            start, end = coords[a], coords[b]
+            tol = 1e-6 * float(np.linalg.norm(end - start))
+            expected = _edge_members_one_by_one(project, start, end, tol)
+            try:
+                found = _edge_members(frames, start, end, tol)
+            except AreaLoadError:
+                continue  # not framed all the way: the old loop raised here too
+            assert [(e.id, ti, tj) for e, ti, tj in found] == expected
+            checked += 1
+    assert checked >= 100
+
+
+def test_a_panel_of_a_building_gets_the_loads_of_its_own_floor() -> None:
+    project = _skew_building()
+    level = {n.id: round(n.coords[2] / 3.2) for n in project.nodes}
+    at = {
+        (round(float(n.coords[0]), 6), round(float(n.coords[1]), 6), level[n.id]): n.id
+        for n in project.nodes
+    }
+    turn = math.radians(27.0)
+
+    def corner(x: float, y: float, k: int) -> int:
+        return at[
+            round(x * math.cos(turn) - y * math.sin(turn), 6),
+            round(x * math.sin(turn) + y * math.cos(turn), 6),
+            k,
+        ]
+
+    xs, ys = (0.0, 5.0, 11.0), (0.0, 4.0, 8.5)
+    for k in (1, 2, 3):
+        on_floor = {e.id for e in project.elements if all(level[n] == k for n in e.nodes)}
+        for x0, x1 in itertools.pairwise(xs):
+            for y0, y1 in itertools.pairwise(ys):
+                panel = (corner(x0, y0, k), corner(x1, y0, k), corner(x1, y1, k), corner(x0, y1, k))
+                load = FloorLoad(nodes=panel, value=2.5)
+                loads = floor_member_loads(project, load)
+                assert {tl.element_id for tl in loads} <= on_floor
+                assert _member_total(project, loads) == pytest.approx(
+                    2.5 * floor_area(project, load)
+                )
 
 
 def test_the_pattern_reads_its_floor_loads_with_its_member_loads() -> None:

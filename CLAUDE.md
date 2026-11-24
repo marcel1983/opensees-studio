@@ -300,7 +300,11 @@ These are non-obvious things that are easy to break if you don't know:
   combination generator, and a code without a snow role (RNC-07) takes the one
   balanced case as a live load.
   `core.building.plan_building` is the same idea for a multi-storey building
-  (`BuildingPlan`; no command or dialog yet, `plan.apply(project)` in a script).
+  (`BuildingPlan`): Define → Create Building is `GeneratorsController.create_building`
+  (`views/controllers/generators.py`), `BuildingWizard` and
+  `commands.building.insert_building_plan`; a script calls `plan.apply(project)`.
+  The wizard's last page plans the building with the planner the controller
+  hands it, so what cannot be built is said before Finish.
   The slab is never modelled: it is `FloorLoad` panels, the mass is the mass
   source (`DEAD` plus the live load the code counts), and the earthquake is
   `core.equivalent_lateral` on the project's storeys, applied at each
