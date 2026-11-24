@@ -121,10 +121,18 @@ follow.
   (`tests/unit/test_aisi_s100.py`). The closed forms of global buckling agree
   with the finite strips within 0.5 % (column, major-axis and minor-axis
   lateral-torsional buckling).
-- **Source of the equations.** No copy of S100-16 was at hand: the equations,
-  limits, factors and clause numbers were written from memory and then pinned
-  by the example above and by the closed forms. They need a pass against the
-  specification.
+- **Source of the equations.** Written first without a copy of S100-16, then
+  checked on 2026-11-24 against its text (2016 edition reaffirmed 2020, with and
+  without Supplement 2, which changes none of the clauses used): D2, D3, E2 to
+  E2.3, E3.2.1, E4.1, F2.1 to F2.1.3, F3.2.1, F4.1, G2.1, G2.3, H1.1, H1.2, H2,
+  C1.1.1.3, C1.2.1.1, Appendix 2 (2.2, 2.3.1.2, 2.3.1.3 with Table 2.3.1.3-1,
+  2.3.3.3) and I6.2.1 agree with the code. Kept on the safe side of the text:
+  `CTF = 1` in F2.1.2 and `β = 1` in 2.3.3.3, both permitted. What the check
+  lacked and now has: the limits of **B4.1** (Table B4.1-1, Direct Strength
+  Method column), outside which B4.2 (a) gives compression, flexure and shear the
+  factors of A1.2 (c) (φ = 0.80, Ω = 2.00), and the `Fu/Fy ≥ 1.08` of I6.2.1
+  (o). D3 of S100-16 is `An Fu`; the shear lag factor the check accepts is the
+  user's, from J6.
 - **Simplifications.** Twisting takes the minor-axis unbraced length (no
   `Lt`/`Kt` yet). A zee takes half the channel's lateral-torsional stress
   (F2.1.3). The sign of a minor-axis moment is not tracked. Shear across the
@@ -138,7 +146,7 @@ follow.
 by the side of the local axis the member bends along. The check evaluates each
 station with the sign of its own moment: with that flange in compression the
 member is braced against lateral-torsional buckling (local and distortional
-buckling stay); with it in tension the strength is `R Mnlo` of I6.2.1 where the
+buckling stay); with it in tension the strength is `R Mno` of I6.2.1 where the
 section is within the clause's limits (edge-stiffened flanges, depth, depth to
 thickness, depth to flange width, flange width, flat width to thickness), and
 never less than lateral-torsional buckling over `Lb`. The Warehouse Wizard
@@ -150,7 +158,8 @@ lines as design lengths.
   restraint of the sheeting on distortional buckling. Continuous (lapped)
   purlins: the wizard's are simple spans. The span, panel, fastener and
   insulation limits of I6.2.1 are stated in the member note, not checked.
-- **Source.** The R values and the limits of I6.2.1 were also written without
-  the specification at hand.
+- **Source.** The R values and the limits (a) to (f) of I6.2.1 agree with the
+  text (checked 2026-11-24); the insulation factor `r = 1 - 0.01 ti` is stated
+  in the member note, not applied.
 - **Found on the examples.** The 50 mm flange of the wizard's default purlin
   is below the 2.125 in of I6.2.1, so under uplift it counts on its sag rods.

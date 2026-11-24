@@ -323,12 +323,15 @@ These are non-obvious things that are easy to break if you don't know:
   brace only through `SteelMemberDesign.sheeted_flange` (`"+"`/`"-"`: the side
   of the local axis the member bends along; a positive M2 compresses the +z
   flange, a positive M3 the -y one): braced where that flange is in
-  compression, `R Mnlo` of I6.2.1 or Lb where it is in tension. The Warehouse
+  compression, `R Mno` of I6.2.1 or Lb where it is in tension. The Warehouse
   Wizard writes it for purlins and girts from the wall's outward normal, with
-  the sag rod lengths (design lengths only, no elements). The equations were typed
-  without a copy of S100-16 at hand and are pinned by the DSM Design Guide
-  example and by closed forms against the finite strips; check a clause against
-  the specification before changing it.
+  the sag rod lengths (design lengths only, no elements). The equations, factors
+  and limits were checked against the text of S100-16 (reaffirmed 2020, with
+  Supplement 2) and are pinned by the DSM Design Guide example and by closed
+  forms against the finite strips. The φ and Ω of Chapters E to H hold only
+  within Table B4.1-1 (`aisi_s100.dsm_limits`); outside it compression,
+  flexure and shear take those of A1.2 (c), so `check_member` needs `ksi` (one
+  ksi in the project's stresses) as well as `inch`.
 - `Entity.id` is `PositiveInt` (>0). The sentinel `999999` is reserved
   for in-flight / temporary objects that haven't been assigned a real id.
 - Eigen determinism rule. ARPACK keeps its random start vector across

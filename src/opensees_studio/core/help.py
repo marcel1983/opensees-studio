@@ -2274,11 +2274,19 @@ material without Fy takes the dialog's values, and the member note says so.
   is the lower of the flange tips and the web in compression.
 - **Shear** G2.1 of a web without stiffeners (kv = 5.34).
 - **Interaction** H1.2 `P/Pa + Mx/Max + My/May`, H1.1 with tension, and H2
-  bending with shear, `sqrt((M/Malo)² + (V/Va)²)`.
+  bending with shear, `sqrt((M/Mao)² + (V/Va)²)`.
 - **P-δ (B1)** follows C1.2.1.1, with `Pe1` on `0.90 τb EI`.
 
 The factors are φ = 0.90 / Ω = 1.67 in tension and flexure, 0.85 / 1.80 in
-compression, 0.95 / 1.60 in shear and 0.75 / 2.00 in rupture.
+compression, 0.95 / 1.60 in shear and 0.75 / 2.00 in rupture. They hold within
+the limits of **B4.1** (Table B4.1-1, Direct Strength Method): flat width to
+thickness of the web up to 300, of an edge-stiffened flange up to 160 and of a
+lip or a plain channel's flange up to 60, inside bend radius up to 20 times the
+thickness, lip up to 0.7 of the flange width (out to out) and Fy up to 95 ksi
+(655 MPa). A member outside them takes φ = 0.80 / Ω = 2.00 in compression,
+flexure and shear (A1.2 (c), as B4.2 (a) allows), and its note says which
+limit it misses; tension keeps its factors. The equations, factors and limits
+were checked against the text of S100-16 (reaffirmed 2020, with Supplement 2).
 
 **Sheeting.** A purlin or girt with a sheeting screwed to one flange gets
 **Sheeting on the flange** in the member overrides: the + or the - side of the
@@ -2287,12 +2295,14 @@ View → Show Local Axes draws it, z in blue). Where the moment puts that flange
 compression (gravity on a purlin, pressure on a girt) the member is braced
 against lateral-torsional buckling along its length. Where it puts it in
 tension (uplift, suction) the free flange is the one in compression: the
-strength is `R Mnlo` of **I6.2.1** (R = 0.70, 0.65, or 0.40 for a channel and
+strength is `R Mno` of **I6.2.1** (R = 0.70, 0.65, or 0.40 for a channel and
 0.50 for a zee, by depth, simple span) when the section is within the limits of
 that clause, and never less than lateral-torsional buckling over Lb; outside
 them it is lateral-torsional buckling over Lb, and the member note says which
-limit is not met. The span (33 ft), the panels, their fasteners and the
-insulation of I6.2.1 are not checked. Sheeting does not hold a member under
+limit is not met. With the material's Fu, Fu/Fy must also be at least 1.08.
+The span (33 ft), the panels, their fasteners and the laps of I6.2.1 are not
+checked, and R is taken without insulation: with a glass fibre blanket of
+thickness ti on a simple span it is R times `1 - 0.01 ti` (ti in inches). Sheeting does not hold a member under
 **axial compression** here (I6.2.3 is not applied): the minor-axis length is
 what the sag rods or the model give. Without the setting, a sheeting is not a
 brace. The Warehouse Wizard sets the flange and the sag rod lengths of its
