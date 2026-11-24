@@ -160,6 +160,22 @@ and a test against a worked example of the code
 (`tests/unit/test_seismic_codes.py` shows an unknown code going through the
 generator untouched).
 
+## Design checks in the calculation memory
+
+Design → Calculation Memory writes the same document as HTML, Markdown, LaTeX
+and OpenDocument. The member sheets are its own; every other design check's
+tables (the AISC 341 joints, the AISC 358 RBS connections and their web
+connection, the SCBF protected zones, gussets, brace connections, joints and
+column splices, the Chapter J connection checks with their steps, the SCBF
+capacity design) are declared once in `services/memory_tables.py`: a function
+per check that returns its `Table` objects (heading, columns as label keys or
+`Raw` text, rows as text), registered in `MEMORY_SECTIONS` in print order.
+`services/calc_memory.py` has one renderer per format. A new check adds its
+function and its labels (in English and Spanish, `calc_memory._LABELS`;
+`tests/unit/test_memory_tables.py` checks both), not four copies of a table.
+The project file is unchanged: the design data stays where it is
+(`connections`, `gussets`, `column_splices`, `chapter_j_checks`, `design`).
+
 ## Threading and the analysis process
 
 The Qt main thread owns all widgets. OpenSees never runs in it:

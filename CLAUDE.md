@@ -262,6 +262,9 @@ These are non-obvious things that are easy to break if you don't know:
   (`services/material_emitters.py`, `section_emitters.py`,
   `element_emitters.py`, registered by type or class); a new kind is an
   emitter there, never a branch in `OpenSeesRunner`.
+- A design check's tables in the calculation memory are one function in
+  `services/memory_tables.py` (`MEMORY_SECTIONS`), rendered by
+  `calc_memory` as HTML, Markdown, LaTeX and ODT; never a table per format.
 - An unregistered material type is not a crash: `material_forms.form_for`
   returns a read-only placeholder, the same contract `section_forms` has.
 - Never hardcode how the analysis child is spawned. Every spawn site
