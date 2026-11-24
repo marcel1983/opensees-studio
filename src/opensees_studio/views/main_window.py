@@ -52,7 +52,6 @@ from PySide6.QtWidgets import (
 from opensees_studio import __version__
 from opensees_studio.commands import (
     AddElementsCommand,
-    AddMaterialsCommand,
     AddNodesCommand,
     AddSectionsCommand,
     AssignMaterialCommand,
@@ -101,7 +100,6 @@ from opensees_studio.core.connectivity import (
     joints_on_shell_edges,
     loose_joints,
 )
-from opensees_studio.core.default_materials import missing_default_materials
 from opensees_studio.core.design.settings import DesignSettings
 from opensees_studio.core.duplicates import default_tolerance
 from opensees_studio.core.generated import GeneratedModel
@@ -176,6 +174,7 @@ from opensees_studio.views.controllers.building import BuildingController
 from opensees_studio.views.controllers.design import DesignController
 from opensees_studio.views.controllers.imports import ImportsController
 from opensees_studio.views.controllers.joints import JointsController
+from opensees_studio.views.controllers.library import LibraryController
 from opensees_studio.views.controllers.loads import LoadsController
 from opensees_studio.views.controllers.members import MembersController
 from opensees_studio.views.controllers.patterns import PatternsController
@@ -189,11 +188,7 @@ from opensees_studio.views.dialogs import (
     DuplicatesDialog,
     ElementDiagramWindow,
     FrameWizard,
-    FrictionLibraryDialog,
-    GroundMotionsDialog,
     InfluenceLineDialog,
-    MaterialLibraryDialog,
-    MaterialTesterDialog,
     MeshDialog,
     ModelCheckDialog,
     MoveDialog,
@@ -201,7 +196,6 @@ from opensees_studio.views.dialogs import (
     ProjectInfoDialog,
     ReplicateDialog,
     RunAnalysisDialog,
-    SectionLibraryDialog,
 )
 from opensees_studio.views.dialogs.batch_run import BatchRunDialog
 from opensees_studio.views.dialogs.connect_joints import DivideFramesDialog, MergeJointsDialog
@@ -419,8 +413,6 @@ class MainWindow(QMainWindow):
         self._quick_shell_tool: DrawShellTool | None = None
         self._draw_shell_tool: DrawShellTool | None = None
         self._measure_tool: MeasureDistanceTool | None = None
-        self._material_tester_dlg: MaterialTesterDialog | None = None  # non-modal, reused
-        self._ground_motions_dlg: GroundMotionsDialog | None = None  # non-modal, reused
 
         shell = Shell(
             window=self,
@@ -445,6 +437,7 @@ class MainWindow(QMainWindow):
             confirm_discard=lambda action: self._confirm_discard_changes(action),
             apply_view_settings=lambda: self._apply_project_view_settings(),
         )
+        self.library = LibraryController(shell, new_project=lambda: self._on_new())
         self.members = MembersController(shell)
         self.patterns = PatternsController(shell, new_project=self._on_new)
         #: Loads on joints, frames and areas, joint patterns, Edit → Delete Loads.
@@ -720,26 +713,6 @@ class MainWindow(QMainWindow):
             "A 3D steel warehouse from a few numbers: portal frames, purlins, girts, "
             "bracing, roof loads and the combinations of a design code."
         )
-        self._act_material_library = QAction("&Material Library…", self, shortcut="Ctrl+Shift+M")
-        self._act_default_materials = QAction("Add &Default Materials", self)
-        self._act_default_materials.setToolTip(
-            "Add the default steels (A36, A572 Gr. 50, A992, A500 Gr. B, A653 sheet), "
-            "concretes (3000 and 4000 psi) and grouted block masonry the project lacks."
-        )
-        self._act_friction_library = QAction("&Friction Models…", self)
-        self._act_material_tester = QAction("Material &Tester…", self, shortcut="Ctrl+Shift+T")
-        # Ctrl+Shift+G is Assign to Group and Ctrl+Shift+S is Save As: an
-        # ambiguous shortcut fires neither (tests/gui/test_shortcuts.py).
-        self._act_ground_motions = QAction(
-            "&Ground Motions…", self, shortcut=QKeySequence("Ctrl+Shift+W")
-        )
-        self._act_section_library = QAction(
-            "&Section Library…", self, shortcut=QKeySequence("Ctrl+Shift+E")
-        )
-        self._act_concrete_section = QAction("&Concrete Section Wizard…", self)
-        self._act_steel_deck = QAction("Steel Deck Sla&b Wizard…", self)
-        self._act_mc2010 = QAction("Concrete Creep && Shrin&kage (fib MC2010)…", self)
-        self._act_section_designer = QAction("Section &Designer…", self)
         self._act_load_combinations = QAction("Load &Combinations…", self)
 
         # Assign
@@ -1036,16 +1009,16 @@ class MainWindow(QMainWindow):
         m_define.addSeparator()
         m_define.addActions(
             [
-                self._act_material_library,
-                self._act_default_materials,
-                self._act_mc2010,
-                self._act_friction_library,
-                self._act_material_tester,
-                self._act_ground_motions,
-                self._act_section_library,
-                self._act_concrete_section,
-                self._act_steel_deck,
-                self._act_section_designer,
+                self.action("define.material_library"),
+                self.action("define.default_materials"),
+                self.action("define.mc2010"),
+                self.action("define.friction_library"),
+                self.action("define.material_tester"),
+                self.action("define.ground_motions"),
+                self.action("define.section_library"),
+                self.action("define.concrete_section"),
+                self.action("define.steel_deck"),
+                self.action("define.section_designer"),
             ]
         )
         m_define.addSeparator()
@@ -1949,16 +1922,6 @@ class MainWindow(QMainWindow):
         self._act_frame_wizard.triggered.connect(self._on_frame_wizard)
         self._act_truss_wizard.triggered.connect(self._on_truss_wizard)
         self._act_warehouse_wizard.triggered.connect(self._on_warehouse_wizard)
-        self._act_material_library.triggered.connect(self._on_material_library)
-        self._act_default_materials.triggered.connect(self._on_add_default_materials)
-        self._act_friction_library.triggered.connect(self._on_friction_library)
-        self._act_material_tester.triggered.connect(self._on_material_tester)
-        self._act_ground_motions.triggered.connect(self._on_ground_motions)
-        self._act_section_library.triggered.connect(self._on_section_library)
-        self._act_concrete_section.triggered.connect(self._on_concrete_section)
-        self._act_steel_deck.triggered.connect(self._on_steel_deck)
-        self._act_mc2010.triggered.connect(self._on_mc2010_concrete)
-        self._act_section_designer.triggered.connect(self._on_section_designer)
         self._act_load_combinations.triggered.connect(self._on_load_combinations)
 
         # Assign
@@ -3317,22 +3280,6 @@ class MainWindow(QMainWindow):
             f"Shell {element_id}: nodes {nodes}, plate section {section.id} "
             f"(winding ordered counter-clockwise)."
         )
-
-    def _on_mc2010_concrete(self) -> None:
-        """Define → Concrete Creep & Shrinkage: a TDConcreteMC10 material from the mix."""
-        from opensees_studio.views.dialogs.mc2010_concrete import Mc2010ConcreteDialog
-
-        if self._vm.project is None:
-            self._on_new()
-        project = self._vm.project
-        if project is None:
-            return
-        dialog = Mc2010ConcreteDialog(project, self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        material = dialog.material()
-        self._vm.apply_command(AddMaterialsCommand(self._vm, [material]))
-        self._log(f"Material {material.id} ({material.name}): TDConcreteMC10 after fib MC2010.")
 
     def _on_shell_formulation(self) -> None:
         """Assign → Area → Shell Formulation: MITC4, DKGQ or NLDKGQ (quads), DKGT or NLDKGT."""
@@ -4859,124 +4806,6 @@ class MainWindow(QMainWindow):
         return "\n".join(lines)
 
     # ── slots: define ────────────────────────────────────────────────
-    def _on_add_default_materials(self) -> None:
-        """Define → Add Default Materials: the default steels, concretes and masonry it lacks."""
-        project = self._vm.project
-        if project is None:
-            return
-        missing = missing_default_materials(project, project.meta.units)
-        if not missing:
-            self.statusBar().showMessage(
-                tr("The project already has every default material."), 6000
-            )
-            return
-        self._vm.apply_command(AddMaterialsCommand(self._vm, missing))
-        self._log(f"Default materials added: {', '.join(m.name for m in missing)}.")
-
-    def _on_material_library(self) -> None:
-        if self._vm.project is None:
-            self._on_new()
-        MaterialLibraryDialog(self._vm, self).exec()
-
-    def _on_friction_library(self) -> None:
-        """Define > Friction Models: friction models for the sliding bearings."""
-        if self._vm.project is None:
-            self._on_new()
-        FrictionLibraryDialog(self._vm, self).exec()
-
-    def _on_material_tester(self) -> None:
-        # Non-modal and reused: a second trigger raises the open dialog.
-        if self._vm.project is None:
-            self._on_new()
-        if self._material_tester_dlg is None:
-            self._material_tester_dlg = MaterialTesterDialog(self._vm, self)
-        self._material_tester_dlg.show()
-        self._material_tester_dlg.raise_()
-        self._material_tester_dlg.activateWindow()
-
-    def _on_ground_motions(self) -> None:
-        # Non-modal and reused: a second trigger raises the open dialog.
-        if self._vm.project is None:
-            self._on_new()
-        if self._ground_motions_dlg is None:
-            self._ground_motions_dlg = GroundMotionsDialog(self._vm, self)
-        self._ground_motions_dlg.show()
-        self._ground_motions_dlg.raise_()
-        self._ground_motions_dlg.activateWindow()
-
-    def _on_section_library(self) -> None:
-        if self._vm.project is None:
-            self._on_new()
-        SectionLibraryDialog(self._vm, self).exec()
-
-    def _on_concrete_section(self) -> None:
-        """Define → Concrete Section Wizard: materials and sections in one undo step."""
-        from opensees_studio.views.dialogs.concrete_section import ConcreteSectionDialog
-
-        if self._vm.project is None:
-            self._on_new()
-        project = self._vm.project
-        if project is None:
-            return
-        dialog = ConcreteSectionDialog(project, self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        result = dialog.built_section()
-        if result is None:
-            return
-        sections = [s for s in (result.fiber, result.elastic) if s is not None]
-        self._add_materials_and_sections("Concrete section", result.materials, sections)
-
-    def _on_steel_deck(self) -> None:
-        """Define → Steel Deck Slab Wizard: orthotropic layered shell, one undo step."""
-        from opensees_studio.views.dialogs.steel_deck import SteelDeckDialog
-
-        if self._vm.project is None:
-            self._on_new()
-        project = self._vm.project
-        if project is None:
-            return
-        dialog = SteelDeckDialog(project, self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        result = dialog.built_deck()
-        if result is not None:
-            self._add_materials_and_sections("Steel deck slab", result.materials, [result.section])
-
-    def _on_section_designer(self) -> None:
-        """Define → Section Designer: a drawn or imported section, added in one undo step."""
-        from opensees_studio.views.dialogs.section_designer import SectionDesignerDialog
-
-        if self._vm.project is None:
-            self._on_new()
-        project = self._vm.project
-        if project is None:
-            return
-        dialog = SectionDesignerDialog(project, self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        section = dialog.built_section()
-        if section is not None:
-            self._add_materials_and_sections("Designed section", [], [section])
-
-    def _add_materials_and_sections(
-        self, text: str, materials: list[Any], sections: list[Any]
-    ) -> None:
-        """Add ``materials`` then ``sections`` as one undo step, and say what was added."""
-        from opensees_studio.commands import AddMaterialsCommand
-
-        stack = self._vm.undo_stack
-        stack.beginMacro(text)
-        try:
-            if materials:
-                self._vm.apply_command(AddMaterialsCommand(self._vm, materials))
-            if sections:
-                self._vm.apply_command(AddSectionsCommand(self._vm, sections))
-        finally:
-            stack.endMacro()
-        names = ", ".join(f"#{s.id} {s.name}" for s in sections)
-        self._log(f"{text}: added {len(materials)} material(s) and section(s) {names}.")
-
     # ── slots: assign property ──────────────────────────────────────
     # ── area loads and imposed displacements ─────────────────────────
     def _on_assign_springs_of(self, kind: str) -> None:
@@ -6933,8 +6762,10 @@ class MainWindow(QMainWindow):
         run_batch.setStatusTip("" if solver else self._solver.summary())
         # The Material Tester and the stability check call OpenSees itself,
         # whatever engine runs the cases.
-        self._act_material_tester.setEnabled(opensees)
-        self._act_material_tester.setStatusTip("" if opensees else self._opensees.summary())
+        self.action("define.material_tester").setEnabled(opensees)
+        self.action("define.material_tester").setStatusTip(
+            "" if opensees else self._opensees.summary()
+        )
         batch_enabled = has_cases and solver and not self._runner.is_running
         self._act_run_all.setEnabled(batch_enabled)
         self._act_run_selected.setEnabled(batch_enabled)
@@ -7011,7 +6842,6 @@ class MainWindow(QMainWindow):
         self._act_display_options.setEnabled(has_project)
         self._act_show_load_assigns.setEnabled(has_project)
         self._act_lock_model.setEnabled(has_project)
-        self._act_default_materials.setEnabled(has_project)
         self._lock_button.setEnabled(has_project)
         self._act_show_local_axes.setEnabled(has_project)
         self._act_back_to_model.setEnabled(self._post_dock is not None)

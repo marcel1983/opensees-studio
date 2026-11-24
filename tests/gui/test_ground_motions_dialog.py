@@ -40,7 +40,7 @@ def _open(qtbot):  # type: ignore[no-untyped-def]
     qtbot.addWidget(mw)
     mw._vm.new_project()
     mw._act_ground_motions.trigger()
-    dlg = mw._ground_motions_dlg
+    dlg = mw.library.ground_motions_dialog
     assert dlg is not None
     qtbot.addWidget(dlg)
     return mw, dlg
@@ -51,7 +51,7 @@ def test_action_opens_non_modal_dialog_and_reuses_it(qtbot) -> None:  # type: ig
     mw, dlg = _open(qtbot)
     assert not dlg.isModal()
     mw._act_ground_motions.trigger()
-    assert mw._ground_motions_dlg is dlg
+    assert mw.library.ground_motions_dialog is dlg
 
 
 @pytest.mark.gui
