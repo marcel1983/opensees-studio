@@ -19,10 +19,12 @@ from opensees_studio.core.design import aisi_s100, fsm
 from opensees_studio.core.design.aisc360 import Demand, Steel
 from opensees_studio.core.design.aisi_s100 import (
     FACTORS,
+    RATIONAL_FACTORS,
     check_member,
     cold_formed_member,
     compression,
     distortional_closed_form,
+    dsm_limits,
     flexure_local_only,
     flexure_major,
     flexure_minor,
@@ -459,6 +461,81 @@ def test_the_member_check_takes_the_side_of_the_sheeting() -> None:
     assert gravity.ratios["Major flexure"] == pytest.approx(
         20.0 / flexure_major(member, _steel(), "LRFD", unbraced=0.0).available
     )
+
+
+def test_the_r_factor_needs_fu_at_least_1_08_fy() -> None:
+    member = cold_formed_member(_c9(), E)
+    assert uplift_r_factor(member, inch=1.0, fu_over_fy=1.08) == (0.40, ())
+    r, reasons = uplift_r_factor(member, inch=1.0, fu_over_fy=1.05)
+    assert r is None
+    assert reasons == ("Fu/Fy = 1.05 < 1.08",)
+    low = flexure_sheeted(member, _steel(fu=57.0), "LRFD", in_compression=False, unbraced=240.0)
+    assert "Fu/Fy = 1.04 < 1.08" in low.notes[0]
+    assert low.equation == flexure_major(member, _steel(), "LRFD", unbraced=240.0).equation
+
+
+# ───────────────────────────── B4.1 limits ─────────────────────────────
+def test_the_published_sections_are_within_the_limits_of_b4() -> None:
+    for shape in (_c9(), _z8(), _track()):
+        assert dsm_limits(cold_formed_member(shape, E), _steel()) == ()
+    purlin = cold_formed_member(_purlin_mm(), 200000.0)
+    mpa = Steel(Fy=345.0, E=200000.0, G=77000.0, Fu=450.0)
+    assert dsm_limits(purlin, mpa, ksi=6.894757) == ()
+
+
+def test_each_limit_of_table_b4_1_1() -> None:
+    thin = cold_formed_member(
+        ColdFormedShape(profile="CS", d=9.0, bf=2.5, t=0.025, r=0.1875, lip=0.773), E
+    )
+    assert dsm_limits(thin, _steel()) == ("web h/t = 343 > 300",)
+    wide_lip = cold_formed_member(
+        ColdFormedShape(profile="CS", d=9.0, bf=2.5, t=0.059, r=0.1875, lip=1.9), E
+    )
+    assert dsm_limits(wide_lip, _steel()) == ("lip to flange width do/bo = 0.76 > 0.7",)
+    plain = cold_formed_member(ColdFormedShape(profile="CU", d=8.0, bf=3.0, t=0.036, r=0.07), E)
+    assert dsm_limits(plain, _steel()) == ("unstiffened flange d/t = 80 > 60",)
+    round_bend = cold_formed_member(
+        ColdFormedShape(profile="CS", d=9.0, bf=4.0, t=0.059, r=1.25, lip=1.5), E
+    )
+    assert dsm_limits(round_bend, _steel()) == ("inside bend radius R/t = 21.2 > 20",)
+    assert dsm_limits(cold_formed_member(_c9(), E), _steel(fy=100.0)) == ("Fy = 100 ksi > 95 ksi",)
+    # The same Fy in MPa, with one ksi in MPa.
+    mpa = Steel(Fy=690.0, E=200000.0, G=77000.0, Fu=800.0)
+    assert dsm_limits(cold_formed_member(_c9(), E), mpa, ksi=6.894757) == ("Fy = 100 ksi > 95 ksi",)
+
+
+def test_outside_b4_compression_flexure_and_shear_take_the_factors_of_a1_2c() -> None:
+    shape = ColdFormedShape(profile="CS", d=9.0, bf=2.5, t=0.025, r=0.1875, lip=0.773)
+    member = cold_formed_member(shape, E)
+    steel = _steel()
+    lengths = {"length_x": 120.0, "length_y": 60.0, "length_ltb": 60.0}
+    demand = Demand(axial=-1.0, moment_major=2.0, moment_minor=0.1, shear_major=0.5, shear_minor=0)
+    phi, omega = RATIONAL_FACTORS
+    assert (phi, omega) == (0.80, 2.00)
+    for method in ("LRFD", "ASD"):
+        check = check_member(member, steel, method, demand, **lengths)  # type: ignore[arg-type]
+        pn = compression(member, steel, method, length_x=120.0, length_y=60.0).nominal  # type: ignore[arg-type]
+        mn = flexure_major(member, steel, method, unbraced=60.0).nominal  # type: ignore[arg-type]
+        vn = shear_major(member, steel, method).nominal  # type: ignore[arg-type]
+        factor = phi if method == "LRFD" else 1.0 / omega
+        assert check.ratios["Compression"] == pytest.approx(1.0 / (factor * pn))
+        assert check.ratios["Major flexure"] == pytest.approx(2.0 / (factor * mn))
+        assert check.ratios["Major shear"] == pytest.approx(0.5 / (factor * vn))
+        assert any("Outside the limits of B4.1" in note for note in check.notes)
+    # Tension is Chapter D: its factors stay.
+    pulled = Demand(axial=1.0, moment_major=0.0, moment_minor=0.0, shear_major=0, shear_minor=0)
+    check = check_member(member, steel, "LRFD", pulled, **lengths)
+    assert check.ratios["Tension"] == pytest.approx(1.0 / (0.90 * steel.Fy * member.A))
+
+
+def test_within_b4_the_chapter_factors_stay() -> None:
+    member = cold_formed_member(_c9(), E)
+    lengths = {"length_x": 120.0, "length_y": 60.0, "length_ltb": 60.0}
+    demand = Demand(axial=-1.0, moment_major=2.0, moment_minor=0.0, shear_major=0, shear_minor=0)
+    check = check_member(member, _steel(), "LRFD", demand, **lengths)
+    pn = compression(member, _steel(), "LRFD", length_x=120.0, length_y=60.0).nominal
+    assert check.ratios["Compression"] == pytest.approx(1.0 / (0.85 * pn))
+    assert not any("B4.1" in note for note in check.notes)
 
 
 # ───────────────────────────── what is covered ─────────────────────────────

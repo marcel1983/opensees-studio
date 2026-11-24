@@ -1558,12 +1558,13 @@ def steel_frame_check(
                         shear_minor=float(values["V2"][k]),
                     )
                 extra: dict[str, Any] = {}
+                if cold is not None:
+                    # One ksi in the project's stresses, for the Fy limit of B4.1.
+                    extra["ksi"] = stress_scale(SOURCE_UNITS, units)
                 if cold is not None and sheeted_side and m_major and about_major:
                     # True when this station's moment compresses the sheeted flange.
-                    extra = {
-                        "sheeted": sheeted_side * demand.moment_major >= 0.0,
-                        "inch": length_scale(SOURCE_UNITS, units),
-                    }
+                    extra["sheeted"] = sheeted_side * demand.moment_major >= 0.0
+                    extra["inch"] = length_scale(SOURCE_UNITS, units)
                 check = (check_member if cold is None else aisi_s100.check_member)(
                     shape,
                     steel,

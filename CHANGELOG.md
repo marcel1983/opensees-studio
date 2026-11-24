@@ -184,7 +184,7 @@ refused instead of silently downgraded).
   member overrides → Sheeting on the flange). Where the moment compresses that
   flange (gravity on a purlin, pressure on a girt) the member is braced against
   lateral-torsional buckling; where it stretches it (uplift, suction) the
-  strength is `R Mnlo` of AISI S100-16 I6.2.1 when the section is within the
+  strength is `R Mno` of AISI S100-16 I6.2.1 when the section is within the
   limits of that clause, and never less than lateral-torsional buckling over
   Lb. The Warehouse Wizard has **Sheeting screwed to the purlins and girts**
   (on by default) and **Sag rod lines per bay** for purlins (1 by default) and
@@ -198,6 +198,16 @@ refused instead of silently downgraded).
 
 ### Changed
 
+- **The cold-formed steel check was read against AISI S100-16.** Its equations,
+  factors and limits were checked against the text of the specification
+  (2016, reaffirmed 2020, with Supplement 2) and agree with it. Two things it
+  lacked are added: a member outside the limits of **Table B4.1-1** (web h/t
+  over 300, an edge-stiffened flange over 160, a lip or a plain channel's
+  flange over 60, a bend radius over 20 t, a lip over 0.7 of the flange, Fy
+  over 95 ksi) takes φ = 0.80 / Ω = 2.00 in compression, flexure and shear, as
+  B4.2 (a) requires, and says why in its note; and the R factor of I6.2.1 is
+  refused when Fu/Fy is below 1.08. Members within the limits, all the
+  examples' among them, get the same ratios as before.
 - **A purlin or girt of the Warehouse Wizard buckles about its major axis over
   its own span.** The members of a purlin line are pinned at every frame, and
   the steel check took the whole line as one member (30 m in the gable
