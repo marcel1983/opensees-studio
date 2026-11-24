@@ -23,6 +23,5 @@ views/canvas3d/model_renderer.py             2750
 core/warehouse.py                            2600
 services/ifc_import.py                       2600
 services/tcl_import.py                       2100
-services/calc_memory.py                      1800
 views/canvas3d/model_canvas.py               1650
 services/stability.py                        1650
