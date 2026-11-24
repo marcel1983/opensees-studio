@@ -198,7 +198,7 @@ def test_a_drifting_click_draws_a_node_end_to_end(qtbot) -> None:  # type: ignor
     window._vm.new_project(ndm=2, ndf=3)
 
     canvas = window._canvas
-    window._on_draw_node_tool()
+    window.drawing.draw_node()
     canvas.view_xy()
 
     centre = QPoint(canvas.width() // 2, canvas.height() // 2)

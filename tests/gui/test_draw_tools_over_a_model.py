@@ -65,7 +65,7 @@ def _click_on_member(window, dx: int = 0, dy: int = 0) -> None:  # type: ignore[
 
 @pytest.mark.gui
 def test_draw_node_over_a_member_places_the_node(qtbot, window) -> None:  # type: ignore[no-untyped-def]
-    window._on_draw_node_tool()
+    window.drawing.draw_node()
 
     _click_on_member(window)
 
@@ -76,7 +76,7 @@ def test_draw_node_over_a_member_places_the_node(qtbot, window) -> None:  # type
 @pytest.mark.gui
 def test_draw_frame_over_a_member_builds_the_frame(qtbot, window) -> None:  # type: ignore[no-untyped-def]
     """Two clicks that both land on members still draw the frame."""
-    window._on_draw_frame_tool()
+    window.drawing.draw_frame()
 
     _click_on_member(window, dx=-120, dy=-60)
     assert "from node" in window.statusBar().currentMessage()
@@ -103,7 +103,7 @@ def test_the_select_tool_still_picks_the_member(qtbot, window) -> None:  # type:
 def test_a_node_on_the_member_is_still_reused(qtbot, window) -> None:  # type: ignore[no-untyped-def]
     """The node at (0, 0, 0) is a target: clicking it must not create a duplicate."""
     canvas = window._canvas
-    window._on_draw_frame_tool()
+    window.drawing.draw_frame()
     screen = canvas._project_world_to_screen(np.array([[0.0, 0.0, 0.0]]), canvas.renderer)
     assert screen is not None
     x, y = float(screen[0][0]), canvas.height() - float(screen[0][1])

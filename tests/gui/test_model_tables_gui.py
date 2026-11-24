@@ -39,7 +39,7 @@ def test_paste_new_joints_then_undo(qtbot, monkeypatch) -> None:  # type: ignore
         return int(self.edited is not None)
 
     monkeypatch.setattr(ModelTablesDialog, "exec", _exec)
-    mw._on_table_editing()
+    mw.model_tools.table_editing()
     project = mw._vm.project
     assert [(n.id, n.name, n.coords) for n in project.nodes[1:]] == [
         (2, "A", (1.0, 2.0, 3.0)),
