@@ -48,7 +48,7 @@ def test_going_back_to_the_model_clears_the_caption(qtbot, tmp_path) -> None:  #
     window = _window(qtbot, tmp_path)
     window._on_analysis_finished(_results())
 
-    window._on_back_to_model()
+    window.display.back_to_model()
 
     assert not window._main_canvas._result_label.isVisibleTo(window._main_canvas)
 
@@ -67,7 +67,7 @@ def test_delete_all_results_clears_memory_and_the_file(qtbot, tmp_path, monkeypa
     window._on_clear_results()
 
     assert not db.exists()
-    assert window._latest_results is None
+    assert window.results.latest is None
     assert not window._main_canvas._result_label.isVisibleTo(window._main_canvas)
     assert not window._act_clear_results.isEnabled()
 

@@ -10,13 +10,11 @@ Adds on top of Phase 3:
 from __future__ import annotations
 
 import contextlib
-from collections.abc import Callable, Iterator, Sequence
-from dataclasses import replace
+from collections.abc import Iterator, Sequence
 from functools import partial
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
-import numpy as np
 import shiboken6
 from PySide6.QtCore import QEvent, QPoint, QPointF, QSettings, QSignalBlocker, Qt, QTimer
 from PySide6.QtGui import (
@@ -71,15 +69,13 @@ from opensees_studio.core import (
     shortcut_profiles,
 )
 from opensees_studio.core.combinations import model_fingerprint
-from opensees_studio.core.design.settings import DesignSettings
 from opensees_studio.core.generated import GeneratedModel
 from opensees_studio.core.help import ACTION_TOPICS, TOPIC_PROPERTY
 from opensees_studio.core.i18n import LANGUAGES
 from opensees_studio.core.materials.library import is_uniaxial
 from opensees_studio.core.mesh import pre_run_auto_mesh
-from opensees_studio.core.model_check import Finding, check_model
+from opensees_studio.core.model_check import check_model
 from opensees_studio.core.object_info import element_info, node_info
-from opensees_studio.core.reactions import ReactionRow, reaction_rows
 from opensees_studio.core.view_settings import ViewSettings
 from opensees_studio.services import (
     PROJECT_FILE_SUFFIX,
@@ -89,27 +85,10 @@ from opensees_studio.services import (
 )
 from opensees_studio.services.batch import StoredResults, stored_results
 from opensees_studio.services.combination import MissingCaseResultsError
-from opensees_studio.services.deformation import (
-    DeformationSource,
-    linear_static_auto_scale,
-    modal_to_deformation,
-    motion_to_deformation,
-    peak_static_displacement,
-    static_to_deformation,
-)
 from opensees_studio.services.element_diagrams import (
     ElementDiagramBundle,
     combine_element_bundles,
     element_diagram_bundle,
-)
-from opensees_studio.services.element_forces import (
-    DiagramData,
-    ForceComponent,
-    envelope_diagram_data,
-    extract_diagram_data,
-)
-from opensees_studio.services.element_forces import (
-    auto_scale as force_diagram_auto_scale,
 )
 from opensees_studio.services.result_store import load_results
 from opensees_studio.services.results import (
@@ -125,7 +104,7 @@ from opensees_studio.services.results_db import database_path, delete_all_result
 from opensees_studio.services.shell_fields import shell_elements
 from opensees_studio.services.stability import StabilityReport
 from opensees_studio.viewmodels import AnalysisRunner, ProjectViewModel
-from opensees_studio.viewmodels.case_results import CaseResultsCache
+from opensees_studio.viewmodels.results_session import ResultsSession, case_names
 from opensees_studio.viewmodels.stability_checker import StabilityChecker
 from opensees_studio.views.actions import ALL_ACTIONS, ActionState
 from opensees_studio.views.actions.registry import ActionRegistry
@@ -138,6 +117,7 @@ from opensees_studio.views.controllers import Shell
 from opensees_studio.views.controllers.areas import AreasController
 from opensees_studio.views.controllers.building import BuildingController
 from opensees_studio.views.controllers.design import DesignController
+from opensees_studio.views.controllers.display import DisplayController
 from opensees_studio.views.controllers.drawing import DrawingController
 from opensees_studio.views.controllers.exports import ExportsController
 from opensees_studio.views.controllers.generators import GeneratorsController
@@ -160,7 +140,6 @@ from opensees_studio.views.dialogs import (
     DisplayOptionsDialog,
     ElementDiagramWindow,
     FrameWizard,
-    InfluenceLineDialog,
     ModelCheckDialog,
     MoveDialog,
     PerformanceDialog,
@@ -177,18 +156,10 @@ from opensees_studio.views.dialogs.run_cases import RunCasesDialog
 from opensees_studio.views.dialogs.solver_settings import SolverSettingsDialog
 from opensees_studio.views.dialogs.view_colors import ViewColorsDialog
 from opensees_studio.views.docks import (
-    DeformedShapeView,
-    DesignRatioView,
-    ForceDiagramView,
-    HysteresisView,
     ModeShapeAnimator,
     PropertyEditorDock,
-    PushoverCurveView,
     ReactionsPanel,
-    ResponseSpectrumView,
     ResultsPanel,
-    ShellContourView,
-    TimeHistoryView,
 )
 from opensees_studio.views.help_window import HelpController
 from opensees_studio.views.i18n import stored_language, tr
@@ -312,18 +283,12 @@ class MainWindow(QMainWindow):
         self._opensees = engines.opensees_status()  # stability check, Material Tester
         self._runner = AnalysisRunner(self)
         self._stability = StabilityChecker(self)
-        self._latest_results: object = None  # last analysis output (any kind)
-        # Every static / response spectrum result of the session, for load combinations.
-        self._case_results = CaseResultsCache()
-        self._report_extra: dict[int, tuple[str, Any]] = {}
+        #: The results in memory: the one on screen, every case's, the report's extras.
+        self.results = ResultsSession()
         #: View → Grid Line View: (line label, window) while active, else None.
         self._analysis_error_box: QMessageBox | None = None  # last failure report
         self._stability_box: QMessageBox | None = None  # last stability check answer
         self._run_dialog: RunAnalysisDialog | None = None  # open while a Run dialog is shown
-        self._post_dock: QDockWidget | None = None  # the active post-processing dock
-        self._post_mode: str | None = None  # "force"/"deformed"/"mode": what the canvas shows
-        # What the viewport is displaying ("Deformed Shape"), ahead of the case name.
-        self._display_title: str | None = None
         # The model lock (Options → Lock Model): set when results arrive, so an
         # edit asks before it makes them stale. The fingerprint is the model the
         # lock protects; the index is the undo position it was last seen at.
@@ -331,8 +296,6 @@ class MainWindow(QMainWindow):
         self._lock_fingerprint: str | None = None
         self._lock_index = 0
         self._lock_reverting = False
-        self._post_units_refresh: Callable[[], None] | None = None  # re-show the dock in new units
-        self._diagram_renderer: DiagramRenderer | None = None  # built lazily once canvas exists
         self._element_diagram_windows: list[ElementDiagramWindow] = []
         self._show_node_labels = False
         self._show_element_labels = False
@@ -385,7 +348,7 @@ class MainWindow(QMainWindow):
         )
         self.exports = ExportsController(
             shell,
-            results=lambda: self._current_case_results(),
+            results=lambda: self.results.current(self._vm.project),
             report_results=lambda: self.report_results(),
         )
         #: Define → Coordinate System/Grids and Grid Wizard; View → Show Grids and labels.
@@ -405,6 +368,18 @@ class MainWindow(QMainWindow):
         self.patterns = PatternsController(shell, new_project=self._on_new)
         #: The camera, the working plane and its level, a grid line view, what is hidden.
         self.viewport = ViewportController(shell, action=lambda action_id: self.action(action_id))
+        #: The post-processing views of the Display menu and the dock each one opens.
+        self.display = DisplayController(
+            shell,
+            results=self.results,
+            diagram=self._diagram_renderer,
+            contours=self._contour_renderer,
+            ratios=self._ratio_renderer,
+            canvases=lambda: [self._main_canvas, *(w.canvas for w in self._view_windows)],
+            busy=lambda message: self._busy(message),
+            select_rows=lambda nodes, elements: self._select_report_row(nodes, elements),
+            close_member_windows=lambda: self._close_element_diagram_windows(),
+        )
         #: What the Properties dock changes in the model.
         self.property_edits = PropertyEditsController(shell)
         #: The Select menu: everything, inverted, the previous one, the queries.
@@ -414,8 +389,10 @@ class MainWindow(QMainWindow):
         #: The Design menu: basis, members, steel and concrete checks, connections, footings.
         self.design = DesignController(
             shell,
-            results=self._current_case_results,
-            show_ratios=self._show_design_ratios,
+            results=lambda: self.results.current(self._vm.project),
+            show_ratios=lambda report, settings, concrete=False: self.display.design_ratios(
+                report, settings, concrete=concrete
+            ),
         )
 
         self._build_docks()
@@ -674,20 +651,10 @@ class MainWindow(QMainWindow):
 
         # Display (post-processing)
         self._act_select_results = QAction("Show Results &Of…", self)
-        self._act_show_deformed = QAction("Show &Deformed Shape", self)
-        self._act_show_mode_shape = QAction("&Animate Mode Shape", self)
-        self._act_show_force_diagram = QAction("Show &Force Diagram…", self)
         self._act_show_reactions = QAction("Show &Reactions", self)
         self._act_show_reactions.setCheckable(True)
         self._act_reactions_table = QAction("Reactions &Table", self)
         self._act_reactions_dialog = QAction("R&eactions…", self)
-        self._act_shell_contours = QAction("Show Shell &Contours…", self)
-        self._act_show_time_history = QAction("&Time-History Plot…", self)
-        self._act_export_th_animation = QAction("Export Time-History &Animation…", self)
-        self._act_show_hysteresis = QAction("&Hysteresis Plot…", self)
-        self._act_show_pushover = QAction("Show &Pushover Curve…", self)
-        self._act_influence_line = QAction("&Influence Line…", self)
-        self._act_show_response_spectrum = QAction("Show &Response Spectrum…", self)
         self._act_display_options = QAction("Display &Options…", self)
         self._act_lock_model = QAction("&Lock Model", self, checkable=True)
         self._act_lock_model.setToolTip(
@@ -708,7 +675,6 @@ class MainWindow(QMainWindow):
             "Choose the load pattern drawn (or all, one colour each), the kinds of load "
             "and whether their values are written."
         )
-        self._act_back_to_model = QAction("Back to &Model View", self, shortcut="Ctrl+Shift+B")
 
         # Analyze
         self._act_case_manager = QAction("&Cases…", self, shortcut="Ctrl+Shift+A")
@@ -1025,23 +991,25 @@ class MainWindow(QMainWindow):
         m_display.addSeparator()
         m_display.addAction(self._act_select_results)
         m_display.addSeparator()
-        m_display.addActions([self._act_show_deformed, self._act_show_mode_shape])
-        m_display.addAction(self._act_show_force_diagram)
+        m_display.addActions(
+            [self.action("display.show_deformed"), self.action("display.show_mode_shape")]
+        )
+        m_display.addAction(self.action("display.show_force_diagram"))
         m_display.addActions(
             [self._act_show_reactions, self._act_reactions_table, self._act_reactions_dialog]
         )
-        m_display.addAction(self._act_shell_contours)
+        m_display.addAction(self.action("display.shell_contours"))
         m_display.addSeparator()
-        m_display.addAction(self._act_show_time_history)
-        m_display.addAction(self._act_export_th_animation)
-        m_display.addAction(self._act_show_hysteresis)
-        m_display.addAction(self._act_show_pushover)
-        m_display.addAction(self._act_influence_line)
-        m_display.addAction(self._act_show_response_spectrum)
+        m_display.addAction(self.action("display.show_time_history"))
+        m_display.addAction(self.action("display.export_th_animation"))
+        m_display.addAction(self.action("display.show_hysteresis"))
+        m_display.addAction(self.action("display.show_pushover"))
+        m_display.addAction(self.action("display.influence_line"))
+        m_display.addAction(self.action("display.show_response_spectrum"))
         m_display.addSeparator()
         m_display.addAction(self._act_display_options)
         m_display.addSeparator()
-        m_display.addAction(self._act_back_to_model)
+        m_display.addAction(self.action("display.back_to_model"))
 
         # In the order a steel design is done: the basis and the analysis it
         # needs, the members, the check and its results, then the connections.
@@ -1668,37 +1636,13 @@ class MainWindow(QMainWindow):
         # Results panel: displacements, reactions, element forces, curves.
         self._results_panel.refresh(self._vm.project)
         # Active post-processing dock (diagram, deformed shape, plots).
-        if self._post_units_refresh is not None:
-            self._post_units_refresh()
-        elif self._latest_results is not None:
+        if not self.display.refresh_units() and self.results.latest is not None:
             self._canvas.render()
         for window in self._element_diagram_windows:
             window.set_units(converter)
         self._log(
             f"Displayed values converted to {converter.target.value} (model units unchanged).",
         )
-
-    def _register_units_refresh(
-        self,
-        view: Any,
-        after: Callable[[], None] | None = None,
-    ) -> None:
-        """Remember how to re-show ``view`` when the display units change.
-
-        ``view`` must expose ``set_units(UnitConverter)``; ``after`` re-applies
-        whatever the dock draws (a diagram overlay, a deformed shape). The dock
-        being torn down, or another project being opened, drops the callback.
-        """
-        project = self._vm.project
-
-        def _refresh() -> None:
-            if self._post_dock is None or self._vm.project is not project:
-                return
-            view.set_units(UnitConverter.of(project.meta))
-            if after is not None:
-                after()
-
-        self._post_units_refresh = _refresh
 
     def _sync_units_combo(self) -> None:
         """Reflect the project's current display units in the status-bar combo.
@@ -1803,24 +1747,13 @@ class MainWindow(QMainWindow):
 
         # Display
         self._act_select_results.triggered.connect(self._on_select_results)
-        self._act_show_deformed.triggered.connect(self._on_show_deformed)
-        self._act_show_mode_shape.triggered.connect(self._on_show_mode_shape)
-        self._act_show_force_diagram.triggered.connect(self._on_show_force_diagram)
         self._act_show_reactions.toggled.connect(self._on_show_reactions)
         self._act_reactions_table.triggered.connect(self._on_reactions_table)
         self._act_reactions_dialog.triggered.connect(self._on_reactions_dialog)
-        self._act_shell_contours.triggered.connect(self._on_show_shell_contours)
-        self._act_show_time_history.triggered.connect(self._on_show_time_history)
-        self._act_export_th_animation.triggered.connect(self._on_export_th_animation)
-        self._act_show_hysteresis.triggered.connect(self._on_show_hysteresis)
-        self._act_show_pushover.triggered.connect(self._on_show_pushover)
-        self._act_influence_line.triggered.connect(self._on_influence_line)
-        self._act_show_response_spectrum.triggered.connect(self._on_show_response_spectrum)
         self._act_display_options.triggered.connect(self._on_display_options)
         self._act_show_load_assigns.triggered.connect(self._on_show_load_assigns)
         self._act_lock_model.triggered.connect(self._on_lock_model_triggered)
         self._vm.undo_stack.indexChanged.connect(self._on_undo_index_changed)
-        self._act_back_to_model.triggered.connect(self._on_back_to_model)
 
         # AnalysisRunner: stream log to console + show results in panel
         self._runner.log.connect(self._console.appendPlainText)
@@ -1880,7 +1813,9 @@ class MainWindow(QMainWindow):
         self._canvas.node_tooltip = self.node_tooltip
         # The deformed shape and the mode shapes are read at the joints: the
         # members would only get in the way of the pointer there.
-        self._canvas.element_tooltips_enabled = lambda: self._post_mode not in ("deformed", "mode")
+        self._canvas.element_tooltips_enabled = lambda: (
+            self.display.mode not in ("deformed", "mode")
+        )
 
         # Contextual help: F1 anywhere, on the topic of what is on screen.
         self._annotate_help_topics()
@@ -2270,15 +2205,7 @@ class MainWindow(QMainWindow):
 
     def report_results(self) -> list[Any]:
         """The results the report includes: every current case, plus the one on screen."""
-        project = self._vm.project
-        if project is None:
-            return []
-        current = dict(self._case_results.current(project))
-        fingerprint = model_fingerprint(project)
-        for case_id, (fp, results) in self._report_extra.items():
-            if fp == fingerprint:
-                current.setdefault(case_id, results)
-        return list(current.values())
+        return self.results.for_report(self._vm.project)
 
     # ── slots: edit ──────────────────────────────────────────────────
     def _warn_case_references(self) -> None:
@@ -2353,19 +2280,6 @@ class MainWindow(QMainWindow):
             self._canvas.selection.select_element(element_id, additive=True)
         self._canvas.render()
 
-    def _on_influence_line(self) -> None:
-        """Display → Influence Line: one response of the influence-line case on screen."""
-        results = self._latest_results
-        if not isinstance(results, InfluenceLineResults) or self._vm.project is None:
-            QMessageBox.information(
-                self,
-                "Influence Line",
-                "Run an influence-line case first (Analyze → Cases… → Add → InfluenceLine).",
-            )
-            return
-        dialog = InfluenceLineDialog(self._vm.project, results, parent=self)
-        dialog.exec()
-
     def _on_language(self, code: str) -> None:
         """Options → Language: switch the interface now and remember it."""
         from PySide6.QtCore import QSettings
@@ -2390,41 +2304,6 @@ class MainWindow(QMainWindow):
         self._ribbon.retranslate()
         self._project_dock.set_project(self._vm.project)
         self._log(f"Interface language: {LANGUAGES[code]}.")
-
-    def _current_case_results(self) -> dict[int, Any]:
-        """The results computed on the project as it is now, by case id."""
-        project = self._vm.project
-        return dict(self._case_results.current(project)) if project is not None else {}
-
-    def _show_design_ratios(
-        self, report: Any, settings: DesignSettings, *, concrete: bool = False
-    ) -> None:
-        """The ratio overlay and its legend dock; Back to model clears both."""
-        self._on_back_to_model()
-        self._ratio_renderer.render(self._vm.project, report.members, limit=settings.ratio_limit)
-        view = DesignRatioView()
-        if concrete:
-            view.set_report(report, method="", limit=settings.ratio_limit, code="ACI 318-19")
-        else:
-            view.set_report(report, method=settings.method, limit=settings.ratio_limit)
-        dock = QDockWidget("Concrete Ratios" if concrete else "Steel Ratios", self)
-        dock.setWidget(view)
-        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
-        self._post_dock = dock
-        failing = {m.element_id for m in report.failing}
-
-        def _select_failing() -> None:
-            self._canvas.selection.set_selection(set(), failing)
-            self.statusBar().showMessage(f"Selected {len(failing)} failing member(s).", 4000)
-
-        view.selectFailing.connect(_select_failing)
-        view.closed.connect(self._on_back_to_model)
-        self._set_result_caption(
-            "Concrete ratios · ACI 318-19"
-            if concrete
-            else f"Steel ratios · AISC 360-16 {settings.method}"
-        )
-        self._canvas.render()
 
     def _on_frame_wizard(self) -> None:
         """Define → Create Portal Frame: a parametric 2D frame, one undo step.
@@ -2804,7 +2683,7 @@ class MainWindow(QMainWindow):
         """Persist the geometry, the panel layout and the default viewport."""
         # A result dock (force diagram, steel ratios, …) belongs to this session
         # only; drop it first so the saved layout holds the permanent panels.
-        self._tear_down_post_dock()
+        self.display.tear_down()
         settings = QSettings()
         settings.setValue("window/geometry", self.saveGeometry())
         settings.setValue("window/state", self.saveState(self.LAYOUT_VERSION))
@@ -2892,16 +2771,14 @@ class MainWindow(QMainWindow):
         diagram or a deformed shape on screen the right-click stays what it
         always was.
         """
-        if self._post_mode not in ("force", "deformed"):
+        if self.display.mode not in ("force", "deformed"):
             return False
         if canvas is not self._main_canvas:
             return False
-        if self._post_mode == "force" and (
-            self._diagram_renderer is None or not self._diagram_renderer.is_drawn
-        ):
+        if self.display.mode == "force" and not self._diagram_renderer.is_drawn:
             return False
         project = self._vm.project
-        if project is None or self._static_result() is None:
+        if project is None or self.results.static() is None:
             return False
         local = canvas.mapFromGlobal(pos)
         element_id = canvas.frame_element_at(local.x(), local.y())
@@ -2917,8 +2794,8 @@ class MainWindow(QMainWindow):
         if bundle is None or project is None:
             return
         converter = UnitConverter.of(project.meta)
-        choices = self._element_diagram_result_choices()
-        current = self._current_result_key()
+        choices = self.results.member_choices(self._vm.project)
+        current = self.results.current_key()
         for window in self._element_diagram_windows:
             if window.bundle.element_id == element_id:
                 window.set_bundle(bundle, converter)
@@ -2947,9 +2824,9 @@ class MainWindow(QMainWindow):
         project = self._vm.project
         if project is None:
             return None
-        results = self._latest_results
+        results = self.results.latest
         case_name = results.combination_name if isinstance(results, CombinationResults) else None
-        if isinstance(results, CombinationResults) and self._is_envelope():
+        if isinstance(results, CombinationResults) and self.results.is_envelope():
             return combine_element_bundles(
                 element_diagram_bundle(
                     project,
@@ -2966,7 +2843,7 @@ class MainWindow(QMainWindow):
                     case_name=case_name,
                 ),
             )
-        static = self._static_result()
+        static = self.results.static()
         if static is None:
             return None
         # Stations read a static case's loads back; a combination bound has no
@@ -2984,19 +2861,18 @@ class MainWindow(QMainWindow):
         results = self._results_for_key(key)
         if results is None or not isinstance(results, StaticResults | CombinationResults):
             window.set_result_choices(
-                self._element_diagram_result_choices(), self._current_result_key()
+                self.results.member_choices(self._vm.project), self.results.current_key()
             )
             return
         self._display_results(results)
-        if self._post_units_refresh is not None:
-            self._post_units_refresh()
+        self.display.refresh_units()
         bundle = self._element_diagram_bundle(window.bundle.element_id)
         project = self._vm.project
         if bundle is None or project is None:
             return
         window.set_bundle(bundle, UnitConverter.of(project.meta))
         window.set_result_choices(
-            self._element_diagram_result_choices(), self._current_result_key()
+            self.results.member_choices(self._vm.project), self.results.current_key()
         )
 
     def _forget_element_diagram_window(self, window: ElementDiagramWindow) -> None:
@@ -3161,9 +3037,9 @@ class MainWindow(QMainWindow):
         if project is None:
             return None
         text = None
-        if self._post_mode == "deformed":
+        if self.display.mode == "deformed":
             text = self._deformed_node_tooltip(node_id)
-        elif self._post_mode == "mode":
+        elif self.display.mode == "mode":
             text = self._mode_shape_node_tooltip(node_id)
         return text if text is not None else node_summary(project, node_id)
 
@@ -3193,8 +3069,8 @@ class MainWindow(QMainWindow):
         from opensees_studio.core.hover import node_mode_shape
 
         project = self._vm.project
-        results = self._latest_results
-        view = self._post_dock.widget() if self._post_dock is not None else None
+        results = self.results.latest
+        view = self.display.dock.widget() if self.display.dock is not None else None
         if project is None or not isinstance(results, ModalResults):
             return None
         if not isinstance(view, ModeShapeAnimator):
@@ -3219,16 +3095,16 @@ class MainWindow(QMainWindow):
         from opensees_studio.views.docks.deformed_shape import DeformedShapeView
 
         project = self._vm.project
-        view = self._post_dock.widget() if self._post_dock is not None else None
+        view = self.display.dock.widget() if self.display.dock is not None else None
         bound = view.current_bound() if isinstance(view, DeformedShapeView) else "max"
-        results = self._static_result(bound)
+        results = self.results.static(bound)
         if project is None or results is None:
             return None
         rows = node_displacements(project, results, node_id)
         if rows is None:
             return None
-        case = self._caption_for(self._latest_results).split("  ·  ")[0]
-        if self._is_envelope():
+        case = self.results.caption_for(self._vm.project, self.results.latest).split("  ·  ")[0]
+        if self.results.is_envelope():
             case += " · " + (tr("Max") if bound == "max" else tr("Min"))
         converter = UnitConverter.of(project.meta)
         length = converter.labels.length
@@ -3404,38 +3280,7 @@ class MainWindow(QMainWindow):
             dlg.deleteLater()
         self._log(report.summary())
         if mechanism is not None:
-            self._show_mechanism(mechanism)
-
-    def _show_mechanism(self, finding: Finding) -> None:
-        """Animate the free motions of a mechanism finding on the model."""
-        project = self._vm.project
-        if project is None or not finding.modes:
-            return
-        self._tear_down_post_dock()
-        modes = list(finding.modes)
-        labels = [f"Motion {k}: {m.kind.replace('_', ' ')}" for k, m in enumerate(modes, 1)]
-        animator = ModeShapeAnimator(
-            len(modes), [0.0] * len(modes), labels=labels, title="Mechanism"
-        )
-        dock = QDockWidget("Mechanism", self)
-        dock.setWidget(animator)
-        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
-        self._post_dock = dock
-
-        def _apply(mode: int, scale: float, phase: float) -> None:
-            if not 0 <= mode < len(modes) or self._vm.project is None:
-                return
-            chosen = modes[mode]
-            src = motion_to_deformation(self._vm.project, chosen.motion, scale=scale, phase=phase)
-            self._canvas._renderer.set_mode(RendererMode.MODAL, src)
-            self._select_report_row(chosen.node_ids, chosen.element_ids)
-            self.statusBar().showMessage(f"{chosen.description} {chosen.hint}")
-
-        animator.frameChanged.connect(_apply)
-        animator.closed.connect(self._on_back_to_model)
-        animator._export_btn.hide()  # a mechanism is not a result to export
-        _apply(0, 1.0, 1.0)
-        self._log("Mechanism: " + " ".join(m.description for m in modes))
+            self.display.mechanism(mechanism)
 
     def _auto_mesh_before_run(self) -> None:
         """Divide the frames that another frame ends on or crosses, in one undo step.
@@ -3493,7 +3338,7 @@ class MainWindow(QMainWindow):
                 dlg.deleteLater()
             self._log(report.summary() + (" Running anyway." if proceed else " Run cancelled."))
             if mechanism is not None:
-                self._show_mechanism(mechanism)
+                self.display.mechanism(mechanism)
             return proceed
         for finding in report.warnings:
             self._log(finding.summary())
@@ -3524,7 +3369,7 @@ class MainWindow(QMainWindow):
         self._auto_mesh_before_run()
         if not self._review_model_before_run():
             return
-        dlg = RunAnalysisDialog(self._vm, self._runner, self, case_results=self._case_results)
+        dlg = RunAnalysisDialog(self._vm, self._runner, self, case_results=self.results.cases)
         combination_finished = getattr(dlg, "combinationFinished", None)
         if combination_finished is not None:
             combination_finished.connect(self._on_analysis_finished)
@@ -3572,13 +3417,13 @@ class MainWindow(QMainWindow):
 
     def _on_analysis_finished(self, results) -> None:  # type: ignore[no-untyped-def]
         self._display_results(results)
-        self._log(f"Analysis complete: {self._caption_for(results)}.")
+        self._log(f"Analysis complete: {self.results.caption_for(self._vm.project, results)}.")
         if isinstance(results, TransientResults) and results.early_stop:
             self._log(f"Warning: transient run did not converge ({results.steps_summary()}).")
         if isinstance(results, ResponseSpectrumResults | CombinationResults):
             for warning in results.warnings:
                 self._log(f"Warning: {warning}")
-        self._set_result_caption(self._caption_for(results))
+        self.display.set_caption(self.results.caption_for(self._vm.project, results))
         self._refresh_action_enablement()
 
     def _on_case_finished(self, results: object) -> None:
@@ -3587,41 +3432,10 @@ class MainWindow(QMainWindow):
         self._record_case_results(results)
 
     def _keep_case_results(self, results: object) -> None:
-        if self._vm.project is not None and not self._case_results.put(self._vm.project, results):
-            # Modal, pushover and transient results: kept for the report only.
-            case_id = getattr(results, "case_id", None)
-            if case_id is not None:
-                self._report_extra[case_id] = (model_fingerprint(self._vm.project), results)
+        self.results.keep(self._vm.project, results)
         self._lock_for_results()
 
     # ── what the viewport is showing ────────────────────────────────
-    def _caption_for(self, results: object) -> str:
-        """One line naming the results on screen, for the viewport's top-left."""
-        if isinstance(results, CombinationResults):
-            kind = "envelope" if not results.single_valued else "combination"
-            return f"{results.combination_name}  ·  {kind}"
-        case_id = getattr(results, "case_id", None)
-        name = self._case_names().get(int(case_id), "") if case_id is not None else ""
-        name = name or getattr(results, "case_name", "")
-        if not name:
-            name = f"case {case_id}"
-        kind = type(results).__name__.removesuffix("Results")
-        return f"{name}  ·  {kind}"
-
-    def _set_display_title(self, title: str | None) -> None:
-        """Say what the viewport draws ("Deformed Shape"), ahead of the case's name."""
-        self._display_title = title
-        if self._latest_results is not None:
-            self._set_result_caption(self._caption_for(self._latest_results))
-
-    def _set_result_caption(self, text: str | None) -> None:
-        """Put ``text`` in every viewport: the main one and each view window."""
-        if text and self._display_title:
-            text = f"{self._display_title}  ·  {text}"
-        canvases = [self._main_canvas, *(window.canvas for window in self._view_windows)]
-        for canvas in canvases:
-            canvas.set_result_label(text)
-
     def _on_clear_results(self) -> None:
         """Analyze → Delete All Results: forget every stored result."""
         db_path = database_path(self._vm.path)
@@ -3650,23 +3464,15 @@ class MainWindow(QMainWindow):
 
     def _drop_session_results(self) -> None:
         """Forget the results held in memory and return to the model view."""
-        self._case_results.clear()
-        self._report_extra.clear()
-        self._latest_results = None
+        self.results.clear()
         self._refresh_reactions()
         self._refresh_case_combo()
-        self._on_back_to_model()
+        self.display.back_to_model()
         self._results_panel.show_results(None, self._vm.project)
 
     # ── the model lock ───────────────────────────────────────────────
     #: Lock the model when results arrive. Tests of other features switch it off.
     lock_after_analysis = True
-
-    def _has_session_results(self) -> bool:
-        project = self._vm.project
-        return self._latest_results is not None or bool(
-            self._report_extra or (project is not None and self._case_results.current(project))
-        )
 
     def _set_model_locked(self, locked: bool) -> None:
         """Lock or unlock, remembering the model the lock protects."""
@@ -3688,7 +3494,7 @@ class MainWindow(QMainWindow):
 
     def _confirm_unlock(self) -> bool:
         """Ask before the lock goes; with results, say that they go with it."""
-        if self._has_session_results():
+        if self.results.has_any(self._vm.project):
             text = (
                 "The model is locked because it has analysis results.\n\n"
                 "Unlock it and discard the results of this session? The results "
@@ -3707,7 +3513,7 @@ class MainWindow(QMainWindow):
 
     def _unlock_model(self) -> None:
         """Unlock; results in memory belonged to the locked model and go with it."""
-        had_results = self._has_session_results()
+        had_results = self.results.has_any(self._vm.project)
         self._set_model_locked(False)
         if had_results:
             self._drop_session_results()
@@ -3781,24 +3587,6 @@ class MainWindow(QMainWindow):
         finally:
             dlg.deleteLater()
 
-    def _result_choices(self) -> list[tuple[str, str]]:
-        """``(label, key)`` for every result Display can show without running anything.
-
-        Case results still current for the model (``case:<id>``), then every load
-        combination (``combination:<id>``), whether or not its cases have run.
-        """
-        project = self._vm.project
-        if project is None:
-            return []
-        current = self._case_results.current(project)
-        names = {c.id: c.name for c in project.analyses}
-        choices = [
-            (f"Case: {names.get(cid, cid)}  [{type(r).__name__}]", f"case:{cid}")
-            for cid, r in sorted(current.items())
-        ]
-        choices += [(f"Combination: {c.name}", f"combination:{c.id}") for c in project.combinations]
-        return choices
-
     def show_results_of(self, key: str) -> bool:
         """Make ``case:<id>`` or ``combination:<id>`` the results Display shows.
 
@@ -3808,7 +3596,7 @@ class MainWindow(QMainWindow):
         results = self._results_for_key(key)
         if results is None:
             return False
-        self._on_back_to_model()
+        self.display.back_to_model()
         self._on_analysis_finished(results)
         return True
 
@@ -3823,13 +3611,13 @@ class MainWindow(QMainWindow):
         except ValueError:
             return None
         if kind == "case":
-            results = self._case_results.current(project).get(ref_id)
+            results = self.results.cases.current(project).get(ref_id)
             if results is None:
                 self._log(f"Case {ref_id} has no current results: run it first.")
                 return None
             return cast(object, results)
         try:
-            return cast(object, self._case_results.combine(project, ref_id))
+            return cast(object, self.results.cases.combine(project, ref_id))
         except (MissingCaseResultsError, ValueError, KeyError) as exc:
             QMessageBox.information(
                 self,
@@ -3839,38 +3627,9 @@ class MainWindow(QMainWindow):
             )
             return None
 
-    def _element_diagram_result_choices(self) -> list[tuple[str, str]]:
-        """Cases and combinations the member window can draw.
-
-        Modal, pushover and transient cases are left out: the window shows
-        static element forces and deformations, so offering them would only
-        replace the curves with an empty panel.
-        """
-        project = self._vm.project
-        if project is None:
-            return []
-        current = self._case_results.current(project)
-        names = {c.id: c.name for c in project.analyses}
-        choices = [
-            (f"Case: {names.get(cid, cid)}  [Static]", f"case:{cid}")
-            for cid, result in sorted(current.items())
-            if isinstance(result, StaticResults)
-        ]
-        choices += [(f"Combination: {c.name}", f"combination:{c.id}") for c in project.combinations]
-        return choices
-
-    def _current_result_key(self) -> str:
-        """The key of the result Display is showing, for the member window picker."""
-        results = self._latest_results
-        if isinstance(results, CombinationResults):
-            return f"combination:{results.case_id}"
-        if isinstance(results, StaticResults):
-            return f"case:{results.case_id}"
-        return ""
-
     def _on_select_results(self) -> None:
         """Display → Show Results Of…: switch between stored case and combination results."""
-        choices = self._result_choices()
+        choices = self.results.choices(self._vm.project)
         if not choices:
             QMessageBox.information(
                 self,
@@ -3883,34 +3642,6 @@ class MainWindow(QMainWindow):
         )
         if ok:
             self.show_results_of(dict(choices)[label])
-
-    def _static_result(self, bound: str = "max") -> StaticResults | None:
-        """The static result Display draws: a static case, or one bound of a combination."""
-        results = self._latest_results
-        if isinstance(results, StaticResults):
-            return results
-        if isinstance(results, CombinationResults):
-            return results.bound(bound)
-        return None
-
-    def _is_envelope(self) -> bool:
-        """True when the shown result has a maximum and a minimum (two diagrams, two shapes)."""
-        results = self._latest_results
-        return isinstance(results, CombinationResults) and not results.single_valued
-
-    def _diagram_data(self, component: ForceComponent) -> DiagramData:
-        """Diagram data of the shown result; an envelope draws its max and min together."""
-        project = self._vm.project
-        results = self._latest_results
-        if project is not None and isinstance(results, CombinationResults) and self._is_envelope():
-            return envelope_diagram_data(project, results.max, results.min, component)
-        static = self._static_result()
-        if project is None or static is None:
-            return DiagramData(component, np.zeros(0, dtype=int), np.zeros(0), np.zeros(0), 0.0)
-        # Stations read the case's loads back: only for a case's own results, not a combination's.
-        return extract_diagram_data(
-            project, static, component, stations=isinstance(self._latest_results, StaticResults)
-        )
 
     def _on_analysis_failed(self, report: str) -> None:
         """Show the failure report (exit code, last error, stderr tail) without blocking."""
@@ -4006,159 +3737,11 @@ class MainWindow(QMainWindow):
         )
 
     # ── slots: display (post-processing) ────────────────────────────
-    def _on_show_deformed(self) -> None:
-        static = self._static_result()
-        if static is None or self._vm.project is None:
-            QMessageBox.information(
-                self,
-                "Deformed Shape",
-                "Run a Static analysis or a load combination first (Display works on the "
-                "latest results).",
-            )
-            return
-        self._tear_down_post_dock()
-        suggested = linear_static_auto_scale(self._vm.project, static)
-        view = DeformedShapeView(suggested_scale=suggested)
-        view.show_bounds(self._is_envelope())
-        dock = QDockWidget("Deformed Shape", self)
-        dock.setWidget(view)
-        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
-        self._post_dock = dock
-        self._post_mode = "deformed"
-        self._set_display_title("Deformed Shape")
-
-        # The member curves integrate the moment diagrams: build the shape once
-        # per result and let the slider only change its scale.
-        shapes: list[tuple[object, str, DeformationSource]] = []
-
-        def _apply(scale: float) -> None:
-            bound = view.current_bound()
-            current = self._static_result(bound)
-            if current is None or self._vm.project is None:
-                return
-            results = self._latest_results
-            if shapes and shapes[0][0] is results and shapes[0][1] == bound:
-                src = shapes[0][2]
-            else:
-                # Span loads are read back from a case: not for a combination.
-                src = static_to_deformation(
-                    self._vm.project,
-                    current,
-                    span_loads=isinstance(results, StaticResults),
-                )
-                shapes[:] = [(results, bound, src)]
-            self._canvas._renderer.set_mode(RendererMode.DEFORMED, replace(src, scale=scale))
-            self._canvas.render()
-
-        def _on_bound(bound: str) -> None:
-            current = self._static_result(bound)
-            if current is not None and self._vm.project is not None:
-                view.set_peak_displacement(peak_static_displacement(self._vm.project, current))
-            _apply(view.current_scale)
-
-        view.scaleChanged.connect(_apply)
-        view.boundChanged.connect(_on_bound)
-        view.closed.connect(self._on_back_to_model)
-        view.set_units(UnitConverter.of(self._vm.project.meta))
-        view.set_peak_displacement(peak_static_displacement(self._vm.project, static))
-        _apply(suggested)  # initial frame at the suggested scale
-        self._register_units_refresh(view, after=lambda: _apply(view.current_scale))
-
-    def _on_show_mode_shape(self) -> None:
-        if not isinstance(self._latest_results, ModalResults) or self._vm.project is None:
-            QMessageBox.information(
-                self,
-                "Mode Shape",
-                "Run a Modal analysis first.",
-            )
-            return
-        self._tear_down_post_dock()
-        n_modes = len(self._latest_results.eigenvalues)
-        freqs = list(self._latest_results.frequencies)
-        animator = ModeShapeAnimator(n_modes, freqs)
-        dock = QDockWidget("Mode Shape Animator", self)
-        dock.setWidget(animator)
-        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
-        self._post_dock = dock
-        self._post_mode = "mode"
-
-        def _apply(mode: int, scale: float, phase: float) -> None:
-            self._set_display_title(f"Mode Shape {mode}")
-            if not isinstance(self._latest_results, ModalResults):
-                return
-            src = modal_to_deformation(
-                self._vm.project, self._latest_results, mode=mode, scale=scale, phase=phase
-            )
-            self._canvas._renderer.set_mode(RendererMode.MODAL, src)
-            self._canvas.render()
-
-        animator.frameChanged.connect(_apply)
-        animator.closed.connect(self._on_back_to_model)
-        animator.exportRequested.connect(
-            lambda: self._on_export_mode_shape(animator, _apply),
-        )
-        # Animator emits an initial frame in its constructor; nothing to do.
-
-    def _on_export_mode_shape(self, animator, apply_callable) -> None:  # type: ignore[no-untyped-def]
-        """Capture one period of the current mode shape to MP4/GIF.
-
-        Runs synchronously on the main thread — typically <10s for a
-        100-node model. We deliberately don't push this to a QThread
-        because the off-screen renderer must be touched from the GUI
-        thread (VTK's Qt-backed render window isn't thread-safe).
-        """
-        from PySide6.QtWidgets import QFileDialog
-
-        path, _sel = QFileDialog.getSaveFileName(
-            self,
-            "Export Mode Shape Animation",
-            f"mode_{animator.current_mode() + 1}.mp4",
-            "MP4 Video (*.mp4);;GIF Animation (*.gif);;WebM Video (*.webm)",
-        )
-        if not path:
-            return
-
-        from opensees_studio.services.animation_export import export_mode_shape_video
-
-        mode = animator.current_mode()
-        scale = animator.current_scale()
-
-        def set_phase(phase: float) -> None:
-            apply_callable(mode, scale, phase)
-
-        try:
-            self._log(f"Exporting mode {mode + 1} animation → {path} …")
-            export_mode_shape_video(
-                self._canvas,
-                set_phase,
-                Path(path),
-                n_frames=60,
-                fps=30,
-                progress=lambda i, n: self.statusBar().showMessage(
-                    f"Exporting frame {i}/{n}",
-                ),
-            )
-            self.statusBar().clearMessage()
-            self._log(f"Export complete: {path}")
-        except Exception as exc:
-            QMessageBox.critical(
-                self,
-                "Export failed",
-                f"Could not write the animation:\n\n{exc}\n\n"
-                "MP4 export requires FFmpeg via imageio. Try .gif as a fallback.",
-            )
-
-    def _reaction_rows(self) -> list[ReactionRow]:
-        """The reactions of the case on screen, or none when there are no results."""
-        project = self._vm.project
-        results = self._latest_results
-        if project is None or results is None:
-            return []
-        return reaction_rows(project, getattr(results, "node_reaction", None))
+    # Animator emits an initial frame in its constructor; nothing to do.
 
     def _refresh_reactions(self) -> None:
         """Keep the table and the overlay on the same case, and enable the actions."""
-        rows = self._reaction_rows()
+        rows = self.results.reaction_rows(self._vm.project)
         self._reactions_panel.set_rows(rows)
         self._canvas.set_reactions(rows, show=self._act_show_reactions.isChecked())
         enabled = bool(rows)
@@ -4169,10 +3752,10 @@ class MainWindow(QMainWindow):
             self._act_show_reactions.setChecked(False)
 
     def _on_show_reactions(self, checked: bool) -> None:
-        self._canvas.set_reactions(self._reaction_rows(), show=checked)
+        self._canvas.set_reactions(self.results.reaction_rows(self._vm.project), show=checked)
 
     def _on_reactions_dialog(self) -> None:
-        dialog = ReactionsDialog(self._reaction_rows(), self)
+        dialog = ReactionsDialog(self.results.reaction_rows(self._vm.project), self)
         dialog.exec()
 
     def _on_reactions_table(self) -> None:
@@ -4182,9 +3765,9 @@ class MainWindow(QMainWindow):
     def _refresh_case_combo(self) -> None:
         """List the cases that still hold results for this model, newest order."""
         project = self._vm.project
-        entries = self._case_results.current(project) if project is not None else {}
-        current = getattr(self._latest_results, "case_id", None)
-        names = self._case_names()
+        entries = self.results.cases.current(project) if project is not None else {}
+        current = getattr(self.results.latest, "case_id", None)
+        names = case_names(self._vm.project)
         self._case_combo.blockSignals(True)
         self._case_combo.clear()
         for case_id, results in sorted(entries.items()):
@@ -4199,37 +3782,30 @@ class MainWindow(QMainWindow):
         self._case_combo.setEnabled(bool(entries))
         self._refresh_step_buttons()
 
-    def _case_names(self) -> dict[int, str]:
-        """The current name of every analysis case, by id."""
-        project = self._vm.project
-        if project is None:
-            return {}
-        return {c.id: c.name for c in project.analyses}
-
     def _on_case_changed(self, index: int) -> None:
-        """Show the chosen case; the layers read it from `_latest_results`."""
+        """Show the chosen case; the layers read it from `results.latest`."""
         case_id = self._case_combo.itemData(index)
         project = self._vm.project
         if case_id is None or project is None:
             return
-        results = self._case_results.current(project).get(case_id)
-        if results is not None and results is not self._latest_results:
+        results = self.results.cases.current(project).get(case_id)
+        if results is not None and results is not self.results.latest:
             self._display_results(results)
 
     def _display_results(self, results: object) -> None:
         """Point the whole window at one results case."""
-        self._latest_results = results
+        self.results.latest = results
         self._lock_for_results()
         self._results_panel.show_results(results, self._vm.project)
         self._refresh_reactions()
         self._refresh_case_combo()
-        self._set_result_caption(self._caption_for(results))
+        self.display.set_caption(self.results.caption_for(self._vm.project, results))
         self._refresh_action_enablement()
         self._refresh_step_buttons()
 
     def _refresh_step_buttons(self) -> None:
         """Enable the step arrows only when the shown case has more than one."""
-        steps = int(getattr(self._latest_results, "n_steps", 1) or 1)
+        steps = self.results.steps()
         # Only a layer that knows how to redraw itself at another step registers
         # an applier; until one does, the arrows must not pretend to work.
         steppable = steps > 1 and getattr(self, "_step_apply", None) is not None
@@ -4242,7 +3818,7 @@ class MainWindow(QMainWindow):
             self._step_label.setText("")
 
     def _shift_step(self, delta: int) -> None:
-        steps = int(getattr(self._latest_results, "n_steps", 1) or 1)
+        steps = self.results.steps()
         if steps <= 1:
             return
         target = min(max(self._step_index + delta, 0), steps - 1)
@@ -4257,375 +3833,6 @@ class MainWindow(QMainWindow):
         apply = getattr(self, "_step_apply", None)
         if apply is not None:
             apply(self._step_index)
-
-    def _on_show_force_diagram(self) -> None:
-        if self._static_result() is None or self._vm.project is None:
-            QMessageBox.information(
-                self,
-                "Force Diagram",
-                "Run a Static analysis or a load combination first; force diagrams visualise "
-                "its element-force output.",
-            )
-            return
-        if self._is_envelope():
-            self._log(
-                "The force diagram draws both bounds of the combination: the maximum and the "
-                "minimum diagram, labelled at their extreme values."
-            )
-        self._tear_down_post_dock()
-
-        # Pick the component with the largest abs_max as the initial choice
-        # so the user sees something even if N (the default) happens to be
-        # zero (cantilever bending case, etc.).
-        best_comp, best_data = self._best_initial_component()
-        suggested = force_diagram_auto_scale(self._vm.project, best_data)
-
-        view = ForceDiagramView(suggested_scale=suggested)
-        # Sync the picker to the auto-chosen best component WITHOUT firing
-        # signals (we'll emit a single render below).
-        view._component.blockSignals(True)
-        idx = view._component.findData(best_comp)
-        if idx >= 0:
-            view._component.setCurrentIndex(idx)
-        view._component.blockSignals(False)
-
-        dock = QDockWidget("Force Diagram", self)
-        dock.setWidget(view)
-        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
-        self._post_dock = dock
-        self._post_mode = "force"
-
-        def _render(component: ForceComponent, scale: float) -> None:
-            if self._static_result() is None:
-                return
-            self._set_display_title(f"Force Diagram {component.name}")
-            data = self._diagram_data(component)
-            if data.element_ids.size == 0:
-                self._log(
-                    f"Nothing to draw for {component.name}: a force diagram runs "
-                    "between the two ends of a line element, and no such element "
-                    "returned forces (shells and quads have no ends)."
-                )
-            if self._diagram_renderer is not None:
-                self._diagram_renderer.render(self._vm.project, data, scale)
-            self._canvas.render()
-
-        def _on_component_changed(component: ForceComponent) -> None:
-            # Recompute the suggested scale for the new component and push
-            # it back into the view, which will re-emit `changed`.
-            data = self._diagram_data(component)
-            new_scale = force_diagram_auto_scale(self._vm.project, data)
-            view.set_scale_base(new_scale)
-
-        view.componentChanged.connect(_on_component_changed)
-        view.changed.connect(_render)
-        view.closed.connect(self._on_back_to_model)
-        view.set_units(UnitConverter.of(self._vm.project.meta))
-
-        # Force the first render now that everything is wired.
-        view._emit_changed()
-        self._register_units_refresh(
-            view,
-            after=lambda: _render(view.current_component(), view.current_scale),
-        )
-
-    def _on_show_shell_contours(self) -> None:
-        """Display → Show Shell Contours: colour the shell faces by a field.
-
-        The dock is the control; the canvas overlay is the renderer, and the two
-        talk through `ShellContourView.changed`. The scale box starts at 0 (the
-        undeformed model) because a force or moment contour is read on the
-        geometry it belongs to, and warping is what makes a deformation contour
-        legible.
-        """
-        static = self._static_result()
-        if static is None or self._vm.project is None:
-            QMessageBox.information(
-                self,
-                "Shell Contours",
-                "Run a Static analysis first: the contour shows its displacements and "
-                "its shell section resultants.",
-            )
-            return
-        if not shell_elements(self._vm.project):
-            QMessageBox.information(
-                self,
-                "Shell Contours",
-                "This model has no shell elements. A contour paints shell faces "
-                "(ShellMITC4 or quad elements).",
-            )
-            return
-
-        self._tear_down_post_dock()
-        if self._is_envelope():
-            self._log(
-                "Shell contours paint one value per face: they show the maximum bound of "
-                "the combination."
-            )
-        view = ShellContourView(n_steps=static.n_steps)
-        dock = QDockWidget("Shell Contours", self)
-        dock.setWidget(view)
-        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
-        dock.resize(700, 500)
-        self._post_dock = dock
-
-        def _render(field_key: str, step: int, scale: float, directions: bool) -> None:
-            current = self._static_result()
-            if current is None or self._vm.project is None:
-                return
-            self._contour_renderer.render(
-                self._vm.project,
-                current,
-                field_key,
-                step=step,
-                scale=scale,
-                show_directions=directions,
-                units=view.target_units,
-            )
-            self._canvas.render()
-
-        view.changed.connect(_render)
-        view.closed.connect(self._on_back_to_model)
-        view.set_units(UnitConverter.of(self._vm.project.meta))
-        # The colour bar carries a unit, so a display-unit change repaints.
-        view.unitsChanged.connect(
-            lambda: _render(
-                view.current_field(),
-                view.current_step(),
-                view.current_scale(),
-                view.directions_wanted(),
-            ),
-        )
-        view._field.setFocus()
-        view.emit_changed()
-        self._register_units_refresh(view)
-
-    def _best_initial_component(self):
-        """Return the (component, data) pair with the largest |force|.
-
-        Used when first opening the diagram dock so we don't show an empty
-        diagram for cases where the default component happens to be zero.
-        """
-        best_comp = ForceComponent.N
-        best_data = self._diagram_data(ForceComponent.N)
-        best_max = best_data.abs_max
-        for comp in (
-            ForceComponent.V2,
-            ForceComponent.V3,
-            ForceComponent.M2,
-            ForceComponent.M3,
-            ForceComponent.T,
-        ):
-            d = self._diagram_data(comp)
-            if d.abs_max > best_max:
-                best_max, best_comp, best_data = d.abs_max, comp, d
-        return best_comp, best_data
-
-    def _on_show_time_history(self) -> None:
-        if not isinstance(self._latest_results, TransientResults) or self._vm.project is None:
-            QMessageBox.information(
-                self,
-                "Time-History Plot",
-                "Run a Transient (time-history) analysis first.",
-            )
-            return
-        self._tear_down_post_dock()
-        view = TimeHistoryView()
-        view.set_results(self._latest_results)
-        view.set_available_nodes([n.id for n in self._vm.project.nodes])
-        dock = QDockWidget("Time-History Plot", self)
-        dock.setWidget(view)
-        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
-        # Plotter docks deserve more space than the slim deformed-shape panel.
-        dock.resize(700, 500)
-        self._post_dock = dock
-        view.closed.connect(self._on_back_to_model)
-        view.set_units(UnitConverter.of(self._vm.project.meta))
-        self._register_units_refresh(view)
-
-    def _on_export_th_animation(self) -> None:
-        """Export the deformed shape evolution over a transient analysis."""
-        if not isinstance(self._latest_results, TransientResults) or self._vm.project is None:
-            QMessageBox.information(
-                self,
-                "Export Time-History Animation",
-                "Run a Transient (time-history) analysis first.",
-            )
-            return
-        from PySide6.QtWidgets import QFileDialog, QInputDialog
-
-        from opensees_studio.services.animation_export import (
-            export_time_history_video,
-        )
-
-        # Compute a sensible scale: peak displacement → ~10% of bbox.
-        # We piggy-back on the deformation service for consistency.
-        # First peek at the data so we can pick `every` such that the
-        # video ends up reasonable (~150 frames target).
-        n_steps = self._latest_results.n_steps
-        if n_steps < 1:
-            QMessageBox.information(
-                self,
-                "Export Time-History Animation",
-                "The transient run completed no steps, so there is nothing to animate.",
-            )
-            return
-        every, ok = QInputDialog.getInt(
-            self,
-            "Frame decimation",
-            f"Take every Nth step ({n_steps} steps available):",
-            max(1, n_steps // 150),
-            1,
-            n_steps,
-        )
-        if not ok:
-            return
-
-        path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Export Time-History Animation",
-            f"timehistory_{self._latest_results.case_name}.mp4",
-            "MP4 Video (*.mp4);;GIF Animation (*.gif);;WebM Video (*.webm)",
-        )
-        if not path:
-            return
-
-        # Find the largest displacement to set a visible scale.
-        from opensees_studio.services.deformation import (
-            transient_to_deformation_at_step,
-        )
-
-        def set_step(step: int) -> None:
-            src = transient_to_deformation_at_step(
-                self._vm.project,
-                self._latest_results,
-                step=step,
-            )
-            self._canvas._renderer.set_mode(RendererMode.DEFORMED, src)
-            self._canvas.render()
-
-        try:
-            self._log(f"Exporting time-history animation → {path} …")
-            with self._busy("Exporting animation…"):
-                export_time_history_video(
-                    self._canvas,
-                    set_step,
-                    Path(path),
-                    n_steps,
-                    fps=30,
-                    every=every,
-                    progress=lambda i, n: self.statusBar().showMessage(
-                        f"Exporting frame {i}/{n}",
-                    ),
-                )
-            self.statusBar().clearMessage()
-            self._log(f"Export complete: {path}")
-        except Exception as exc:
-            QMessageBox.critical(
-                self,
-                "Export failed",
-                f"Could not write the animation:\n\n{exc}\n\n"
-                "MP4 export requires FFmpeg via imageio. Try .gif as a fallback.",
-            )
-
-    def _on_show_hysteresis(self) -> None:
-        if not isinstance(self._latest_results, TransientResults) or self._vm.project is None:
-            QMessageBox.information(
-                self,
-                "Hysteresis Plot",
-                "Run a Transient (time-history) analysis first.",
-            )
-            return
-        self._tear_down_post_dock()
-        view = HysteresisView()
-        view.set_results(self._latest_results)
-        view.set_available_nodes([n.id for n in self._vm.project.nodes])
-        view.set_available_elements([e.id for e in self._vm.project.elements])
-        dock = QDockWidget("Hysteresis Plot", self)
-        dock.setWidget(view)
-        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
-        dock.resize(700, 500)
-        self._post_dock = dock
-        view.closed.connect(self._on_back_to_model)
-        view.set_units(UnitConverter.of(self._vm.project.meta))
-        self._register_units_refresh(view)
-
-    def _on_show_pushover(self) -> None:
-        if not isinstance(self._latest_results, PushoverResults):
-            QMessageBox.information(
-                self,
-                "Pushover Curve",
-                "Run a Pushover analysis first.",
-            )
-            return
-        self._tear_down_post_dock()
-        # Plot axes follow the project's units and ndf so a kip-in / ndf=3
-        # Moment-Curvature model shows "in" / "kip·in" (or "1/in") rather than
-        # hard-coded SI m / N. The display conversion is applied by the view.
-        units = self._vm.project.meta.units if self._vm.project is not None else UnitSystem.SI_M_N
-        display = self._vm.project.meta.display_units if self._vm.project is not None else None
-        ndf = self._vm.project.ndf if self._vm.project is not None else 6
-        view = PushoverCurveView(units=units, ndf=ndf, display_units=display)
-        view.set_results(self._latest_results)
-        dock = QDockWidget("Pushover Curve", self)
-        dock.setWidget(view)
-        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
-        dock.resize(700, 500)
-        self._post_dock = dock
-        view.closed.connect(self._on_back_to_model)
-        self._register_units_refresh(view)
-
-    def _on_show_response_spectrum(self) -> None:
-        if (
-            not isinstance(self._latest_results, ResponseSpectrumResults)
-            or self._vm.project is None
-        ):
-            QMessageBox.information(
-                self,
-                "Response Spectrum",
-                "Run a Response-Spectrum analysis first.",
-            )
-            return
-        # Find the spectrum referenced by the case so the dock can plot it.
-        case_id = self._latest_results.case_id
-        case = next((c for c in self._vm.project.analyses if c.id == case_id), None)
-        spectrum = None
-        if case is not None and case.type == "ResponseSpectrum":
-            spectrum = next((s for s in self._vm.project.spectra if s.id == case.spectrum_id), None)
-
-        self._tear_down_post_dock()
-        view = ResponseSpectrumView()
-        view.set_results(self._latest_results, spectrum)
-        dock = QDockWidget("Response Spectrum", self)
-        dock.setWidget(view)
-        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
-        dock.resize(800, 600)
-        self._post_dock = dock
-        view.closed.connect(self._on_back_to_model)
-        view.set_units(UnitConverter.of(self._vm.project.meta))
-        self._register_units_refresh(view)
-
-    def _on_back_to_model(self) -> None:
-        self._tear_down_post_dock()
-        self._set_result_caption(None)
-        if self._diagram_renderer is not None:
-            self._diagram_renderer.clear()
-        self._contour_renderer.clear()
-        self._ratio_renderer.clear()
-        self._canvas._renderer.set_mode(RendererMode.MODEL)
-        self._canvas.render()
-
-    def _tear_down_post_dock(self) -> None:
-        if self._post_dock is not None:
-            self.removeDockWidget(self._post_dock)
-            self._post_dock.deleteLater()
-            self._post_dock = None
-        self._post_mode = None
-        if self._display_title is not None:
-            # The next view names itself; until then the caption is the case alone.
-            self._set_display_title(None)
-        self._post_units_refresh = None
-        self._close_element_diagram_windows()
 
     def _close_element_diagram_windows(self) -> None:
         """Close the member windows of a view that is being replaced."""
@@ -4712,15 +3919,13 @@ class MainWindow(QMainWindow):
         # set into it.
         self._main_canvas.set_hidden(nodes=set(), elements=set())
         self.action("view.show_all_objects").setEnabled(False)
-        # Results of another project (or of the closed one) never feed a combination.
-        self._case_results.clear()
-        self._report_extra.clear()
-        # Results belong to the previous project: drop the shown case, its
-        # charts/tables and every overlay (deformed shape, diagrams, contours,
-        # ratios). The new project's stored results are offered afterwards.
-        self._latest_results = None
+        # Results belong to the previous project and never feed a combination of
+        # this one: drop them, the shown case, its charts/tables and every
+        # overlay (deformed shape, diagrams, contours, ratios). The new
+        # project's stored results are offered afterwards.
+        self.results.clear()
         self._set_model_locked(False)
-        self._on_back_to_model()
+        self.display.back_to_model()
         self._results_panel.show_results(None, project)
         self._refresh_reactions()
         self._main_canvas.show_project(project)
@@ -4769,10 +3974,12 @@ class MainWindow(QMainWindow):
         # numbers did not move, only the label.
         self._refresh_case_combo()
         if (
-            self._latest_results is not None
+            self.results.latest is not None
             and self._canvas._renderer.mode is not RendererMode.MODEL
         ):
-            self._set_result_caption(self._caption_for(self._latest_results))
+            self.display.set_caption(
+                self.results.caption_for(self._vm.project, self.results.latest)
+            )
 
     def _on_dirty_changed(self, _dirty: bool) -> None:
         self._refresh_status()
@@ -4961,11 +4168,11 @@ class MainWindow(QMainWindow):
         has_selection = not self._canvas.selection.is_empty
         has_selected_nodes = bool(self._canvas.selection.nodes)
         has_selected_elements = bool(self._canvas.selection.elements)
-        has_static = self._static_result() is not None
-        has_modal = isinstance(self._latest_results, ModalResults)
-        has_transient = isinstance(self._latest_results, TransientResults)
-        has_pushover = isinstance(self._latest_results, PushoverResults)
-        has_rs = isinstance(self._latest_results, ResponseSpectrumResults)
+        has_static = self.results.static() is not None
+        has_modal = isinstance(self.results.latest, ModalResults)
+        has_transient = isinstance(self.results.latest, TransientResults)
+        has_pushover = isinstance(self.results.latest, PushoverResults)
+        has_rs = isinstance(self.results.latest, ResponseSpectrumResults)
         n_sel = len(self._canvas.selection.nodes)
         has_series = has_project and bool(self._vm.project and self._vm.project.time_series)
         self._actions.refresh(
@@ -5008,9 +4215,7 @@ class MainWindow(QMainWindow):
         self._act_run_all.setEnabled(batch_enabled)
         self._act_run_selected.setEnabled(batch_enabled)
         project_now = self._vm.project
-        stored = project_now is not None and (
-            bool(self._case_results.current(project_now)) or bool(self._report_extra)
-        )
+        stored = self.results.has_stored(project_now)
         db_there = has_project and database_path(self._vm.path).exists()
         self._act_clear_results.setEnabled(bool(has_project and (stored or db_there)))
         self._act_auto_mesh_frames.setEnabled(has_project)
@@ -5050,24 +4255,26 @@ class MainWindow(QMainWindow):
         self._act_tool_measure.setEnabled(has_project)
         self._act_select_results.setEnabled(has_project)
         self._act_load_combinations.setEnabled(True)
-        self._act_show_deformed.setEnabled(has_static)
-        self._act_show_mode_shape.setEnabled(has_modal)
-        self._act_show_force_diagram.setEnabled(has_static)
-        self._act_shell_contours.setEnabled(
+        self.action("display.show_deformed").setEnabled(has_static)
+        self.action("display.show_mode_shape").setEnabled(has_modal)
+        self.action("display.show_force_diagram").setEnabled(has_static)
+        self.action("display.shell_contours").setEnabled(
             has_static and bool(shell_elements(self._vm.project)) if self._vm.project else False,
         )
-        self._act_show_time_history.setEnabled(has_transient)
-        self._act_export_th_animation.setEnabled(has_transient)
-        self._act_show_hysteresis.setEnabled(has_transient)
-        self._act_show_pushover.setEnabled(has_pushover)
-        self._act_influence_line.setEnabled(isinstance(self._latest_results, InfluenceLineResults))
-        self._act_show_response_spectrum.setEnabled(has_rs)
+        self.action("display.show_time_history").setEnabled(has_transient)
+        self.action("display.export_th_animation").setEnabled(has_transient)
+        self.action("display.show_hysteresis").setEnabled(has_transient)
+        self.action("display.show_pushover").setEnabled(has_pushover)
+        self.action("display.influence_line").setEnabled(
+            isinstance(self.results.latest, InfluenceLineResults)
+        )
+        self.action("display.show_response_spectrum").setEnabled(has_rs)
         self._act_display_options.setEnabled(has_project)
         self._act_show_load_assigns.setEnabled(has_project)
         self._act_lock_model.setEnabled(has_project)
         self._lock_button.setEnabled(has_project)
         self._act_show_local_axes.setEnabled(has_project)
-        self._act_back_to_model.setEnabled(self._post_dock is not None)
+        self.action("display.back_to_model").setEnabled(self.display.dock is not None)
         # Startup gate: with no project open only File and Help stay usable. The
         # whole menu is disabled rather than every action inside it, so it cannot
         # open onto a wall of grey entries.

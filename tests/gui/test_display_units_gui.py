@@ -141,8 +141,8 @@ def test_a_display_change_does_not_mark_the_project_as_reinterpreted(qtbot) -> N
 @pytest.mark.gui
 def test_the_deformed_shape_reports_the_peak_displacement_in_display_units(qtbot) -> None:  # type: ignore[no-untyped-def]
     mw = _window(qtbot)
-    mw._on_show_deformed()
-    view = mw._post_dock.widget()
+    mw.display.show_deformed()
+    view = mw.display.dock.widget()
     # 6 mm across, 8 mm down → a 10 mm magnitude, not 8 and not 6.
     assert view._peak_label.text() == "0.01 m"
 
@@ -160,8 +160,8 @@ def test_the_force_diagram_is_redrawn_in_the_new_units(qtbot) -> None:  # type: 
     # pipeline only fills on a real render, which this platform never does
     # in that view. The isometric view reads the mesh as built.
     mw._canvas.view_isometric()
-    mw._on_show_force_diagram()
-    view = mw._post_dock.widget()
+    mw.display.show_force_diagram()
+    view = mw.display.dock.widget()
     assert view.current_component().is_moment  # the 10 kN·m root dominates
     assert "N·m" in view._units_label.text()
 
@@ -195,7 +195,7 @@ def test_a_solved_model_shows_converted_element_forces(qtbot) -> None:  # type: 
 def test_the_deformed_shape_tooltip_shows_the_joint_displacements(qtbot) -> None:  # type: ignore[no-untyped-def]
     mw = _window(qtbot)
     assert mw.node_tooltip(2).startswith("Joint 2")  # the model's own summary
-    mw._on_show_deformed()
+    mw.display.show_deformed()
     text = mw.node_tooltip(2)
     assert text.startswith("<b>Joint 2</b>")
     assert "Case: tip load" in text
@@ -206,7 +206,7 @@ def test_the_deformed_shape_tooltip_shows_the_joint_displacements(qtbot) -> None
     text = mw.node_tooltip(2)
     assert "&nbsp;6<" in text and "&nbsp;-8<" in text and "&nbsp;mm<" in text
 
-    mw._on_back_to_model()
+    mw.display.back_to_model()
     assert mw.node_tooltip(2).startswith("Joint 2")
 
 
@@ -222,10 +222,10 @@ def test_the_mode_shape_tooltip_shows_the_joint_components(qtbot) -> None:  # ty
         mode_shapes={1: {1: np.zeros(3), 2: np.array([0.0, 1.0, -0.25])}},
     )
     mw._on_analysis_finished(modal)
-    mw._on_show_mode_shape()
+    mw.display.show_mode_shape()
     text = mw.node_tooltip(2)
     assert text.startswith("<b>Joint 2</b><br>Mode 1 · T = 0.5 s")
     assert ">Uz<" in text and "&nbsp;1<" in text and "&nbsp;-0.25<" in text
 
-    mw._on_back_to_model()
+    mw.display.back_to_model()
     assert mw.node_tooltip(2).startswith("Joint 2")

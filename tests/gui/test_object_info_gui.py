@@ -115,9 +115,9 @@ def test_the_viewport_title_says_what_is_displayed(window) -> None:  # type: ign
     label = window._main_canvas._result_label
     assert label.text().startswith("DEAD")
 
-    window._set_display_title("Deformed Shape")
+    window.display.set_title("Deformed Shape")
     assert label.text().startswith("Deformed Shape")
     assert "DEAD" in label.text()
 
-    window._tear_down_post_dock()
+    window.display.tear_down()
     assert label.text().startswith("DEAD")

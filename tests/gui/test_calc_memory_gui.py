@@ -42,7 +42,7 @@ def test_the_action_writes_the_memory(qtbot, monkeypatch, tmp_path) -> None:  # 
     window = MainWindow()
     qtbot.addWidget(window)
     window._vm.adopt(project)
-    monkeypatch.setattr(window._case_results, "current", lambda _project: results)
+    monkeypatch.setattr(window.results.cases, "current", lambda _project: results)
     monkeypatch.setattr(
         CalculationMemoryDialog, "exec", lambda self: int(QDialog.DialogCode.Accepted)
     )

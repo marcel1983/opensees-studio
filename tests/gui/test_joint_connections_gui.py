@@ -46,7 +46,7 @@ def test_the_menu_stores_the_tabs_in_one_undo_step(qtbot, monkeypatch) -> None: 
     qtbot.addWidget(mw)
     mw._vm.adopt(project)
     for result in results.values():
-        mw._case_results.put(project, result)
+        mw.results.cases.put(project, result)
 
     def _accept(self) -> int:  # type: ignore[no-untyped-def]
         rows = [r for r in range(self._table.rowCount()) if self._table.item(r, 5).text() == "OK"]

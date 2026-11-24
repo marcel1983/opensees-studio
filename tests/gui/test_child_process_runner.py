@@ -87,7 +87,7 @@ def test_normal_run_through_qprocess_updates_the_results_views(qtbot, tmp_path) 
 
     results = blocker.args[0]
     assert isinstance(results, StaticResults)
-    assert window._latest_results is results
+    assert window.results.latest is results
     assert window._act_show_deformed.isEnabled()
     assert window._act_show_force_diagram.isEnabled()
     assert results.disp(2, 2) < 0.0  # tip goes down under the tip load
@@ -292,7 +292,7 @@ def test_cancel_during_a_long_transient_ends_with_cancelled(qtbot, tmp_path) -> 
     assert not window._vm.is_dirty
     # The window is responsive: the event loop turns and the widget answers.
     qtbot.waitUntil(lambda: window.isVisible(), timeout=5000)
-    assert window._latest_results is None
+    assert window.results.latest is None
 
 
 @pytest.mark.gui
@@ -404,7 +404,7 @@ def test_missing_recorder_output_in_the_child_opens_the_error_dialog(
     box = window._analysis_error_box
     assert box is not None and box.isVisible()
     assert "nodes_disp.out" in box.detailedText()
-    assert window._latest_results is None
+    assert window.results.latest is None
     box.close()
 
 
@@ -432,4 +432,4 @@ def test_the_run_dialog_is_modeless_single_and_offers_the_results(qtbot, tmp_pat
 
     dlg._show_results_btn.click()
     assert window._run_dialog is None
-    assert isinstance(window._latest_results, StaticResults)
+    assert isinstance(window.results.latest, StaticResults)

@@ -61,6 +61,6 @@ def test_the_window_animates_the_mechanism(qtbot) -> None:  # type: ignore[no-un
     qtbot.addWidget(window)
     window._vm.adopt(_rolling_beam())
     finding = next(f for f in check_model(window._vm.project).findings if f.code == "mechanism")
-    window._show_mechanism(finding)
-    assert window._post_dock is not None and window._post_dock.windowTitle() == "Mechanism"
+    window.display.mechanism(finding)
+    assert window.display.dock is not None and window.display.dock.windowTitle() == "Mechanism"
     assert window._canvas.selection.nodes == {1, 2}

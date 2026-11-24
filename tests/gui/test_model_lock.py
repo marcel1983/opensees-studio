@@ -98,7 +98,7 @@ def test_a_refused_edit_is_taken_back_and_the_results_stay(window: MainWindow) -
     assert window.asked == 1  # type: ignore[attr-defined]
     assert [n.id for n in window._vm.project.nodes] == [1, 2]
     assert window._model_locked
-    assert window._latest_results is not None
+    assert window.results.latest is not None
 
 
 def test_an_accepted_edit_unlocks_and_discards_the_results(window: MainWindow) -> None:
@@ -109,7 +109,7 @@ def test_an_accepted_edit_unlocks_and_discards_the_results(window: MainWindow) -
 
     assert [n.id for n in window._vm.project.nodes] == [1, 2, 9]
     assert not window._model_locked
-    assert window._latest_results is None
+    assert window.results.latest is None
     assert window._lock_button.text() == "Unlocked"
     _add_node_again = AddNodesCommand(window._vm, [Node(id=10, coords=(1.0, 0.0, 1.0))])
     window._vm.apply_command(_add_node_again)  # unlocked: nobody is asked
@@ -122,7 +122,7 @@ def test_what_no_result_depends_on_is_not_asked_about(window: MainWindow) -> Non
 
     assert window.asked == 0  # type: ignore[attr-defined]
     assert window._model_locked
-    assert window._latest_results is not None
+    assert window.results.latest is not None
 
 
 def test_renaming_a_case_does_not_ask_to_unlock(window: MainWindow) -> None:
@@ -135,7 +135,7 @@ def test_renaming_a_case_does_not_ask_to_unlock(window: MainWindow) -> None:
 
     assert window.asked == 0  # type: ignore[attr-defined]
     assert window._model_locked
-    assert window._latest_results is not None
+    assert window.results.latest is not None
     assert window._vm.project.analyses[0].name == "GRAVITY"
 
 
@@ -183,9 +183,9 @@ def test_saving_a_changed_viewport_keeps_the_results_and_the_lock(
 
     assert window._on_save()
     assert window._vm.project.view is not None
-    assert window._case_results.current(window._vm.project)
+    assert window.results.cases.current(window._vm.project)
 
     window._vm.apply_command(SetDesignSettingsCommand(window._vm, DesignSettings(method="ASD")))
     assert window.asked == 0  # type: ignore[attr-defined]
     assert window._model_locked
-    assert window._latest_results is not None
+    assert window.results.latest is not None
