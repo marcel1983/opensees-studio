@@ -74,7 +74,7 @@ def test_docks_explorer_and_message_boxes_follow_the_language(qtbot, monkeypatch
     try:
         titles = {dock.windowTitle() for dock in window.findChildren(QDockWidget)}
         assert {"Explorador del modelo", "Propiedades", "Consola"} <= titles
-        nodes = window._tree_categories["Nodes"]
+        nodes = window._tree.categories["Nodes"]
         assert nodes.text(0).startswith("Nudos (")
         assert window._tree.headerItem().text(0) == "Modelo"
 
@@ -91,7 +91,7 @@ def test_docks_explorer_and_message_boxes_follow_the_language(qtbot, monkeypatch
         assert seen == ["Seleccione primero nudos o barras."]
     finally:
         window._on_language("en")
-    assert window._tree_categories["Nodes"].text(0).startswith("Nodes (")
+    assert window._tree.categories["Nodes"].text(0).startswith("Nodes (")
 
 
 @pytest.mark.gui

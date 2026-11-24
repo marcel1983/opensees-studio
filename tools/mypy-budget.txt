@@ -64,4 +64,5 @@
 # Coordinate System/Grids is declared too (`shortcut="Ctrl+G"` matched no overload): Linux 163 -> 162.
 # Back to Model View is declared too (`shortcut="Ctrl+Shift+B"` matched no overload): Linux 162 -> 161.
 # Cases, Run and Run All Cases are declared too (`shortcut="F5"` matched no overload): Linux 161 -> 159.
-159
+# The Model Explorer is a widget of its own (its untyped `_fill(items: list, label_fn)` went with it): Linux 159 -> 158.
+158
