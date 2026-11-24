@@ -135,7 +135,7 @@ def test_hide_grids_from_view_menu_is_undoable(qtbot) -> None:  # type: ignore[n
     mw._vm.undo_stack.undo()
     assert not any(cs.grid.hide_all for cs in mw._vm.project.coord_systems)
     assert mw._act_show_grids.isChecked()  # the tick follows Ctrl+Z
-    mw._set_grids_shown(False, "B")
+    mw.grids.set_shown(False, "B")
     hidden = {cs.name: cs.grid.hide_all for cs in mw._vm.project.coord_systems}
     assert hidden == {"Global": False, "B": True}
     mw._act_show_grid_labels.trigger()
@@ -148,7 +148,7 @@ def test_grid_wizard_fills_the_empty_global_grid(qtbot, monkeypatch) -> None:  #
 
     mw = _window(qtbot)
     monkeypatch.setattr(GridWizardDialog, "exec", lambda self: 1)
-    mw._on_grid_wizard()
+    mw.grids.wizard()
     (global_cs,) = mw._vm.project.coord_systems
     assert global_cs.name == "Global"
     assert len(global_cs.grid.x_grid_lines) == 4

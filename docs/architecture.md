@@ -88,6 +88,7 @@ handler: `"transforms.move"` is `window.transforms.move`.
 | `PropertyEditsController` | `property_edits` | No menu: what the Properties dock calls back with. One joint's mass, an element's type, material, section or fields, and the edits of several joints or elements in one undo step |
 | `ViewportController` | `viewport` | View → Isometric, Top, Front, Right, Rotate, Spin, Parallel projection, Move Up/Down in List, Grid Line View, Hide/Isolate Selected, Invert Visible, Show All Objects. Owns the Level list of the View toolbar and the grid line being viewed (`grid_view`); gets `action` for the three commands it enables itself |
 | `DrawingController` | `drawing` | Tools → Select, Draw Node, Draw Frame, Draw Truss, Quick Draw Frame, Draw Shell, Quick Draw Shell, Measure Distance. Builds each tool when it is first armed and owns the two Section boxes of the Tools bar. Gets `tools` (the window's `ToolController`), `check_select`/`check_measure` (the tool buttons are an exclusive group of the window) and `offset_dialog` (the open Move or Replicate window) |
+| `GridsController` | `grids` | Define → Coordinate System/Grids, Grid Wizard; View → Show Grids and Show Grid Labels (each an undo step). Gets `new_project` (both dialogs work with no project open) and `sync_actions` (the window ticks its two checkable commands again) |
 
 `DesignController` is the example of the named hooks: it is created with
 `results` (the case results computed on the project as it is now) and

@@ -53,7 +53,6 @@ from opensees_studio import __version__
 from opensees_studio.commands import (
     AddNodesCommand,
     MeshCommand,
-    SetCoordSystemsCommand,
     SetProjectMetaCommand,
     SetRestraintCommand,
 )
@@ -141,6 +140,7 @@ from opensees_studio.views.controllers.building import BuildingController
 from opensees_studio.views.controllers.design import DesignController
 from opensees_studio.views.controllers.drawing import DrawingController
 from opensees_studio.views.controllers.exports import ExportsController
+from opensees_studio.views.controllers.grids import GridsController
 from opensees_studio.views.controllers.groups import GroupsController
 from opensees_studio.views.controllers.imports import ImportsController
 from opensees_studio.views.controllers.joints import JointsController
@@ -156,7 +156,6 @@ from opensees_studio.views.controllers.viewport import ViewportController
 from opensees_studio.views.dialogs import (
     AddNodeDialog,
     AnalysisCaseManagerDialog,
-    CoordinateGridSystemsDialog,
     DisplayOptionsDialog,
     ElementDiagramWindow,
     FrameWizard,
@@ -169,7 +168,6 @@ from opensees_studio.views.dialogs import (
     RunAnalysisDialog,
 )
 from opensees_studio.views.dialogs.batch_run import BatchRunDialog
-from opensees_studio.views.dialogs.grid_wizard import GridWizardDialog
 from opensees_studio.views.dialogs.load_combinations import LoadCombinationsDialog
 from opensees_studio.views.dialogs.load_display import LoadDisplayDialog
 from opensees_studio.views.dialogs.object_info import ObjectInfoDialog
@@ -386,6 +384,12 @@ class MainWindow(QMainWindow):
             shell,
             results=lambda: self._current_case_results(),
             report_results=lambda: self.report_results(),
+        )
+        #: Define → Coordinate System/Grids and Grid Wizard; View → Show Grids and labels.
+        self.grids = GridsController(
+            shell,
+            new_project=lambda: self._on_new(),
+            sync_actions=lambda: self._sync_grid_actions(),
         )
         self.groups = GroupsController(shell)
         self.imports = ImportsController(
@@ -633,8 +637,6 @@ class MainWindow(QMainWindow):
             self._snap_actions[mode] = action
 
         # Define
-        self._act_grid = QAction("&Coordinate System/Grids…", self, shortcut="Ctrl+G")
-        self._act_grid_wizard = QAction("Grid &Wizard…", self)
         # No shortcut: Ctrl+N is File → New, and F4 draws nodes.
         self._act_add_node = QAction("Add &Node…", self)
         self._act_custom_commands = QAction("Custom OpenSees Co&mmands…", self)
@@ -892,8 +894,8 @@ class MainWindow(QMainWindow):
         self._build_select_menu(m_select)
 
         m_define = mb.addMenu("&Define")
-        m_define.addAction(self._act_grid)
-        m_define.addAction(self._act_grid_wizard)
+        m_define.addAction(self.action("define.grid"))
+        m_define.addAction(self.action("define.grid_wizard"))
         m_define.addAction(self.action("define.storeys"))
         m_define.addAction(self.action("define.groups"))
         m_define.addAction(self.action("define.joint_patterns"))
@@ -1757,10 +1759,8 @@ class MainWindow(QMainWindow):
             action.toggled.connect(self._on_snap_mode_toggled)
 
         # Define
-        self._act_grid.triggered.connect(self._on_grid_system)
-        self._act_grid_wizard.triggered.connect(self._on_grid_wizard)
-        self._act_show_grids.triggered.connect(self._set_grids_shown)
-        self._act_show_grid_labels.triggered.connect(self._set_grid_labels_shown)
+        self._act_show_grids.triggered.connect(self.grids.set_shown)
+        self._act_show_grid_labels.triggered.connect(self.grids.set_labels_shown)
         self._canvas.contextMenuRequested.connect(self._on_canvas_context_menu)
         self._canvas.cursorMoved.connect(self._on_cursor_moved)
         self._canvas.lineSelectFinished.connect(lambda: self._act_select_line.setChecked(False))
@@ -1920,7 +1920,7 @@ class MainWindow(QMainWindow):
         self._vm.new_project(ndm, ndf, dead_case=True, units=units, default_materials=True)
         self._log(f"New model: {TEMPLATES[key]} ({units.value}).")
         if key == "grid":
-            self._on_grid_wizard()
+            self.grids.wizard()
         elif key == "truss2d":
             self._on_truss_wizard()
         elif key == "frame2d":
@@ -2338,23 +2338,6 @@ class MainWindow(QMainWindow):
         return self.transforms.paste_offset
 
     # ── slots: define ────────────────────────────────────────────────
-    def _on_grid_system(self) -> None:
-        """Open the SAP2000-style Coordinate/Grid Systems manager."""
-        if self._vm.project is None:
-            self._on_new()
-        proj = self._vm.project
-        assert proj is not None
-        dlg = CoordinateGridSystemsDialog(proj.coord_systems, parent=self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            new_systems = dlg.result_systems()
-            self._vm.apply_command(SetCoordSystemsCommand(self._vm, new_systems))
-            names = ", ".join(cs.name for cs in new_systems)
-            self._log(f"Coordinate/Grid Systems updated: {names}.")
-        except Exception as exc:
-            QMessageBox.critical(self, "Grid update failed", str(exc))
-
     def _select_report_row(self, node_ids: Sequence[int], element_ids: Sequence[int]) -> None:
         """Highlight the nodes/elements of a report row so they can be inspected."""
         self._canvas.selection.clear()
@@ -2635,59 +2618,6 @@ class MainWindow(QMainWindow):
             {node.id for node in truss.nodes}, {element.id for element in truss.elements}
         )
         self._log(f"{truss.summary()} Left selected.")
-
-    def _on_grid_wizard(self) -> None:
-        """Define → Grid Wizard: a regular Cartesian or radial grid, one undo step."""
-        if self._vm.project is None:
-            self._on_new()
-        project = self._vm.project
-        assert project is not None
-        dlg = GridWizardDialog(project.coord_systems, ndm=project.ndm, parent=self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        target = dlg.target()
-        if target:
-            systems = [
-                cs.model_copy(update={"grid": dlg.grid_system()}) if cs.name == target else cs
-                for cs in project.coord_systems
-            ]
-            name = target
-        else:
-            new = dlg.system()
-            systems = [*project.coord_systems, new]
-            name = new.name
-        self._vm.apply_command(SetCoordSystemsCommand(self._vm, systems))
-        self._log(f"Grid Wizard: grid of '{name}' set.")
-
-    def _set_grids_shown(self, shown: bool, name: str | None = None) -> None:
-        """Show or hide the grids (all, or the system called ``name``): an undo step.
-
-        The same flag as the Hide All Grid Lines box of the grid dialog.
-        """
-        project = self._vm.project
-        if project is None:
-            return
-        systems = [
-            cs.model_copy(update={"grid": cs.grid.model_copy(update={"hide_all": not shown})})
-            if name is None or cs.name == name
-            else cs
-            for cs in project.coord_systems
-        ]
-        if systems != project.coord_systems:
-            self._vm.apply_command(SetCoordSystemsCommand(self._vm, systems))
-        self._sync_grid_actions()
-
-    def _set_grid_labels_shown(self, shown: bool) -> None:
-        project = self._vm.project
-        if project is None:
-            return
-        systems = [
-            cs.model_copy(update={"grid": cs.grid.model_copy(update={"show_labels": shown})})
-            for cs in project.coord_systems
-        ]
-        if systems != project.coord_systems:
-            self._vm.apply_command(SetCoordSystemsCommand(self._vm, systems))
-        self._sync_grid_actions()
 
     def _sync_grid_actions(self) -> None:
         """Tick View → Show Grids / Labels from the project (checked when any shows)."""
@@ -3095,12 +3025,12 @@ class MainWindow(QMainWindow):
                     action.setCheckable(True)
                     action.setChecked(not cs.grid.hide_all)
                     action.triggered.connect(
-                        lambda checked, name=cs.name: self._set_grids_shown(checked, name)
+                        lambda checked, name=cs.name: self.grids.set_shown(checked, name)
                     )
             menu.addAction(self._act_show_grid_labels)
             menu.addSeparator()
-        menu.addAction(self._act_grid)
-        menu.addAction(self._act_grid_wizard)
+        menu.addAction(self.action("define.grid"))
+        menu.addAction(self.action("define.grid_wizard"))
         menu.addSeparator()
         menu.addAction(self.action("view.grid_line_view"))
         menu.addAction(self.action("view.show_all_objects"))
@@ -5047,7 +4977,6 @@ class MainWindow(QMainWindow):
             has_project and any(self._canvas.selection.previous)
         )
         self._act_select_line.setEnabled(has_project)
-        self._act_grid.setEnabled(True)
         self._act_add_node.setEnabled(True)
         self._act_frame_wizard.setEnabled(has_project)
         self._act_truss_wizard.setEnabled(has_project)

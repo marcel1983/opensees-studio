@@ -154,10 +154,11 @@ These are non-obvious things that are easy to break if you don't know:
   is never asked about. A new project field that no result depends on goes in
   that set, or saving or editing it makes every result stale. `tests/gui/conftest.py` answers the
   unlock box with Yes for every test; `test_model_lock.py` sets its own answers.
-- Draw tools need something to snap to. `MainWindow._require_drawable_grid`
-  offers Define → Coordinate System/Grids… when the project has no visible
-  grid lines: the canvas rejects every off-grid click, so a fresh project
-  with an empty Global grid looks broken rather than empty.
+- Draw tools work on an empty grid. Arming one never moves the camera, and a
+  click lands on a grid intersection when one is near and otherwise where the
+  view ray meets the working plane; with no grid lines at all the status line
+  says there is no snapping (`tests/gui/test_draw_without_grid.py`). Only the
+  Quick Draw tools need grid lines, and say so (`DrawingController`).
 - `services.persistence._write_text_atomic` is the only way a project or a
   snapshot reaches disk; a save must never truncate the file the user
   already has. `load_project` refuses a `schema_version` newer than
@@ -222,7 +223,8 @@ These are non-obvious things that are easy to break if you don't know:
   `DrawingController` (the draw tools, Measure Distance, the Section boxes of
   the Tools bar) gets the window's `ToolController` as `tools`; the tool
   buttons stay an exclusive group of the window, which it ticks through
-  `check_select` and `check_measure`. A controller's attribute must not be the name of a `QMainWindow`
+  `check_select` and `check_measure`. `GridsController` (coordinate
+  systems, Grid Wizard, Show Grids) gets `new_project` and `sync_actions`. A controller's attribute must not be the name of a `QMainWindow`
   method (`window.geometry` would replace `QWidget.geometry()`):
   `tests/gui/test_action_registry.py` checks it, hence `model_tools`.
   The rest of the window is being moved out the same way.
