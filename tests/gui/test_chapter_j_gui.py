@@ -53,7 +53,7 @@ def test_the_action_stores_and_undoes_the_chapter_j_checks(qtbot, monkeypatch) -
     )
     monkeypatch.setattr(ChapterJDialog, "exec", lambda self: int(QDialog.DialogCode.Accepted))
     monkeypatch.setattr(ChapterJDialog, "checks", lambda self: [check])
-    window._on_chapter_j()
+    window.design.chapter_j()
     assert project.chapter_j_checks == [check]
     window._vm.undo_stack.undo()
     assert project.chapter_j_checks == []

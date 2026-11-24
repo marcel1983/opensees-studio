@@ -59,7 +59,9 @@ class ActionSpec:
     """One command.
 
     ``id`` is ``"<area>.<name>"`` and is how code and tests ask for the action
-    (``window.action("file.save")``). ``handler`` names the method that runs it.
+    (``window.action("file.save")``). ``handler`` names the method that runs it:
+    a method of the window (``"_on_save"``) or, dotted, of one of its
+    controllers (``"transforms.move"`` is ``window.transforms.move``).
 
     ``needs`` is what enables it. ``Needs.NOTHING`` leaves the action alone (it
     stays enabled); ``None`` means the condition is not one :class:`Needs` can
@@ -73,6 +75,9 @@ class ActionSpec:
     needs: Needs | None = Needs.NOTHING
     checkable: bool = False
     tooltip: str | None = None
+    #: Only for a command whose ``_act_`` name predates its id and is not
+    #: ``_act_<name>`` (``"assign.diaphragm"`` is ``_act_assign_diaphragm``).
+    legacy_attribute: str | None = None
 
     @property
     def area(self) -> str:
@@ -89,4 +94,4 @@ class ActionSpec:
         The ribbon layout, ``core.help.ACTION_TOPICS``, the icon files and the
         GUI tests still find a command by that name.
         """
-        return f"_act_{self.name}"
+        return self.legacy_attribute or f"_act_{self.name}"

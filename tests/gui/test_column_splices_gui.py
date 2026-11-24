@@ -58,7 +58,7 @@ def test_the_action_stores_and_undoes_the_column_splices(qtbot, monkeypatch) -> 
     )
     monkeypatch.setattr(ColumnSplicesDialog, "exec", lambda self: int(QDialog.DialogCode.Accepted))
     monkeypatch.setattr(ColumnSplicesDialog, "splices", lambda self: [splice])
-    window._on_column_splices()
+    window.design.column_splices()
     assert project.column_splices == [splice]
     window._vm.undo_stack.undo()
     assert project.column_splices == []

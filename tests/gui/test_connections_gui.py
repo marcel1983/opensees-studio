@@ -56,7 +56,7 @@ def test_the_action_stores_and_undoes_the_connections(qtbot, monkeypatch) -> Non
     connection = RbsConnection(id=1, beam_element_id=2, column_element_id=1, a=4.5, b=13.0, c=1.0)
     monkeypatch.setattr(ConnectionsDialog, "exec", lambda self: int(QDialog.DialogCode.Accepted))
     monkeypatch.setattr(ConnectionsDialog, "connections", lambda self: [connection])
-    window._on_connections()
+    window.design.connections()
     assert project.connections == [connection]
     window._vm.undo_stack.undo()
     assert project.connections == []

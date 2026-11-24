@@ -62,7 +62,7 @@ def test_the_action_stores_and_undoes_the_gussets(qtbot, monkeypatch) -> None:  
     gusset = Gusset(id=1, brace_element_id=5, t=0.5, b=12.0, lw=10.0, free_length=10.0)
     monkeypatch.setattr(GussetsDialog, "exec", lambda self: int(QDialog.DialogCode.Accepted))
     monkeypatch.setattr(GussetsDialog, "gussets", lambda self: [gusset])
-    window._on_gussets()
+    window.design.gussets()
     assert project.gussets == [gusset]
     window._vm.undo_stack.undo()
     assert project.gussets == []

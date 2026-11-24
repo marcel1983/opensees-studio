@@ -24,6 +24,8 @@ class GeneratedModel:
 
     The ids are the final ones: a generator asks the project for the next free
     id of each kind (``project.next_node_id()`` …) and numbers from there.
+    A list adds to what the project has; ``mass_source`` and ``design`` are
+    single settings and replace the project's when given.
     """
 
     materials: list[Any] = field(default_factory=list)
@@ -31,6 +33,10 @@ class GeneratedModel:
     nodes: list[Any] = field(default_factory=list)
     elements: list[Any] = field(default_factory=list)
     groups: list[Any] = field(default_factory=list)
+    storeys: list[Any] = field(default_factory=list)
+    """New storeys, added to the ones the project has."""
+    diaphragms: list[Any] = field(default_factory=list)
+    """Rigid diaphragms. A retained node that is new goes in ``nodes``."""
     grid: CoordinateGridSystem | None = None
     replace_grids: bool = False
     """``grid`` becomes the project's only coordinate system (a new model's
@@ -41,6 +47,8 @@ class GeneratedModel:
     pattern_loads: list[tuple[int, str, list[Any]]] = field(default_factory=list)
     """``(pattern id, PlainLoadPattern list name, loads)`` to append."""
     combinations: list[Any] = field(default_factory=list)
+    mass_source: Any = None
+    """The project's mass source as it should be, or None to leave it."""
     design: Any = None
     """The project's design settings as they should be, or None to leave them."""
     notes: list[str] = field(default_factory=list)
@@ -53,6 +61,8 @@ class GeneratedModel:
         project.nodes.extend(self.nodes)
         project.elements.extend(self.elements)
         project.groups.extend(self.groups)
+        project.storeys.extend(self.storeys)
+        project.diaphragms.extend(self.diaphragms)
         if self.grid is not None:
             if self.replace_grids:
                 project.coord_systems[:] = [self.grid]
@@ -65,6 +75,8 @@ class GeneratedModel:
         for pattern_id, list_name, loads in self.pattern_loads:
             getattr(patterns[pattern_id], list_name).extend(loads)
         project.combinations.extend(self.combinations)
+        if self.mass_source is not None:
+            project.mass_source = self.mass_source
         if self.design is not None:
             project.design = self.design
 

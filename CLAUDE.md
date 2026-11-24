@@ -181,11 +181,28 @@ These are non-obvious things that are easy to break if you don't know:
   the `Needs` that enable it); `ActionRegistry` builds the `QAction`, connects
   it and enables it, and also stores it as `_act_<name>`, which is how the
   ribbon layout, `ACTION_TOPICS`, the icon file and older tests find it. Ask
-  for it with `window.action("file.save")`. Only the File menu is migrated so
-  far: when you add a command, add a spec instead of new lines in
-  `_build_actions`, `_wire` and `_refresh_action_enablement` (use `needs=None`
-  when the condition is not a `Needs` flag and set it in the window). The spec
-  tables import no Qt; `registry.py` is the only module there that does.
+  for it with `window.action("file.save")`. The File and Design menus and parts of
+  Edit, Define and Assign are migrated so far: when you add a command, add a spec
+  instead of new lines in `_build_actions`, `_wire` and
+  `_refresh_action_enablement` (use `needs=None` when the condition is not a
+  `Needs` flag and set it in the window). `legacy_attribute` is only for a
+  command that already existed under another name (`"assign.diaphragm"` is
+  `_act_assign_diaphragm`); a new command never sets it. The spec tables import
+  no Qt; `registry.py` is the only module there that does.
+- New behaviour does not go into `MainWindow`. An area of the menus is a
+  controller in `views/controllers/<area>.py`: a `QObject` that gets a `Shell`
+  (the window as dialog parent, the view model, the focused canvas, the log,
+  "refresh the commands") and owns its own state; anything else it needs from
+  the window is a named constructor argument, never the window's attributes.
+  Its commands name it in their spec (`handler="transforms.move"` is
+  `window.transforms.move`). `TransformsController` (Copy, Paste, Move,
+  Replicate, Mirror, Extrude) is the model to follow; `BuildingController`
+  (storeys, mass source, seismic loads, diaphragms, rigid links) has no state
+  at all, and `DesignController` (the whole Design menu) shows the hooks: it
+  gets `results` (the current case results) and `show_ratios` (the overlay the
+  window still owns) and runs in a test with no `MainWindow`; `LoadsController`
+  assigns and deletes loads. The rest of the window is being moved out the
+  same way.
 - An unregistered material type is not a crash: `material_forms.form_for`
   returns a read-only placeholder, the same contract `section_forms` has.
 - Never hardcode how the analysis child is spawned. Every spawn site
@@ -206,8 +223,8 @@ These are non-obvious things that are easy to break if you don't know:
   same when a result depends on what ran earlier in the process.
 - Parametric generators plan, then insert. A wizard computes what the project
   gains without touching it and hands it over as a `core.generated.GeneratedModel`
-  (materials, sections, nodes, elements, groups, grid, cases, loads,
-  combinations, design settings); `commands.generated.insert_generated` checks
+  (materials, sections, nodes, elements, groups, storeys, diaphragms, grid,
+  cases, loads, combinations, mass source, design settings); `commands.generated.insert_generated` checks
   it against the project first (`model_problems`: ids taken, references to
   something that is not there) and only then pushes one macro, which it takes
   back whole if a command still refuses (an error inside `redo` is lost by

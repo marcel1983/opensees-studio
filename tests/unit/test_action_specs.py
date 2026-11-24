@@ -11,7 +11,7 @@ import re
 from pathlib import Path
 
 from opensees_studio.core.help import ACTION_TOPICS, TOPICS
-from opensees_studio.views.actions import ALL_ACTIONS, ActionState, Needs
+from opensees_studio.views.actions import ALL_ACTIONS, ActionSpec, ActionState, Needs
 
 VIEWS = Path(__file__).resolve().parents[2] / "src" / "opensees_studio" / "views"
 MAIN_WINDOW = ast.parse((VIEWS / "main_window.py").read_text(encoding="utf-8"))
@@ -33,15 +33,56 @@ def test_ids_are_area_dot_name_and_unique() -> None:
     assert len(set(ids)) == len(ids)
 
 
+def test_the_attribute_is_the_name_unless_the_command_kept_an_older_one() -> None:
+    assert ActionSpec("assign.masses", "M", "_on_m").attribute == "_act_masses"
+    kept = ActionSpec("assign.masses", "M", "_on_m", legacy_attribute="_act_assign_masses")
+    assert kept.attribute == "_act_assign_masses"
+    # An override is only for a name that differs: otherwise it is noise.
+    assert [s.id for s in ALL_ACTIONS if s.legacy_attribute == f"_act_{s.name}"] == []
+
+
 def test_no_two_commands_share_an_attribute() -> None:
     # The attribute drops the area, so "file.x" and "edit.x" would collide.
     attributes = [spec.attribute for spec in ALL_ACTIONS]
     assert len(set(attributes)) == len(attributes)
 
 
-def test_every_handler_is_a_method_of_the_window() -> None:
-    methods = {node.name for node in _main_window_class().body if isinstance(node, ast.FunctionDef)}
-    assert [s.id for s in ALL_ACTIONS if s.handler not in methods] == []
+def _methods(tree: ast.AST, class_suffix: str) -> set[str]:
+    return {
+        item.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ClassDef) and node.name.endswith(class_suffix)
+        for item in node.body
+        if isinstance(item, ast.FunctionDef)
+    }
+
+
+def test_every_handler_is_a_method_of_the_window_or_of_its_controller() -> None:
+    window_methods = _methods(MAIN_WINDOW, "MainWindow")
+    window_attributes = {
+        target.attr
+        for node in ast.walk(_main_window_class())
+        if isinstance(node, ast.Assign)
+        for target in node.targets
+        if isinstance(target, ast.Attribute)
+    }
+    missing = []
+    for spec in ALL_ACTIONS:
+        controller, _, method = spec.handler.rpartition(".")
+        if not controller:
+            found = method in window_methods
+        else:
+            # "transforms.move": views/controllers/transforms.py, a method of its
+            # controller class, which the window keeps as ``self.transforms``.
+            module = VIEWS / "controllers" / f"{controller}.py"
+            found = (
+                module.is_file()
+                and controller in window_attributes
+                and method in _methods(ast.parse(module.read_text(encoding="utf-8")), "Controller")
+            )
+        if not found:
+            missing.append(spec.id)
+    assert missing == []
 
 
 def test_the_window_does_not_build_a_declared_action_itself() -> None:

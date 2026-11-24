@@ -50,10 +50,40 @@ those tables, connects them and enables them; `MainWindow.action("file.save")`
 returns one. The spec tables are plain data with no Qt import, so a unit test
 checks that every command has a handler and a help page.
 
-The migration is by menu: File is declared this way, the other menus are still
-built by hand in `MainWindow._build_actions`. A declared action is also stored
-as `_act_<name>`, the name the ribbon layout, `core.help.ACTION_TOPICS` and the
-icon files use.
+The migration is by menu: File, Design and parts of Edit, Define and Assign
+are declared this way, the rest is still built by hand in
+`MainWindow._build_actions`. A declared action is also stored as `_act_<name>`,
+the name the ribbon layout, `core.help.ACTION_TOPICS` and the icon files use; a
+command that had another name before it was declared keeps it through
+`legacy_attribute`.
+
+## Controllers
+
+What a group of commands *does* lives in a controller, not in `MainWindow`:
+`views/controllers/<area>.py` holds a `QObject` that is given a `Shell` — the
+window as the parent of its dialogs, the view model, the focused canvas, the
+log and "refresh the commands" — and keeps the state of its area (the
+clipboard and the open Move/Replicate window, for `TransformsController`).
+Whatever else it needs from the window arrives as a named constructor argument
+(`arm_measure`, `release_measure`), so the coupling is visible where the
+controller is created. A command's spec names the controller method as its
+handler: `"transforms.move"` is `window.transforms.move`.
+
+| Controller | Window attribute | Commands |
+|---|---|---|
+| `TransformsController` | `transforms` | Edit → Copy, Paste, Move, Replicate, Mirror, Extrude |
+| `BuildingController` | `building` | Define → Storeys, Mass Source, Seismic Loads; Assign → Diaphragm, Rigid Link, Remove Constraints |
+| `DesignController` | `design` | The Design menu (19 commands): basis, Direct Analysis, notional loads, members, steel and concrete checks, connections, base plates, footings |
+| `LoadsController` | `loads` | Assign → point, imposed displacement, distributed, trapezoidal, frame point, temperature, tendon, surface and floor loads; joint patterns; Edit → Delete Loads |
+
+`DesignController` is the example of the named hooks: it is created with
+`results` (the case results computed on the project as it is now) and
+`show_ratios` (the ratio overlay and its legend dock, which belong to the
+window's post-processing display), and `tests/gui/test_design_controller.py`
+runs it with a plain `QMainWindow` and two lambdas.
+
+`MainWindow` is being emptied this way, one area per pull request; it keeps
+the layout, the docks and the wiring.
 
 ## Wizards and generated models
 
@@ -61,12 +91,14 @@ A wizard does not edit the project. Its geometry lives in `core` as a pure
 function (`core.frames.build_portal_frame`, `core.trusses.build_truss`,
 `core.templates`, `core.warehouse.plan_warehouse`), and what the project gains
 is collected in a `core.generated.GeneratedModel`: materials, sections, joints,
-members, groups, a grid, cases, loads, combinations. One function inserts it,
+members, groups, storeys, diaphragms, a grid, cases, loads, combinations, the
+mass source and the design settings. One function inserts it,
 `commands.generated.insert_generated(vm, model, text=...)`:
 
 1. `model_problems` checks the model against the project (ids already taken,
-   a member whose section, material or joint exists nowhere, a grid name in
-   use) and raises before anything is pushed;
+   a member whose section, material or joint exists nowhere, a diaphragm
+   without its joints or its storey, a mass source naming a pattern that is not
+   there, a grid name in use) and raises before anything is pushed;
 2. the parts go in as one macro, so one Ctrl+Z takes the whole structure back;
 3. if a command still refuses, the macro is undone and removed from the stack.
 
