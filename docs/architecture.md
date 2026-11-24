@@ -76,6 +76,7 @@ handler: `"transforms.move"` is `window.transforms.move`.
 | `DesignController` | `design` | The Design menu (19 commands): basis, Direct Analysis, notional loads, members, steel and concrete checks, connections, base plates, footings |
 | `LoadsController` | `loads` | Assign → point, imposed displacement, distributed, trapezoidal, frame point, temperature, tendon, surface and floor loads; joint patterns; Edit → Delete Loads |
 | `MembersController` | `members` | Assign → section, material, geometric transformation, local axes, beam integration, releases, end offsets, insertion point, property modifiers, auto mesh; plastic hinge, RC wall, pile soil springs |
+| `ExportsController` | `exports` | File → Export: OpenSees script, IFC, SAP2000 text, report, calculation memory. Gets `results` and `report_results` as hooks (the window owns the results) |
 | `ImportsController` | `imports` | File → Import: DXF drawing (into the project), PORTICO, SAP2000 text, IFC and Tcl (a new project). Gets `confirm_discard` (the unsaved-changes prompt) and `apply_view_settings` as hooks |
 | `LibraryController` | `library` | Define → material library, default materials, MC2010 concrete, friction models, material tester, ground motions, section library, concrete section, steel deck and section designer. Owns the two windows it keeps open (`material_tester_dialog`, `ground_motions_dialog`); gets `new_project` as a hook |
 | `GroupsController` | `groups` | Define → Groups, Section Cuts; Assign → Assign to Group |

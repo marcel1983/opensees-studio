@@ -24,17 +24,19 @@ FILE_ACTIONS: tuple[ActionSpec, ...] = (
     ActionSpec("file.import_ifc", "&IFC (.ifc)…", "imports.ifc"),
     ActionSpec("file.import_tcl", "OpenSees &Tcl Script (.tcl)…", "imports.tcl"),
     ActionSpec(
-        "file.export_script", "OpenSees &script (.py)…", "_on_export_script", needs=Needs.PROJECT
+        "file.export_script", "OpenSees &script (.py)…", "exports.script", needs=Needs.PROJECT
     ),
-    ActionSpec("file.export_ifc", "&IFC (.ifc)…", "_on_export_ifc", needs=Needs.PROJECT),
-    ActionSpec("file.export_s2k", "SAP2000 &Text (.s2k)…", "_on_export_s2k", needs=Needs.PROJECT),
+    ActionSpec("file.export_ifc", "&IFC (.ifc)…", "exports.ifc", needs=Needs.PROJECT),
+    ActionSpec("file.export_s2k", "SAP2000 &Text (.s2k)…", "exports.s2k", needs=Needs.PROJECT),
     ActionSpec(
         "file.export_report",
         "&Report (PDF / Word / HTML)…",
-        "_on_export_report",
+        "exports.report",
         needs=Needs.PROJECT,
     ),
-    ActionSpec("file.calc_memory", "Calculation &Memory…", "_on_calc_memory", needs=Needs.PROJECT),
+    ActionSpec(
+        "file.calc_memory", "Calculation &Memory…", "exports.calc_memory", needs=Needs.PROJECT
+    ),
     # Enabled only with a solver (Options → Solver): the window sets it.
     ActionSpec("file.run_batch", "Run &Batch…", "_on_run_batch", needs=None),
     ActionSpec("file.quit", "&Quit", "_on_quit", shortcut="std:Quit"),

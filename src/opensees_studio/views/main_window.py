@@ -128,7 +128,6 @@ from opensees_studio.services.element_forces import (
 from opensees_studio.services.element_forces import (
     auto_scale as force_diagram_auto_scale,
 )
-from opensees_studio.services.opensees_script import case_label, export_script
 from opensees_studio.services.result_store import load_results
 from opensees_studio.services.results import (
     CombinationResults,
@@ -142,7 +141,6 @@ from opensees_studio.services.results import (
 from opensees_studio.services.results_db import database_path, delete_all_results, record_results
 from opensees_studio.services.shell_fields import shell_elements
 from opensees_studio.services.stability import StabilityReport
-from opensees_studio.services.steel_design import DesignReport, steel_frame_check
 from opensees_studio.viewmodels import AnalysisRunner, ProjectViewModel
 from opensees_studio.viewmodels.case_results import CaseResultsCache
 from opensees_studio.viewmodels.stability_checker import StabilityChecker
@@ -157,6 +155,7 @@ from opensees_studio.views.controllers import Shell
 from opensees_studio.views.controllers.areas import AreasController
 from opensees_studio.views.controllers.building import BuildingController
 from opensees_studio.views.controllers.design import DesignController
+from opensees_studio.views.controllers.exports import ExportsController
 from opensees_studio.views.controllers.groups import GroupsController
 from opensees_studio.views.controllers.imports import ImportsController
 from opensees_studio.views.controllers.joints import JointsController
@@ -169,7 +168,6 @@ from opensees_studio.views.controllers.transforms import TransformsController
 from opensees_studio.views.dialogs import (
     AddNodeDialog,
     AnalysisCaseManagerDialog,
-    CalculationMemoryDialog,
     CoordinateGridSystemsDialog,
     DisplayOptionsDialog,
     ElementDiagramWindow,
@@ -210,7 +208,6 @@ from opensees_studio.views.docks import (
 from opensees_studio.views.help_window import HelpController
 from opensees_studio.views.i18n import stored_language, tr
 from opensees_studio.views.project_dock import ProjectDock
-from opensees_studio.views.report_pdf import write_pdf
 from opensees_studio.views.ribbon import RibbonBar, build_ribbon_tabs
 from opensees_studio.views.ribbon.icons import apply_command_icons
 from opensees_studio.views.run_status import RunStatusWidget
@@ -226,9 +223,6 @@ from opensees_studio.views.tools import (
     ToolController,
 )
 from opensees_studio.views.view_window import ViewWindow
-
-#: First entry of the export dialog's case list: no analysis block in the script.
-EXPORT_MODEL_ONLY = "Model only"
 
 #: Options → Autosave Recovery Copy: minutes between copies (0 = off), and where
 #: the choice is kept.
@@ -412,6 +406,11 @@ class MainWindow(QMainWindow):
         self.joints = JointsController(shell)
         self.model_tools = ModelToolsController(
             shell, select_rows=lambda nodes, elements: self._select_report_row(nodes, elements)
+        )
+        self.exports = ExportsController(
+            shell,
+            results=lambda: self._current_case_results(),
+            report_results=lambda: self.report_results(),
         )
         self.groups = GroupsController(shell)
         self.imports = ImportsController(
@@ -2388,52 +2387,6 @@ class MainWindow(QMainWindow):
         self._recent.add(out)
         return True
 
-    def _on_export_ifc(self) -> None:
-        """File → Export → IFC: the physical BIM model and the analytical model, IFC4."""
-        from opensees_studio.services.ifc_export import IfcExportError, export_ifc
-
-        if self._vm.project is None:
-            QMessageBox.information(self, "Export IFC", "Open or create a project first.")
-            return
-        default = (self._vm.path.stem if self._vm.path is not None else "model") + ".ifc"
-        path, _ = QFileDialog.getSaveFileName(self, "Export IFC", default, "IFC (*.ifc)")
-        if not path:
-            return
-        if not path.lower().endswith(".ifc"):
-            path += ".ifc"
-        try:
-            report = export_ifc(self._vm.project, path)
-        except (IfcExportError, OSError, ValueError) as exc:
-            QMessageBox.critical(self, "Export IFC failed", str(exc))
-            return
-        self._log(report.summary())
-        if report.notes:
-            QMessageBox.information(self, "Export IFC", report.summary())
-
-    def _on_export_s2k(self) -> None:
-        """File → Export → SAP2000 Text: the frame model as SAP2000 text tables."""
-        from opensees_studio.services.sap2000_text import Sap2000TextError, export_s2k
-
-        if self._vm.project is None:
-            QMessageBox.information(self, "Export SAP2000 Text", "Open or create a project first.")
-            return
-        default = (self._vm.path.stem if self._vm.path is not None else "model") + ".s2k"
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Export SAP2000 Text", default, "SAP2000 text (*.s2k *.$2k)"
-        )
-        if not path:
-            return
-        if not path.lower().endswith((".s2k", ".$2k")):
-            path += ".s2k"
-        try:
-            report = export_s2k(self._vm.project, path)
-        except Sap2000TextError as exc:
-            QMessageBox.critical(self, "Export SAP2000 Text failed", str(exc))
-            return
-        self._log(f"Exported {Path(path).name}: {report.summary()}")
-        if report.skipped:
-            QMessageBox.information(self, "Export SAP2000 Text", report.summary())
-
     def report_results(self) -> list[Any]:
         """The results the report includes: every current case, plus the one on screen."""
         project = self._vm.project
@@ -2445,211 +2398,6 @@ class MainWindow(QMainWindow):
             if fp == fingerprint:
                 current.setdefault(case_id, results)
         return list(current.values())
-
-    def _on_export_report(self) -> None:
-        """File → Export → Report: model, loads, cases and current results (PDF, Word, HTML)."""
-        from opensees_studio.services.report import build_report, report_sections, running_text
-        from opensees_studio.views.dialogs.report_options import (
-            ReportOptionsDialog,
-            load_options,
-            save_options,
-        )
-
-        project = self._vm.project
-        if project is None:
-            QMessageBox.information(self, "Export report", "Open or create a project first.")
-            return
-        results = self.report_results()
-        dialog = ReportOptionsDialog(report_sections(project, results), load_options(), self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        options = dialog.options()
-        save_options(options)
-        default = (self._vm.path.stem if self._vm.path is not None else "model") + "-report.pdf"
-        path, chosen = QFileDialog.getSaveFileName(
-            self,
-            "Export report",
-            default,
-            "PDF (*.pdf);;Word document (*.docx);;HTML page (*.html)",
-        )
-        if not path:
-            return
-        lower = path.lower()
-        if lower.endswith((".html", ".htm")):
-            fmt = "html"
-        elif lower.endswith(".docx"):
-            fmt = "docx"
-        elif lower.endswith(".pdf"):
-            fmt = "pdf"
-        else:
-            fmt = "html" if "HTML" in chosen else "docx" if "Word" in chosen else "pdf"
-            path += {"html": ".html", "docx": ".docx", "pdf": ".pdf"}[fmt]
-        page = build_report(project, results, options=options, paged=fmt == "pdf")
-        running = None
-        if options.header_footer:
-            running = running_text(
-                project, skip_first_page=options.cover, language=options.language
-            )
-        try:
-            if fmt == "html":
-                Path(path).write_text(page, encoding="utf-8")
-            elif fmt == "docx":
-                from opensees_studio.services.report_docx import docx_bytes
-                from opensees_studio.views.report_pdf import svg_to_png
-
-                Path(path).write_bytes(
-                    docx_bytes(
-                        page,
-                        running=running,
-                        keep_tables_together=options.keep_tables_together,
-                        rasterize=svg_to_png,
-                        language=options.language,
-                        title=project.meta.name,
-                    )
-                )
-            else:
-                write_pdf(
-                    page,
-                    path,
-                    running=running,
-                    keep_tables_together=options.keep_tables_together,
-                )
-        except OSError as exc:
-            QMessageBox.critical(self, "Export report failed", str(exc))
-            return
-        self._log(f"Report written: {path} ({len(results)} result set(s)).")
-
-    def _on_calc_memory(self) -> None:
-        """File → Export → Calculation Memory: member sheets in the chosen format."""
-        from opensees_studio.services.calc_memory import (
-            Language,
-            build_member_memory,
-            odt_bytes,
-        )
-
-        project = self._vm.project
-        if project is None:
-            QMessageBox.information(self, "Calculation memory", "Open or create a project first.")
-            return
-        dialog = CalculationMemoryDialog(self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        results = dict(self._case_results.current(project))
-        report = steel_frame_check(project, results, project.design)
-        members = report.members
-        chosen = dialog.member_filter()
-        if chosen == "selected":
-            ids = set(self._canvas.selection.elements)
-            members = [m for m in members if m.element_id in ids]
-        elif chosen == "ng":
-            members = [m for m in members if m.status == "NG"]
-        if not members:
-            QMessageBox.information(
-                self, "Calculation memory", "No member matches the chosen filter."
-            )
-            return
-        filtered = DesignReport(
-            members=members,
-            joints=report.joints,
-            connections=report.connections,
-            load_sets=report.load_sets,
-            notes=report.notes,
-        )
-        fmt = dialog.format()
-        extensions = {
-            "html": (".html", "HTML page (*.html)"),
-            "markdown": (".md", "Markdown (*.md)"),
-            "latex": (".tex", "LaTeX (*.tex)"),
-            "odt": (".odt", "OpenDocument text (*.odt)"),
-            "pdf": (".pdf", "PDF (*.pdf)"),
-        }
-        suffix, file_filter = extensions[fmt]
-        stem = self._vm.path.stem if self._vm.path is not None else "model"
-        path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Export calculation memory",
-            f"{stem}-calc-memory{suffix}",
-            file_filter,
-        )
-        if not path:
-            return
-        language = cast(Language, dialog.language())
-        try:
-            if fmt == "odt":
-                Path(path).write_bytes(odt_bytes(project, filtered, language=language))
-            elif fmt == "pdf":
-                page = build_member_memory(
-                    project,
-                    filtered,
-                    language=language,
-                    fmt="html",
-                )
-                write_pdf(page, path)
-            else:
-                text = build_member_memory(
-                    project,
-                    filtered,
-                    language=language,
-                    fmt=cast(Any, fmt),
-                )
-                Path(path).write_text(text, encoding="utf-8")
-        except (OSError, ValueError) as exc:
-            QMessageBox.critical(self, "Calculation memory failed", str(exc))
-            return
-        self._log(f"Calculation memory written: {path} ({len(members)} member(s)).")
-
-    def _on_export_script(self) -> None:
-        """File → Export → OpenSees script: the model as plain OpenSeesPy.
-
-        The script is the command sequence the runner itself emits, so it
-        cannot drift from what the solver is given (see
-        ``services/opensees_script.py``).
-        """
-        if self._vm.project is None:
-            QMessageBox.information(self, "Export script", "Open or create a project first.")
-            return
-        chosen, case = self._ask_export_case()
-        if not chosen:
-            return
-        default = (self._vm.path.stem if self._vm.path is not None else "model") + ".py"
-        path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Export OpenSees script",
-            default,
-            "Python script (*.py)",
-        )
-        if not path:
-            return
-        try:
-            source = export_script(
-                self._vm.project, case, version=__version__, filename=Path(path).name
-            )
-            Path(path).write_text(source, encoding="utf-8")
-        except Exception as exc:
-            QMessageBox.critical(self, "Export failed", str(exc))
-            return
-        self._log(f"Exported OpenSees script: {path}")
-
-    def _ask_export_case(self) -> tuple[bool, Any]:
-        """Ask which case the script should run. ``(False, None)`` on cancel."""
-        project = self._vm.project
-        if project is None or not project.analyses:
-            return True, None
-        analyses = project.analyses
-        labels = [EXPORT_MODEL_ONLY, *(case_label(c) for c in analyses)]
-        choice, accepted = QInputDialog.getItem(
-            self,
-            "Export OpenSees script",
-            "Include which analysis case?",
-            labels,
-            0,
-            False,
-        )
-        if not accepted:
-            return False, None
-        if choice == EXPORT_MODEL_ONLY:
-            return True, None
-        return True, analyses[labels.index(choice) - 1]
 
     # ── slots: edit ──────────────────────────────────────────────────
     def _warn_case_references(self) -> None:
