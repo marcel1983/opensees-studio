@@ -53,13 +53,10 @@ from opensees_studio import __version__
 from opensees_studio.commands import (
     AddNodesCommand,
     AddSectionsCommand,
-    AssignMaterialCommand,
-    AssignSectionCommand,
     DeleteElementsCommand,
     DeleteNodesCommand,
     MeshCommand,
     SetCoordSystemsCommand,
-    SetMassCommand,
     SetProjectMetaCommand,
     SetRestraintCommand,
 )
@@ -156,6 +153,7 @@ from opensees_studio.views.controllers.loads import LoadsController
 from opensees_studio.views.controllers.members import MembersController
 from opensees_studio.views.controllers.model_tools import ModelToolsController
 from opensees_studio.views.controllers.patterns import PatternsController
+from opensees_studio.views.controllers.property_edits import PropertyEditsController
 from opensees_studio.views.controllers.select import SelectController
 from opensees_studio.views.controllers.transforms import TransformsController
 from opensees_studio.views.dialogs import (
@@ -409,6 +407,8 @@ class MainWindow(QMainWindow):
         self.library = LibraryController(shell, new_project=lambda: self._on_new())
         self.members = MembersController(shell)
         self.patterns = PatternsController(shell, new_project=self._on_new)
+        #: What the Properties dock changes in the model.
+        self.property_edits = PropertyEditsController(shell)
         #: The Select menu: everything, inverted, the previous one, the queries.
         self.select = SelectController(shell, action=lambda action_id: self.action(action_id))
         #: Loads on joints, frames and areas, joint patterns, Edit → Delete Loads.
@@ -519,14 +519,14 @@ class MainWindow(QMainWindow):
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, tree_dock)
 
         self._props = PropertyEditorDock()
-        self._props.on_apply_mass = self._on_apply_mass
-        self._props.on_change_element_type = self._on_change_element_type
-        self._props.on_change_element_material = self._on_change_element_material
-        self._props.on_change_element_section = self._on_change_element_section
-        self._props.on_change_element_fields = self._on_change_element_fields
-        self._props.on_assign_node_restraints = self._on_assign_node_restraints
-        self._props.on_assign_node_masses = self._on_assign_node_masses
-        self._props.on_assign_elements = self._on_assign_elements
+        self._props.on_apply_mass = self.property_edits.apply_mass
+        self._props.on_change_element_type = self.property_edits.change_element_type
+        self._props.on_change_element_material = self.property_edits.change_element_material
+        self._props.on_change_element_section = self.property_edits.change_element_section
+        self._props.on_change_element_fields = self.property_edits.change_element_fields
+        self._props.on_assign_node_restraints = self.property_edits.assign_node_restraints
+        self._props.on_assign_node_masses = self.property_edits.assign_node_masses
+        self._props.on_assign_elements = self.property_edits.assign_elements
         props_dock = QDockWidget("Properties", self)
         props_dock.setObjectName("propertiesDock")
         props_dock.setWidget(self._props)
@@ -3684,151 +3684,8 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, "Custom OpenSees Commands failed", str(exc))
 
-    def _on_apply_mass(self, node_id: int, mass) -> None:  # type: ignore[no-untyped-def]
-        """Callback from the property editor — dispatch as an undoable command."""
-        try:
-            self._vm.apply_command(SetMassCommand(self._vm, {node_id}, mass))
-        except Exception as exc:
-            QMessageBox.critical(self, "Apply mass failed", str(exc))
-
     # ── property editor: live-edit callbacks ─────────────────────────
-    def _on_change_element_type(self, element_id: int, new_type: str) -> None:
-        """User picked a different element type from the Properties dock."""
-        command = self._convert_command({element_id}, new_type)
-        if command is None:
-            return
-        try:
-            self._vm.apply_command(command)
-            self._log(f"Element {element_id} → {new_type}.")
-        except Exception as exc:
-            QMessageBox.critical(self, "Convert element failed", str(exc))
-
-    def _convert_command(self, element_ids: set[int], new_type: str) -> Any:
-        """The command converting ``element_ids`` to ``new_type``, None if it cannot."""
-        from opensees_studio.commands import ConvertElementTypeCommand
-
-        project = self._vm.project
-        if project is None:
-            return None
-        # Supply sensible defaults for fields the target type requires.
-        defaults: dict[str, object] = {}
-        if new_type in ("Truss", "CorotTruss"):
-            # Prefer an existing ElasticUniaxial + a nominal area.
-            from opensees_studio.core import ElasticUniaxial
-
-            mat = next((m for m in project.materials if isinstance(m, ElasticUniaxial)), None)
-            if mat is None and project.materials:
-                mat = project.materials[0]
-            if mat is None:
-                QMessageBox.warning(
-                    self,
-                    "Convert element",
-                    "Define a material before converting to a truss type.",
-                )
-                return None
-            defaults["material_id"] = mat.id
-            defaults["area"] = 0.001
-        elif new_type in ("ElasticBeamColumn", "ForceBeamColumn", "DispBeamColumn"):
-            if not project.sections:
-                QMessageBox.warning(
-                    self,
-                    "Convert element",
-                    f"Define a section before converting to {new_type}.",
-                )
-                return None
-            defaults["section_id"] = project.sections[0].id
-        return ConvertElementTypeCommand(self._vm, element_ids, new_type, defaults=defaults)
-
     # ── property editor: multi-selection edits (one undo step each) ──
-    def _on_assign_node_restraints(self, restraints: dict[int, tuple[bool, ...]]) -> None:
-        self._apply_grouped(restraints, SetRestraintCommand, "Edit restraints")
-
-    def _on_assign_node_masses(self, masses: dict[int, tuple[float, ...]]) -> None:
-        self._apply_grouped(masses, SetMassCommand, "Edit masses")
-
-    def _apply_grouped(self, values: dict[int, Any], command: Any, text: str) -> None:
-        """One command per distinct value, all in one undo step."""
-        groups: dict[Any, set[int]] = {}
-        for node_id, value in values.items():
-            groups.setdefault(tuple(value), set()).add(node_id)
-        stack = self._vm.undo_stack
-        stack.beginMacro(f"{text} of {len(values)} joint(s)")
-        try:
-            for value, ids in groups.items():
-                self._vm.apply_command(command(self._vm, ids, value))
-        except Exception as exc:
-            QMessageBox.critical(self, text, str(exc))
-        finally:
-            stack.endMacro()
-
-    def _on_assign_elements(self, edit: Any) -> None:
-        """Properties dock, several elements: type, section, material and fields at once."""
-        from opensees_studio.commands import AssignElementFieldsCommand
-
-        ids = set(edit.element_ids)
-        convert = None
-        if edit.new_type is not None:
-            convert = self._convert_command(ids, edit.new_type)
-            if convert is None:
-                return
-        stack = self._vm.undo_stack
-        stack.beginMacro(f"Edit {len(ids)} element(s)")
-        try:
-            # The type first: the other edits then apply to what the elements became.
-            if convert is not None:
-                self._vm.apply_command(convert)
-            project = self._vm.project
-            assert project is not None
-            has = {
-                key: {e.id for e in project.elements if e.id in ids and hasattr(e, key)}
-                for key in ("section_id", "material_id")
-            }
-            if edit.material_id is not None and has["material_id"]:
-                self._vm.apply_command(
-                    AssignMaterialCommand(self._vm, has["material_id"], edit.material_id)
-                )
-            for key, value in edit.fields.items():
-                # One field at a time: each lands on the elements that have it.
-                self._vm.apply_command(AssignElementFieldsCommand(self._vm, ids, {key: value}))
-            if edit.per_element:
-                self._vm.apply_command(
-                    AssignElementFieldsCommand(
-                        self._vm, set(edit.per_element), {}, per_element=edit.per_element
-                    )
-                )
-            # The section goes last: assigning a nonprismatic template splits the
-            # member into pieces, and it must see the other edits on the frame.
-            if edit.section_id is not None and has["section_id"]:
-                self._vm.apply_command(
-                    AssignSectionCommand(self._vm, has["section_id"], edit.section_id)
-                )
-            self._log(f"Edited {len(ids)} element(s) from the Properties panel.")
-        except Exception as exc:
-            QMessageBox.critical(self, "Edit elements failed", str(exc))
-        finally:
-            stack.endMacro()
-
-    def _on_change_element_material(self, element_id: int, material_id: int) -> None:
-        try:
-            self._vm.apply_command(AssignMaterialCommand(self._vm, {element_id}, material_id))
-        except Exception as exc:
-            QMessageBox.critical(self, "Assign material failed", str(exc))
-
-    def _on_change_element_section(self, element_id: int, section_id: int) -> None:
-        try:
-            self._vm.apply_command(AssignSectionCommand(self._vm, {element_id}, section_id))
-        except Exception as exc:
-            QMessageBox.critical(self, "Assign section failed", str(exc))
-
-    def _on_change_element_fields(self, element_id: int, fields: dict) -> None:  # type: ignore[type-arg]
-        """Inline scalar edit dispatched from Properties dock (e.g. area)."""
-        from opensees_studio.commands import UpdateElementFieldsCommand
-
-        try:
-            self._vm.apply_command(UpdateElementFieldsCommand(self._vm, element_id, fields))
-        except Exception as exc:
-            QMessageBox.critical(self, "Edit element failed", str(exc))
-
     def node_tooltip(self, node_id: int) -> str | None:
         """Hover text for a joint: where it is, its restraint, mass, members and loads."""
         from opensees_studio.core.hover import node_summary

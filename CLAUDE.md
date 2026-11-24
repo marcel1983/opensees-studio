@@ -213,7 +213,9 @@ These are non-obvious things that are easy to break if you don't know:
   passes a hook as a lambda, so a test that replaces the window's method still
   reaches it. `SelectController` (the Select menu) adds its own "By …" submenus
   to the menu the window lays out, and gets `action` (the window's
-  `action(id)`) for the commands that menu enables when it opens. A controller's attribute must not be the name of a `QMainWindow`
+  `action(id)`) for the commands that menu enables when it opens. A controller is
+  not only for menu commands: `PropertyEditsController` is what the Properties
+  dock calls back with an edit (its `on_…` callbacks are set to its methods). A controller's attribute must not be the name of a `QMainWindow`
   method (`window.geometry` would replace `QWidget.geometry()`):
   `tests/gui/test_action_registry.py` checks it, hence `model_tools`.
   The rest of the window is being moved out the same way.
