@@ -192,7 +192,9 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   whole frame is one undoable step that arrives selected for copying.
 - **A warehouse wizard** (Define → Create Warehouse, or File → New Model →
   Warehouse): a 3D steel warehouse from a few numbers, with a live wireframe
-  preview. Portal frames (gable, one slope or flat, one or several naves)
+  preview. Portal frames (gable, one slope or flat, one or several naves),
+  with rafters or with Pratt, Howe or Warren roof trusses (horizontal or
+  parallel bottom chord, tied from frame to frame),
   repeated along the building, purlins and girts at a maximum spacing, X bracing
   of the roof and side walls in the braced bays, a group per kind of member and
   a grid on the column lines. Purlins, girts and braces are pinned, and a purlin

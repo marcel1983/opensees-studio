@@ -3671,8 +3671,8 @@ case carries them: half of each bar's weight goes to each of its joints.
             "A 3D steel warehouse from a few numbers, with its loads, wind and combinations.",
             """
 Builds a warehouse (bodega, nave industrial) into the open 3D frame model as one
-undoable step: portal frames in X-Z planes repeated along Y, the purlins, girts
-and X bracing between them, the end wall columns, the supports, a group per kind
+undoable step: portal frames in X-Z planes repeated along Y, with rafters or
+with roof trusses, the purlins, girts and X bracing between them, the end wall columns, the supports, a group per kind
 of member, a grid on the column lines, the roof loads, the wind cases and the
 load combinations of a design code.
 File → New Model → **Warehouse** starts a new model with it. The preview on the
@@ -3686,6 +3686,43 @@ left follows every field.
 - **Number of frames** and **distance between frames** — the building's length
   is their product, less one bay.
 - **Eave height** and **column bases** (fixed or pinned).
+- **Roof structure** — rafters, or roof trusses (see below).
+
+# Roof trusses
+With **Roof trusses** each frame carries the roof on a truss instead of a
+rafter:
+
+- The **top chord** follows the roof line, with a panel point under every
+  purlin line, so the purlin spacing is also the panel of the truss.
+- **Bottom chord** — *horizontal*, at one level below the eave, or *parallel to
+  the roof*. **Truss depth** is measured plumb: at the eave for a horizontal
+  chord (the truss is deeper towards the ridge by the rise of the roof), and
+  everywhere for a parallel one. The eave height stays the top of the roof
+  line, so the clear height under the truss is the eave height less the depth.
+- **Truss web** — a vertical under every purlin line, and one diagonal per
+  panel: **Pratt** (down towards the middle of the nave: in tension under
+  gravity next to the columns), **Howe** (up towards the middle) or **Warren
+  with verticals** (alternating from each column line). Each nave has its own
+  pattern.
+- The chords are **continuous** and run into the columns, and a column goes on
+  up to the top chord: the truss and its columns work as a frame, which is what
+  holds a building on pinned bases against the wind across it. Verticals and
+  diagonals are **pinned** at both ends.
+- **Bottom chord tie every** — the bottom chord is tied to the next frame at
+  the column lines and at the ridge, and besides at every n-th panel point. In
+  the braced bays each tie line gets a vertical X between the two chords (sway
+  bracing) that takes it up to the roof bracing; at the side walls the wall
+  bracing does that, and a girt line at the level of the chord is the tie.
+- An end wall column passes through the bottom chord of the end truss and is
+  its vertical there. Where a horizontal bottom chord lies on a girt line of
+  the end wall, the chord carries that strip of cladding.
+
+A purlin is fixed to the top chord itself, so **every purlin braces the top
+chord** and the stabilising angle setting of the purlins does not apply. The
+**bottom chord is braced only at its tie lines**: it is the chord in
+compression when the wind lifts the roof, and the wizard writes the distance
+between tie lines as its unbraced length. A column is braced where the bottom
+chord meets it.
 
 # Purlins, girts and bracing
 - **Purlin spacing** — the largest distance between purlin lines, on the roof
@@ -3733,9 +3770,13 @@ One section per kind of member. Choose one the project has, or let the wizard
 create the default: **W14X48** columns, **W16X40** rafters, **L3X3X1/4**
 braces and **W8X31** end wall columns from the AISC library, and a cold-formed
 lipped channel **C 150 × 50 × 15 × 2.38 mm** for purlins and girts, of the
-project's default steels. Change them afterwards with Assign → Frame → Section
-on the groups the wizard creates (Columns, Rafters, Purlins, Girts, Roof
-bracing, Wall bracing, End wall columns). A purlin's web stands normal to the
+project's default steels. A roof truss takes **HSS6X6X1/4** chords,
+**HSS3X3X3/16** verticals and diagonals and **HSS4X4X3/16** bottom chord ties;
+the page lists only the members the roof structure has. Change them afterwards
+with Assign → Frame → Section on the groups the wizard creates (Columns,
+Rafters, Purlins, Girts, Roof bracing, Wall bracing, End wall columns; with
+trusses also Truss top chords, Truss bottom chords, Truss web members, Bottom
+chord ties and Truss sway bracing). A purlin's web stands normal to the
 roof and a girt's lies flat. The defaults are a starting point, not a design:
 run the cases and the steel check, and size the members from them.
 
@@ -3756,6 +3797,12 @@ width, in the purlin's local axes. With **Generate the load combinations of the
 code** the combinations of the gravity and wind cases are added with their
 envelope; the earthquake combinations appear once those cases exist (Define →
 Load Combinations → Generate).
+
+The load cases the wizard creates use the sparse solver **UmfPack** (Define →
+Load Cases → System). A warehouse has hundreds of pinned members, each with its
+own released rotations, and the band solver a new case has by default takes
+tens of seconds per case on it for the same result. A case the project already
+had keeps its solver; the log says so when the model is large.
 
 # Wind
 With **Create the wind load cases** the wizard adds one load case per wind
@@ -3810,7 +3857,10 @@ open buildings, the minimum wind load of ASCE 7 27.1.5 and the torsional load
 cases are not created either.
 
 # Not included yet
-Earthquake load cases, trussed roofs and haunches. RNC-07 Art. 11 also asks
+Earthquake load cases, haunches, and trusses with a Warren web without
+verticals. The X braces are modelled as bars that also take compression:
+the steel check reports the compressed diagonal of each X, which in a
+tension-only bracing is ignored. RNC-07 Art. 11 also asks
 each purlin for 100 kg at mid-span: check the purlins for it separately.
 """,
             "define.portal_frame",

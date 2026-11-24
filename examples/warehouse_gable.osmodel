@@ -10491,7 +10491,7 @@
       ],
       "n_steps": 1,
       "load_factor_increment": 1.0,
-      "system": "BandGeneral",
+      "system": "UmfPack",
       "constraints": "Plain",
       "integrator": "LoadControl",
       "algorithm": "Linear",

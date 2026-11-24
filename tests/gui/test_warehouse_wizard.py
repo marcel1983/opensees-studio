@@ -17,9 +17,11 @@ from PySide6.QtWidgets import QDialog, QMessageBox
 
 from opensees_studio.commands.warehouse import insert_warehouse_plan, plan_problems
 from opensees_studio.core.frames import RoofType, SupportCondition
+from opensees_studio.core.trusses import TrussType
 from opensees_studio.core.units import UnitSystem
 from opensees_studio.core.warehouse import (
     GROUPS,
+    TRUSS_GROUPS,
     WarehouseSpec,
     WarehouseWind,
     plan_warehouse,
@@ -88,6 +90,49 @@ def test_the_fields_reach_the_spec(qtbot) -> None:  # type: ignore[no-untyped-de
 
 
 @pytest.mark.gui
+def test_the_truss_fields_reach_the_spec_and_follow_the_roof_structure(qtbot) -> None:  # type: ignore[no-untyped-def]
+    wizard = WarehouseWizard([])
+    qtbot.addWidget(wizard)
+    truss_fields = (
+        wizard._truss_type, wizard._truss_bottom, wizard._truss_depth, wizard._chord_ties
+    )  # fmt: skip
+    assert not any(w.isEnabled() for w in truss_fields)
+    assert wizard._rafter_fly.isEnabled()
+    assert not wizard.spec().has_truss
+    rafter_lines = wizard._preview.line_count()
+
+    wizard._roof_structure.setCurrentIndex(1)
+    assert all(w.isEnabled() for w in truss_fields)
+    assert not wizard._rafter_fly.isEnabled()  # a purlin is fixed to the top chord
+    wizard._truss_type.setCurrentIndex(1)
+    wizard._truss_bottom.setCurrentIndex(1)
+    wizard._truss_depth.setValue(1.2)
+    wizard._chord_ties.setValue(3)
+    spec = wizard.spec()
+    assert spec.has_truss
+    assert (spec.truss_type, spec.truss_bottom) == (TrussType.HOWE, "parallel")
+    assert (spec.truss_depth, spec.bottom_chord_tie_every) == (1.2, 3)
+    assert wizard._preview.line_count() > rafter_lines
+    assert "Clear height under the trusses" in wizard._geometry_summary.text()
+    assert "Bottom chord unbraced length" in wizard._secondary_summary.text()
+    assert list(wizard.section_choice()) == [
+        "column", "purlin", "girt", "brace", "end_column",
+        "top_chord", "bottom_chord", "truss_web", "chord_tie",
+    ]  # fmt: skip
+    form = wizard._sections_form
+    assert not form.isRowVisible(wizard._section_combos["rafter"])
+    assert form.isRowVisible(wizard._section_combos["top_chord"])
+
+    wizard._truss_depth.setValue(6.0)  # as deep as the eave is high
+    assert not wizard._page_geometry.isComplete()
+    assert "less than the eave height" in wizard._geometry_summary.text()
+    wizard._roof_structure.setCurrentIndex(0)  # with rafters the depth does not matter
+    assert wizard._page_geometry.isComplete()
+    assert form.isRowVisible(wizard._section_combos["rafter"])
+    assert not form.isRowVisible(wizard._section_combos["top_chord"])
+
+
+@pytest.mark.gui
 def test_the_preview_follows_the_fields_and_bad_numbers_block_next(qtbot) -> None:  # type: ignore[no-untyped-def]
     wizard = WarehouseWizard([])
     qtbot.addWidget(wizard)
@@ -142,7 +187,9 @@ def test_the_menu_builds_the_warehouse_in_one_undo_step(qtbot, monkeypatch) -> N
 
     assert mw._vm.undo_stack.index() == index + 1  # one step
     assert len({n.coords[1] for n in project.nodes}) == 3
-    assert [g.name for g in project.groups] == list(GROUPS.values())
+    assert [g.name for g in project.groups] == [
+        name for key, name in GROUPS.items() if key not in TRUSS_GROUPS
+    ]
     grouped = {eid for g in project.groups for eid in g.element_ids}
     assert grouped == {e.id for e in project.elements}
     assert {s.name for s in project.sections} >= {
@@ -259,3 +306,34 @@ def test_the_wind_page_follows_the_code_and_reaches_the_loads(qtbot) -> None:  #
     wizard._wind_on.setChecked(False)
     assert wizard._page_wind.isComplete() and wizard.loads().wind is None
     assert not wizard._wind_speed.isEnabled()
+
+
+@pytest.mark.gui
+def test_the_menu_builds_a_trussed_warehouse_in_one_undo_step(qtbot, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    mw = _window(qtbot)
+    monkeypatch.setattr(QMessageBox, "critical", lambda *a, **k: pytest.fail(str(a[2])))
+
+    def setup(wizard: WarehouseWizard) -> None:
+        wizard._n_frames.setValue(3)
+        wizard._roof_structure.setCurrentIndex(1)
+
+    _accept(monkeypatch, setup)
+    project = mw._vm.project
+    before = project.model_dump()
+    index = mw._vm.undo_stack.index()
+
+    mw._act_warehouse_wizard.trigger()
+
+    assert mw._vm.undo_stack.index() == index + 1
+    names = [g.name for g in project.groups]
+    assert GROUPS["rafters"] not in names
+    assert names[-len(TRUSS_GROUPS) :] == [GROUPS[key] for key in TRUSS_GROUPS]
+    grouped = {eid for g in project.groups for eid in g.element_ids}
+    assert grouped == {e.id for e in project.elements}
+    assert {s.name for s in project.sections} >= {"HSS6X6X1_4", "HSS3X3X3_16"}
+    assert "W16X40" not in {s.name for s in project.sections}  # no rafter, no rafter section
+    assert project.design is not None and project.design.members
+    project.validate_references()
+
+    mw._vm.undo_stack.undo()
+    assert project.model_dump() == before
