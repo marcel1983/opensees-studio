@@ -88,8 +88,17 @@ def test_the_purlins_and_girts_are_checked_by_aisi_s100(solved) -> None:  # type
     assert {m.shape for m in rows} == {"C150X50X15X2.38"}
     # Fy and Fu of the section's material, the sheet steel of the default library.
     assert {m.grade for m in rows} == {"A653SSGr50"}
-    # Held at every frame; the sheeting is not a brace.
-    assert {tuple(round(x, 9) for x in m.unbraced) for m in rows} == {(6.0, 6.0, 6.0)}
+    # Held at every frame; a line of sag rods at mid-bay holds the purlins sideways.
+    purlins = set(next(g for g in project.groups if g.name == "Purlins").element_ids)
+    lengths = {
+        kind: {
+            tuple(round(x, 9) for x in m.unbraced)
+            for m in rows
+            if (m.element_id in purlins) == kind
+        }
+        for kind in (True, False)
+    }
+    assert lengths == {True: {(6.0, 3.0, 3.0)}, False: {(6.0, 6.0, 6.0)}}
     assert all("Web crippling (G5, H3) is not checked." in m.notes for m in rows)
     assert any("AISI S100-16" in note for note in report.notes)
     others = [m for m in report.members if m.element_id not in secondary]
@@ -97,31 +106,73 @@ def test_the_purlins_and_girts_are_checked_by_aisi_s100(solved) -> None:  # type
     assert not any("AISC 341" in name for m in rows for name in m.ratios)
 
 
-def test_a_purlin_braced_along_its_span_carries_the_roof(solved) -> None:  # type: ignore[no-untyped-def]
-    """Unbraced over 6 m the channel buckles sideways; held every 0.5 m it does not."""
+def test_the_sheeting_and_the_sag_rods_carry_the_purlins(solved) -> None:  # type: ignore[no-untyped-def]
+    """Gravity compresses the sheeted flange; bare and unbraced over 6 m the channel fails."""
     project, results = solved
-    purlins = next(g for g in project.groups if g.name == "Purlins").element_ids
-    as_modelled = steel_frame_check(project, results, project.design)
-    worst = max(
-        (m for m in as_modelled.members if m.element_id in set(purlins)), key=lambda m: m.ratio
-    )
-    assert worst.status == "NG"
-    assert worst.ratios["Major flexure"] > 1.0
-    braced = project.design.model_copy(
+    purlins = set(next(g for g in project.groups if g.name == "Purlins").element_ids)
+    as_built = steel_frame_check(project, results, project.design)
+    rows = [m for m in as_built.members if m.element_id in purlins]
+    assert {m.status for m in rows} == {"OK"}
+    worst = max(rows, key=lambda m: m.ratio)
+    assert any("the sheeting braces the compression flange" in note for note in worst.notes)
+    assert not any("tension flange" in note for m in rows for note in m.notes)
+
+    bare = project.design.model_copy(
         update={
             "members": [
-                m.model_copy(update={"length_minor": 0.5, "length_ltb": 0.5})
-                if m.element_id == worst.element_id
+                m.model_copy(
+                    update={"sheeted_flange": None, "length_minor": None, "length_ltb": None}
+                )
+                if m.element_id in purlins
                 else m
                 for m in project.design.members
             ]
         }
     )
-    again = steel_frame_check(project, results, braced)
+    again = steel_frame_check(project, results, bare)
     row = next(m for m in again.members if m.element_id == worst.element_id)
-    assert row.status == "OK"
-    assert row.ratio < 0.5 * worst.ratio
-    assert row.unbraced == (6.0, 0.5, 0.5)
+    assert row.status == "NG"
+    assert row.ratios["Major flexure"] > 1.0
+    assert row.unbraced == (6.0, 6.0, 6.0)
+    assert worst.ratio < 0.5 * row.ratio
+
+
+def test_the_wind_puts_the_free_flange_of_purlins_and_leeward_girts_in_compression() -> None:
+    """The side of the sheeting against the sign of the moment, on a solved wind case."""
+    from examples.warehouse_wind import build_warehouse_project as build_wind_project
+
+    from opensees_studio.core.design.settings import DesignLoadSet
+
+    project = build_wind_project()
+    wind = next(c for c in project.analyses if c.name == "WIND +X")
+    results = {wind.id: OpenSeesRunner(project).run(wind)}
+    design = project.design.model_copy(
+        update={"load_sets": [DesignLoadSet(source="case", ref_id=wind.id)]}
+    )
+    report = steel_frame_check(project, results, design)
+    rows = {m.element_id: m for m in report.members}
+    nodes = {n.id: n.coords for n in project.nodes}
+    elements = {e.id: e for e in project.elements}
+
+    def sides(element_ids):  # type: ignore[no-untyped-def]
+        found = set()
+        for element_id in element_ids:
+            notes = " ".join(rows[element_id].notes)
+            braced = "the sheeting braces the compression flange" in notes
+            free = "the sheeting is on the tension flange" in notes
+            assert braced != free, (element_id, notes)
+            found.add("braced" if braced else "free")
+        return found
+
+    purlin_ids = next(g for g in project.groups if g.name == "Purlins").element_ids
+    # The roof is in suction over its whole width for this wind: every purlin lifts.
+    interior = [e for e in purlin_ids if 1.0 < nodes[elements[e].nodes[0]][0] < 23.0]
+    assert interior and sides(interior) == {"free"}
+    girt_ids = next(g for g in project.groups if g.name == "Girts").element_ids
+    windward = [e for e in girt_ids if all(nodes[n][0] == 0.0 for n in elements[e].nodes)]
+    leeward = [e for e in girt_ids if all(nodes[n][0] == 24.0 for n in elements[e].nodes)]
+    assert windward and sides(windward) == {"braced"}
+    assert leeward and sides(leeward) == {"free"}
 
 
 def test_the_calculation_memory_prints_the_aisi_steps(solved) -> None:  # type: ignore[no-untyped-def]

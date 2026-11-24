@@ -265,8 +265,13 @@ These are non-obvious things that are easy to break if you don't know:
   (`core/design/aisi_s100.py`, Direct Strength Method, ADR-0005): the elastic
   local and distortional loads are the finite strip signature curve
   (`core/design/fsm.py`, cached per shape), Fy and Fu come from the section's
-  material, and the AISC 341 system does not act on them. Sheeting is not a
-  brace: the check uses the model's unbraced lengths. The equations were typed
+  material, and the AISC 341 system does not act on them. Sheeting is a
+  brace only through `SteelMemberDesign.sheeted_flange` (`"+"`/`"-"`: the side
+  of the local axis the member bends along; a positive M2 compresses the +z
+  flange, a positive M3 the -y one): braced where that flange is in
+  compression, `R Mnlo` of I6.2.1 or Lb where it is in tension. The Warehouse
+  Wizard writes it for purlins and girts from the wall's outward normal, with
+  the sag rod lengths (design lengths only, no elements). The equations were typed
   without a copy of S100-16 at hand and are pinned by the DSM Design Guide
   example and by closed forms against the finite strips; check a clause against
   the specification before changing it.

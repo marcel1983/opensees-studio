@@ -257,9 +257,65 @@ def test_a_purlin_or_girt_buckles_about_its_major_axis_over_its_own_span() -> No
         override = overrides[element_id]
         a, b = by_id[element_id].nodes
         assert override.length_major == pytest.approx(float(np.linalg.norm(nodes[b] - nodes[a])))
-        # The sheeting is not counted as a brace: these stay as modelled.
+        # Without sag rods these stay as modelled: the span.
         assert override.length_minor is None and override.length_ltb is None
     assert set(overrides) == set(warehouse.unbraced) | secondary
+
+
+def test_sag_rods_cut_the_sideways_lengths_of_the_purlins_and_girts() -> None:
+    warehouse = _build(girt_spacing=1.5, purlin_sag_rods=2, girt_sag_rods=1)
+    overrides = {o.element_id: o for o in member_design_overrides(warehouse)}
+    for element_id in warehouse.members["purlins"]:
+        override = overrides[element_id]
+        assert override.length_major == pytest.approx(6.0)
+        assert override.length_minor == override.length_ltb == pytest.approx(2.0)
+    for element_id in warehouse.members["girts"]:
+        assert overrides[element_id].length_minor == pytest.approx(3.0)
+    with pytest.raises(WarehouseError, match="sag rod lines"):
+        _build(purlin_sag_rods=-1)
+
+
+def test_the_sheeting_is_on_the_outer_flange_of_every_purlin_and_girt() -> None:
+    """By the side of the member's local z: up on the roof, away from the building on a wall."""
+    spec = WarehouseSpec(
+        span=20.0,
+        eave_height=6.0,
+        frame_spacing=6.0,
+        n_frames=4,
+        girt_spacing=1.5,
+        end_wall_column_spacing=5.0,
+    )
+    warehouse = build_warehouse(
+        spec, {**SECTIONS, "end_column": 6}, first_node_id=1, first_element_id=1
+    )
+    overrides = {o.element_id: o for o in member_design_overrides(warehouse)}
+    nodes = {n.id: np.asarray(n.coords) for n in warehouse.nodes}
+    by_id = {e.id: e for e in warehouse.elements}
+    centre = np.mean([nodes[n] for n in nodes], axis=0)
+    walls = set()
+    for key in ("purlins", "girts"):
+        for element_id in warehouse.members[key]:
+            element = by_id[element_id]
+            a, b = (nodes[n] for n in element.nodes)
+            local_z = frame_local_axes(3, a, b, element.local_axis_angle)[2]
+            if key == "purlins":
+                outward = np.array([0.0, 0.0, 1.0])
+            else:
+                wall = warehouse.wall_girts[element_id][0]
+                walls.add(wall)
+                outward = np.zeros(3)
+                axis = 0 if wall.startswith("x") else 1
+                outward[axis] = np.sign(((a + b) / 2 - centre)[axis])
+            side = "+" if float(local_z @ outward) > 0.0 else "-"
+            assert abs(float(local_z @ outward)) > 0.9
+            assert overrides[element_id].sheeted_flange == side
+    assert walls == {"x0", "x1", "y0", "y1"}
+    # Both senses occur: the flange is found from the geometry, not assumed.
+    girts = warehouse.members["girts"]
+    assert {overrides[e].sheeted_flange for e in girts} == {"+", "-"}
+
+    bare = _build(girt_spacing=1.5, sheeting=False)
+    assert {o.sheeted_flange for o in member_design_overrides(bare)} == {None}
 
 
 def test_interior_columns_get_no_override() -> None:

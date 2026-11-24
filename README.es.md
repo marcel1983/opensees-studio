@@ -228,9 +228,11 @@ script o un notebook de Jupyter: la interfaz es una forma de usarlo, no la únic
   **Método de Resistencia Directa**: las cargas de pandeo local y distorsional
   salen del análisis de franjas finitas del propio programa, y con ellas
   tracción (D), compresión (E2–E4), flexión (F2–F4), corte (G2.1) y las
-  interacciones H1.2 y H2, con Fy y Fu del material de la sección. La chapa de
-  cubierta no cuenta como arriostramiento y no se verifica el aplastamiento del
-  alma. Un **sistema sísmico** (AISC 341-22) añade la comprobación
+  interacciones H1.2 y H2, con Fy y Fu del material de la sección. Una correa o
+  un larguero con la **chapa atornillada a un ala** queda arriostrado donde esa
+  ala está comprimida, y donde está traccionada toma el factor R de I6.2.1
+  (dentro de sus límites) o sus tensores; el asistente de bodegas define ambas
+  cosas. No se verifica el aplastamiento del alma. Un **sistema sísmico** (AISC 341-22) añade la comprobación
   de esbeltez de la Tabla D1.1 con `Ry` y `Ca`, las juntas de SMF (E3.4a,
   panel zone J10.6 y placas de continuidad E3.6f), el diseño por capacidad
   F2.3 y los límites F2.5b de SCBF, y la cobertura F1.4/F1.5/F1.6 de OCBF.

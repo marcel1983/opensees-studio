@@ -68,6 +68,11 @@ def test_the_fields_reach_the_spec(qtbot) -> None:  # type: ignore[no-untyped-de
     wizard._purlin_spacing.setValue(1.2)
     wizard._girt_spacing.setValue(0.0)
     wizard._rafter_fly.setValue(3)
+    assert wizard._purlin_rods.value() == 1  # a line at mid-bay unless told otherwise
+    assert wizard._sheeting.isChecked()
+    wizard._purlin_rods.setValue(2)
+    wizard._girt_rods.setValue(1)
+    wizard._sheeting.setChecked(False)
     wizard._end_wall_spacing.setValue(4.0)
     wizard._wall_bracing.setChecked(False)
     wizard._braced_bays.setText("1, 4; 7")
@@ -89,6 +94,9 @@ def test_the_fields_reach_the_spec(qtbot) -> None:  # type: ignore[no-untyped-de
         wall_bracing=False,
         braced_bays=(0, 3, 6),
         end_wall_column_spacing=4.0,
+        sheeting=False,
+        purlin_sag_rods=2,
+        girt_sag_rods=1,
     )
     assert wizard.section_choice() == dict.fromkeys(
         ("column", "rafter", "purlin", "girt", "brace", "end_column")

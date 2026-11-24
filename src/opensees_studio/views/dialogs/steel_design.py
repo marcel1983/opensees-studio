@@ -67,6 +67,14 @@ _RESULT_COLUMNS = [
     "Station",
     "Notes",
 ]
+#: The sheeted flange of a cold-formed member: label and value; the first leaves it as it is.
+_KEEP = "keep"
+_SHEETED_CHOICES: tuple[tuple[str, str | None], ...] = (
+    ("Unchanged", _KEEP),
+    ("No sheeting", None),
+    ("On the + side of the local axis", "+"),
+    ("On the - side of the local axis", "-"),
+)
 _FAIL = QColor("#f8d7da")
 _SKIP = QColor("#eeeeee")
 #: Text on those light tints, in both themes.
@@ -191,6 +199,16 @@ class SteelDesignDialog(FittedDialog):
         self._shear_lag.setValue(1.0)
         self._shear_lag.setToolTip("Shear-lag factor U in Ae = U An (D2-2).")
         over.addRow("Shear lag U:", self._shear_lag)
+        self._sheeted = QComboBox()
+        for label, _value in _SHEETED_CHOICES:
+            self._sheeted.addItem(tr(label))
+        self._sheeted.setToolTip(
+            "Cold-formed members: the flange a sheeting is screwed to, by the side of the "
+            "local axis the member bends along about its major axis (local z in a 3D model). "
+            "That flange is braced when it is in compression; with it in tension the check "
+            "uses Lb, or the R factor of AISI S100 I6.2.1 where it applies."
+        )
+        over.addRow("Sheeting on the flange:", self._sheeted)
         apply = QPushButton("Apply to the selected members")
         apply.clicked.connect(self._apply_overrides)
         over.addRow(apply)
@@ -269,19 +287,27 @@ class SteelDesignDialog(FittedDialog):
             self._cb.setValue(member.cb or 0.0)
             self._net_area.setValue(member.net_area or 0.0)
             self._shear_lag.setValue(member.shear_lag)
+            values = [value for _label, value in _SHEETED_CHOICES]
+            self._sheeted.setCurrentIndex(values.index(member.sheeted_flange))
 
     def _apply_overrides(self) -> None:
         shape = self._shape.text().strip() or None
+        sheeted = _SHEETED_CHOICES[self._sheeted.currentIndex()][1]
         for element_id in self._selected:
-            self._members[element_id] = SteelMemberDesign(
-                element_id=element_id,
-                shape=shape,
-                k_major=self._k_major.value(),
-                k_minor=self._k_minor.value(),
-                length_ltb=self._lb.value() or None,
-                cb=self._cb.value() or None,
-                net_area=self._net_area.value() or None,
-                shear_lag=self._shear_lag.value(),
+            # What this dialog does not edit (the role, the grade, the lengths about
+            # the two axes a wizard wrote) stays as it is.
+            current = self._members.get(element_id) or SteelMemberDesign(element_id=element_id)
+            self._members[element_id] = current.model_copy(
+                update={
+                    "shape": shape,
+                    "k_major": self._k_major.value(),
+                    "k_minor": self._k_minor.value(),
+                    "length_ltb": self._lb.value() or None,
+                    "cb": self._cb.value() or None,
+                    "net_area": self._net_area.value() or None,
+                    "shear_lag": self._shear_lag.value(),
+                }
+                | ({} if sheeted == _KEEP else {"sheeted_flange": sheeted})
             )
         self._summary.show_message(f"Overrides set on {len(self._selected)} member(s).")
 

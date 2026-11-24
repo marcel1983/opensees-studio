@@ -13,7 +13,9 @@ Define → Create Warehouse builds with these numbers:
 - **Purlins** — every second one has a stabilising angle to the rafter's bottom
   flange, so the steel check takes the rafter's unbraced length as two purlin
   spaces (2.87 m) instead of the whole slope (10.05 m). The girts have none:
-  the side columns are unbraced over their 6 m.
+  the side columns are unbraced over their 6 m. A line of sag rods at mid-bay
+  holds the purlins sideways, and the sheeting is screwed to the purlins and
+  girts, so the AISI check takes their outer flange as braced in compression.
 - **Loads** — 0.10 kN/m² of cladding in DEAD (with the self weight), and in
   LIVE the RNC-07 Art. 11 light roof: 10 kg/m² plus 200 kg at each ridge.
 - **Combinations** — RNC-07 Art. 15: 1.4CM, 1.2CM + 1.6CV and their envelope.
@@ -57,6 +59,7 @@ def build_warehouse_project() -> Project:
         purlin_spacing=1.5,
         girt_spacing=1.5,
         rafter_fly_brace_every=2,
+        purlin_sag_rods=1,
     )
     preset = CODE_PRESETS[CODE]
     loads = WarehouseLoads(

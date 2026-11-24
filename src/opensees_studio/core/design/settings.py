@@ -113,6 +113,7 @@ class SteelMemberDesign(BaseModel):
         "shear_lag",
         "grade",
         "role",
+        "sheeted_flange",
     )
 
     element_id: PositiveInt
@@ -160,6 +161,15 @@ class SteelMemberDesign(BaseModel):
         gt=0.0,
         le=1.0,
         description="Shear-lag factor U for D2-2 (1.0 for a fully effective connection).",
+    )
+    sheeted_flange: Literal["+", "-"] | None = Field(
+        default=None,
+        description=(
+            "Cold-formed members (AISI S100): the flange with a sheeting screwed to it, on "
+            "the positive or the negative side of the local axis the member bends along "
+            "about its major axis (z in a 3D model). The sheeting braces that flange when "
+            "it is in compression; None = no sheeting."
+        ),
     )
 
 

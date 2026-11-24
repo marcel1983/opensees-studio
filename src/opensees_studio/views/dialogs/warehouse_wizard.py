@@ -423,6 +423,29 @@ class WarehouseWizard(QWizard):
             "As for the purlins: a girt braces the column only where it has a stabilising "
             "angle to the inner flange."
         )
+        self._purlin_rods = QSpinBox()
+        self._purlin_rods.setRange(0, 10)
+        self._purlin_rods.setValue(1)
+        self._purlin_rods.setSpecialValueText(tr("None"))
+        self._purlin_rods.setToolTip(
+            "Lines of sag rods in each bay, holding every purlin sideways: 1 is a line at "
+            "mid-span, 2 at the third points. They are not modelled; the steel check takes "
+            "the purlin's minor-axis and lateral-torsional lengths between them."
+        )
+        self._girt_rods = QSpinBox()
+        self._girt_rods.setRange(0, 10)
+        self._girt_rods.setSpecialValueText(tr("None"))
+        self._girt_rods.setToolTip("As for the purlins: lines of sag rods in each bay of wall.")
+        self._sheeting = QCheckBox("Sheeting screwed to the purlins and girts")
+        self._sheeting.setChecked(True)
+        self._sheeting.setToolTip(
+            "A roof and wall sheeting fastened through to every purlin and girt braces the "
+            "flange it sits on: the steel check takes that flange as held when it is in "
+            "compression (gravity on a purlin, pressure on a girt). Under uplift or suction "
+            "the free flange is in compression and the member counts on its sag rods, or on "
+            "the R factor of AISI S100 I6.2.1 where the section is within its limits. Untick "
+            "for a standing seam roof."
+        )
         self._end_wall_spacing = self._length(5.0)
         self._end_wall_spacing.setToolTip(
             "Largest distance between the columns of the two end walls; 0 builds none. Each "
@@ -456,6 +479,9 @@ class WarehouseWizard(QWizard):
         form.addRow("Stabilising angle every (purlins):", self._rafter_fly)
         form.addRow("Girt spacing:", self._girt_spacing)
         form.addRow("Stabilising angle every (girts):", self._column_fly)
+        form.addRow("Sag rod lines per bay (purlins):", self._purlin_rods)
+        form.addRow("Sag rod lines per bay (girts):", self._girt_rods)
+        form.addRow(self._sheeting)
         form.addRow("End wall column spacing:", self._end_wall_spacing)
         form.addRow("Bottom chord tie every (panel points):", self._chord_ties)
         form.addRow(self._roof_bracing)
@@ -474,9 +500,15 @@ class WarehouseWizard(QWizard):
 
         for field in (self._purlin_spacing, self._girt_spacing, self._end_wall_spacing):
             field.valueChanged.connect(self._refresh)
-        for spin in (self._rafter_fly, self._column_fly, self._chord_ties):
+        for spin in (
+            self._rafter_fly,
+            self._column_fly,
+            self._chord_ties,
+            self._purlin_rods,
+            self._girt_rods,
+        ):
             spin.valueChanged.connect(self._refresh)
-        for box in (self._roof_bracing, self._wall_bracing):
+        for box in (self._roof_bracing, self._wall_bracing, self._sheeting):
             box.toggled.connect(self._refresh)
         self._braced_bays.textChanged.connect(self._refresh)
         self._page_secondary = page
@@ -1199,6 +1231,9 @@ class WarehouseWizard(QWizard):
             wall_bracing=self._wall_bracing.isChecked(),
             braced_bays=self._bays(),
             end_wall_column_spacing=self._end_wall_spacing.value(),
+            sheeting=self._sheeting.isChecked(),
+            purlin_sag_rods=self._purlin_rods.value(),
+            girt_sag_rods=self._girt_rods.value(),
             **truss,
         )
 
