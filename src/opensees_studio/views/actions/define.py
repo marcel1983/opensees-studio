@@ -105,4 +105,14 @@ DEFINE_ACTIONS: tuple[ActionSpec, ...] = (
         "building.define_seismic_loads",
         needs=Needs.PROJECT,
     ),
+    ActionSpec(
+        "define.building_wizard",
+        "Create &Building…",
+        "generators.create_building",
+        needs=Needs.PROJECT,
+        tooltip=(
+            "A multi-storey frame building from a few numbers: bays, storeys, floor "
+            "loads, rigid diaphragms, the earthquake and the combinations of a design code."
+        ),
+    ),
 )

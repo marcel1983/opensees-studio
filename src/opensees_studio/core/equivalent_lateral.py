@@ -284,8 +284,18 @@ def _levels(project: Project, masses: dict[int, np.ndarray], direction: int) -> 
 
 
 # ─────────────────────────── the generator ───────────────────────────
-def equivalent_lateral_forces(project: Project, direction: int, p: ElfParameters) -> ElfResult:
-    """Base shear and storey forces of ``project`` for loads along global axis ``direction``."""
+def equivalent_lateral_forces(
+    project: Project,
+    direction: int,
+    p: ElfParameters,
+    *,
+    masses: dict[int, np.ndarray] | None = None,
+) -> ElfResult:
+    """Base shear and storey forces of ``project`` for loads along global axis ``direction``.
+
+    ``masses`` is ``effective_nodal_masses(project)``, for a caller that asks
+    for more than one direction of the same model.
+    """
     if project.ndm == 2 and direction != 0:
         raise ElfError("A 2D model takes lateral loads along X only (it lives in the X-Z plane).")
     if p.period <= 0.0:
@@ -297,7 +307,8 @@ def equivalent_lateral_forces(project: Project, direction: int, p: ElfParameters
         raise ElfError("SDS and SD1 must be positive.")
     units = project.meta.units
     g = gravity(units)
-    masses = effective_nodal_masses(project)
+    if masses is None:
+        masses = effective_nodal_masses(project)
     levels = _levels(project, masses, direction)
     if not levels:
         raise ElfError(
@@ -438,13 +449,20 @@ def _on_same_level(project: Project, node: int, level_nodes: Sequence[int]) -> b
 
 
 def nodal_forces(
-    project: Project, result: ElfResult, eccentricity_sign: int = 0, ratio: float = 0.05
+    project: Project,
+    result: ElfResult,
+    eccentricity_sign: int = 0,
+    ratio: float = 0.05,
+    *,
+    masses: dict[int, np.ndarray] | None = None,
 ) -> dict[int, tuple[float, float, float, float, float, float]]:
     """The storey forces as global nodal loads, with ``±ratio`` accidental eccentricity.
 
-    ``eccentricity_sign`` is -1, 0 or +1; it is ignored in 2D.
+    ``eccentricity_sign`` is -1, 0 or +1; it is ignored in 2D. ``masses`` is
+    ``effective_nodal_masses(project)``, as in :func:`equivalent_lateral_forces`.
     """
-    masses = effective_nodal_masses(project)
+    if masses is None:
+        masses = effective_nodal_masses(project)
     d = result.direction
     across = 1 - d  # the horizontal axis perpendicular to the load (3D)
     coords = {n.id: np.asarray(n.coords, dtype=float) for n in project.nodes}

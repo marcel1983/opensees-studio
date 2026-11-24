@@ -140,11 +140,22 @@ def pattern_weight_per_node(project: Project, pattern: PlainLoadPattern) -> dict
     def add(nid: int, value: float) -> None:
         out[nid] = out.get(nid, 0.0) + value
 
+    # A beam under a floor carries a load per panel and piece of its profile:
+    # its axes and length are worked out once.
+    shares: dict[int, tuple[np.ndarray, np.ndarray, float] | None] = {}
+
+    def end_shares(element_id: int) -> tuple[np.ndarray, np.ndarray, float] | None:
+        if element_id not in shares:
+            element = elements.get(element_id)
+            shares[element_id] = (
+                _frame_end_shares(project, coords, element) if element is not None else None
+            )
+        return shares[element_id]
+
     for nodal in pattern.nodal_loads:
         add(nodal.node_id, float(np.asarray(nodal.forces[:3], dtype=float) @ down))
     for uniform in pattern.element_loads:
-        element = elements.get(uniform.element_id)
-        frame = _frame_end_shares(project, coords, element) if element is not None else None
+        frame = end_shares(uniform.element_id)
         if frame is None:
             continue
         axes, nodes, length = frame
@@ -153,8 +164,7 @@ def pattern_weight_per_node(project: Project, pattern: PlainLoadPattern) -> dict
         add(int(nodes[0]), 0.5 * q)
         add(int(nodes[1]), 0.5 * q)
     for point in pattern.point_loads:
-        element = elements.get(point.element_id)
-        frame = _frame_end_shares(project, coords, element) if element is not None else None
+        frame = end_shares(point.element_id)
         if frame is None:
             continue
         axes, nodes, _length = frame
@@ -170,8 +180,7 @@ def pattern_weight_per_node(project: Project, pattern: PlainLoadPattern) -> dict
     except AreaLoadError:
         distributed = list(pattern.distributed_loads)
     for varying in distributed:
-        element = elements.get(varying.element_id)
-        frame = _frame_end_shares(project, coords, element) if element is not None else None
+        frame = end_shares(varying.element_id)
         if frame is None:
             continue
         axes, nodes, length = frame
@@ -278,7 +287,11 @@ def total_translational_mass(project: Project) -> tuple[float, float, float]:
 
 
 def diaphragm_centre_of_mass(
-    project: Project, node_ids: Sequence[int], perp_dirn: int = 3
+    project: Project,
+    node_ids: Sequence[int],
+    perp_dirn: int = 3,
+    *,
+    masses: dict[int, np.ndarray] | None = None,
 ) -> tuple[float, float, float]:
     """Where a new retained node goes: the centre of the in-plane mass of ``node_ids``.
 
@@ -286,10 +299,12 @@ def diaphragm_centre_of_mass(
     translations (the same masses :func:`effective_nodal_masses` hands the
     solver, before any lumping onto this diaphragm); without mass it is the
     centroid. The coordinate across the plane is the nodes' mean, so the node
-    lies in the floor.
+    lies in the floor. ``masses`` is :func:`effective_nodal_masses` of the
+    project, for a caller that places the nodes of several floors.
     """
     a, b, _rot = IN_PLANE_SLOTS[perp_dirn]
-    masses = effective_nodal_masses(project)
+    if masses is None:
+        masses = effective_nodal_masses(project)
     coords = {n.id: n.coords for n in project.nodes}
     weights = {
         nid: 0.5 * float(masses[nid][a] + masses[nid][b]) for nid in node_ids if nid in masses

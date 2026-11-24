@@ -116,6 +116,27 @@ refused instead of silently downgraded).
   together: where a code adds "the snow" (ASCE 7 combination 5, NSCM), there is
   one combination per snow case instead of their sum. Without the option
   nothing changes.
+- **Building wizard.** Define → Create Building (and File → New Model →
+  Building) builds a regular multi-storey frame building into a 3D model, as
+  one undo step and with a wireframe preview that follows every field. Four
+  pages: the bays each way (equal, or a list of widths), the storeys with a
+  first storey of its own height, the bases, a steel or a concrete frame, the
+  way the columns are turned and a two-way or one-way slab; a section for the
+  columns and for the beams each way (W14X90 and W18X50, or 500 × 500 and
+  300 × 600 mm of concrete, are created when none is chosen); the floor and
+  roof dead loads and the live loads of a **use** (residential, classrooms,
+  hospital, offices, assembly) by RNC-07, NSCM or ASCE 7-16, with the part of
+  each that counts as seismic weight; and the earthquake by the equivalent
+  lateral force of RNC-07 Art. 32, NSCM 8.2.1 or ASCE 7-16 12.8, with the
+  period of each direction, the accidental eccentricity and a reduction
+  factor that starts at the value of an ordinary moment frame. The project
+  gains the members in three groups, a grid, a storey and a rigid diaphragm
+  per floor, the slab loads as floor panels, the mass source, the cases
+  `DEAD`, `LIVE`, `ROOF LIVE` and `EQ X ±e`, `EQ Y ±e`, and the combinations
+  of the code. Before you press Finish the last page plans the building as
+  the fields stand and shows the seismic weight and the base shear of each
+  direction, or why it cannot be built. It is the wizard of
+  `core.building.plan_building`, described next.
 - **Parametric building, for scripts.** `core.building.plan_building` makes a
   regular multi-storey building of a few numbers (bay widths along X and Y,
   storey heights, steel or concrete frame, fixed or pinned bases): columns and
@@ -132,7 +153,7 @@ refused instead of silently downgraded).
   -e`: the storey forces at the centre of mass with the torque of the
   accidental eccentricity (0.1 b by RNC-07 Art. 32 d, 5 % by NSCM 9.8 and ASCE
   7) to either side. The combinations of the code follow, with the 100 % + 30 %
-  rule between one case of each direction for RNC-07 and NSCM. No dialog yet:
+  rule between one case of each direction for RNC-07 and NSCM.
   `examples/building_office.py` builds a three-storey concrete office building
   in Managua with it. Not included: wind on the building, cracked stiffness,
   secondary beams, and the 1.5 amplification of the static eccentricity of
@@ -192,6 +213,13 @@ refused instead of silently downgraded).
   in the Spanish interface: the truss element (Dibujar barra de cercha), the
   Truss Wizard (Asistente de cerchas), New 2D Truss and the roof trusses of the
   Warehouse Wizard.
+- **Floor panels are fast on a real building.** Every consumer of a floor
+  panel (the analysis, the mass source, the seismic loads, the drawing of the
+  loads) looked for the beams under each of its four edges by asking every
+  element of the model, one by one: a building of 6 × 6 bays and ten storeys
+  took more than two minutes to weigh. The search now looks only at the
+  members of the panel's level, in one pass; the same building takes about a
+  second and a half to plan, and the loads are the same numbers as before.
 - **The mass source counts distributed loads and floor panels.** A load pattern
   in Define → Mass Source gave mass for its nodal, uniform and point loads and
   its self weight; a distributed (trapezoidal) load and a floor panel (Assign →

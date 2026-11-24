@@ -124,6 +124,7 @@ RIBBON_LAYOUT: tuple[tuple[str, str, tuple[tuple[str, tuple[str, ...]], ...]], .
                     "_act_frame_wizard",
                     "_act_truss_wizard",
                     "_act_warehouse_wizard",
+                    "_act_building_wizard",
                 ),
             ),
             (

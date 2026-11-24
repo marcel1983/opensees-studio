@@ -7,6 +7,8 @@ import pytest
 
 from opensees_studio.core.building import (
     ACCIDENTAL_ECCENTRICITY,
+    BUILDING_CODES,
+    BUILDING_SEISMIC_METHODS,
     DEFAULT_STEEL_SHAPES,
     FLOOR_LIVE_CASE,
     GROUPS,
@@ -103,6 +105,19 @@ def test_a_spec_that_is_not_a_building_is_refused(fields: dict, message: str) ->
     values = {"spans_x": (6.0,), "spans_y": (5.0,), "storey_heights": (3.0,), **fields}
     with pytest.raises(BuildingError, match=message):
         BuildingSpec(**values)
+
+
+def test_a_building_takes_the_codes_and_methods_it_has_numbers_for() -> None:
+    """What the wizard offers: no code without live loads by use, no method without an ELF."""
+    assert BUILDING_CODES == ("rnc07", "nscm", "asce7_lrfd", "asce7_asd")
+    assert list(BUILDING_SEISMIC_METHODS) == ["rnc07", "nscm", "asce7"]
+    assert set(BUILDING_SEISMIC_METHODS) == set(ACCIDENTAL_ECCENTRICITY)
+    for code in BUILDING_CODES:
+        assert occupancy_loads(code, "office", UnitSystem.SI_M_N)["floor_live"] > 0.0
+    with pytest.raises(BuildingError, match="No table of live loads"):
+        occupancy_loads("en1990", "office", UnitSystem.SI_M_N)
+    with pytest.raises(BuildingError, match="no equivalent lateral force"):
+        BuildingSeismic(method="en1998")
 
 
 def test_regular_makes_equal_bays_with_a_taller_first_storey() -> None:
