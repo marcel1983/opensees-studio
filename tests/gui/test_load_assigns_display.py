@@ -81,7 +81,7 @@ def test_the_menu_applies_the_choice_to_the_viewport(qtbot, tmp_path: Path, monk
     window = MainWindow()
     qtbot.addWidget(window)
     assert window.files.open_project(path)
-    window._apply_view_settings(show_loads=False)
+    window.visibility.apply(show_loads=False)
     assert window._act_show_load_assigns.isEnabled()
 
     def _accept(dialog: LoadDisplayDialog) -> int:

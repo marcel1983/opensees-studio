@@ -79,7 +79,7 @@ def test_each_viewport_keeps_its_own_settings(qtbot) -> None:  # type: ignore[no
     view = window._view_windows[0]
     qtbot.addWidget(view)
 
-    window._apply_view_settings(show_nodes=False)
+    window.visibility.apply(show_nodes=False)
 
     assert view.canvas.view_settings.show_nodes is False
     assert window._main_canvas.view_settings.show_nodes is True

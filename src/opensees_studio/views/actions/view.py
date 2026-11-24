@@ -85,4 +85,6 @@ VIEW_ACTIONS: tuple[ActionSpec, ...] = (
     ActionSpec(
         "view.invert_visible", "&Invert Visible", "viewport.invert_visible", needs=Needs.PROJECT
     ),
+    # The six colours of the viewport (VisibilityController).
+    ActionSpec("view.colors", "&Colors…", "visibility.colors", legacy_attribute="_act_view_colors"),
 )

@@ -247,7 +247,11 @@ These are non-obvious things that are easy to break if you don't know:
   Open Recent, Save, Save As, Project Information, Run Batch, the autosaved
   recovery copy) gets the recent-files list the start page shares and
   `store_view`/`restore_view` for the viewport a project carries; New Model,
-  New 2D Frame and Quit stay in the window (wizards, `closeEvent`). A controller's attribute must not be the name of a `QMainWindow`
+  New 2D Frame and Quit stay in the window (wizards, `closeEvent`).
+  `VisibilityController` (View → Visibility, Color By, Colors; Display →
+  Display Options, Show Load Assigns; the viewport a project carries) does not
+  build its ticks: they listen to `toggled`, so the window builds them and hands
+  them over with `attach`, one or more per `ViewSettings` field. A controller's attribute must not be the name of a `QMainWindow`
   method (`window.geometry` would replace `QWidget.geometry()`):
   `tests/gui/test_action_registry.py` checks it, hence `model_tools`.
   The rest of the window is being moved out the same way.

@@ -1,7 +1,8 @@
 """Display menu commands: which results are shown and the views of them.
 
 The post-processing views are ``DisplayController``'s; the case on screen and
-its reactions are ``ResultsViewController``'s.
+its reactions are ``ResultsViewController``'s; what the viewport draws of the
+model is ``VisibilityController``'s.
 """
 
 from __future__ import annotations
@@ -51,5 +52,22 @@ DISPLAY_ACTIONS: tuple[ActionSpec, ...] = (
     ),
     ActionSpec(
         "display.reactions_dialog", "R&eactions…", "results_view.reactions_dialog", needs=None
+    ),
+    # What the viewport draws of the model (VisibilityController).
+    ActionSpec(
+        "display.display_options",
+        "Display &Options…",
+        "visibility.options",
+        needs=Needs.PROJECT,
+    ),
+    ActionSpec(
+        "display.show_load_assigns",
+        "Show &Load Assigns…",
+        "visibility.load_assigns",
+        needs=Needs.PROJECT,
+        tooltip=(
+            "Choose the load pattern drawn (or all, one colour each), the kinds of load "
+            "and whether their values are written."
+        ),
     ),
 )
