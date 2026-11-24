@@ -140,12 +140,12 @@ These are non-obvious things that are easy to break if you don't know:
   *user-initiated* close: one the window manager sent (`event.spontaneous()`)
   or `File → Quit`, which goes through `_on_quit`. A programmatic `close()`
   (test teardown, `closeAllWindows()` while shutting down) never prompts — a
-  modal dialog with no event loop running wedges the exit. `_on_save` and
-  `_on_save_as` return `True` when the file was written, and
-  `_confirm_discard_changes(action)` is the one prompt shared by close, New
-  and Open so the three cannot drift apart.
-- Model lock. Results lock the model (`MainWindow._lock_for_results`); the one
-  place that enforces it is `_on_undo_index_changed`, which compares
+  modal dialog with no event loop running wedges the exit. New, Open and Save
+  are `FilesController` (`window.files`): `save` and `save_as` return `True`
+  when the file was written, and `confirm_discard(action)` is the one prompt
+  shared by close, New and Open so the three cannot drift apart.
+- Model lock. Results lock the model (`ModelLockController.lock_for_results`,
+  `window.model_lock`); the one place that enforces it is its `on_undo_index_changed`, which compares
   `model_fingerprint` with the locked one after every push, undo and redo and
   takes the change back when the user refuses to unlock. So a model change must
   go through the undo stack, and what the fingerprint leaves out
@@ -183,7 +183,7 @@ These are non-obvious things that are easy to break if you don't know:
   it and enables it, and also stores it as `_act_<name>`, which is how the
   ribbon layout, `ACTION_TOPICS`, the icon file and older tests find it. Ask
   for it with `window.action("file.save")`. The File and Design menus and parts of
-  Edit, Select, View, Define, Assign and Display are migrated so far: when you add a command, add a spec
+  Edit, Select, View, Define, Assign, Analyze, Display and Options are migrated so far: when you add a command, add a spec
   instead of new lines in `_build_actions`, `_wire` and
   `_refresh_action_enablement` (use `needs=None` when the condition is not a
   `Needs` flag and set it in the window). `legacy_attribute` is only for a
@@ -227,12 +227,31 @@ These are non-obvious things that are easy to break if you don't know:
   systems, Grid Wizard, Show Grids) gets `new_project` and `sync_actions`.
   `DisplayController` (the post-processing views of the Display menu, the
   design ratios, the mechanisms of Check Model) owns the dock of the open view
-  (`display.dock`), what the canvas shows (`display.mode`) and the viewports'
-  caption; the window enables its commands from the results on screen
-  (`needs=None`). The results in memory are `window.results`, a
+  (`display.dock`), what the canvas shows (`display.mode`), the viewports'
+  caption, the hover text and the member diagram windows; the window enables
+  its commands from the results on screen (`needs=None`). The results in memory are `window.results`, a
   `viewmodels.results_session.ResultsSession` (`latest` on screen, `cases` for
   the combinations, `extra` for the report only): ask it, do not add a
-  `_latest_results` to the window. A controller's attribute must not be the name of a `QMainWindow`
+  `_latest_results` to the window. `ModelLockController` (Options → Lock Model)
+  owns the padlock of the status bar and gets `drop_results`.
+  `UnitsController` (Options → Set Display Units) owns the unit picker of the
+  status bar and gets `refresh`, the window's re-draw of what shows a number.
+  `AnalysisController` (the Analyze menu: cases, Check Model, the stability
+  check, Run and the batch doors) gets the window's `AnalysisRunner` and
+  `StabilityChecker` as `runner` and `stability`; the window connects their
+  signals to it. The results of a run go to `ResultsViewController`
+  (`window.results_view`: the case on screen, the Results and Reactions
+  panels, the Case list and step arrows of the View toolbar, Show Results Of,
+  the reactions commands, Delete All Results), which owns those widgets; the
+  window only places them. `FilesController` (New Blank, New 2D Truss, Open,
+  Open Recent, Save, Save As, Project Information, Run Batch, the autosaved
+  recovery copy) gets the recent-files list the start page shares and
+  `store_view`/`restore_view` for the viewport a project carries; New Model,
+  New 2D Frame and Quit stay in the window (wizards, `closeEvent`).
+  `VisibilityController` (View → Visibility, Color By, Colors; Display →
+  Display Options, Show Load Assigns; the viewport a project carries) does not
+  build its ticks: they listen to `toggled`, so the window builds them and hands
+  them over with `attach`, one or more per `ViewSettings` field. A controller's attribute must not be the name of a `QMainWindow`
   method (`window.geometry` would replace `QWidget.geometry()`):
   `tests/gui/test_action_registry.py` checks it, hence `model_tools`.
   The rest of the window is being moved out the same way.

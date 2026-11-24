@@ -57,7 +57,7 @@ def test_run_all_hands_every_case_to_the_runner(qtbot) -> None:  # type: ignore[
 
     window._runner.run_cases = _fake_run_cases  # type: ignore[method-assign]
 
-    window._on_run_all_cases()
+    window.analysis.run_all()
 
     assert seen == [[1, 2]]
 
@@ -96,7 +96,7 @@ def test_a_finished_case_writes_the_results_database(qtbot, tmp_path) -> None:  
         element_forces={9: np.zeros((1, 12))},
     )
 
-    window._on_case_finished(results)
+    window.results_view.on_case_finished(results)
 
     db = tmp_path / "model_results.sqlite"
     assert db.exists()

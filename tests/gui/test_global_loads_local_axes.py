@@ -135,7 +135,7 @@ def test_view_local_axes_toggle_updates_the_viewport(qtbot) -> None:  # type: ig
     window._vm.new_project()
     # QSettings may carry a view/default from a previous app run; start from off.
     window._act_show_local_axes.setChecked(False)
-    window._sync_visibility_actions()
+    window.visibility.sync_actions()
     assert not window._canvas.view_settings.show_local_axes
 
     window._act_show_local_axes.trigger()

@@ -98,9 +98,9 @@ def test_open_offers_restore_and_restore_loads_unsaved_changes(
     window = MainWindow()
     qtbot.addWidget(window)
     asked: list[Path] = []
-    monkeypatch.setattr(window, "_ask_restore_snapshot", lambda p: asked.append(p) or True)
+    monkeypatch.setattr(window.files, "ask_restore_snapshot", lambda p: asked.append(p) or True)
 
-    assert window.open_project(path)
+    assert window.files.open_project(path)
 
     assert asked == [snapshot]
     assert [n.id for n in window._vm.project.nodes] == [1, 2, 3]
@@ -129,9 +129,9 @@ def test_open_discard_deletes_the_snapshot_and_keeps_the_file(qtbot, tmp_path, m
 
     window = MainWindow()
     qtbot.addWidget(window)
-    monkeypatch.setattr(window, "_ask_restore_snapshot", lambda p: False)
+    monkeypatch.setattr(window.files, "ask_restore_snapshot", lambda p: False)
 
-    assert window.open_project(path)
+    assert window.files.open_project(path)
 
     assert not snapshot.exists()
     assert [n.id for n in window._vm.project.nodes] == [1, 2]
@@ -145,9 +145,9 @@ def test_open_without_a_newer_snapshot_does_not_ask(qtbot, tmp_path, monkeypatch
     window = MainWindow()
     qtbot.addWidget(window)
     monkeypatch.setattr(
-        window, "_ask_restore_snapshot", lambda p: pytest.fail("prompt shown without snapshot")
+        window.files, "ask_restore_snapshot", lambda p: pytest.fail("prompt shown without snapshot")
     )
-    assert window.open_project(path)
+    assert window.files.open_project(path)
     assert [n.id for n in window._vm.project.nodes] == [1, 2]
 
 
@@ -156,7 +156,7 @@ def test_normal_close_removes_the_snapshot(qtbot, tmp_path) -> None:  # type: ig
     path = _saved_project(tmp_path)
     window = MainWindow()
     qtbot.addWidget(window)
-    assert window.open_project(path)
+    assert window.files.open_project(path)
     snapshot = window._vm.write_run_snapshot()
     assert snapshot.is_file()
 
@@ -170,7 +170,7 @@ def _window_with_snapshot(qtbot, path: Path):  # type: ignore[no-untyped-def]
     """A window with ``path`` open and a newer pre-run snapshot of it, as after Run All."""
     window = MainWindow()
     qtbot.addWidget(window)
-    assert window.open_project(path)
+    assert window.files.open_project(path)
     snapshot = window._vm.write_run_snapshot()
     _make_newer(snapshot, path)
     return window, snapshot
@@ -189,22 +189,22 @@ def test_opening_another_project_removes_the_first_snapshot(qtbot, tmp_path, mon
     window, snapshot = _window_with_snapshot(qtbot, first)
     _choose_file(monkeypatch, second)
 
-    window._on_open()
+    window.files.open_file()
 
     assert window._vm.path == second
     assert not snapshot.exists()
     # Reopening the first project later has nothing to offer.
     monkeypatch.setattr(
-        window, "_ask_restore_snapshot", lambda p: pytest.fail("stale snapshot offered")
+        window.files, "ask_restore_snapshot", lambda p: pytest.fail("stale snapshot offered")
     )
-    assert window.open_project(first)
+    assert window.files.open_project(first)
 
 
 @pytest.mark.gui
 def test_new_project_removes_the_snapshot(qtbot, tmp_path) -> None:  # type: ignore[no-untyped-def]
     window, snapshot = _window_with_snapshot(qtbot, _saved_project(tmp_path))
 
-    window._on_new()
+    window.files.new_blank()
 
     assert window._vm.path is None
     assert not snapshot.exists()
@@ -224,20 +224,20 @@ def test_a_replacement_that_does_not_happen_keeps_the_snapshot(
     monkeypatch.setattr(QMessageBox, "critical", staticmethod(lambda *a, **k: None))
 
     # Cancel on the unsaved-changes prompt.
-    window._on_new()
-    window._on_open()
+    window.files.new_blank()
+    window.files.open_file()
     assert snapshot.is_file()
 
     # Discard, then cancel the file dialog.
     answer[0] = QMessageBox.StandardButton.Discard
     _choose_file(monkeypatch, "")
-    window._on_open()
+    window.files.open_file()
     assert snapshot.is_file()
 
     # Discard, then pick a file that does not load.
     broken = tmp_path / "broken.osmodel"
     broken.write_text("not a project", encoding="utf-8")
     _choose_file(monkeypatch, broken)
-    window._on_open()
+    window.files.open_file()
     assert snapshot.is_file()
     assert window._vm.path == path

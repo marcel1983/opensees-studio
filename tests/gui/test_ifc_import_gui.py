@@ -70,7 +70,7 @@ def test_the_menu_entry_replaces_the_project_and_logs_the_import(
     qtbot.addWidget(mw)
     monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *a, **k: (str(path), ""))
     monkeypatch.setattr(IfcImportDialog, "exec", lambda self: int(QDialog.DialogCode.Accepted))
-    monkeypatch.setattr(mw, "_confirm_discard_changes", lambda action: True)
+    monkeypatch.setattr(mw.files, "confirm_discard", lambda action: True)
 
     mw._act_import_ifc.trigger()
 
@@ -93,7 +93,7 @@ def test_cancelling_the_dialog_leaves_the_project_alone(qtbot, monkeypatch, tmp_
     before = mw._vm.project
     monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *a, **k: (str(path), ""))
     monkeypatch.setattr(IfcImportDialog, "exec", lambda self: int(QDialog.DialogCode.Rejected))
-    monkeypatch.setattr(mw, "_confirm_discard_changes", lambda action: True)
+    monkeypatch.setattr(mw.files, "confirm_discard", lambda action: True)
 
     mw._act_import_ifc.trigger()
 

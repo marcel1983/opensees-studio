@@ -31,8 +31,8 @@ def window(qtbot, tmp_path):  # type: ignore[no-untyped-def]
 
     mw = MainWindow()
     qtbot.addWidget(mw)
-    mw._recent = RecentFiles(QSettings(str(tmp_path / "w.ini"), QSettings.Format.IniFormat))
-    mw._start_page._recent = mw._recent
+    mw.files.recent = RecentFiles(QSettings(str(tmp_path / "w.ini"), QSettings.Format.IniFormat))
+    mw._start_page._recent = mw.files.recent
     yield mw
     mw._help_controller.uninstall()
 
@@ -75,13 +75,13 @@ def test_saving_and_opening_fill_the_recent_menu(window, tmp_path, monkeypatch) 
     monkeypatch.setattr(
         QFileDialog, "getSaveFileName", staticmethod(lambda *a, **k: (str(target), ""))
     )
-    assert window._on_save_as()
-    assert window._recent.paths() == [target.resolve()]
+    assert window.files.save_as()
+    assert window.files.recent.paths() == [target.resolve()]
 
-    window._fill_recent_menu()
+    window.files.fill_recent_menu(window._menu_recent)
     texts = [action.text() for action in window._menu_recent.actions()]
     assert texts[0] == "&1 frame.osmodel"
 
-    window._on_clear_recent()
-    window._fill_recent_menu()
+    window.files.clear_recent()
+    window.files.fill_recent_menu(window._menu_recent)
     assert "No recent projects" in [a.text() for a in window._menu_recent.actions()]

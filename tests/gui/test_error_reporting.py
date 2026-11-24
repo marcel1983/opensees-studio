@@ -47,15 +47,15 @@ def test_a_closed_failure_report_does_not_break_the_run_teardown(qtbot) -> None:
     mw = _window(qtbot)
     run_dialog = QDialog(mw)
     box = QMessageBox(run_dialog)
-    mw._analysis_error_box = box
+    mw.analysis.error_box = box
 
     shiboken6.delete(box)  # exactly what closing it does
     with pytest.raises(RuntimeError):
         box.parent()  # the wrapper is now dangling: this is what used to raise
 
-    mw._keep_failure_report_alive(run_dialog)  # must not raise
+    mw.analysis.keep_failure_report_alive(run_dialog)  # must not raise
 
-    assert mw._analysis_error_box is None  # and the stale reference is dropped
+    assert mw.analysis.error_box is None  # and the stale reference is dropped
 
 
 @pytest.mark.gui
@@ -64,9 +64,9 @@ def test_an_unread_failure_report_is_kept_alive(qtbot) -> None:  # type: ignore[
     run_dialog = QDialog(mw)
     box = QMessageBox(run_dialog)
     box.setText("Analysis failed")
-    mw._analysis_error_box = box
+    mw.analysis.error_box = box
 
-    mw._keep_failure_report_alive(run_dialog)
+    mw.analysis.keep_failure_report_alive(run_dialog)
 
     assert box.parent() is mw
     assert box.isVisible()
@@ -82,15 +82,15 @@ def test_closing_the_report_forgets_it(qtbot, monkeypatch) -> None:  # type: ign
     mw = _window(qtbot)
     monkeypatch.setattr(QMessageBox, "show", lambda self: None)  # no window needed
 
-    mw._on_analysis_failed("exit code 3\nstderr tail")
-    box = mw._analysis_error_box
+    mw.analysis.on_failed("exit code 3\nstderr tail")
+    box = mw.analysis.error_box
     assert box is not None
     assert box.text().startswith("Analysis failed")  # no run, so no exit code
     assert "stderr tail" in box.detailedText()
 
     box.finished.emit(0)  # what the OK button does
 
-    assert mw._analysis_error_box is None
+    assert mw.analysis.error_box is None
 
 
 # ──────────────── the safety net ────────────────

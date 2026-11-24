@@ -106,8 +106,8 @@ def test_a_right_click_on_a_member_with_a_force_diagram_opens_its_window(
     mw._on_canvas_context_menu(QPoint(20, 20))
 
     assert calls == []  # the menu did not open
-    assert len(mw._element_diagram_windows) == 1
-    window = mw._element_diagram_windows[0]
+    assert len(mw.display.member_windows) == 1
+    window = mw.display.member_windows[0]
     assert window.bundle.element_id == 10
     assert "Element 10" in window._header.text()
     assert window._axial.plot.listDataItems()  # the axial curve is drawn
@@ -130,7 +130,7 @@ def test_without_a_post_processing_view_the_menu_is_unchanged(qtbot, monkeypatch
     mw._on_canvas_context_menu(QPoint(20, 20))
 
     assert calls == [True]
-    assert mw._element_diagram_windows == []
+    assert mw.display.member_windows == []
 
 
 @pytest.mark.gui
@@ -144,7 +144,7 @@ def test_an_empty_area_keeps_the_normal_menu(qtbot, monkeypatch) -> None:  # typ
     mw._on_canvas_context_menu(QPoint(20, 20))
 
     assert calls == [True]
-    assert mw._element_diagram_windows == []
+    assert mw.display.member_windows == []
 
 
 @pytest.mark.gui
@@ -159,7 +159,7 @@ def test_a_zero_diagram_does_not_hijack_the_right_click(qtbot, monkeypatch) -> N
     mw._on_canvas_context_menu(QPoint(20, 20))
 
     assert calls == [True]
-    assert mw._element_diagram_windows == []
+    assert mw.display.member_windows == []
 
 
 @pytest.mark.gui
@@ -174,7 +174,7 @@ def test_a_right_click_with_a_deformed_shape_opens_the_window(qtbot, monkeypatch
     mw._on_canvas_context_menu(QPoint(20, 20))
 
     assert calls == []
-    assert len(mw._element_diagram_windows) == 1
+    assert len(mw.display.member_windows) == 1
 
 
 @pytest.mark.gui
@@ -191,9 +191,9 @@ def test_the_result_picker_switches_to_a_combination(qtbot) -> None:  # type: ig
     )
     mw.results.cases.put(mw._vm.project, results)
     mw.display.show_force_diagram()
-    mw._show_element_diagrams(10)
+    mw.display.show_member(10)
 
-    window = mw._element_diagram_windows[0]
+    window = mw.display.member_windows[0]
     assert window._results.count() == 2
     assert window._results.currentData() == "case:1"
 
@@ -211,16 +211,16 @@ def test_the_units_picker_rewrites_the_window(qtbot) -> None:  # type: ignore[no
     mw = _window(qtbot)
     mw.results.latest = _results()
     mw.display.show_force_diagram()
-    mw._show_element_diagrams(10)
+    mw.display.show_member(10)
 
-    window = mw._element_diagram_windows[0]
-    assert mw._current_display_units() is UnitSystem.SI_M_N
+    window = mw.display.member_windows[0]
+    assert mw.units.current() is UnitSystem.SI_M_N
 
     index = window._units.findData(UnitSystem.US_IN_KIP.value)
     assert index >= 0
     window._units.setCurrentIndex(index)
 
-    assert mw._current_display_units() is UnitSystem.US_IN_KIP
+    assert mw.units.current() is UnitSystem.US_IN_KIP
     assert "kip" in window._axial.value.text()
     assert "in" in window._distance.suffix()
 
@@ -237,4 +237,4 @@ def test_back_to_model_restores_the_plain_right_click(qtbot, monkeypatch) -> Non
     mw._on_canvas_context_menu(QPoint(20, 20))
 
     assert calls == [True]
-    assert mw._element_diagram_windows == []
+    assert mw.display.member_windows == []

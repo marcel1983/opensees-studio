@@ -149,7 +149,7 @@ def test_new_project_can_be_cancelled(qtbot, window, monkeypatch) -> None:  # ty
     before = window._vm.project
     _answer(monkeypatch, QMessageBox.StandardButton.Cancel)
 
-    window._on_new()
+    window.files.new_blank()
 
     assert window._vm.project is before
     assert [n.id for n in window._vm.project.nodes] == [1]
@@ -161,7 +161,7 @@ def test_new_project_proceeds_after_discard(qtbot, window, monkeypatch) -> None:
     before = window._vm.project
     _answer(monkeypatch, QMessageBox.StandardButton.Discard)
 
-    window._on_new()
+    window.files.new_blank()
 
     assert window._vm.project is not before
     assert window._vm.project.nodes == []
@@ -180,7 +180,7 @@ def test_open_can_be_cancelled_before_the_file_dialog(qtbot, window, monkeypatch
 
     monkeypatch.setattr(QFileDialog, "getOpenFileName", staticmethod(_get_open_file_name))
 
-    window._on_open()
+    window.files.open_file()
 
     # The prompt comes first: the user is not asked to pick a file and only
     # then told the model would be discarded.
@@ -202,7 +202,7 @@ def test_open_asks_and_then_opens(qtbot, window, monkeypatch, tmp_path) -> None:
         staticmethod(lambda *a, **k: (str(other), "")),
     )
 
-    window._on_open()
+    window.files.open_file()
 
     assert [n.id for n in window._vm.project.nodes] == [7]
     assert Path(window._vm.path) == other

@@ -50,7 +50,7 @@ def test_save_warns_but_preserves_invalid_case(qtbot, tmp_path, monkeypatch):
     window._vm._path = tmp_path / "invalid.osmodel"
     messages = []
     monkeypatch.setattr(QMessageBox, "warning", lambda *a: messages.append(a[2]))
-    window._on_save()
+    window.files.save()
     assert "missing pattern 99" in messages[0]
     assert window._vm.path.exists()
 

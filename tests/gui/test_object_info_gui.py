@@ -111,7 +111,7 @@ def test_the_viewport_title_says_what_is_displayed(window) -> None:  # type: ign
         node_disp={1: np.zeros((1, 3)), 2: np.zeros((1, 3))},
         element_forces={1: np.zeros((1, 6))},
     )
-    window._on_analysis_finished(results)
+    window.results_view.on_finished(results)
     label = window._main_canvas._result_label
     assert label.text().startswith("DEAD")
 

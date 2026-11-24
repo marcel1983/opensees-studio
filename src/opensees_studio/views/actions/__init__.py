@@ -6,12 +6,14 @@ can check them; :mod:`.registry` is the part that builds ``QAction`` objects.
 
 from __future__ import annotations
 
+from opensees_studio.views.actions.analyze import ANALYZE_ACTIONS
 from opensees_studio.views.actions.assign import ASSIGN_ACTIONS
 from opensees_studio.views.actions.define import DEFINE_ACTIONS
 from opensees_studio.views.actions.design import DESIGN_ACTIONS
 from opensees_studio.views.actions.display import DISPLAY_ACTIONS
 from opensees_studio.views.actions.edit import EDIT_ACTIONS
 from opensees_studio.views.actions.file import FILE_ACTIONS
+from opensees_studio.views.actions.options import OPTIONS_ACTIONS
 from opensees_studio.views.actions.select import SELECT_ACTIONS
 from opensees_studio.views.actions.spec import ActionSpec, ActionState, Needs
 from opensees_studio.views.actions.view import VIEW_ACTIONS
@@ -26,6 +28,8 @@ ALL_ACTIONS: tuple[ActionSpec, ...] = (
     *SELECT_ACTIONS,
     *VIEW_ACTIONS,
     *DISPLAY_ACTIONS,
+    *OPTIONS_ACTIONS,
+    *ANALYZE_ACTIONS,
 )
 
 __all__ = ["ALL_ACTIONS", "ActionSpec", "ActionState", "Needs"]

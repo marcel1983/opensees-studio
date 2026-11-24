@@ -68,7 +68,7 @@ def test_a_mechanism_is_reported_and_its_joints_selected(qtbot) -> None:  # type
     report = blocker.args[0]
     assert not report.stable and report.n_mechanisms == 1
     assert mw._canvas.selection.nodes == frozenset({3, 4})
-    box = mw._stability_box
+    box = mw.analysis.stability_box
     assert box is not None and box.icon() == QMessageBox.Icon.Warning
     assert "not statically stable" in box.text()
     assert "N3 Ux" in box.informativeText() or "N4 Ux" in box.informativeText()
@@ -81,8 +81,8 @@ def test_a_braced_truss_is_reported_stable(qtbot) -> None:  # type: ignore[no-un
     with qtbot.waitSignal(mw._stability.finished, timeout=60000) as blocker:
         mw._act_check_stability.trigger()
     assert blocker.args[0].stable
-    assert "statically stable" in mw._stability_box.text()
-    mw._stability_box.close()
+    assert "statically stable" in mw.analysis.stability_box.text()
+    mw.analysis.stability_box.close()
 
 
 @pytest.mark.gui
@@ -91,7 +91,7 @@ def test_an_incomplete_check_is_not_called_unstable(qtbot) -> None:  # type: ign
 
     mw = MainWindow()
     qtbot.addWidget(mw)
-    mw._on_stability_report(
+    mw.analysis.on_stability_report(
         StabilityReport(
             n_equations=5,
             rank=None,
@@ -100,6 +100,6 @@ def test_an_incomplete_check_is_not_called_unstable(qtbot) -> None:  # type: ign
             failure_reason="the sparse search only checked the lowest modes",
         )
     )
-    assert "incomplete" in mw._stability_box.text()
-    assert "not statically stable" not in mw._stability_box.text()
-    mw._stability_box.close()
+    assert "incomplete" in mw.analysis.stability_box.text()
+    assert "not statically stable" not in mw.analysis.stability_box.text()
+    mw.analysis.stability_box.close()

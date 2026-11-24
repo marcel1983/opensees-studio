@@ -35,7 +35,7 @@ def _window(qtbot, tmp_path):  # type: ignore[no-untyped-def]
 def test_the_caption_names_the_results_on_screen(qtbot, tmp_path) -> None:  # type: ignore[no-untyped-def]
     window = _window(qtbot, tmp_path)
 
-    window._on_analysis_finished(_results("DEAD"))
+    window.results_view.on_finished(_results("DEAD"))
 
     label = window._main_canvas._result_label
     assert label.isVisibleTo(window._main_canvas)
@@ -46,7 +46,7 @@ def test_the_caption_names_the_results_on_screen(qtbot, tmp_path) -> None:  # ty
 @pytest.mark.gui
 def test_going_back_to_the_model_clears_the_caption(qtbot, tmp_path) -> None:  # type: ignore[no-untyped-def]
     window = _window(qtbot, tmp_path)
-    window._on_analysis_finished(_results())
+    window.results_view.on_finished(_results())
 
     window.display.back_to_model()
 
@@ -58,13 +58,13 @@ def test_delete_all_results_clears_memory_and_the_file(qtbot, tmp_path, monkeypa
     from PySide6.QtWidgets import QMessageBox
 
     window = _window(qtbot, tmp_path)
-    window._on_analysis_finished(_results())
-    window._on_case_finished(_results())
+    window.results_view.on_finished(_results())
+    window.results_view.on_case_finished(_results())
     db = tmp_path / "model_results.sqlite"
     assert db.exists()
 
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
-    window._on_clear_results()
+    window.results_view.delete_all()
 
     assert not db.exists()
     assert window.results.latest is None
@@ -77,11 +77,11 @@ def test_delete_all_results_can_be_cancelled(qtbot, tmp_path, monkeypatch) -> No
     from PySide6.QtWidgets import QMessageBox
 
     window = _window(qtbot, tmp_path)
-    window._on_case_finished(_results())
+    window.results_view.on_case_finished(_results())
     db = tmp_path / "model_results.sqlite"
     assert db.exists()
 
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.No)
-    window._on_clear_results()
+    window.results_view.delete_all()
 
     assert db.exists()

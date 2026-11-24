@@ -140,12 +140,12 @@ def test_the_action_is_only_enabled_for_a_static_result_with_shells(qtbot) -> No
     mw._refresh_action_enablement()
     assert mw._act_shell_contours.isEnabled() is False  # no results yet
 
-    mw._on_analysis_finished(_results())
+    mw.results_view.on_finished(_results())
     mw._refresh_action_enablement()
     assert mw._act_shell_contours.isEnabled() is True
 
     shell_less = _window(qtbot, with_shell=False)
-    shell_less._on_analysis_finished(_results())
+    shell_less.results_view.on_finished(_results())
     shell_less._refresh_action_enablement()
     assert shell_less._act_shell_contours.isEnabled() is False
 
@@ -153,7 +153,7 @@ def test_the_action_is_only_enabled_for_a_static_result_with_shells(qtbot) -> No
 @pytest.mark.gui
 def test_showing_the_dock_paints_a_contour_and_closing_it_clears_it(qtbot) -> None:  # type: ignore[no-untyped-def]
     mw = _window(qtbot)
-    mw._on_analysis_finished(_results())
+    mw.results_view.on_finished(_results())
 
     mw.display.shell_contours()
 
@@ -177,7 +177,7 @@ def test_showing_the_dock_paints_a_contour_and_closing_it_clears_it(qtbot) -> No
 def test_the_step_produces_a_different_field(qtbot) -> None:  # type: ignore[no-untyped-def]
     """Step 1 has no moment yet; the last step has 4000."""
     mw = _window(qtbot)
-    mw._on_analysis_finished(_results())
+    mw.results_view.on_finished(_results())
     mw.display.shell_contours()
     view = mw.display.dock.widget()
 
@@ -191,7 +191,7 @@ def test_the_step_produces_a_different_field(qtbot) -> None:  # type: ignore[no-
 @pytest.mark.gui
 def test_a_display_unit_change_repaints_the_contour(qtbot) -> None:  # type: ignore[no-untyped-def]
     mw = _window(qtbot)
-    mw._on_analysis_finished(_results())
+    mw.results_view.on_finished(_results())
     mw.display.shell_contours()
 
     calls: list[tuple] = []
@@ -202,7 +202,7 @@ def test_a_display_unit_change_repaints_the_contour(qtbot) -> None:  # type: ign
         return original(*args, **kwargs)
 
     mw._contour_renderer.render = _spy  # type: ignore[method-assign]
-    mw._set_display_units(UnitSystem.US_IN_KIP)
+    mw.units.set_display(UnitSystem.US_IN_KIP)
 
     assert calls, "the contour was not repainted when the units changed"
     _args, kwargs = calls[-1]

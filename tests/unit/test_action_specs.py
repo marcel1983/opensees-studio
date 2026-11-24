@@ -59,11 +59,12 @@ def _methods(tree: ast.AST, class_suffix: str) -> set[str]:
 
 def test_every_handler_is_a_method_of_the_window_or_of_its_controller() -> None:
     window_methods = _methods(MAIN_WINDOW, "MainWindow")
+    # ``self.x = ...`` and the annotated ``self.x: XController = ...``.
     window_attributes = {
         target.attr
         for node in ast.walk(_main_window_class())
-        if isinstance(node, ast.Assign)
-        for target in node.targets
+        if isinstance(node, ast.Assign | ast.AnnAssign)
+        for target in (node.targets if isinstance(node, ast.Assign) else [node.target])
         if isinstance(target, ast.Attribute)
     }
     missing = []

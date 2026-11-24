@@ -8,7 +8,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QObject, Qt
+from PySide6.QtCore import QObject, QPoint, Qt
 from PySide6.QtWidgets import QDockWidget, QMessageBox
 
 from opensees_studio.core import UnitConverter, UnitSystem
@@ -22,9 +22,15 @@ from opensees_studio.services.deformation import (
     peak_static_displacement,
     static_to_deformation,
 )
+from opensees_studio.services.element_diagrams import (
+    ElementDiagramBundle,
+    combine_element_bundles,
+    element_diagram_bundle,
+)
 from opensees_studio.services.element_forces import ForceComponent
 from opensees_studio.services.element_forces import auto_scale as force_diagram_auto_scale
 from opensees_studio.services.results import (
+    CombinationResults,
     InfluenceLineResults,
     ModalResults,
     PushoverResults,
@@ -40,7 +46,7 @@ from opensees_studio.views.canvas3d.diagram_renderer import DiagramRenderer
 from opensees_studio.views.canvas3d.model_renderer import RendererMode
 from opensees_studio.views.canvas3d.shell_contour_renderer import ShellContourRenderer
 from opensees_studio.views.controllers.shell import Shell
-from opensees_studio.views.dialogs import InfluenceLineDialog
+from opensees_studio.views.dialogs import ElementDiagramWindow, InfluenceLineDialog
 from opensees_studio.views.docks import (
     DeformedShapeView,
     DesignRatioView,
@@ -52,6 +58,7 @@ from opensees_studio.views.docks import (
     ShellContourView,
     TimeHistoryView,
 )
+from opensees_studio.views.i18n import tr
 
 
 class DisplayController(QObject):
@@ -67,10 +74,12 @@ class DisplayController(QObject):
 
     ``results`` is the window's results session, and ``diagram``, ``contours``
     and ``ratios`` the overlays it draws on the main viewport. ``canvases``
-    lists every viewport (the caption goes on all of them), ``busy`` is the
-    window's wait cursor, ``select_rows`` selects what a mechanism moves and
-    ``close_member_windows`` closes the member diagram windows of a view that
-    is being replaced.
+    lists every viewport, the main one first (the caption goes on all of
+    them), ``busy`` is the window's wait cursor and ``select_rows`` selects
+    what a mechanism moves. A member diagram window can change the results on
+    screen and the display units: ``results_for_key`` resolves its choice,
+    ``show_results`` points the window at it, and ``display_units`` and
+    ``set_display_units`` are the window's.
     """
 
     def __init__(
@@ -84,7 +93,10 @@ class DisplayController(QObject):
         canvases: Callable[[], Iterable[ModelCanvas]],
         busy: Callable[[str], AbstractContextManager[None]],
         select_rows: Callable[[Sequence[int], Sequence[int]], None],
-        close_member_windows: Callable[[], None],
+        results_for_key: Callable[[str], object | None],
+        show_results: Callable[[object], None],
+        display_units: Callable[[], UnitSystem],
+        set_display_units: Callable[[UnitSystem], None],
     ) -> None:
         super().__init__(shell.window)
         self._shell = shell
@@ -97,7 +109,10 @@ class DisplayController(QObject):
         self._canvases = canvases
         self._busy = busy
         self._select_rows = select_rows
-        self._close_member_windows = close_member_windows
+        self._results_for_key = results_for_key
+        self._show_results = show_results
+        self._display_units = display_units
+        self._set_display_units = set_display_units
         #: The active post-processing dock, or None in the model view.
         self.dock: QDockWidget | None = None
         #: "force", "deformed" or "mode" while the canvas shows one of them.
@@ -105,6 +120,9 @@ class DisplayController(QObject):
         #: What the viewport is displaying ("Deformed Shape"), ahead of the case name.
         self.title: str | None = None
         self._units_refresh: Callable[[], None] | None = None  # re-show the dock in new units
+        #: The open member diagram windows (right-click on a member of a force
+        #: diagram or a deformed shape); they close with the view they belong to.
+        self.member_windows: list[ElementDiagramWindow] = []
 
     def refresh_units(self) -> bool:
         """Re-show the open view in the display units; False when none re-shows itself."""
@@ -112,6 +130,11 @@ class DisplayController(QObject):
             return False
         self._units_refresh()
         return True
+
+    def set_member_units(self, converter: UnitConverter) -> None:
+        """Show the open member diagram windows in the display units."""
+        for window in self.member_windows:
+            window.set_units(converter)
 
     def set_title(self, title: str | None) -> None:
         """Say what the viewport draws ("Deformed Shape"), ahead of the case's name."""
@@ -720,6 +743,276 @@ class DisplayController(QObject):
         _apply(0, 1.0, 1.0)
         self._shell.log("Mechanism: " + " ".join(m.description for m in modes))
 
+    # ── the diagrams of one member, in a window of its own ───────────
+    def open_member_at(self, pos: QPoint, canvas: ModelCanvas) -> bool:
+        """Open the clicked member's window, or return False for the normal menu.
+
+        The behaviour belongs to the post-processing views: without a force
+        diagram or a deformed shape on screen the right-click stays what it
+        always was.
+        """
+        if self.mode not in ("force", "deformed"):
+            return False
+        if canvas is not next(iter(self._canvases())):
+            return False
+        if self.mode == "force" and not self._diagram.is_drawn:
+            return False
+        project = self._vm.project
+        if project is None or self._results.static() is None:
+            return False
+        local = canvas.mapFromGlobal(pos)
+        element_id = canvas.frame_element_at(local.x(), local.y())
+        if element_id is None:
+            return False
+        self.show_member(element_id)
+        return True
+
+    def show_member(self, element_id: int) -> None:
+        """Build and show the diagram window of one frame member."""
+        bundle = self._member_bundle(element_id)
+        project = self._vm.project
+        if bundle is None or project is None:
+            return
+        converter = UnitConverter.of(project.meta)
+        choices = self._results.member_choices(self._vm.project)
+        current = self._results.current_key()
+        for window in self.member_windows:
+            if window.bundle.element_id == element_id:
+                window.set_bundle(bundle, converter)
+                window.set_result_choices(choices, current)
+                window.show()
+                window.raise_()
+                window.activateWindow()
+                return
+        window = ElementDiagramWindow(bundle, converter, self._window)
+        self.member_windows.append(window)
+        window.set_result_choices(choices, current)
+        window.resultChanged.connect(
+            lambda key, opened=window: self._on_member_result_changed(opened, key)
+        )
+        window.unitsChanged.connect(self._on_member_units_changed)
+        window.destroyed.connect(
+            lambda _object=None, opened=window: self._forget_member_window(opened)
+        )
+        window.show()
+        window.raise_()
+        window.activateWindow()
+        self._shell.log(f"Element {element_id}: opened its diagram window.")
+
+    def _member_bundle(self, element_id: int) -> ElementDiagramBundle | None:
+        """The current result's bundle for one member, or None when it has none."""
+        project = self._vm.project
+        if project is None:
+            return None
+        results = self._results.latest
+        case_name = results.combination_name if isinstance(results, CombinationResults) else None
+        if isinstance(results, CombinationResults) and self._results.is_envelope():
+            return combine_element_bundles(
+                element_diagram_bundle(
+                    project,
+                    results.max,
+                    element_id,
+                    label="Max",
+                    case_name=case_name,
+                ),
+                element_diagram_bundle(
+                    project,
+                    results.min,
+                    element_id,
+                    label="Min",
+                    case_name=case_name,
+                ),
+            )
+        static = self._results.static()
+        if static is None:
+            return None
+        # Stations read a static case's loads back; a combination bound has no
+        # single load pattern, so its curves stay linear.
+        return element_diagram_bundle(
+            project,
+            static,
+            element_id,
+            stations=isinstance(results, StaticResults),
+            case_name=case_name,
+        )
+
+    def _on_member_result_changed(self, window: ElementDiagramWindow, key: str) -> None:
+        """Switch the result from the member window, keeping that window open."""
+        results = self._results_for_key(key)
+        if results is None or not isinstance(results, StaticResults | CombinationResults):
+            window.set_result_choices(
+                self._results.member_choices(self._vm.project), self._results.current_key()
+            )
+            return
+        self._show_results(results)
+        self.refresh_units()
+        bundle = self._member_bundle(window.bundle.element_id)
+        project = self._vm.project
+        if bundle is None or project is None:
+            return
+        window.set_bundle(bundle, UnitConverter.of(project.meta))
+        window.set_result_choices(
+            self._results.member_choices(self._vm.project), self._results.current_key()
+        )
+
+    def _forget_member_window(self, window: ElementDiagramWindow) -> None:
+        """Drop a closed window from the references that keep it alive."""
+        if window in self.member_windows:
+            self.member_windows.remove(window)
+
+    def _on_member_units_changed(self, value: str) -> None:
+        """Change the display units from the member window's picker."""
+        try:
+            chosen = UnitSystem(value)
+        except ValueError:
+            return
+        if chosen is self._display_units():
+            return
+        self._set_display_units(chosen)
+
+    def close_member_windows(self) -> None:
+        """Close the member windows of a view that is being replaced."""
+        for window in list(self.member_windows):
+            window.close()
+        self.member_windows.clear()
+
+    # ── what the pointer is over ─────────────────────────────────────
+    def element_tooltips_enabled(self) -> bool:
+        """False while a deformed or a mode shape is drawn: they are read at the joints."""
+        return self.mode not in ("deformed", "mode")
+
+    def node_tooltip(self, node_id: int) -> str | None:
+        """Hover text for a joint: where it is, its restraint, mass, members and loads."""
+        from opensees_studio.core.hover import node_summary
+
+        project = self._vm.project
+        if project is None:
+            return None
+        text = None
+        if self.mode == "deformed":
+            text = self._deformed_node_tooltip(node_id)
+        elif self.mode == "mode":
+            text = self._mode_shape_node_tooltip(node_id)
+        return text if text is not None else node_summary(project, node_id)
+
+    @staticmethod
+    def _node_box(title: str, subtitle: str, rows: list[tuple[str, str, str]]) -> str:
+        """The rich-text box a joint's hover shows: a title, a line and a value table."""
+        from html import escape
+
+        cells = "".join(
+            f"<tr><td><b>{escape(label)}</b></td><td align='right'>&nbsp;{escape(value)}</td>"
+            f"<td>&nbsp;{escape(unit)}</td></tr>"
+            for label, value, unit in rows
+        )
+        return (
+            f"<b>{escape(title)}</b><br>{escape(subtitle)}"
+            f"<table cellspacing='0' cellpadding='1'>{cells}</table>"
+        )
+
+    def _joint_title(self, node_id: int) -> str:
+        project = self._vm.project
+        node = next((n for n in project.nodes if n.id == node_id), None) if project else None
+        title = tr("Joint {id}").format(id=node_id)
+        return f"{title} ({node.name})" if node is not None and node.name else title
+
+    def _mode_shape_node_tooltip(self, node_id: int) -> str | None:
+        """A box with the joint and its components in the mode the animator draws."""
+        from opensees_studio.core.hover import node_mode_shape
+
+        project = self._vm.project
+        results = self._results.latest
+        view = self.dock.widget() if self.dock is not None else None
+        if project is None or not isinstance(results, ModalResults):
+            return None
+        if not isinstance(view, ModeShapeAnimator):
+            return None
+        mode = view.current_mode() + 1
+        rows = node_mode_shape(project, results, node_id, mode)
+        if rows is None:
+            return None
+        periods = results.periods
+        subtitle = tr("Mode {n}").format(n=mode)
+        if mode - 1 < len(periods):
+            subtitle += f" · T = {float(periods[mode - 1]):.4g} s"
+        return self._node_box(
+            self._joint_title(node_id),
+            subtitle,
+            [(label, f"{value:.4g}", "") for label, value, _rotation in rows],
+        )
+
+    def _deformed_node_tooltip(self, node_id: int) -> str | None:
+        """A box with the joint and its displacements in the case the deformed shape draws."""
+        from opensees_studio.core.hover import node_displacements
+
+        project = self._vm.project
+        view = self.dock.widget() if self.dock is not None else None
+        bound = view.current_bound() if isinstance(view, DeformedShapeView) else "max"
+        results = self._results.static(bound)
+        if project is None or results is None:
+            return None
+        rows = node_displacements(project, results, node_id)
+        if rows is None:
+            return None
+        case = self._results.caption_for(self._vm.project, self._results.latest).split("  ·  ")[0]
+        if self._results.is_envelope():
+            case += " · " + (tr("Max") if bound == "max" else tr("Min"))
+        converter = UnitConverter.of(project.meta)
+        length = converter.labels.length
+        return self._node_box(
+            self._joint_title(node_id),
+            tr("Case: {name}").format(name=case),
+            [
+                (
+                    label,
+                    f"{value if rotation else value * converter.length:.6g}",
+                    "rad" if rotation else length,
+                )
+                for label, value, rotation in rows
+            ],
+        )
+
+    def element_tooltip(self, element_id: int) -> str | None:
+        """Hover text for the canvas: a bearing's key parameters, else the element summary."""
+        from opensees_studio.core import BEARING_CLASSES, SLIDING_BEARING_CLASSES
+        from opensees_studio.core.hover import element_summary
+
+        if self._vm.project is None:
+            return None
+        try:
+            el = self._vm.project.element(element_id)
+        except KeyError:
+            return None
+        if not isinstance(el, BEARING_CLASSES):
+            return element_summary(self._vm.project, element_id)
+        if isinstance(el, SLIDING_BEARING_CLASSES):
+            try:
+                friction = self._vm.project.friction_model(el.friction_model_id).type
+            except KeyError:
+                friction = "missing"
+            lines = [
+                f"{el.type} #{el.id}, nodes {el.nodes[0]}-{el.nodes[1]}",
+                f"Kinit = {el.k_init:g}, friction model #{el.friction_model_id} ({friction})",
+            ]
+            if el.type == "SingleFPBearing":
+                units = self._vm.project.meta.units
+                lines.append(
+                    f"Reff = {el.r_eff:g}, T = 2 pi sqrt(Reff / g) = "
+                    f"{el.isolated_period(units):.4g} s"
+                )
+            return "\n".join(lines)
+        lines = [
+            f"{el.type} #{el.id}, nodes {el.nodes[0]}-{el.nodes[1]}",
+            f"Kinit = {el.k_init:g}, Qd = {el.qd:g}, alpha1 = {el.alpha1:g}",
+            f"u_y = {el.yield_displacement:.6g}, F_y = {el.yield_force:.6g}",
+        ]
+        if el.alpha2:
+            lines.append(f"alpha2 = {el.alpha2:g}, mu = {el.mu:g}")
+        if el.type == "ElastomericBearingBoucWen":
+            lines.append(f"eta = {el.eta:g}, beta = {el.beta:g}, gamma = {el.gamma:g}")
+        return "\n".join(lines)
+
+    # ── leaving a view ───────────────────────────────────────────────
     def back_to_model(self) -> None:
         """Display → Back to Model View: close the view and clear every overlay."""
         self.tear_down()
@@ -741,4 +1034,4 @@ class DisplayController(QObject):
             # The next view names itself; until then the caption is the case alone.
             self.set_title(None)
         self._units_refresh = None
-        self._close_member_windows()
+        self.close_member_windows()

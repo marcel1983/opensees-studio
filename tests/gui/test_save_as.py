@@ -32,7 +32,7 @@ def _record_backed_project(project_dir: Path) -> Path:
 
 @pytest.mark.gui
 def test_file_save_as_rebases_record_paths(qtbot, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    import opensees_studio.views.main_window as mod
+    import opensees_studio.views.controllers.files as mod
     from opensees_studio.views.main_window import MainWindow
 
     src = _record_backed_project(tmp_path / "proj")
@@ -43,7 +43,7 @@ def test_file_save_as_rebases_record_paths(qtbot, tmp_path, monkeypatch) -> None
 
     window = MainWindow()
     qtbot.addWidget(window)
-    assert window.open_project(src)
+    assert window.files.open_project(src)
 
     window._act_save_as.trigger()
 

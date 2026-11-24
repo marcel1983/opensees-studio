@@ -11,11 +11,8 @@ from __future__ import annotations
 
 import contextlib
 from collections.abc import Iterator, Sequence
-from functools import partial
-from pathlib import Path
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar
 
-import shiboken6
 from PySide6.QtCore import QEvent, QPoint, QPointF, QSettings, QSignalBlocker, Qt, QTimer
 from PySide6.QtGui import (
     QAction,
@@ -29,11 +26,8 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QApplication,
-    QComboBox,
     QDialog,
     QDockWidget,
-    QFileDialog,
-    QInputDialog,
     QLabel,
     QMainWindow,
     QMenu,
@@ -41,17 +35,13 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QStackedWidget,
     QToolBar,
-    QToolButton,
     QTreeWidget,
     QTreeWidgetItem,
-    QWidget,
 )
 
 from opensees_studio import __version__
 from opensees_studio.commands import (
     AddNodesCommand,
-    MeshCommand,
-    SetProjectMetaCommand,
     SetRestraintCommand,
 )
 from opensees_studio.commands.generated import insert_generated
@@ -68,43 +58,27 @@ from opensees_studio.core import (
     make_default_truss_material,
     shortcut_profiles,
 )
-from opensees_studio.core.combinations import model_fingerprint
 from opensees_studio.core.generated import GeneratedModel
 from opensees_studio.core.help import ACTION_TOPICS, TOPIC_PROPERTY
 from opensees_studio.core.i18n import LANGUAGES
 from opensees_studio.core.materials.library import is_uniaxial
-from opensees_studio.core.mesh import pre_run_auto_mesh
-from opensees_studio.core.model_check import check_model
 from opensees_studio.core.object_info import element_info, node_info
 from opensees_studio.core.view_settings import ViewSettings
 from opensees_studio.services import (
-    PROJECT_FILE_SUFFIX,
     engines,
-    load_project,
     run_snapshot_path,
 )
-from opensees_studio.services.batch import StoredResults, stored_results
-from opensees_studio.services.combination import MissingCaseResultsError
-from opensees_studio.services.element_diagrams import (
-    ElementDiagramBundle,
-    combine_element_bundles,
-    element_diagram_bundle,
-)
-from opensees_studio.services.result_store import load_results
 from opensees_studio.services.results import (
-    CombinationResults,
     InfluenceLineResults,
     ModalResults,
     PushoverResults,
     ResponseSpectrumResults,
-    StaticResults,
     TransientResults,
 )
-from opensees_studio.services.results_db import database_path, delete_all_results, record_results
+from opensees_studio.services.results_db import database_path
 from opensees_studio.services.shell_fields import shell_elements
-from opensees_studio.services.stability import StabilityReport
 from opensees_studio.viewmodels import AnalysisRunner, ProjectViewModel
-from opensees_studio.viewmodels.results_session import ResultsSession, case_names
+from opensees_studio.viewmodels.results_session import ResultsSession
 from opensees_studio.viewmodels.stability_checker import StabilityChecker
 from opensees_studio.views.actions import ALL_ACTIONS, ActionState
 from opensees_studio.views.actions.registry import ActionRegistry
@@ -114,12 +88,14 @@ from opensees_studio.views.canvas3d.diagram_renderer import DiagramRenderer
 from opensees_studio.views.canvas3d.model_renderer import RendererMode
 from opensees_studio.views.canvas3d.shell_contour_renderer import ShellContourRenderer
 from opensees_studio.views.controllers import Shell
+from opensees_studio.views.controllers.analysis import AnalysisController
 from opensees_studio.views.controllers.areas import AreasController
 from opensees_studio.views.controllers.building import BuildingController
 from opensees_studio.views.controllers.design import DesignController
 from opensees_studio.views.controllers.display import DisplayController
 from opensees_studio.views.controllers.drawing import DrawingController
 from opensees_studio.views.controllers.exports import ExportsController
+from opensees_studio.views.controllers.files import FilesController
 from opensees_studio.views.controllers.generators import GeneratorsController
 from opensees_studio.views.controllers.grids import GridsController
 from opensees_studio.views.controllers.groups import GroupsController
@@ -128,38 +104,28 @@ from opensees_studio.views.controllers.joints import JointsController
 from opensees_studio.views.controllers.library import LibraryController
 from opensees_studio.views.controllers.loads import LoadsController
 from opensees_studio.views.controllers.members import MembersController
+from opensees_studio.views.controllers.model_lock import ModelLockController
 from opensees_studio.views.controllers.model_tools import ModelToolsController
 from opensees_studio.views.controllers.patterns import PatternsController
 from opensees_studio.views.controllers.property_edits import PropertyEditsController
+from opensees_studio.views.controllers.results_view import ResultsViewController
 from opensees_studio.views.controllers.select import SelectController
 from opensees_studio.views.controllers.transforms import TransformsController
+from opensees_studio.views.controllers.units import UnitsController
 from opensees_studio.views.controllers.viewport import ViewportController
+from opensees_studio.views.controllers.visibility import VisibilityController
 from opensees_studio.views.dialogs import (
     AddNodeDialog,
-    AnalysisCaseManagerDialog,
-    DisplayOptionsDialog,
-    ElementDiagramWindow,
     FrameWizard,
-    ModelCheckDialog,
     MoveDialog,
     PerformanceDialog,
-    ProjectInfoDialog,
     ReplicateDialog,
-    RunAnalysisDialog,
 )
-from opensees_studio.views.dialogs.batch_run import BatchRunDialog
 from opensees_studio.views.dialogs.load_combinations import LoadCombinationsDialog
-from opensees_studio.views.dialogs.load_display import LoadDisplayDialog
 from opensees_studio.views.dialogs.object_info import ObjectInfoDialog
-from opensees_studio.views.dialogs.reactions import ReactionsDialog
-from opensees_studio.views.dialogs.run_cases import RunCasesDialog
 from opensees_studio.views.dialogs.solver_settings import SolverSettingsDialog
-from opensees_studio.views.dialogs.view_colors import ViewColorsDialog
 from opensees_studio.views.docks import (
-    ModeShapeAnimator,
     PropertyEditorDock,
-    ReactionsPanel,
-    ResultsPanel,
 )
 from opensees_studio.views.help_window import HelpController
 from opensees_studio.views.i18n import stored_language, tr
@@ -286,19 +252,6 @@ class MainWindow(QMainWindow):
         #: The results in memory: the one on screen, every case's, the report's extras.
         self.results = ResultsSession()
         #: View → Grid Line View: (line label, window) while active, else None.
-        self._analysis_error_box: QMessageBox | None = None  # last failure report
-        self._stability_box: QMessageBox | None = None  # last stability check answer
-        self._run_dialog: RunAnalysisDialog | None = None  # open while a Run dialog is shown
-        # The model lock (Options → Lock Model): set when results arrive, so an
-        # edit asks before it makes them stale. The fingerprint is the model the
-        # lock protects; the index is the undo position it was last seen at.
-        self._model_locked = False
-        self._lock_fingerprint: str | None = None
-        self._lock_index = 0
-        self._lock_reverting = False
-        self._element_diagram_windows: list[ElementDiagramWindow] = []
-        self._show_node_labels = False
-        self._show_element_labels = False
         self._user_close_requested = False  # File → Quit sets this before close()
         #: Top-level menus by role, so the startup gate can disable them all at
         #: once instead of grey-out every action they contain.
@@ -354,22 +307,41 @@ class MainWindow(QMainWindow):
         #: Define → Coordinate System/Grids and Grid Wizard; View → Show Grids and labels.
         self.grids = GridsController(
             shell,
-            new_project=lambda: self._on_new(),
+            new_project=lambda: self.files.new_blank(),
             sync_actions=lambda: self._sync_grid_actions(),
         )
         self.groups = GroupsController(shell)
         self.imports = ImportsController(
             shell,
-            confirm_discard=lambda action: self._confirm_discard_changes(action),
-            apply_view_settings=lambda: self._apply_project_view_settings(),
+            confirm_discard=lambda action: self.files.confirm_discard(action),
+            apply_view_settings=lambda: self.visibility.restore_from_project(),
         )
-        self.library = LibraryController(shell, new_project=lambda: self._on_new())
+        self.library = LibraryController(shell, new_project=lambda: self.files.new_blank())
         self.members = MembersController(shell)
-        self.patterns = PatternsController(shell, new_project=self._on_new)
+        self.patterns = PatternsController(shell, new_project=lambda: self.files.new_blank())
         #: The camera, the working plane and its level, a grid line view, what is hidden.
         self.viewport = ViewportController(shell, action=lambda action_id: self.action(action_id))
+        #: What a viewport draws: the visibility ticks, the colours, the display options.
+        self.visibility: VisibilityController = VisibilityController(
+            shell, main_canvas=self._main_canvas
+        )
+        #: The results on screen: the case shown, its panels, its reactions.
+        self.results_view: ResultsViewController = ResultsViewController(
+            shell,
+            results=self.results,
+            lock=lambda: self.model_lock.lock_for_results(),
+            unlock=lambda: self.model_lock.set_locked(False),
+            set_caption=lambda text: self.display.set_caption(text),
+            back_to_model=lambda: self.display.back_to_model(),
+            show_reactions_dock=lambda: self._show_reactions_dock(),
+            action=lambda action_id: self.action(action_id),
+        )
+        #: The display units: Options → Set Display Units and the status bar's picker.
+        self.units = UnitsController(
+            shell, refresh=lambda converter: self._refresh_displayed_units(converter)
+        )
         #: The post-processing views of the Display menu and the dock each one opens.
-        self.display = DisplayController(
+        self.display: DisplayController = DisplayController(
             shell,
             results=self.results,
             diagram=self._diagram_renderer,
@@ -378,7 +350,40 @@ class MainWindow(QMainWindow):
             canvases=lambda: [self._main_canvas, *(w.canvas for w in self._view_windows)],
             busy=lambda message: self._busy(message),
             select_rows=lambda nodes, elements: self._select_report_row(nodes, elements),
-            close_member_windows=lambda: self._close_element_diagram_windows(),
+            results_for_key=lambda key: self.results_view.for_key(key),
+            show_results=lambda results: self.results_view.show(results),
+            display_units=lambda: self.units.current(),
+            set_display_units=lambda units: self.units.set_display(units),
+        )
+        #: Options → Lock Model: results make an edit of the model ask first.
+        self.model_lock: ModelLockController = ModelLockController(
+            shell,
+            results=self.results,
+            drop_results=lambda: self.results_view.drop(),
+            action=lambda action_id: self.action(action_id),
+        )
+        #: The Analyze menu: cases, the checks, the run and its failure report.
+        self.analysis = AnalysisController(
+            shell,
+            runner=self._runner,
+            stability=self._stability,
+            results=self.results,
+            finished=lambda results: self.results_view.on_finished(results),
+            new_project=lambda: self.files.new_blank(),
+            select_rows=lambda nodes, elements: self._select_report_row(nodes, elements),
+            show_mechanism=lambda finding: self.display.mechanism(finding),
+            console=lambda text: self._console.appendPlainText(text),
+        )
+        #: The project file: New, Open, Open Recent, Save, the recovery copy.
+        self.files: FilesController = FilesController(
+            shell,
+            recent=self._recent,
+            recent_changed=lambda: self._start_page.refresh(),
+            busy=lambda message: self._busy(message),
+            store_view=lambda: self.visibility.store_in_project(),
+            restore_view=lambda: self.visibility.restore_from_project(),
+            offer_stored_results=lambda: self.results_view.offer_stored(),
+            is_running=lambda: self._runner.is_running,
         )
         #: What the Properties dock changes in the model.
         self.property_edits = PropertyEditsController(shell)
@@ -411,7 +416,7 @@ class MainWindow(QMainWindow):
         self._refresh_action_enablement()
         self._restore_session_state()
         self._autosave_timer = QTimer(self)
-        self._autosave_timer.timeout.connect(self._autosave)
+        self._autosave_timer.timeout.connect(self.files.autosave)
         self._set_autosave(self._stored_autosave_minutes(), remember=False)
         # Every action exists now: its keys are the defaults a profile starts from.
         self._default_shortcuts = {
@@ -430,19 +435,20 @@ class MainWindow(QMainWindow):
         #: one and follows focus to a secondary ViewWindow when one is active.
         self._active_canvas: ModelCanvas = self._main_canvas
         # With no project the start page takes the viewport's place.
+        #: The recent projects, shared by the start page and File → Open Recent.
         self._recent = RecentFiles()
         self._start_page = StartPage(
             {
                 "new_model": self._on_new_model,
-                "new_3d": self._on_new,
+                "new_3d": lambda: self.files.new_blank(),
                 "new_2d": self._on_new_2d,
-                "new_truss": self._on_new_2d_truss,
-                "open": self._on_open,
+                "new_truss": lambda: self.files.new_2d_truss(),
+                "open": lambda: self.files.open_file(),
             },
             self._recent,
         )
-        self._start_page.openRequested.connect(self._on_open_recent)
-        self._start_page.recoverRequested.connect(self._on_recover_untitled)
+        self._start_page.openRequested.connect(lambda path: self.files.open_recent(path))
+        self._start_page.recoverRequested.connect(lambda: self.files.recover_untitled())
         untitled = run_snapshot_path(None)
         self._start_page.set_recovery(untitled if untitled.is_file() else None)
         self._central = QStackedWidget(self)
@@ -518,15 +524,13 @@ class MainWindow(QMainWindow):
         console_dock.setWidget(self._console)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, console_dock)
 
-        self._results_panel = ResultsPanel()
         results_dock = QDockWidget("Results", self)
         results_dock.setObjectName("resultsDock")
-        results_dock.setWidget(self._results_panel)
+        results_dock.setWidget(self.results_view.panel)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, results_dock)
-        self._reactions_panel = ReactionsPanel()
         self._reactions_dock = QDockWidget("Reactions", self)
         self._reactions_dock.setObjectName("reactionsDock")
-        self._reactions_dock.setWidget(self._reactions_panel)
+        self._reactions_dock.setWidget(self.results_view.reactions_panel)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self._reactions_dock)
         self.tabifyDockWidget(console_dock, results_dock)
         self.tabifyDockWidget(results_dock, self._reactions_dock)
@@ -650,17 +654,6 @@ class MainWindow(QMainWindow):
             action.setData(preset)
 
         # Display (post-processing)
-        self._act_select_results = QAction("Show Results &Of…", self)
-        self._act_show_reactions = QAction("Show &Reactions", self)
-        self._act_show_reactions.setCheckable(True)
-        self._act_reactions_table = QAction("Reactions &Table", self)
-        self._act_reactions_dialog = QAction("R&eactions…", self)
-        self._act_display_options = QAction("Display &Options…", self)
-        self._act_lock_model = QAction("&Lock Model", self, checkable=True)
-        self._act_lock_model.setToolTip(
-            "Locked: the model cannot be changed without asking. It locks itself when "
-            "an analysis has results; unlocking discards them."
-        )
         self._act_use_ribbon = QAction("Use &Ribbon", self, checkable=True)
         self._act_use_ribbon.setToolTip(
             "Show the ribbon: the menu commands regrouped by the modelling workflow. "
@@ -670,28 +663,15 @@ class MainWindow(QMainWindow):
         self._act_dark_mode.setToolTip(
             "Use the dark palette for the interface and the 3D viewport."
         )
-        self._act_show_load_assigns = QAction("Show &Load Assigns…", self)
-        self._act_show_load_assigns.setToolTip(
-            "Choose the load pattern drawn (or all, one colour each), the kinds of load "
-            "and whether their values are written."
-        )
 
         # Analyze
-        self._act_case_manager = QAction("&Cases…", self, shortcut="Ctrl+Shift+A")
-        self._act_check_model = QAction("Check &Model…", self)
-        self._act_check_model.setShortcut("F6")
-        self._act_run = QAction("&Run…", self, shortcut="F5")
         # Batch doors: the whole model in one child process, or a ticked subset.
-        self._act_run_all = QAction("Run &All Cases", self, shortcut=QKeySequence("Shift+F5"))
-        self._act_run_selected = QAction("Run Se&lected Cases…", self)
-        self._act_clear_results = QAction("Delete &All Results…", self)
         self._act_auto_mesh_frames = QAction("Auto-mesh &Frames Before Run", self)
         self._act_auto_mesh_frames.setCheckable(True)
         self._act_auto_mesh_frames.setChecked(True)
         self._act_auto_mesh_frames.setStatusTip(
             "Run divides frames where another frame ends on them or crosses them."
         )
-        self._act_check_stability = QAction("Check Model &Stability…", self)
         self._act_cancel_stability = QAction("&Cancel Stability Check", self)
 
         # View
@@ -740,7 +720,6 @@ class MainWindow(QMainWindow):
 
         # Per-viewport hiding. These never touch the project: the ids stay in
         # the model, they are only not drawn in this one canvas.
-        self._act_view_colors = QAction("&Colors…", self)
 
         # A second (third, …) viewport on the same project, in its own window.
         self._act_new_view = QAction(
@@ -750,7 +729,7 @@ class MainWindow(QMainWindow):
         self._act_close_view.setEnabled(False)
         self._act_reset_layout = QAction("&Reset Window Layout", self)
 
-        # Visibility toggles, one per ViewSettings field. _sync_visibility_actions
+        # Visibility toggles, one per ViewSettings field. VisibilityController
         # keeps their ticks truthful after any change, whichever path made it.
         self._act_vis_grids = QAction("Grids", self, checkable=True, checked=True)
         self._act_vis_grid_labels = QAction("Grid Labels", self, checkable=True, checked=True)
@@ -776,7 +755,6 @@ class MainWindow(QMainWindow):
         self._act_help_contents = QAction("&Help Contents\tF1", self)
         self._act_shortcuts = QAction("&Keyboard Shortcuts…", self)
         self._act_performance = QAction("&Performance monitor…", self)
-        self._act_set_units = QAction("Set Display &Units…", self)
         self._act_solver_settings = QAction("&Solver…", self)
 
     def _annotate_help_topics(self) -> None:
@@ -814,7 +792,9 @@ class MainWindow(QMainWindow):
             ]
         )
         self._menu_recent = m_file.addMenu("Open &Recent")
-        self._menu_recent.aboutToShow.connect(self._fill_recent_menu)
+        self._menu_recent.aboutToShow.connect(
+            lambda: self.files.fill_recent_menu(self._menu_recent)
+        )
         self._menu_recent.menuAction().setProperty(TOPIC_PROPERTY, "file.recent")
         m_file.addSeparator()
         m_file.addActions([act("file.save"), act("file.save_as")])
@@ -973,30 +953,34 @@ class MainWindow(QMainWindow):
         m_assign.addAction(self.action("assign.group"))
 
         m_analyze = mb.addMenu("&Analyze")
-        m_analyze.addAction(self._act_case_manager)
+        m_analyze.addAction(self.action("analyze.case_manager"))
         m_analyze.addSeparator()
-        m_analyze.addAction(self._act_check_model)
-        m_analyze.addAction(self._act_check_stability)
+        m_analyze.addAction(self.action("analyze.check_model"))
+        m_analyze.addAction(self.action("analyze.check_stability"))
         m_analyze.addAction(self._act_cancel_stability)
-        m_analyze.addAction(self._act_run)
+        m_analyze.addAction(self.action("analyze.run"))
         m_analyze.addAction(self._act_auto_mesh_frames)
         m_analyze.addSeparator()
-        m_analyze.addAction(self._act_run_all)
-        m_analyze.addAction(self._act_run_selected)
+        m_analyze.addAction(self.action("analyze.run_all"))
+        m_analyze.addAction(self.action("analyze.run_selected"))
         m_analyze.addSeparator()
-        m_analyze.addAction(self._act_clear_results)
+        m_analyze.addAction(self.action("analyze.clear_results"))
 
         m_display = mb.addMenu("&Display")
-        m_display.addAction(self._act_show_load_assigns)
+        m_display.addAction(self.action("display.show_load_assigns"))
         m_display.addSeparator()
-        m_display.addAction(self._act_select_results)
+        m_display.addAction(self.action("display.select_results"))
         m_display.addSeparator()
         m_display.addActions(
             [self.action("display.show_deformed"), self.action("display.show_mode_shape")]
         )
         m_display.addAction(self.action("display.show_force_diagram"))
         m_display.addActions(
-            [self._act_show_reactions, self._act_reactions_table, self._act_reactions_dialog]
+            [
+                self.action("display.show_reactions"),
+                self.action("display.reactions_table"),
+                self.action("display.reactions_dialog"),
+            ]
         )
         m_display.addAction(self.action("display.shell_contours"))
         m_display.addSeparator()
@@ -1007,7 +991,7 @@ class MainWindow(QMainWindow):
         m_display.addAction(self.action("display.influence_line"))
         m_display.addAction(self.action("display.show_response_spectrum"))
         m_display.addSeparator()
-        m_display.addAction(self._act_display_options)
+        m_display.addAction(self.action("display.display_options"))
         m_display.addSeparator()
         m_display.addAction(self.action("display.back_to_model"))
 
@@ -1123,7 +1107,7 @@ class MainWindow(QMainWindow):
         m_view.addAction(self.action("view.show_all_objects"))
         m_view.addSeparator()
         m_view.addAction(self.action("view.grid_line_view"))
-        m_view.addAction(self._act_view_colors)
+        m_view.addAction(self.action("view.colors"))
         m_view.addSeparator()
         m_view.addAction(self._act_new_view)
         m_view.addAction(self._act_close_view)
@@ -1152,9 +1136,9 @@ class MainWindow(QMainWindow):
         )
 
         m_options = mb.addMenu("&Options")
-        m_options.addAction(self._act_set_units)
+        m_options.addAction(self.action("options.set_units"))
         m_options.addAction(self._act_solver_settings)
-        m_options.addAction(self._act_lock_model)
+        m_options.addAction(self.action("options.lock_model"))
         m_options.addAction(self._act_use_ribbon)
         m_options.addAction(self._act_dark_mode)
         m_language = m_options.addMenu("&Language")
@@ -1250,28 +1234,10 @@ class MainWindow(QMainWindow):
         # Which results case the viewport represents: the layers (deformed
         # shape, diagrams, reactions) follow it.
         tb.addWidget(QLabel("Case: "))
-        self._case_combo = QComboBox()
-        self._case_combo.setMinimumWidth(190)
-        self._case_combo.setToolTip(
-            "Results case shown in the viewport. Deformed shape, force diagram, "
-            "contours and reactions all read this case."
-        )
-        self._case_combo.currentIndexChanged.connect(self._on_case_changed)
-        tb.addWidget(self._case_combo)
-        self._step_back = QToolButton()
-        self._step_back.setText("\u25c0")
-        self._step_back.setToolTip("Previous step of this case")
-        self._step_back.setEnabled(False)
-        self._step_back.clicked.connect(lambda: self._shift_step(-1))
-        tb.addWidget(self._step_back)
-        self._step_forward = QToolButton()
-        self._step_forward.setText("\u25b6")
-        self._step_forward.setToolTip("Next step of this case")
-        self._step_forward.setEnabled(False)
-        self._step_forward.clicked.connect(lambda: self._shift_step(1))
-        tb.addWidget(self._step_forward)
-        self._step_label = QLabel("")
-        tb.addWidget(self._step_label)
+        tb.addWidget(self.results_view.case_combo)
+        tb.addWidget(self.results_view.step_back)
+        tb.addWidget(self.results_view.step_forward)
+        tb.addWidget(self.results_view.step_label)
         tb.addSeparator()
         tb.addAction(self._act_toggle_parallel)
         tb.addAction(self._act_show_extruded)
@@ -1421,29 +1387,14 @@ class MainWindow(QMainWindow):
         self._status_label = QLabel("No project")
         self.statusBar().addPermanentWidget(self._status_label)
         # The model lock, where SAP2000 users look for the padlock.
-        self._lock_button = QToolButton()
-        self._lock_button.setCheckable(True)
-        self._lock_button.setAutoRaise(True)
-        self._lock_button.setText(tr("Unlocked"))
-        self._lock_button.setToolTip(self._act_lock_model.toolTip())
-        self._lock_button.clicked.connect(self._act_lock_model.trigger)
-        self.statusBar().addPermanentWidget(self._lock_button)
+        self.model_lock.button.setToolTip(self.action("options.lock_model").toolTip())
+        self.model_lock.button.clicked.connect(self.action("options.lock_model").trigger)
+        self.statusBar().addPermanentWidget(self.model_lock.button)
 
-        # SAP2000-style bottom-right unit picker. Drives the same state
-        # as Options → Set Display Units — changes here are instantly
-        # reflected in the menu dialog (and vice-versa).
-        self._units_combo = QComboBox()
-        self._units_combo.setToolTip(
-            "Display units — results, diagrams and tables convert to this "
-            "system. The model keeps the units its values were entered in."
-        )
-        for u in UnitSystem:
-            self._units_combo.addItem(u.value, u)
-        self._units_combo.currentIndexChanged.connect(
-            self._on_units_combo_changed,
-        )
+        # SAP2000-style bottom-right unit picker: the same state as
+        # Options → Set Display Units.
         self.statusBar().addPermanentWidget(QLabel("Units:"))
-        self.statusBar().addPermanentWidget(self._units_combo)
+        self.statusBar().addPermanentWidget(self.units.combo)
 
     # ── ribbon ────────────────────────────────────────────────────
     #: ribbon tab → the help page the Ayuda panel shows.
@@ -1587,88 +1538,6 @@ class MainWindow(QMainWindow):
 
         self.statusBar().showMessage(tr("Ready"))
 
-    def _on_units_combo_changed(self, _idx: int) -> None:
-        """Status-bar unit picker → ``project.meta.display_units``.
-
-        Qt stores the userData as a bare string (UnitSystem inherits
-        from str), so we re-cast to the enum before writing through
-        and logging. The model's own system is untouched, and every view
-        that shows a number is refreshed with the new conversion.
-        """
-        if self._vm.project is None:
-            return
-
-        raw = self._units_combo.currentData()
-        if raw is None:
-            return
-        chosen = raw if isinstance(raw, UnitSystem) else UnitSystem(str(raw))
-        if chosen is self._current_display_units():
-            return
-        self._set_display_units(chosen)
-
-    def _current_display_units(self) -> UnitSystem:
-        """The system results are shown in (the model's own when none was picked)."""
-        if self._vm.project is None:
-            return UnitSystem.SI_M_N
-        meta = self._vm.project.meta
-        return meta.display_units if meta.display_units is not None else meta.units
-
-    def _set_display_units(self, chosen: UnitSystem) -> None:
-        """Change the display system and refresh everything that shows a number."""
-        if self._vm.project is None:
-            return
-        self._vm.project.meta.display_units = chosen
-        self._vm.mark_dirty()
-        self._sync_units_combo()
-        self._log(f"Display units set to {chosen.value}.")
-        self._apply_display_units()
-
-    def _apply_display_units(self) -> None:
-        """Re-render every result view in the project's current display units.
-
-        The model is untouched — OpenSees numbers do not move — but each number
-        read off a diagram, table or curve is converted, so a unit change is
-        visible without re-running anything.
-        """
-        if self._vm.project is None:
-            return
-        converter = UnitConverter.of(self._vm.project.meta)
-        # Results panel: displacements, reactions, element forces, curves.
-        self._results_panel.refresh(self._vm.project)
-        # Active post-processing dock (diagram, deformed shape, plots).
-        if not self.display.refresh_units() and self.results.latest is not None:
-            self._canvas.render()
-        for window in self._element_diagram_windows:
-            window.set_units(converter)
-        self._log(
-            f"Displayed values converted to {converter.target.value} (model units unchanged).",
-        )
-
-    def _sync_units_combo(self) -> None:
-        """Reflect the project's current display units in the status-bar combo.
-
-        Called after project load / menu-based unit change so the
-        status-bar widget stays consistent with the model state. When the
-        display system differs from the model's, the tooltip says so — the
-        typed values are in the model's system, not in the picker's.
-        """
-        if self._vm.project is None:
-            return
-        target = self._current_display_units()
-        idx = self._units_combo.findData(target)
-        if idx >= 0 and idx != self._units_combo.currentIndex():
-            self._units_combo.blockSignals(True)
-            self._units_combo.setCurrentIndex(idx)
-            self._units_combo.blockSignals(False)
-        model = self._vm.project.meta.units
-        tooltip = (
-            "Display units — results, diagrams and tables convert to this "
-            "system. The model keeps the units its values were entered in."
-        )
-        if target is not model:
-            tooltip += f"  Model units: {model.value} — typed values are unchanged."
-        self._units_combo.setToolTip(tooltip)
-
     def _wire(self) -> None:
         # File and every other declared command (views/actions).
         self._actions.wire(self)
@@ -1676,7 +1545,6 @@ class MainWindow(QMainWindow):
         self._act_help_contents.triggered.connect(self._on_help_contents)
         self._act_shortcuts.triggered.connect(self._on_shortcuts)
         self._act_performance.triggered.connect(self._on_performance)
-        self._act_set_units.triggered.connect(self._on_set_units)
         self._act_solver_settings.triggered.connect(self._on_solver_settings)
 
         # Edit
@@ -1725,20 +1593,13 @@ class MainWindow(QMainWindow):
         self._act_custom_commands.triggered.connect(self._on_custom_commands)
 
         # Analyze
-        self._act_case_manager.triggered.connect(self._on_case_manager)
-        self._act_check_model.triggered.connect(self._on_check_model)
-        self._act_run.triggered.connect(self._on_run_analysis)
-        self._act_run_all.triggered.connect(self._on_run_all_cases)
-        self._act_run_selected.triggered.connect(self._on_run_selected_cases)
-        self._act_clear_results.triggered.connect(self._on_clear_results)
-        self._act_auto_mesh_frames.toggled.connect(self._on_toggle_auto_mesh_frames)
+        self._act_auto_mesh_frames.toggled.connect(self.analysis.toggle_auto_mesh_frames)
         self._act_dark_mode.toggled.connect(self._apply_dark_mode)
-        self._act_check_stability.triggered.connect(self._on_check_stability)
         self._act_cancel_stability.triggered.connect(self._stability.cancel)
         self._stability.log.connect(self._log)
-        self._stability.progress.connect(self._on_stability_progress)
-        self._stability.finished.connect(self._on_stability_report)
-        self._stability.failed.connect(self._on_stability_failed)
+        self._stability.progress.connect(self.analysis.on_stability_progress)
+        self._stability.finished.connect(self.analysis.on_stability_report)
+        self._stability.failed.connect(self.analysis.on_stability_failed)
         self._stability.runningChanged.connect(self._on_stability_running_changed)
         # The runner's own flag flips to False only after ``finished`` has been
         # handled (teardown emits it), so the batch actions would stay disabled
@@ -1746,20 +1607,13 @@ class MainWindow(QMainWindow):
         self._runner.runningChanged.connect(self._on_runner_running_changed)
 
         # Display
-        self._act_select_results.triggered.connect(self._on_select_results)
-        self._act_show_reactions.toggled.connect(self._on_show_reactions)
-        self._act_reactions_table.triggered.connect(self._on_reactions_table)
-        self._act_reactions_dialog.triggered.connect(self._on_reactions_dialog)
-        self._act_display_options.triggered.connect(self._on_display_options)
-        self._act_show_load_assigns.triggered.connect(self._on_show_load_assigns)
-        self._act_lock_model.triggered.connect(self._on_lock_model_triggered)
-        self._vm.undo_stack.indexChanged.connect(self._on_undo_index_changed)
+        self._vm.undo_stack.indexChanged.connect(self.model_lock.on_undo_index_changed)
 
         # AnalysisRunner: stream log to console + show results in panel
         self._runner.log.connect(self._console.appendPlainText)
-        self._runner.caseFinished.connect(self._on_case_finished)
-        self._runner.finished.connect(self._on_analysis_finished)
-        self._runner.failed.connect(self._on_analysis_failed)
+        self._runner.caseFinished.connect(self.results_view.on_case_finished)
+        self._runner.finished.connect(self.results_view.on_finished)
+        self._runner.failed.connect(self.analysis.on_failed)
         self._runner.cancelled.connect(lambda: self._log("Analysis cancelled."))
 
         # View
@@ -1773,33 +1627,31 @@ class MainWindow(QMainWindow):
         self._act_zoom_out.triggered.connect(lambda: self._canvas.zoom_out())
         self._act_zoom_window.toggled.connect(self._on_zoom_window)
         self._canvas.zoomWindowFinished.connect(lambda: self._act_zoom_window.setChecked(False))
-        self._act_view_colors.triggered.connect(self._on_view_colors)
         self._act_new_view.triggered.connect(self._on_new_view_window)
         self._act_reset_layout.triggered.connect(self._on_reset_layout)
         self._act_close_view.triggered.connect(self._on_close_view_window)
-        # "Show Extruded Sections" and its Visibility twin are the same state,
-        # so both drive it and _sync_visibility_actions keeps both ticked.
-        self._act_show_extruded.toggled.connect(self._on_vis_extruded)
-        for mode, action in self._color_by_actions.items():
-            action.triggered.connect(lambda _=False, mode=mode: self._on_color_by(mode))
-        self._act_vis_extruded.toggled.connect(self._on_vis_extruded)
-        for action, field in (
-            (self._act_vis_grids, "show_grids"),
-            (self._act_vis_grid_labels, "show_grid_labels"),
-            (self._act_vis_nodes, "show_nodes"),
-            (self._act_vis_frames, "show_frames"),
-            (self._act_vis_surfaces, "show_surfaces"),
-            (self._act_vis_supports, "show_supports"),
-            (self._act_vis_footings, "show_footings"),
-            (self._act_vis_constraints, "show_constraints"),
-            (self._act_vis_frame_assignments, "show_frame_assignments"),
-            (self._act_vis_releases, "show_releases"),
-            (self._act_vis_loads, "show_loads"),
-            (self._act_show_local_axes, "show_local_axes"),
-        ):
-            action.toggled.connect(partial(self._on_visibility_toggle, field))
-        self._act_vis_node_labels.toggled.connect(self._on_vis_node_labels)
-        self._act_vis_element_labels.toggled.connect(self._on_vis_element_labels)
+        # One tick per ViewSettings field. "Show Extruded Sections" and its
+        # Visibility twin are the same field, so both drive it and both tick.
+        self.visibility.attach(
+            toggles={
+                "show_grids": [self._act_vis_grids],
+                "show_grid_labels": [self._act_vis_grid_labels],
+                "show_nodes": [self._act_vis_nodes],
+                "show_frames": [self._act_vis_frames],
+                "show_surfaces": [self._act_vis_surfaces],
+                "show_supports": [self._act_vis_supports],
+                "show_footings": [self._act_vis_footings],
+                "show_constraints": [self._act_vis_constraints],
+                "show_frame_assignments": [self._act_vis_frame_assignments],
+                "show_releases": [self._act_vis_releases],
+                "show_loads": [self._act_vis_loads],
+                "show_local_axes": [self._act_show_local_axes],
+                "show_node_labels": [self._act_vis_node_labels],
+                "show_element_labels": [self._act_vis_element_labels],
+                "show_extruded": [self._act_vis_extruded, self._act_show_extruded],
+            },
+            color_by=self._color_by_actions,
+        )
 
         # ViewModel
         self._vm.projectChanged.connect(self._on_project_changed)
@@ -1809,13 +1661,11 @@ class MainWindow(QMainWindow):
 
         # Selection → properties + action enablement
         self._canvas.selection.selectionChanged.connect(self._on_selection_changed)
-        self._canvas.element_tooltip = self.element_tooltip
-        self._canvas.node_tooltip = self.node_tooltip
+        self._canvas.element_tooltip = self.display.element_tooltip
+        self._canvas.node_tooltip = self.display.node_tooltip
         # The deformed shape and the mode shapes are read at the joints: the
         # members would only get in the way of the pointer there.
-        self._canvas.element_tooltips_enabled = lambda: (
-            self.display.mode not in ("deformed", "mode")
-        )
+        self._canvas.element_tooltips_enabled = self.display.element_tooltips_enabled
 
         # Contextual help: F1 anywhere, on the topic of what is on screen.
         self._annotate_help_topics()
@@ -1823,11 +1673,6 @@ class MainWindow(QMainWindow):
         self._help_controller.install()
 
     # ── slots: file ──────────────────────────────────────────────────
-    def _on_new(self) -> None:
-        if not self._confirm_discard_changes("Creating a new project"):
-            return
-        self._vm.new_project(dead_case=True, default_materials=True)
-
     def _on_new_model(self) -> None:
         """File → New Model: units and a template, as SAP2000 starts a model."""
         from opensees_studio.views.dialogs.new_model import NewModelDialog
@@ -1840,7 +1685,7 @@ class MainWindow(QMainWindow):
         dlg = NewModelDialog(units, parent=self)
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
-        if not self._confirm_discard_changes("Creating a new model"):
+        if not self.files.confirm_discard("Creating a new model"):
             return
         units = dlg.units()
         QSettings().setValue(NEW_MODEL_UNITS_KEY, units.value)
@@ -1912,184 +1757,11 @@ class MainWindow(QMainWindow):
         turns "new 2D frame" into a frame. Cancelling leaves the empty project,
         which is still the right start for drawing by hand.
         """
-        if not self._confirm_discard_changes("Creating a new 2D frame"):
+        if not self.files.confirm_discard("Creating a new 2D frame"):
             return
         self._vm.new_project(ndm=2, ndf=3, dead_case=True, default_materials=True)
         self._log("New 2D frame project (ndm = 2, ndf = 3).")
         self._create_portal_frame(with_grid=True)
-
-    def _on_new_2d_truss(self) -> None:
-        """Planar truss model — (ndm=2, ndf=2): only Ux, Uz per joint (the X-Z plane).
-
-        Matches OpenSees's ``model BasicBuilder -ndm 2 -ndf 2`` from
-        the Basic Truss Example and keeps the stiffness matrix well
-        posed (no empty rotational rows).
-        """
-        if not self._confirm_discard_changes("Creating a new project"):
-            return
-        self._vm.new_project(ndm=2, ndf=2, dead_case=True, default_materials=True)
-        self._log("New empty project.")
-
-    def _on_open(self) -> None:
-        if not self._confirm_discard_changes("Opening another project"):
-            return
-        path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Open project",
-            "",
-            f"OpenSees Studio model (*{PROJECT_FILE_SUFFIX});;All files (*)",
-        )
-        if not path:
-            return
-        self.open_project(path)
-
-    def _on_open_recent(self, path: str) -> None:
-        """File → Open Recent, or a project picked on the start page."""
-        if not self._confirm_discard_changes("Opening another project"):
-            return
-        self.open_project(path)
-
-    def _fill_recent_menu(self) -> None:
-        """Rebuild File → Open Recent from the stored list each time it opens."""
-        menu = self._menu_recent
-        menu.clear()
-        paths = self._recent.paths()
-        for number, path in enumerate(paths, 1):
-            action = menu.addAction(f"&{number % 10} {path.name}")
-            action.setToolTip(str(path))
-            action.setStatusTip(str(path))
-            action.triggered.connect(lambda _checked=False, p=str(path): self._on_open_recent(p))
-        if not paths:
-            menu.addAction("No recent projects").setEnabled(False)
-        menu.addSeparator()
-        clear = menu.addAction("&Clear List")
-        clear.setEnabled(bool(paths))
-        clear.triggered.connect(self._on_clear_recent)
-
-    def _on_clear_recent(self) -> None:
-        self._recent.clear()
-        self._start_page.refresh()
-
-    def open_project(self, path: str | Path) -> bool:
-        """Open ``path``; offer to restore a newer pre-run snapshot if one exists.
-
-        Returns True when the project was opened (with or without the
-        recovered changes).
-        """
-        try:
-            with self._busy(f"Opening {Path(path).name}…"):
-                self._vm.open(path)
-            self._log(f"Opened: {path}")
-        except Exception as exc:
-            QMessageBox.critical(self, "Open failed", str(exc))
-            return False
-        self._recent.add(path)
-        snapshot = self._vm.pending_run_snapshot()
-        if snapshot is None:
-            self._apply_project_view_settings()
-            self._confirm_custom_commands()
-            self._offer_stored_results()
-            return True
-        if self._ask_restore_snapshot(snapshot):
-            try:
-                self._vm.restore_run_snapshot()
-                self._log(f"Restored unsaved changes from {snapshot.name} (not yet saved).")
-            except Exception as exc:
-                QMessageBox.critical(self, "Restore failed", str(exc))
-        else:
-            self._vm.discard_run_snapshot()
-            self._log(f"Discarded {snapshot.name}.")
-        self._apply_project_view_settings()
-        self._confirm_custom_commands()
-        self._offer_stored_results()
-        return True
-
-    def _offer_stored_results(self) -> None:
-        """Offer the results a batch stored for this model, so nothing has to run again."""
-        stored = stored_results(self._vm.path, self._vm.project)
-        if stored is None:
-            return
-        answer = QMessageBox.question(
-            self,
-            "Stored results",
-            f"Results of {len(stored.entries)} case(s) from a batch run "
-            f"({stored.finished_at or 'time unknown'}) are stored for this model, and the "
-            "model has not changed since.\n\nLoad them to view without running again?\n\n"
-            f"Folder: {stored.out_dir}",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.Yes,
-        )
-        if answer == QMessageBox.StandardButton.Yes:
-            self.load_stored_results(stored)
-
-    def load_stored_results(self, stored: StoredResults) -> int:
-        """Load every case of ``stored`` as if it had just run; show the last one.
-
-        They are already in the results database, so nothing is recorded again.
-        Returns how many cases loaded.
-        """
-        loaded = []
-        for entry in stored.entries:
-            try:
-                results = load_results(entry, stored.out_dir)
-            except Exception as exc:
-                self._log(
-                    f"Warning: stored results of case {entry.get('case_id')} unreadable: {exc}"
-                )
-                continue
-            self._keep_case_results(results)
-            loaded.append(results)
-        if loaded:
-            self._display_results(loaded[-1])
-            self._log(f"Loaded {len(loaded)} stored case result(s) from {stored.out_dir}.")
-        return len(loaded)
-
-    def _on_run_batch(self) -> None:
-        """File → Run Batch…"""
-        start_dir = self._vm.path.parent if self._vm.path is not None else None
-        dlg = BatchRunDialog(self, start_dir=start_dir)
-        try:
-            dlg.exec()
-        finally:
-            dlg.deleteLater()
-
-    def _confirm_custom_commands(self) -> None:
-        """A file's custom Python blocks run only once the user trusts them."""
-        project = self._vm.project
-        blocks = [b for b in project.custom_commands if b.enabled] if project is not None else []
-        if not blocks:
-            return
-        names = ", ".join(b.name or str(b.id) for b in blocks)
-        answer = QMessageBox.warning(
-            self,
-            "Custom OpenSees commands",
-            f"This project contains {len(blocks)} custom Python block(s) ({names}) that run "
-            "on this computer when the model is analysed.\n\nRun them only if you trust "
-            "where the file came from. Enable them?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        if answer != QMessageBox.StandardButton.Yes:
-            for block in blocks:
-                block.enabled = False
-            self._log(
-                f"Custom command blocks disabled: {names}. "
-                "Enable them in Define → Custom OpenSees Commands."
-            )
-
-    def _ask_restore_snapshot(self, snapshot: Path) -> bool:
-        """Ask whether the newer pre-run snapshot should replace the file's content."""
-        answer = QMessageBox.question(
-            self,
-            "Recover unsaved changes",
-            "A snapshot written before the last analysis run is newer than this "
-            "project file.\n\nRestore unsaved changes from the last analysis run?\n\n"
-            f"Snapshot: {snapshot}\n"
-            "Yes loads the snapshot as unsaved changes; No deletes it.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.Yes,
-        )
-        return answer == QMessageBox.StandardButton.Yes
 
     def closeEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         """Close: confirm unsaved work for a user-initiated close only.
@@ -2102,7 +1774,7 @@ class MainWindow(QMainWindow):
         """
         user_initiated = event.spontaneous() or self._user_close_requested
         self._user_close_requested = False
-        if user_initiated and not self._confirm_discard_changes("Closing the application"):
+        if user_initiated and not self.files.confirm_discard("Closing the application"):
             event.ignore()
             return
         self._vm.discard_run_snapshot()
@@ -2124,7 +1796,7 @@ class MainWindow(QMainWindow):
                 if controller is not None:
                     controller.set_canvas(main)
                 self._act_close_view.setEnabled(False)
-                self._sync_visibility_actions()
+                self.visibility.sync_actions()
                 self._refresh_action_enablement()
         super().changeEvent(event)
 
@@ -2133,91 +1805,11 @@ class MainWindow(QMainWindow):
         self._user_close_requested = True
         self.close()
 
-    def _confirm_discard_changes(self, action: str) -> bool:
-        """Ask before throwing away unsaved work. True when it is safe to go on.
-
-        ``is_dirty`` used to drive only the ``*`` in the window title, so
-        closing, opening and File → New dropped the model without a word.
-        Returns False when the user cancels, or chooses Save and the save
-        does not go through (dialog cancelled, write failed).
-        """
-        if self._vm.project is None or not self._vm.is_dirty:
-            return True
-        answer = QMessageBox.warning(
-            self,
-            "Unsaved changes",
-            f"{action} will discard changes that have not been saved.\n\nSave the project first?",
-            QMessageBox.StandardButton.Save
-            | QMessageBox.StandardButton.Discard
-            | QMessageBox.StandardButton.Cancel,
-            QMessageBox.StandardButton.Save,
-        )
-        if answer == QMessageBox.StandardButton.Cancel:
-            return False
-        if answer == QMessageBox.StandardButton.Save:
-            return self._on_save()
-        return True
-
-    def _on_save(self) -> bool:
-        """Save to the current path (asking for one if needed). True when written."""
-        if self._vm.path is None:
-            return self._on_save_as()
-        try:
-            self._store_view_settings_in_project()
-            self._warn_case_references()
-            self._vm.save()
-            self._log(f"Saved: {self._vm.path}")
-        except Exception as exc:
-            QMessageBox.critical(self, "Save failed", str(exc))
-            return False
-        return True
-
-    def _on_project_info(self) -> None:
-        """File → Project Information: the cover data of the calculation report."""
-        project = self._vm.project
-        if project is None:
-            return
-        dialog = ProjectInfoDialog(project.meta, self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        self._vm.apply_command(SetProjectMetaCommand(self._vm, dialog.meta()))
-        self._log("Project information updated.")
-
-    def _on_save_as(self) -> bool:
-        path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Save project as",
-            "",
-            f"OpenSees Studio model (*{PROJECT_FILE_SUFFIX})",
-        )
-        if not path:
-            return False
-        try:
-            self._store_view_settings_in_project()
-            self._warn_case_references()
-            out = self._vm.save(path)
-            self._log(f"Saved: {out}")
-        except Exception as exc:
-            QMessageBox.critical(self, "Save failed", str(exc))
-            return False
-        self._recent.add(out)
-        return True
-
     def report_results(self) -> list[Any]:
         """The results the report includes: every current case, plus the one on screen."""
         return self.results.for_report(self._vm.project)
 
     # ── slots: edit ──────────────────────────────────────────────────
-    def _warn_case_references(self) -> None:
-        project = self._vm.project
-        if project is None:
-            return
-        errors = [
-            error for case in project.analyses for error in project.case_reference_errors(case)
-        ]
-        if errors:
-            QMessageBox.warning(self, "Saving with invalid case references", "\n".join(errors))
-
     # ── slots: select menu ──────────────────────────────────────────
     def _build_select_menu(self, menu: Any) -> None:
         """Select: everything, by property, by load pattern, inverted or the previous one.
@@ -2512,71 +2104,6 @@ class MainWindow(QMainWindow):
         self._act_show_grid_labels.setChecked(any(cs.grid.show_labels for cs in systems))
 
     # ── View → zoom, hiding and per-viewport settings ───────────────
-    def _apply_view_settings(self, **changes: object) -> None:
-        """Apply ``changes`` to this viewport's settings and resync the ticks."""
-        self._canvas.set_view_settings(self._canvas.view_settings.with_changes(**changes))
-        self._sync_visibility_actions()
-
-    def _sync_visibility_actions(self) -> None:
-        """Tick every visibility action from the canvas without re-firing it."""
-        settings = self._canvas.view_settings
-        pairs: tuple[tuple[QAction, bool], ...] = (
-            (self._act_vis_grids, settings.show_grids),
-            (self._act_vis_grid_labels, settings.show_grid_labels),
-            (self._act_vis_nodes, settings.show_nodes),
-            (self._act_vis_frames, settings.show_frames),
-            (self._act_vis_surfaces, settings.show_surfaces),
-            (self._act_vis_supports, settings.show_supports),
-            (self._act_vis_footings, settings.show_footings),
-            (self._act_vis_constraints, settings.show_constraints),
-            (self._act_vis_frame_assignments, settings.show_frame_assignments),
-            (self._act_vis_releases, settings.show_releases),
-            (self._act_vis_loads, settings.show_loads),
-            (self._act_show_local_axes, settings.show_local_axes),
-            (self._act_vis_node_labels, settings.show_node_labels),
-            (self._act_vis_element_labels, settings.show_element_labels),
-            (self._act_vis_extruded, settings.show_extruded),
-            # "Show Extruded Sections" is the same field, so it ticks too.
-            (self._act_show_extruded, settings.show_extruded),
-        )
-        for action, checked in pairs:
-            action.blockSignals(True)
-            action.setChecked(checked)
-            action.blockSignals(False)
-        color_by = self._color_by_actions[settings.color_by]
-        color_by.blockSignals(True)
-        color_by.setChecked(True)
-        color_by.blockSignals(False)
-
-    def _on_visibility_toggle(self, field: str, checked: bool) -> None:
-        """Apply one Visibility-menu toggle to the viewport."""
-        self._apply_view_settings(**{field: checked})
-
-    def _on_vis_node_labels(self, checked: bool) -> None:
-        """Node labels, keeping the Display Options dialog's state in step."""
-        self._show_node_labels = checked
-        self._apply_view_settings(show_node_labels=checked)
-
-    def _on_vis_element_labels(self, checked: bool) -> None:
-        """Element labels, keeping the Display Options dialog's state in step."""
-        self._show_element_labels = checked
-        self._apply_view_settings(show_element_labels=checked)
-
-    def _on_color_by(self, mode: str) -> None:
-        """View → Color By: paint frames and shells by section, material or group."""
-        self._apply_view_settings(color_by=mode)
-
-    def _on_vis_extruded(self, checked: bool) -> None:
-        """Show Extruded Sections, from either of its two actions."""
-        self._apply_view_settings(show_extruded=checked)
-
-    def _on_view_colors(self) -> None:
-        """View → Colors: edit the six viewport colours in one dialog."""
-        dialog = ViewColorsDialog(self._canvas.view_settings, parent=self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        self._apply_view_settings(**dialog.colors())
-
     # ── View → secondary windows ────────────────────────────────────
     def _on_new_view_window(self) -> None:
         """Open another viewport on the same project, in its own window."""
@@ -2611,7 +2138,7 @@ class MainWindow(QMainWindow):
         self._active_canvas = window.canvas
         self._tool_controller.set_canvas(window.canvas)
         self._act_close_view.setEnabled(True)
-        self._sync_visibility_actions()
+        self.visibility.sync_actions()
         self._refresh_action_enablement()
 
     def _on_view_window_closed(self, window: object) -> None:
@@ -2624,7 +2151,7 @@ class MainWindow(QMainWindow):
             self._active_canvas = self._main_canvas
             self._tool_controller.set_canvas(self._main_canvas)
         self._act_close_view.setEnabled(False)
-        self._sync_visibility_actions()
+        self.visibility.sync_actions()
 
     def _refresh_view_windows(self, project: Project | None) -> None:
         """Re-render every secondary viewport, keeping its camera where it was."""
@@ -2632,30 +2159,6 @@ class MainWindow(QMainWindow):
             window.refresh(project)
 
     # ── View settings that live in the project file ─────────────────
-    def _apply_project_view_settings(self) -> None:
-        """Adopt the display settings the project carries."""
-        project = self._vm.project
-        stored = project.view if project is not None else None
-        self._main_canvas.set_view_settings(stored if stored is not None else ViewSettings())
-        self._sync_visibility_actions()
-        # Re-rendering for the new settings may fit the camera to every actor
-        # again (including furniture left from the previous file); keep it on
-        # the new model.
-        if project is not None and project.nodes:
-            self._main_canvas.reframe()
-
-    def _store_view_settings_in_project(self) -> None:
-        """Write the primary viewport's settings into the model before saving.
-
-        A viewport that was never customised stores ``None``, so the file stays
-        byte-identical to one written before this feature existed.
-        """
-        project = self._vm.project
-        if project is None:
-            return
-        settings = self._main_canvas.view_settings
-        project.view = None if settings == ViewSettings() else settings
-
     # ── display state that outlives the process ─────────────────────
     #: Bumped when the set of panels or toolbars changes, so a layout saved by an
     #: older build is ignored instead of restored half-way.
@@ -2707,7 +2210,7 @@ class MainWindow(QMainWindow):
         a non-frame element - the menu is unchanged.
         """
         canvas = self._context_canvas()
-        if self._open_element_diagrams_at(pos, canvas):
+        if self.display.open_member_at(pos, canvas):
             return
         menu = self._context_menu_at(pos, canvas)
         menu.exec(pos)
@@ -2763,132 +2266,6 @@ class MainWindow(QMainWindow):
         """The viewport whose right-click emitted the signal (the active one if unknown)."""
         sender = self.sender()
         return sender if isinstance(sender, ModelCanvas) else self._canvas
-
-    def _open_element_diagrams_at(self, pos: QPoint, canvas: ModelCanvas) -> bool:
-        """Open the clicked member's window, or return False for the normal menu.
-
-        The behaviour belongs to the post-processing views: without a force
-        diagram or a deformed shape on screen the right-click stays what it
-        always was.
-        """
-        if self.display.mode not in ("force", "deformed"):
-            return False
-        if canvas is not self._main_canvas:
-            return False
-        if self.display.mode == "force" and not self._diagram_renderer.is_drawn:
-            return False
-        project = self._vm.project
-        if project is None or self.results.static() is None:
-            return False
-        local = canvas.mapFromGlobal(pos)
-        element_id = canvas.frame_element_at(local.x(), local.y())
-        if element_id is None:
-            return False
-        self._show_element_diagrams(element_id)
-        return True
-
-    def _show_element_diagrams(self, element_id: int) -> None:
-        """Build and show the diagram window of one frame member."""
-        bundle = self._element_diagram_bundle(element_id)
-        project = self._vm.project
-        if bundle is None or project is None:
-            return
-        converter = UnitConverter.of(project.meta)
-        choices = self.results.member_choices(self._vm.project)
-        current = self.results.current_key()
-        for window in self._element_diagram_windows:
-            if window.bundle.element_id == element_id:
-                window.set_bundle(bundle, converter)
-                window.set_result_choices(choices, current)
-                window.show()
-                window.raise_()
-                window.activateWindow()
-                return
-        window = ElementDiagramWindow(bundle, converter, self)
-        self._element_diagram_windows.append(window)
-        window.set_result_choices(choices, current)
-        window.resultChanged.connect(
-            lambda key, opened=window: self._on_element_diagram_result_changed(opened, key)
-        )
-        window.unitsChanged.connect(self._on_element_diagram_units_changed)
-        window.destroyed.connect(
-            lambda _object=None, opened=window: self._forget_element_diagram_window(opened)
-        )
-        window.show()
-        window.raise_()
-        window.activateWindow()
-        self._log(f"Element {element_id}: opened its diagram window.")
-
-    def _element_diagram_bundle(self, element_id: int) -> ElementDiagramBundle | None:
-        """The current result's bundle for one member, or None when it has none."""
-        project = self._vm.project
-        if project is None:
-            return None
-        results = self.results.latest
-        case_name = results.combination_name if isinstance(results, CombinationResults) else None
-        if isinstance(results, CombinationResults) and self.results.is_envelope():
-            return combine_element_bundles(
-                element_diagram_bundle(
-                    project,
-                    results.max,
-                    element_id,
-                    label="Max",
-                    case_name=case_name,
-                ),
-                element_diagram_bundle(
-                    project,
-                    results.min,
-                    element_id,
-                    label="Min",
-                    case_name=case_name,
-                ),
-            )
-        static = self.results.static()
-        if static is None:
-            return None
-        # Stations read a static case's loads back; a combination bound has no
-        # single load pattern, so its curves stay linear.
-        return element_diagram_bundle(
-            project,
-            static,
-            element_id,
-            stations=isinstance(results, StaticResults),
-            case_name=case_name,
-        )
-
-    def _on_element_diagram_result_changed(self, window: ElementDiagramWindow, key: str) -> None:
-        """Switch the result from the member window, keeping that window open."""
-        results = self._results_for_key(key)
-        if results is None or not isinstance(results, StaticResults | CombinationResults):
-            window.set_result_choices(
-                self.results.member_choices(self._vm.project), self.results.current_key()
-            )
-            return
-        self._display_results(results)
-        self.display.refresh_units()
-        bundle = self._element_diagram_bundle(window.bundle.element_id)
-        project = self._vm.project
-        if bundle is None or project is None:
-            return
-        window.set_bundle(bundle, UnitConverter.of(project.meta))
-        window.set_result_choices(
-            self.results.member_choices(self._vm.project), self.results.current_key()
-        )
-
-    def _forget_element_diagram_window(self, window: ElementDiagramWindow) -> None:
-        """Drop a closed window from the references that keep it alive."""
-        if window in self._element_diagram_windows:
-            self._element_diagram_windows.remove(window)
-
-    def _on_element_diagram_units_changed(self, value: str) -> None:
-        """Change the display units from the member window's picker."""
-        try:
-            chosen = UnitSystem(value)
-        except ValueError:
-            return
-        if chosen is self._current_display_units():
-            return
-        self._set_display_units(chosen)
 
     def _canvas_context_menu(self) -> QMenu:
         """What the right-click shows: the selection's options, or grids and view."""
@@ -2981,7 +2358,7 @@ class MainWindow(QMainWindow):
     # ── View → Grid Line View ───────────────────────────────────────
     def _on_add_node(self) -> None:
         if self._vm.project is None:
-            self._on_new()
+            self.files.new_blank()
         proj = self._vm.project
         assert proj is not None
         dlg = AddNodeDialog(
@@ -3029,646 +2406,21 @@ class MainWindow(QMainWindow):
 
     # ── property editor: live-edit callbacks ─────────────────────────
     # ── property editor: multi-selection edits (one undo step each) ──
-    def node_tooltip(self, node_id: int) -> str | None:
-        """Hover text for a joint: where it is, its restraint, mass, members and loads."""
-        from opensees_studio.core.hover import node_summary
-
-        project = self._vm.project
-        if project is None:
-            return None
-        text = None
-        if self.display.mode == "deformed":
-            text = self._deformed_node_tooltip(node_id)
-        elif self.display.mode == "mode":
-            text = self._mode_shape_node_tooltip(node_id)
-        return text if text is not None else node_summary(project, node_id)
-
-    @staticmethod
-    def _node_box(title: str, subtitle: str, rows: list[tuple[str, str, str]]) -> str:
-        """The rich-text box a joint's hover shows: a title, a line and a value table."""
-        from html import escape
-
-        cells = "".join(
-            f"<tr><td><b>{escape(label)}</b></td><td align='right'>&nbsp;{escape(value)}</td>"
-            f"<td>&nbsp;{escape(unit)}</td></tr>"
-            for label, value, unit in rows
-        )
-        return (
-            f"<b>{escape(title)}</b><br>{escape(subtitle)}"
-            f"<table cellspacing='0' cellpadding='1'>{cells}</table>"
-        )
-
-    def _joint_title(self, node_id: int) -> str:
-        project = self._vm.project
-        node = next((n for n in project.nodes if n.id == node_id), None) if project else None
-        title = tr("Joint {id}").format(id=node_id)
-        return f"{title} ({node.name})" if node is not None and node.name else title
-
-    def _mode_shape_node_tooltip(self, node_id: int) -> str | None:
-        """A box with the joint and its components in the mode the animator draws."""
-        from opensees_studio.core.hover import node_mode_shape
-
-        project = self._vm.project
-        results = self.results.latest
-        view = self.display.dock.widget() if self.display.dock is not None else None
-        if project is None or not isinstance(results, ModalResults):
-            return None
-        if not isinstance(view, ModeShapeAnimator):
-            return None
-        mode = view.current_mode() + 1
-        rows = node_mode_shape(project, results, node_id, mode)
-        if rows is None:
-            return None
-        periods = results.periods
-        subtitle = tr("Mode {n}").format(n=mode)
-        if mode - 1 < len(periods):
-            subtitle += f" · T = {float(periods[mode - 1]):.4g} s"
-        return self._node_box(
-            self._joint_title(node_id),
-            subtitle,
-            [(label, f"{value:.4g}", "") for label, value, _rotation in rows],
-        )
-
-    def _deformed_node_tooltip(self, node_id: int) -> str | None:
-        """A box with the joint and its displacements in the case the deformed shape draws."""
-        from opensees_studio.core.hover import node_displacements
-        from opensees_studio.views.docks.deformed_shape import DeformedShapeView
-
-        project = self._vm.project
-        view = self.display.dock.widget() if self.display.dock is not None else None
-        bound = view.current_bound() if isinstance(view, DeformedShapeView) else "max"
-        results = self.results.static(bound)
-        if project is None or results is None:
-            return None
-        rows = node_displacements(project, results, node_id)
-        if rows is None:
-            return None
-        case = self.results.caption_for(self._vm.project, self.results.latest).split("  ·  ")[0]
-        if self.results.is_envelope():
-            case += " · " + (tr("Max") if bound == "max" else tr("Min"))
-        converter = UnitConverter.of(project.meta)
-        length = converter.labels.length
-        return self._node_box(
-            self._joint_title(node_id),
-            tr("Case: {name}").format(name=case),
-            [
-                (
-                    label,
-                    f"{value if rotation else value * converter.length:.6g}",
-                    "rad" if rotation else length,
-                )
-                for label, value, rotation in rows
-            ],
-        )
-
-    def element_tooltip(self, element_id: int) -> str | None:
-        """Hover text for the canvas: a bearing's key parameters, else the element summary."""
-        from opensees_studio.core import BEARING_CLASSES, SLIDING_BEARING_CLASSES
-        from opensees_studio.core.hover import element_summary
-
-        if self._vm.project is None:
-            return None
-        try:
-            el = self._vm.project.element(element_id)
-        except KeyError:
-            return None
-        if not isinstance(el, BEARING_CLASSES):
-            return element_summary(self._vm.project, element_id)
-        if isinstance(el, SLIDING_BEARING_CLASSES):
-            try:
-                friction = self._vm.project.friction_model(el.friction_model_id).type
-            except KeyError:
-                friction = "missing"
-            lines = [
-                f"{el.type} #{el.id}, nodes {el.nodes[0]}-{el.nodes[1]}",
-                f"Kinit = {el.k_init:g}, friction model #{el.friction_model_id} ({friction})",
-            ]
-            if el.type == "SingleFPBearing":
-                units = self._vm.project.meta.units
-                lines.append(
-                    f"Reff = {el.r_eff:g}, T = 2 pi sqrt(Reff / g) = "
-                    f"{el.isolated_period(units):.4g} s"
-                )
-            return "\n".join(lines)
-        lines = [
-            f"{el.type} #{el.id}, nodes {el.nodes[0]}-{el.nodes[1]}",
-            f"Kinit = {el.k_init:g}, Qd = {el.qd:g}, alpha1 = {el.alpha1:g}",
-            f"u_y = {el.yield_displacement:.6g}, F_y = {el.yield_force:.6g}",
-        ]
-        if el.alpha2:
-            lines.append(f"alpha2 = {el.alpha2:g}, mu = {el.mu:g}")
-        if el.type == "ElastomericBearingBoucWen":
-            lines.append(f"eta = {el.eta:g}, beta = {el.beta:g}, gamma = {el.gamma:g}")
-        return "\n".join(lines)
-
     # ── slots: define ────────────────────────────────────────────────
     # ── slots: assign property ──────────────────────────────────────
     # ── area loads and imposed displacements ─────────────────────────
     # ── slots: analyze ──────────────────────────────────────────────
-    def _on_check_stability(self) -> None:
-        """Analyze → Check Model Stability: look for mechanisms before solving anything."""
-        project = self._vm.project
-        if project is None:
-            return
-        if not project.nodes:
-            QMessageBox.information(self, "Check Model Stability", "The model has no joints yet.")
-            return
-        self._stability.check(project, self._vm.path)
-
-    def _on_stability_progress(self, phase: str, message: str) -> None:
-        """Show the coarse stability phase in the status bar and console."""
-        self._log(f"Stability [{phase}]: {message}")
-
-    def _on_stability_report(self, report: StabilityReport) -> None:
-        summary = report.summary()
-        self._log(summary)
-        if report.nodes:
-            # Show where the mechanisms are: their joints become the selection.
-            self._canvas.selection.set_selection(set(report.nodes), set())
-            self._refresh_action_enablement()
-        box = QMessageBox(self)
-        box.setWindowTitle("Check Model Stability")
-        box.setIcon(QMessageBox.Icon.Information if report.stable else QMessageBox.Icon.Warning)
-        if report.completion != "complete":
-            headline = "The stability check is incomplete."
-        elif report.classification == "no_free_equations":
-            headline = "The model is fully restrained."
-        elif report.stable:
-            headline = "The model is statically stable."
-        else:
-            headline = "The model is not statically stable."
-        box.setText(headline)
-        box.setInformativeText(
-            summary + ("\n\nThe joints that move are selected." if report.nodes else "")
-        )
-        box.open()
-        self._stability_box = box
-
-    def _on_stability_failed(self, message: str) -> None:
-        self._log(message)
-        box = QMessageBox(self)
-        box.setWindowTitle("Check Model Stability")
-        box.setIcon(QMessageBox.Icon.Critical)
-        box.setText("The stability check could not finish.")
-        box.setInformativeText(message)
-        box.open()
-        self._stability_box = box
-
-    def _on_case_manager(self) -> None:
-        if self._vm.project is None:
-            self._on_new()
-        AnalysisCaseManagerDialog(self._vm, self).exec()
-
-    def _on_run_all_cases(self) -> None:
-        """Analyze → Run All Cases: every case, in one child process."""
-        project = self._vm.project
-        if project is None or self._runner.is_running:
-            return
-        if not project.analyses:
-            self._log("No analysis cases. Define one in Analyze → Cases…")
-            return
-        self._log(f"Running all {len(project.analyses)} case(s).")
-        self._start_batch(list(project.analyses))
-
-    def _on_run_selected_cases(self) -> None:
-        """Analyze → Run Selected Cases: tick the cases, then run them together."""
-        project = self._vm.project
-        if project is None or self._runner.is_running:
-            return
-        if not project.analyses:
-            self._log("No analysis cases. Define one in Analyze → Cases…")
-            return
-        dialog = RunCasesDialog(project, self)
-        try:
-            if dialog.exec() != QDialog.DialogCode.Accepted:
-                return
-            chosen = set(dialog.selected_case_ids())
-        finally:
-            dialog.deleteLater()
-        cases = [case for case in project.analyses if case.id in chosen]
-        if not cases:
-            self._log("No case selected.")
-            return
-        self._log(f"Running {len(cases)} selected case(s).")
-        self._start_batch(cases)
-
-    def _start_batch(self, cases: list[Any]) -> None:
-        """Hand a set of cases to the runner in one child process."""
-        project = self._vm.project
-        if project is None:
-            return
-        self._auto_mesh_before_run()
-        try:
-            self._runner.run_cases(project, cases, project_path=self._vm.path)
-        except Exception as exc:
-            self._log(f"Could not start: {exc}")
-
-    def _on_check_model(self) -> None:
-        """Analyze → Check Model: loose nodes, unconnected elements, mechanisms."""
-        project = self._vm.project
-        if project is None:
-            QMessageBox.information(self, "Check Model", "Open or create a project first.")
-            return
-        report = check_model(project)
-        dlg = ModelCheckDialog(
-            project, report=report, on_select=self._select_report_row, parent=self
-        )
-        try:
-            dlg.exec()
-            mechanism = dlg.mechanism_to_show()
-        finally:
-            dlg.deleteLater()
-        self._log(report.summary())
-        if mechanism is not None:
-            self.display.mechanism(mechanism)
-
-    def _auto_mesh_before_run(self) -> None:
-        """Divide the frames that another frame ends on or crosses, in one undo step.
-
-        So no member lying on another is left unconnected. Members with their own
-        Auto Mesh off, and every member while Analyze → Auto-mesh Frames Before
-        Run is off, are left as drawn.
-        """
-        project = self._vm.project
-        if project is None:
-            return
-        plan = pre_run_auto_mesh(project)
-        if plan.is_empty:
-            return
-        try:
-            self._vm.apply_command(MeshCommand(self._vm, plan, text="Auto-mesh frames"))
-        except Exception as exc:
-            self._log(f"Auto-mesh before run failed: {exc}")
-            return
-        self._log(f"Auto-mesh before run: {plan.summary()}")
-
-    def _on_toggle_auto_mesh_frames(self, checked: bool) -> None:
-        """Analyze → Auto-mesh Frames Before Run (saved with the project)."""
-        from opensees_studio.commands import SetAutoMeshFramesCommand
-
-        project = self._vm.project
-        if project is None or project.auto_mesh_frames == checked:
-            return
-        self._vm.apply_command(SetAutoMeshFramesCommand(self._vm, checked))
-
-    def _review_model_before_run(self) -> bool:
-        """Check the model on the way into Run; ``False`` means the run was called off.
-
-        Errors stop at a dialog that offers *Run anyway* (the check is a linear,
-        small-displacement test, so the person may know better). Warnings are
-        written to the console and do not interrupt: a modeller who has seen
-        "two separate parts" once does not want to click through it on every run.
-        """
-        project = self._vm.project
-        if project is None:
-            return True
-        report = check_model(project)
-        if report.has_errors:
-            dlg = ModelCheckDialog(
-                project,
-                report=report,
-                pre_run=True,
-                on_select=self._select_report_row,
-                parent=self,
-            )
-            try:
-                proceed = dlg.exec() == QDialog.DialogCode.Accepted
-                mechanism = dlg.mechanism_to_show()
-            finally:
-                dlg.deleteLater()
-            self._log(report.summary() + (" Running anyway." if proceed else " Run cancelled."))
-            if mechanism is not None:
-                self.display.mechanism(mechanism)
-            return proceed
-        for finding in report.warnings:
-            self._log(finding.summary())
-        if not report.is_complete:
-            # A partial check is not a pass: say what was left out.
-            for finding in report.infos:
-                self._log(finding.summary())
-            self._log(report.summary())
-        return True
-
-    def _on_run_analysis(self) -> None:
-        if self._vm.project is None:
-            QMessageBox.information(self, "Run Analysis", "Open or create a project first.")
-            return
-        if not self._vm.project.analyses:
-            QMessageBox.information(
-                self,
-                "Run Analysis",
-                "No analysis cases defined. Open Analyze → Cases…",
-            )
-            return
-        open_dialog = self._run_dialog
-        if open_dialog is not None and open_dialog.isVisible():
-            # One Run dialog at a time: F5 again brings it to the front.
-            open_dialog.raise_()
-            open_dialog.activateWindow()
-            return
-        self._auto_mesh_before_run()
-        if not self._review_model_before_run():
-            return
-        dlg = RunAnalysisDialog(self._vm, self._runner, self, case_results=self.results.cases)
-        combination_finished = getattr(dlg, "combinationFinished", None)
-        if combination_finished is not None:
-            combination_finished.connect(self._on_analysis_finished)
-        self._run_dialog = dlg
-        # Modeless: the model, the viewport and the results stay usable while
-        # the case runs and after, next to the log.
-        dlg.finished.connect(lambda _code, d=dlg: self._on_run_dialog_closed(d))
-        dlg.show()
-
-    def _on_run_dialog_closed(self, dlg: QWidget) -> None:
-        if self._run_dialog is dlg:
-            self._run_dialog = None
-        self._keep_failure_report_alive(dlg)
-        # The dialog connects seven signals of the long-lived runner and is
-        # parented to this window, so without this it stays alive after it
-        # closes and every later run keeps appending to its log widget.
-        dlg.deleteLater()
-
-    def _keep_failure_report_alive(self, dlg: QWidget) -> None:
-        """Reparent an unread failure report so it outlives the Run dialog.
-
-        The report is created with ``WA_DeleteOnClose``, so once the user has
-        closed it Qt has destroyed the C++ object while this window still holds
-        the Python wrapper. ``box.parent()`` then raises ``RuntimeError``, and
-        an exception raised here — inside the ``finally`` of a Qt slot — used to
-        take the whole application down with it. Hence the validity check, and
-        the reference being dropped when the box is gone.
-        """
-        box = self._analysis_error_box
-        if box is None:
-            return
-        if not shiboken6.isValid(box):
-            self._analysis_error_box = None
-            return
-        if box.parent() is dlg:
-            box.setParent(self, box.windowFlags())
-            box.show()
-
-    def _failure_parent(self) -> QWidget:
-        """The dialog that started the run while it is open, else the main window."""
-        dlg = self._run_dialog
-        if dlg is not None and dlg.isVisible():
-            return dlg
-        return self
-
-    def _on_analysis_finished(self, results) -> None:  # type: ignore[no-untyped-def]
-        self._display_results(results)
-        self._log(f"Analysis complete: {self.results.caption_for(self._vm.project, results)}.")
-        if isinstance(results, TransientResults) and results.early_stop:
-            self._log(f"Warning: transient run did not converge ({results.steps_summary()}).")
-        if isinstance(results, ResponseSpectrumResults | CombinationResults):
-            for warning in results.warnings:
-                self._log(f"Warning: {warning}")
-        self.display.set_caption(self.results.caption_for(self._vm.project, results))
-        self._refresh_action_enablement()
-
-    def _on_case_finished(self, results: object) -> None:
-        """Keep each case result of a run for the load combinations."""
-        self._keep_case_results(results)
-        self._record_case_results(results)
-
-    def _keep_case_results(self, results: object) -> None:
-        self.results.keep(self._vm.project, results)
-        self._lock_for_results()
-
     # ── what the viewport is showing ────────────────────────────────
-    def _on_clear_results(self) -> None:
-        """Analyze → Delete All Results: forget every stored result."""
-        db_path = database_path(self._vm.path)
-        answer = QMessageBox.question(
-            self,
-            "Delete All Results",
-            "Delete every stored result?\n\n"
-            "  • the results of this session\n"
-            f"  • {db_path}\n\n"
-            "The model, its analysis cases and any other project's database are "
-            "not touched.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        if answer != QMessageBox.StandardButton.Yes:
-            return
-        self._drop_session_results()
-        self._set_model_locked(False)
-        removed = delete_all_results(db_path)
-        self._log(
-            "All results deleted."
-            if removed
-            else "All results deleted (the database was already empty)."
-        )
-        self._refresh_action_enablement()
-
-    def _drop_session_results(self) -> None:
-        """Forget the results held in memory and return to the model view."""
-        self.results.clear()
-        self._refresh_reactions()
-        self._refresh_case_combo()
-        self.display.back_to_model()
-        self._results_panel.show_results(None, self._vm.project)
-
-    # ── the model lock ───────────────────────────────────────────────
-    #: Lock the model when results arrive. Tests of other features switch it off.
-    lock_after_analysis = True
-
-    def _set_model_locked(self, locked: bool) -> None:
-        """Lock or unlock, remembering the model the lock protects."""
-        project = self._vm.project
-        self._model_locked = bool(locked and project is not None)
-        self._lock_fingerprint = (
-            model_fingerprint(project) if self._model_locked and project is not None else None
-        )
-        self._lock_index = self._vm.undo_stack.index()
-        self._act_lock_model.setChecked(self._model_locked)
-        self._lock_button.setChecked(self._model_locked)
-        self._lock_button.setText(tr("Locked") if self._model_locked else tr("Unlocked"))
-
-    def _lock_for_results(self) -> None:
-        """Results arrived: from here on an edit would make them stale."""
-        if self.lock_after_analysis and not self._model_locked:
-            self._set_model_locked(True)
-            self._log("Model locked: it has analysis results (Options → Lock Model unlocks it).")
-
-    def _confirm_unlock(self) -> bool:
-        """Ask before the lock goes; with results, say that they go with it."""
-        if self.results.has_any(self._vm.project):
-            text = (
-                "The model is locked because it has analysis results.\n\n"
-                "Unlock it and discard the results of this session? The results "
-                "database is kept."
-            )
-        else:
-            text = "The model is locked. Unlock it to change it?"
-        answer = QMessageBox.question(
-            self,
-            "Unlock Model",
-            text,
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        return answer == QMessageBox.StandardButton.Yes
-
-    def _unlock_model(self) -> None:
-        """Unlock; results in memory belonged to the locked model and go with it."""
-        had_results = self.results.has_any(self._vm.project)
-        self._set_model_locked(False)
-        if had_results:
-            self._drop_session_results()
-            self._log("Model unlocked: the results of this session were discarded.")
-        else:
-            self._log("Model unlocked.")
-        self._refresh_action_enablement()
-
-    def _on_lock_model_triggered(self, checked: bool) -> None:
-        """Options → Lock Model, and the padlock in the status bar."""
-        if checked:
-            self._set_model_locked(True)
-            self._log("Model locked.")
-        elif self._confirm_unlock():
-            self._unlock_model()
-        else:
-            self._act_lock_model.setChecked(True)
-            self._lock_button.setChecked(True)
-
-    def _on_undo_index_changed(self, index: int) -> None:
-        """An edit, an undo or a redo happened: a locked model asks first.
-
-        Only a change of the model the results depend on counts (its
-        fingerprint): combinations, design settings and display choices are
-        free. Refused, the change is taken back.
-        """
-        project = self._vm.project
-        if not self._model_locked or self._lock_reverting or project is None:
-            self._lock_index = index
-            return
-        if model_fingerprint(project) == self._lock_fingerprint:
-            self._lock_index = index
-            return
-        if self._confirm_unlock():
-            self._unlock_model()
-            return
-        stack = self._vm.undo_stack
-        self._lock_reverting = True
-        try:
-            if index < self._lock_index:
-                stack.redo()
-            else:
-                stack.undo()
-        finally:
-            self._lock_reverting = False
-        self._lock_index = stack.index()
-        self.statusBar().showMessage(tr("The model is locked: the change was not made."), 6000)
-
-    def _record_case_results(self, results: object) -> None:
-        """Append this case's results to the project's queryable database.
-
-        A failure here must never fail the analysis: the run already happened,
-        so the database is reported as a warning and the results stay in memory.
-        """
-        try:
-            run_id = record_results(results, project_path=self._vm.path, project=self._vm.project)
-        except Exception as exc:
-            self._log(f"Warning: the results database was not written: {exc}")
-            return
-        if run_id is not None:
-            self._log(f"Results recorded in {database_path(self._vm.path)} (run {run_id}).")
-
     # ── slots: load combinations ────────────────────────────────────
     def _on_load_combinations(self) -> None:
         """Define → Load Combinations…"""
         if self._vm.project is None:
-            self._on_new()
+            self.files.new_blank()
         dlg = LoadCombinationsDialog(self._vm, self)
         try:
             dlg.exec()
         finally:
             dlg.deleteLater()
-
-    def show_results_of(self, key: str) -> bool:
-        """Make ``case:<id>`` or ``combination:<id>`` the results Display shows.
-
-        A combination is combined from the current case results; when some of its
-        cases have none, the message says to run it from Analyze → Run.
-        """
-        results = self._results_for_key(key)
-        if results is None:
-            return False
-        self.display.back_to_model()
-        self._on_analysis_finished(results)
-        return True
-
-    def _results_for_key(self, key: str) -> object | None:
-        """Resolve a ``case:<id>`` / ``combination:<id>`` key, or explain why not."""
-        project = self._vm.project
-        if project is None:
-            return None
-        kind, _, raw_id = key.partition(":")
-        try:
-            ref_id = int(raw_id)
-        except ValueError:
-            return None
-        if kind == "case":
-            results = self.results.cases.current(project).get(ref_id)
-            if results is None:
-                self._log(f"Case {ref_id} has no current results: run it first.")
-                return None
-            return cast(object, results)
-        try:
-            return cast(object, self.results.cases.combine(project, ref_id))
-        except (MissingCaseResultsError, ValueError, KeyError) as exc:
-            QMessageBox.information(
-                self,
-                "Show Results Of",
-                f"{exc}\n\nAnalyze → Run, then pick the combination: it runs only the "
-                "cases without current results.",
-            )
-            return None
-
-    def _on_select_results(self) -> None:
-        """Display → Show Results Of…: switch between stored case and combination results."""
-        choices = self.results.choices(self._vm.project)
-        if not choices:
-            QMessageBox.information(
-                self,
-                "Show Results Of",
-                "No results yet: run a case (Analyze → Run) or define a load combination.",
-            )
-            return
-        label, ok = QInputDialog.getItem(
-            self, "Show Results Of", "Results:", [c[0] for c in choices], 0, False
-        )
-        if ok:
-            self.show_results_of(dict(choices)[label])
-
-    def _on_analysis_failed(self, report: str) -> None:
-        """Show the failure report (exit code, last error, stderr tail) without blocking."""
-        self._console.appendPlainText(report)
-        code = self._runner.last_exit_code
-        headline = "Analysis failed."
-        if code is not None:
-            headline = f"Analysis process exited with code {code}."
-        # A child of the modal Run dialog, so it is not blocked and opens in front of it.
-        box = QMessageBox(self._failure_parent())
-        box.setIcon(QMessageBox.Icon.Critical)
-        box.setWindowTitle("Analysis failed")
-        box.setText(headline)
-        box.setInformativeText(
-            "The application and your model are unaffected. "
-            "The pre-run snapshot is kept for recovery. Details below and in the Console dock."
-        )
-        box.setDetailedText(report)
-        box.setStandardButtons(QMessageBox.StandardButton.Ok)
-        box.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
-        box.setModal(False)
-        box.finished.connect(self._forget_failure_report)
-        self._analysis_error_box = box
-        box.show()
-        box.raise_()
-        box.activateWindow()
-        self._log(headline)
 
     def report_unexpected_error(self, traceback_text: str) -> None:
         """Show an unhandled exception instead of letting the process die.
@@ -3695,150 +2447,8 @@ class MainWindow(QMainWindow):
         box.raise_()
         box.activateWindow()
 
-    def _forget_failure_report(self, _result: int = 0) -> None:
-        """The report is closed (and, with ``WA_DeleteOnClose``, about to be deleted)."""
-        self._analysis_error_box = None
-
-    def _on_display_options(self) -> None:
-        dlg = DisplayOptionsDialog(
-            show_node_labels=self._show_node_labels,
-            show_element_labels=self._show_element_labels,
-            view_settings=self._canvas.view_settings,
-            parent=self,
-        )
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        self._show_node_labels, self._show_element_labels = dlg.values()
-        settings = dlg.view_settings()
-        self._canvas.set_view_settings(settings)
-        self._sync_visibility_actions()
-        self._log(
-            f"Display options updated: node labels={'on' if self._show_node_labels else 'off'}, "
-            f"element labels={'on' if self._show_element_labels else 'off'}, "
-            f"node size={settings.node_size_percent:g}% of the view height."
-        )
-
-    def _on_show_load_assigns(self) -> None:
-        """Display → Show Load Assigns: the pattern, kinds and values the canvas draws."""
-        project = self._vm.project
-        if project is None:
-            return
-        dlg = LoadDisplayDialog(project.load_patterns, self._canvas.view_settings, parent=self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        changes = dlg.changes()
-        self._apply_view_settings(**changes)
-        pattern_id = changes["load_pattern_id"]
-        pattern = next((p for p in project.load_patterns if p.id == pattern_id), None)
-        self._log(
-            "Loads shown: "
-            + ("every load pattern" if pattern is None else f"load pattern '{pattern.name}'")
-            + "."
-        )
-
     # ── slots: display (post-processing) ────────────────────────────
     # Animator emits an initial frame in its constructor; nothing to do.
-
-    def _refresh_reactions(self) -> None:
-        """Keep the table and the overlay on the same case, and enable the actions."""
-        rows = self.results.reaction_rows(self._vm.project)
-        self._reactions_panel.set_rows(rows)
-        self._canvas.set_reactions(rows, show=self._act_show_reactions.isChecked())
-        enabled = bool(rows)
-        self._act_show_reactions.setEnabled(enabled)
-        self._act_reactions_table.setEnabled(enabled)
-        self._act_reactions_dialog.setEnabled(enabled)
-        if not enabled and self._act_show_reactions.isChecked():
-            self._act_show_reactions.setChecked(False)
-
-    def _on_show_reactions(self, checked: bool) -> None:
-        self._canvas.set_reactions(self.results.reaction_rows(self._vm.project), show=checked)
-
-    def _on_reactions_dialog(self) -> None:
-        dialog = ReactionsDialog(self.results.reaction_rows(self._vm.project), self)
-        dialog.exec()
-
-    def _on_reactions_table(self) -> None:
-        self._reactions_dock.show()
-        self._reactions_dock.raise_()
-
-    def _refresh_case_combo(self) -> None:
-        """List the cases that still hold results for this model, newest order."""
-        project = self._vm.project
-        entries = self.results.cases.current(project) if project is not None else {}
-        current = getattr(self.results.latest, "case_id", None)
-        names = case_names(self._vm.project)
-        self._case_combo.blockSignals(True)
-        self._case_combo.clear()
-        for case_id, results in sorted(entries.items()):
-            kind = type(results).__name__.removesuffix("Results")
-            name = names.get(case_id) or getattr(results, "case_name", None) or f"Case {case_id}"
-            self._case_combo.addItem(f"{name} · {kind}", case_id)
-        if current is not None:
-            index = self._case_combo.findData(current)
-            if index >= 0:
-                self._case_combo.setCurrentIndex(index)
-        self._case_combo.blockSignals(False)
-        self._case_combo.setEnabled(bool(entries))
-        self._refresh_step_buttons()
-
-    def _on_case_changed(self, index: int) -> None:
-        """Show the chosen case; the layers read it from `results.latest`."""
-        case_id = self._case_combo.itemData(index)
-        project = self._vm.project
-        if case_id is None or project is None:
-            return
-        results = self.results.cases.current(project).get(case_id)
-        if results is not None and results is not self.results.latest:
-            self._display_results(results)
-
-    def _display_results(self, results: object) -> None:
-        """Point the whole window at one results case."""
-        self.results.latest = results
-        self._lock_for_results()
-        self._results_panel.show_results(results, self._vm.project)
-        self._refresh_reactions()
-        self._refresh_case_combo()
-        self.display.set_caption(self.results.caption_for(self._vm.project, results))
-        self._refresh_action_enablement()
-        self._refresh_step_buttons()
-
-    def _refresh_step_buttons(self) -> None:
-        """Enable the step arrows only when the shown case has more than one."""
-        steps = self.results.steps()
-        # Only a layer that knows how to redraw itself at another step registers
-        # an applier; until one does, the arrows must not pretend to work.
-        steppable = steps > 1 and getattr(self, "_step_apply", None) is not None
-        self._step_index = min(getattr(self, "_step_index", 0), max(steps - 1, 0))
-        self._step_back.setEnabled(steppable)
-        self._step_forward.setEnabled(steppable)
-        if steps > 1:
-            self._step_label.setText(f"Step {self._step_index + 1}/{steps}")
-        else:
-            self._step_label.setText("")
-
-    def _shift_step(self, delta: int) -> None:
-        steps = self.results.steps()
-        if steps <= 1:
-            return
-        target = min(max(self._step_index + delta, 0), steps - 1)
-        if target == self._step_index:
-            return
-        self._step_index = target
-        self._refresh_step_buttons()
-        self._apply_step()
-
-    def _apply_step(self) -> None:
-        """Re-draw the step-based layer at the current step, if one is showing."""
-        apply = getattr(self, "_step_apply", None)
-        if apply is not None:
-            apply(self._step_index)
-
-    def _close_element_diagram_windows(self) -> None:
-        """Close the member windows of a view that is being replaced."""
-        for window in list(self._element_diagram_windows):
-            window.close()
-        self._element_diagram_windows.clear()
 
     # ── SAP2000-style view switching + working level ───────────────
     # ── autosave ────────────────────────────────────────────────────
@@ -3877,31 +2487,19 @@ class MainWindow(QMainWindow):
         else:
             self._autosave_timer.stop()
 
-    def _autosave(self) -> None:
-        """Write the recovery copy of unsaved changes (the project file is not touched).
+    def _show_reactions_dock(self) -> None:
+        """Bring the Reactions panel to the front."""
+        self._reactions_dock.show()
+        self._reactions_dock.raise_()
 
-        It is the same copy a run writes before it starts: opening the project
-        after a crash offers it, and a save removes it.
-        """
-        if self._vm.project is None or not self._vm.is_dirty or self._runner.is_running:
-            return
-        try:
-            path = self._vm.write_run_snapshot()
-        except OSError as exc:
-            self._log(f"Autosave failed: {exc}")
-            return
-        self.statusBar().showMessage(f"Recovery copy saved ({path.name}).", 3000)
-
-    def _on_recover_untitled(self) -> None:
-        """Start page → Recover: the autosaved never-saved project, as unsaved changes."""
-        snapshot = run_snapshot_path(None)
-        try:
-            project = load_project(snapshot)
-        except Exception as exc:
-            QMessageBox.critical(self, "Recover failed", str(exc))
-            return
-        self._vm.adopt(project)
-        self._log(f"Recovered the unsaved project from {snapshot} (not yet saved).")
+    def _refresh_displayed_units(self, converter: UnitConverter) -> None:
+        """Re-draw what shows a number, after the display units changed."""
+        # Results panel: displacements, reactions, element forces, curves.
+        self.results_view.panel.refresh(self._vm.project)
+        # Active post-processing dock (diagram, deformed shape, plots).
+        if not self.display.refresh_units() and self.results.latest is not None:
+            self._canvas.render()
+        self.display.set_member_units(converter)
 
     def _on_project_changed(self, project: Project | None) -> None:
         if project is None:
@@ -3924,10 +2522,10 @@ class MainWindow(QMainWindow):
         # overlay (deformed shape, diagrams, contours, ratios). The new
         # project's stored results are offered afterwards.
         self.results.clear()
-        self._set_model_locked(False)
+        self.model_lock.set_locked(False)
         self.display.back_to_model()
-        self._results_panel.show_results(None, project)
-        self._refresh_reactions()
+        self.results_view.panel.show_results(None, project)
+        self.results_view.refresh_reactions()
         self._main_canvas.show_project(project)
         self._refresh_view_windows(project)
         if project is not None:
@@ -3947,7 +2545,7 @@ class MainWindow(QMainWindow):
         self._props.set_project(project)
         self._refresh_tree(project)
         self._refresh_status()
-        self._sync_units_combo()
+        self.units.sync_combo()
         self._refresh_action_enablement()
 
     def _on_model_mutated(self) -> None:
@@ -3972,7 +2570,7 @@ class MainWindow(QMainWindow):
         # A case renamed elsewhere (or here) must read the same in the results
         # picker and, when results are on screen, in the viewport caption: the
         # numbers did not move, only the label.
-        self._refresh_case_combo()
+        self.results_view.refresh_case_combo()
         if (
             self.results.latest is not None
             and self._canvas._renderer.mode is not RendererMode.MODEL
@@ -4034,41 +2632,6 @@ class MainWindow(QMainWindow):
         self._opensees = engines.opensees_status(settings)
         self._log_solver_status()
         self._refresh_action_enablement()
-
-    def _on_set_units(self) -> None:
-        """Options → Set Display Units — SAP2000 parity.
-
-        The selection is stored in ``project.meta.display_units`` and converts
-        every number a result view shows (force diagrams, displacements,
-        tables, curves). The model keeps ``project.meta.units``: the values an
-        engineer typed are never rewritten.
-        """
-        from PySide6.QtWidgets import QInputDialog
-
-        if self._vm.project is None:
-            QMessageBox.information(
-                self,
-                "Set Display Units",
-                "Open or create a project first.",
-            )
-            return
-        choices = [u.value for u in UnitSystem]
-        current_value = self._current_display_units().value
-        current_idx = choices.index(current_value)
-        choice, ok = QInputDialog.getItem(
-            self,
-            "Set Display Units",
-            "Unit system:",
-            choices,
-            current=current_idx,
-            editable=False,
-        )
-        if not ok:
-            return
-        new_units = next(u for u in UnitSystem if u.value == choice)
-        if new_units is self._current_display_units():
-            return
-        self._set_display_units(new_units)
 
     # ── helpers ──────────────────────────────────────────────────────
     def _refresh_tree(self, project: Project | None) -> None:
@@ -4200,8 +2763,8 @@ class MainWindow(QMainWindow):
         # what calls OpenSees waits for one (Options → Solver).
         solver = self._solver.available
         opensees = self._opensees.available
-        self._act_run.setEnabled(solver)
-        self._act_run.setStatusTip("" if solver else self._solver.summary())
+        self.action("analyze.run").setEnabled(solver)
+        self.action("analyze.run").setStatusTip("" if solver else self._solver.summary())
         run_batch = self.action("file.run_batch")
         run_batch.setEnabled(solver)
         run_batch.setStatusTip("" if solver else self._solver.summary())
@@ -4212,18 +2775,18 @@ class MainWindow(QMainWindow):
             "" if opensees else self._opensees.summary()
         )
         batch_enabled = has_cases and solver and not self._runner.is_running
-        self._act_run_all.setEnabled(batch_enabled)
-        self._act_run_selected.setEnabled(batch_enabled)
+        self.action("analyze.run_all").setEnabled(batch_enabled)
+        self.action("analyze.run_selected").setEnabled(batch_enabled)
         project_now = self._vm.project
         stored = self.results.has_stored(project_now)
         db_there = has_project and database_path(self._vm.path).exists()
-        self._act_clear_results.setEnabled(bool(has_project and (stored or db_there)))
+        self.action("analyze.clear_results").setEnabled(bool(has_project and (stored or db_there)))
         self._act_auto_mesh_frames.setEnabled(has_project)
         with QSignalBlocker(self._act_auto_mesh_frames):
             self._act_auto_mesh_frames.setChecked(
                 project_now is None or project_now.auto_mesh_frames
             )
-        self._act_check_stability.setEnabled(
+        self.action("analyze.check_stability").setEnabled(
             has_project
             and opensees
             and not self._stability.is_running
@@ -4232,7 +2795,6 @@ class MainWindow(QMainWindow):
         self._act_cancel_stability.setEnabled(self._stability.is_running)
         # Only there while a check runs, rather than a permanent grey entry.
         self._act_cancel_stability.setVisible(self._stability.is_running)
-        self._act_check_model.setEnabled(has_project)
         self.action("edit.join_frames").setEnabled(
             has_project and len(self._canvas.selection.elements) >= 2
         )
@@ -4253,7 +2815,6 @@ class MainWindow(QMainWindow):
         self._act_tool_quick_shell.setEnabled(has_project)
         self._act_tool_draw_shell.setEnabled(has_project)
         self._act_tool_measure.setEnabled(has_project)
-        self._act_select_results.setEnabled(has_project)
         self._act_load_combinations.setEnabled(True)
         self.action("display.show_deformed").setEnabled(has_static)
         self.action("display.show_mode_shape").setEnabled(has_modal)
@@ -4269,10 +2830,7 @@ class MainWindow(QMainWindow):
             isinstance(self.results.latest, InfluenceLineResults)
         )
         self.action("display.show_response_spectrum").setEnabled(has_rs)
-        self._act_display_options.setEnabled(has_project)
-        self._act_show_load_assigns.setEnabled(has_project)
-        self._act_lock_model.setEnabled(has_project)
-        self._lock_button.setEnabled(has_project)
+        self.model_lock.button.setEnabled(has_project)
         self._act_show_local_axes.setEnabled(has_project)
         self.action("display.back_to_model").setEnabled(self.display.dock is not None)
         # Startup gate: with no project open only File and Help stay usable. The
@@ -4293,7 +2851,7 @@ class MainWindow(QMainWindow):
             if menu is not None:
                 menu.setEnabled(has_project)
         self._explain_disabled_actions()
-        self._sync_visibility_actions()
+        self.visibility.sync_actions()
         self.viewport.sync_show_all()
 
     #: Why an action is greyed out, by the condition it waits for. The tooltip

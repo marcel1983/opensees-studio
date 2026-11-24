@@ -24,19 +24,19 @@ def test_opening_another_project_clears_the_previous_results(qtbot) -> None:  # 
     window = MainWindow()
     qtbot.addWidget(window)
 
-    assert window.open_project(EXAMPLES / "cantilever.osmodel")
+    assert window.files.open_project(EXAMPLES / "cantilever.osmodel")
     project = window._vm.project
     assert project is not None
     results = StaticResults(case_id=1, case_name="old", n_steps=1)
     window.results.latest = results
-    window._results_panel.show_results(results, project)
+    window.results_view.panel.show_results(results, project)
     window.display.set_caption("Old results")
-    assert window._results_panel._tabs.count() > 0
+    assert window.results_view.panel._tabs.count() > 0
 
-    assert window.open_project(EXAMPLES / "space_frame_3d.osmodel")
+    assert window.files.open_project(EXAMPLES / "space_frame_3d.osmodel")
 
     assert window.results.latest is None
-    assert window._results_panel.tables() == []
-    assert window._results_panel._tabs.count() == 0
-    assert window._results_panel._title.text() == ""
+    assert window.results_view.panel.tables() == []
+    assert window.results_view.panel._tabs.count() == 0
+    assert window.results_view.panel._title.text() == ""
     assert window.display.dock is None

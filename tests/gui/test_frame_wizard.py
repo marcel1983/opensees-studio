@@ -185,7 +185,7 @@ def test_new_2d_frame_keeps_the_model_when_the_discard_is_refused(qtbot, monkeyp
         )
     )
     before = mw._vm.project.model_dump()
-    monkeypatch.setattr(mw, "_confirm_discard_changes", lambda _action: False)
+    monkeypatch.setattr(mw.files, "confirm_discard", lambda _action: False)
     monkeypatch.setattr(
         FrameWizard,
         "exec",

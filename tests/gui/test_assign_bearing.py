@@ -147,10 +147,10 @@ def test_main_window_creates_renders_and_undoes_bearings(qtbot, monkeypatch) -> 
     renderer = mw._canvas._renderer
     assert renderer._frame_pd is not None and first.id in renderer._frame_ids_ordered
     # the tooltip provider describes the bearing, nothing for a missing element
-    tip = mw.element_tooltip(first.id)
+    tip = mw.display.element_tooltip(first.id)
     assert tip is not None and "Kinit = 1000" in tip and f"u_y = {U_Y:.6g}" in tip
-    assert mw.element_tooltip(999) is None
-    assert mw._canvas.element_tooltip == mw.element_tooltip
+    assert mw.display.element_tooltip(999) is None
+    assert mw._canvas.element_tooltip == mw.display.element_tooltip
 
     # the property editor shows the derived yield values for the selection
     mw._canvas.selection.select_element(first.id)

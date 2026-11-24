@@ -209,7 +209,7 @@ def test_main_window_creates_renders_and_undoes_sliding_bearings(qtbot, monkeypa
     assert flat.nodes == (1, 2) and flat.friction_model_id == 1
     renderer = mw._canvas._renderer
     assert renderer._frame_pd is not None and flat.id in renderer._frame_ids_ordered
-    tip = mw.element_tooltip(flat.id)
+    tip = mw.display.element_tooltip(flat.id)
     assert tip is not None and "friction model #1 (Coulomb)" in tip and "Reff" not in tip
 
     mw._canvas.selection.select_node(1)
@@ -217,7 +217,7 @@ def test_main_window_creates_renders_and_undoes_sliding_bearings(qtbot, monkeypa
     mw._act_assign_bearing.trigger()
     assert [el.type for el in project.elements] == ["FlatSliderBearing", "SingleFPBearing"]
     pendulum = project.elements[1]
-    tip = mw.element_tooltip(pendulum.id)
+    tip = mw.display.element_tooltip(pendulum.id)
     assert tip is not None and "Reff = 2" in tip and "T = 2 pi sqrt(Reff / g)" in tip
     assert len(renderer._frame_ids_ordered) == 2
 

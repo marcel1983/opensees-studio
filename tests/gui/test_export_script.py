@@ -22,7 +22,7 @@ def window_with_project(qtbot):  # type: ignore[no-untyped-def]
 
     win = MainWindow()
     qtbot.addWidget(win)
-    assert win.open_project(EXAMPLES / "cantilever.osmodel")
+    assert win.files.open_project(EXAMPLES / "cantilever.osmodel")
     return win
 
 
@@ -105,7 +105,7 @@ def test_file_export_ifc_writes_a_valid_ifc4(qtbot, monkeypatch, tmp_path) -> No
 
     window = MainWindow()
     qtbot.addWidget(window)
-    assert window.open_project(EXAMPLES / "space_frame_3d.osmodel")
+    assert window.files.open_project(EXAMPLES / "space_frame_3d.osmodel")
     target = tmp_path / "frame"  # no suffix: the action adds .ifc
     monkeypatch.setattr(
         QFileDialog, "getSaveFileName", staticmethod(lambda *a, **k: (str(target), ""))

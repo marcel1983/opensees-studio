@@ -147,11 +147,11 @@ def test_opening_a_batch_solved_project_offers_its_results(qtbot, tmp_path, monk
     window = MainWindow()
     qtbot.addWidget(window)
 
-    assert window.open_project(path)
+    assert window.files.open_project(path)
 
     assert asked == ["Stored results"]
     n_cases = len(load_project(path).analyses)
-    assert window._case_combo.count() + len(window.results.extra) == n_cases
+    assert window.results_view.case_combo.count() + len(window.results.extra) == n_cases
     assert window.results.latest is not None
 
     # An edited model no longer matches: nothing is offered.
@@ -159,5 +159,5 @@ def test_opening_a_batch_solved_project_offers_its_results(qtbot, tmp_path, monk
     edited.nodes.append(Node(id=999, coords=(50.0, 0.0, 0.0), restraint=(True,) * 6))
     save_project(edited, path)
     asked.clear()
-    assert window.open_project(path)
+    assert window.files.open_project(path)
     assert asked == []

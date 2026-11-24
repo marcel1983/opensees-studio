@@ -24,7 +24,7 @@ def _window(qtbot):  # type: ignore[no-untyped-def]
 
     mw = MainWindow()
     qtbot.addWidget(mw)
-    assert mw.open_project(EXAMPLE)
+    assert mw.files.open_project(EXAMPLE)
     return mw
 
 

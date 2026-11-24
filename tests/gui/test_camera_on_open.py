@@ -29,11 +29,11 @@ def test_a_3d_project_after_a_2d_one_opens_isometric_and_fitted(qtbot) -> None: 
     qtbot.waitExposed(window)
 
     window._vm.open(EXAMPLES / "ex1a_canti2d.osmodel")
-    window._apply_project_view_settings()
+    window.visibility.restore_from_project()
     qtbot.wait(50)
 
     window._vm.open(EXAMPLES / "space_frame_3d.osmodel")
-    window._apply_project_view_settings()
+    window.visibility.restore_from_project()
     qtbot.wait(50)
 
     camera = window._canvas.camera
