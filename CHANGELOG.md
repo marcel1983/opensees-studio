@@ -145,6 +145,10 @@ refused instead of silently downgraded).
 
 ### Changed
 
+- **Spanish: *cercha* in place of *celosía*.** A truss is a *cercha* everywhere
+  in the Spanish interface: the truss element (Dibujar barra de cercha), the
+  Truss Wizard (Asistente de cerchas), New 2D Truss and the roof trusses of the
+  Warehouse Wizard.
 - **The mass source counts distributed loads and floor panels.** A load pattern
   in Define → Mass Source gave mass for its nodal, uniform and point loads and
   its self weight; a distributed (trapezoidal) load and a floor panel (Assign →
