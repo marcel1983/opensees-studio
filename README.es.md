@@ -125,7 +125,10 @@ script o un notebook de Jupyter: la interfaz es una forma de usarlo, no la únic
   las combinaciones de RNC-07, NSCM o ASCE 7-16; columnas y largueros de los
   muros hastiales, y casos de viento por dirección según RNC-07 Título IV o
   ASCE 7-16 capítulo 27, con las presiones de la estructura principal sobre
-  correas, largueros y columnas; las correas van
+  correas, largueros y columnas; casos de sismo estático `EQ X` y `EQ Y` según
+  RNC-07 Art. 32, NSCM 8.2.1 o ASCE 7-16 12.8, con el coeficiente de la meseta
+  del espectro por el peso sísmico (acero, carga muerta de techo y carga viva
+  reducida) repartido entre los nudos según peso y altura; las correas van
   articuladas y solo arriostran la viga de techo donde llevan angular de
   estabilización, y el asistente escribe esas longitudes no arriostradas para la
   verificación de acero); la losa **Slab 20cm** de concreto

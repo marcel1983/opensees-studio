@@ -20,6 +20,7 @@ from opensees_studio.core.warehouse import (
     Warehouse,
     WarehouseError,
     WarehouseLoads,
+    WarehouseSeismic,
     WarehouseSpec,
     WarehouseWind,
     build_warehouse,
@@ -27,6 +28,7 @@ from opensees_studio.core.warehouse import (
     end_wall_layout,
     member_design_overrides,
     plan_warehouse,
+    portable,
     warehouse_wind_cases,
     wind_loads,
 )
@@ -477,6 +479,7 @@ def _planned(roof_structure: str) -> str:
         roof_live=preset.roof_live_kpa * 1000.0,
         midspan_point=preset.midspan_point_kn * 1000.0,
         wind=WarehouseWind(),
+        seismic=WarehouseSeismic(),
     )
     plan_warehouse(project, spec, loads=loads).apply(project)
     return project.model_dump_json(by_alias=True)
@@ -508,8 +511,23 @@ def test_the_plan_does_not_keep_the_last_digit_of_the_maths(
         return tuple(np.nextafter(axis, towards) for axis in frame_local_axes(*args))
 
     monkeypatch.setattr(module, "frame_local_axes", axes)
+    norm = np.linalg.norm
+    monkeypatch.setattr(
+        np.linalg, "norm", lambda *args, **kw: np.nextafter(norm(*args, **kw), towards)
+    )
 
     assert _planned(roof_structure) == expected
+
+
+def test_a_number_half_way_between_two_rounded_ones_falls_to_one_side() -> None:
+    half_way = 294.4254031875  # 13 digits: a product of round inputs
+    values = {
+        portable(v)
+        for v in (half_way, math.nextafter(half_way, math.inf), math.nextafter(half_way, 0.0))
+    }
+    assert len(values) == 1
+    assert portable(-0.0) == 0.0 and math.copysign(1.0, portable(-0.0)) == 1.0
+    assert portable(1.0 / 3.0) == 0.333333333333
 
 
 def test_a_load_has_no_component_that_is_round_off() -> None:

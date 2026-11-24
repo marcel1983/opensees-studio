@@ -35,6 +35,8 @@ from PySide6.QtWidgets import (
 
 from opensees_studio.core.code_combinations import CODES
 from opensees_studio.core.help import TOPIC_PROPERTY
+from opensees_studio.core.nscm import NSCM_IMPORTANCE
+from opensees_studio.core.rnc07 import RNC07_REGULARITY_LABELS, RNC07_SOILS, RNC07_ZONE_A0
 from opensees_studio.core.trusses import TRUSS_TYPE_LABELS
 from opensees_studio.core.units import UnitSystem, labels_for
 from opensees_studio.core.warehouse import (
@@ -45,12 +47,15 @@ from opensees_studio.core.warehouse import (
     ROOF_STRUCTURES,
     ROOF_TRUSS_TYPES,
     SECTION_KEYS,
+    SEISMIC_DIRECTIONS,
+    SEISMIC_METHODS,
     TRUSS_BOTTOMS,
     TRUSS_SECTION_KEYS,
     WIND_METHODS,
     Warehouse,
     WarehouseError,
     WarehouseLoads,
+    WarehouseSeismic,
     WarehouseSpec,
     WarehouseWind,
     build_warehouse,
@@ -58,6 +63,7 @@ from opensees_studio.core.warehouse import (
     force_from_kn,
     length_from_m,
     pressure_from_kpa,
+    seismic_coefficient,
     warehouse_wind_cases,
 )
 from opensees_studio.core.wind import (
@@ -113,6 +119,26 @@ WIND_TOPOGRAPHIES: tuple[tuple[str, str], ...] = (
     ("T4", "T4: slopes between 5 and 10 %"),
     ("T5", "T5: hilltops, slopes above 10 %"),
 )
+
+#: Soil choices per seismic method: RNC-07 soil types, NSCM and ASCE site classes.
+SEISMIC_SOILS: dict[str, tuple[str, ...]] = {
+    "rnc07": RNC07_SOILS,
+    "nscm": ("A", "B", "C", "D"),
+    "asce7": (),
+}
+#: The soil each method starts with.
+DEFAULT_SOIL: dict[str, str] = {"rnc07": "II", "nscm": "C"}
+
+#: Importance choices per seismic method: RNC-07 groups, NSCM risk categories.
+SEISMIC_CLASSES: dict[str, tuple[str, ...]] = {
+    "rnc07": ("A", "B", "C"),
+    "nscm": tuple(NSCM_IMPORTANCE),
+    "asce7": (),
+}
+DEFAULT_CLASS: dict[str, str] = {"rnc07": "B", "nscm": "II"}
+
+#: a0 each method starts with, g: RNC-07 zone C; NSCM Tabla 14.2, Managua.
+DEFAULT_A0: dict[str, float] = {"rnc07": RNC07_ZONE_A0["C"], "nscm": 0.36667, "asce7": 0.0}
 
 #: Labels of :data:`opensees_studio.core.wind.OPENINGS`, in its order.
 WIND_OPENINGS: tuple[str, ...] = (
@@ -220,6 +246,7 @@ class WarehouseWizard(QWizard):
         self._build_sections_page()
         self._build_loads_page()
         self._build_wind_page()
+        self._build_seismic_page()
         for index, page in enumerate(
             (
                 self._page_geometry,
@@ -227,6 +254,7 @@ class WarehouseWizard(QWizard):
                 self._page_sections,
                 self._page_loads,
                 self._page_wind,
+                self._page_seismic,
             )
         ):
             self.setPage(index, page)
@@ -603,6 +631,109 @@ class WarehouseWizard(QWizard):
         self._page_wind = page
         self._on_wind_method_changed()
 
+    def _build_seismic_page(self) -> None:
+        page = _CompletablePage()
+        page.complete_check = lambda: not self._seismic_error
+        page.setTitle("Earthquake")
+        page.setSubTitle("The static earthquake forces, one case per direction.")
+        form = QFormLayout(page)
+        self._seismic_error = ""
+
+        self._seismic_on = QCheckBox("Create the earthquake load cases")
+        self._seismic_method = QComboBox()
+        for key, label in SEISMIC_METHODS.items():
+            self._seismic_method.addItem(tr(label), userData=key)
+        self._seismic_a0 = _field(0.3, minimum=0.0, maximum=2.0, step=0.05, suffix="g")
+        self._seismic_a0.setToolTip(
+            "Peak ground acceleration a0. RNC-07 Art. 24: zone A 0.1, B 0.2, C 0.3 g, or the "
+            "value of the map of Anexo C. NSCM Tabla 14.2 per municipality: Managua 0.36667 g."
+        )
+        self._seismic_soil = QComboBox()
+        self._seismic_soil.setToolTip(
+            "RNC-07 Art. 25: soil type I (rock) to III (soft). NSCM Tabla 6.4.1: site class "
+            "A to D. A softer soil needs a site study."
+        )
+        self._seismic_class = QComboBox()
+        self._seismic_class.setToolTip(
+            "RNC-07 Art. 20: group A (essential, forces times 1.5), B or C. NSCM Tabla 5.2.1: "
+            "risk category I to IV."
+        )
+        self._seismic_reduction = _field(2.0, minimum=0.01, maximum=20.0, step=0.5)
+        self._seismic_reduction.setToolTip(
+            "Q of RNC-07 Art. 21, Ro of NSCM (Ec. 6.6-1) or R of ASCE 7-16 Table 12.2-1, "
+            "for the lateral system of the warehouse in the direction that has the least."
+        )
+        self._seismic_regularity = QComboBox()
+        for key, label in RNC07_REGULARITY_LABELS.items():
+            self._seismic_regularity.addItem(tr(label), userData=key)
+        self._seismic_sds = _field(1.0, minimum=0.0, maximum=10.0, step=0.1, suffix="g")
+        self._seismic_sds.setToolTip(
+            "ASCE 7-16 11.4.5: design spectral acceleration at short periods, SDS."
+        )
+        self._seismic_ie = _field(1.0, minimum=0.01, maximum=10.0, step=0.25)
+        self._seismic_ie.setToolTip("ASCE 7-16 Table 1.5-2: importance factor Ie.")
+        self._seismic_live = _field(
+            0.0, minimum=0.0, maximum=1e9, step=pressure_from_kpa(0.05, self._units),
+            suffix=self._pressure,
+        )  # fmt: skip
+        self._seismic_live.setToolTip(
+            "Roof live load that counts as seismic weight, per area of horizontal "
+            "projection. RNC-07 Art. 11 a: 10 kg/m² on light roofs (CVR). NSCM 9.6: 0.3 CV "
+            "in warehouses and storage, 0.15 CV elsewhere. ASCE 7-16 12.7.2 counts none."
+        )
+        self._seismic_directions: dict[str, QCheckBox] = {}
+        directions = QHBoxLayout()
+        for direction in SEISMIC_DIRECTIONS:
+            box = QCheckBox(direction)
+            box.setChecked(True)
+            box.toggled.connect(self._refresh_seismic)
+            self._seismic_directions[direction] = box
+            directions.addWidget(box)
+        directions.addStretch(1)
+
+        for combo in (self._seismic_method, self._seismic_regularity):
+            combo.setSizeAdjustPolicy(
+                QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+            )
+            combo.setMinimumContentsLength(24)
+        form.addRow(self._seismic_on)
+        form.addRow("Method:", self._seismic_method)
+        form.addRow("Ground acceleration a0:", self._seismic_a0)
+        form.addRow("Soil:", self._seismic_soil)
+        form.addRow("Group or risk category:", self._seismic_class)
+        form.addRow("Reduction factor (Q, Ro or R):", self._seismic_reduction)
+        form.addRow("Regularity:", self._seismic_regularity)
+        form.addRow("SDS:", self._seismic_sds)
+        form.addRow("Importance factor Ie:", self._seismic_ie)
+        form.addRow("Roof live load in the seismic weight:", self._seismic_live)
+        form.addRow("Earthquake along:", directions)
+        self._seismic_summary = QLabel()
+        self._seismic_summary.setWordWrap(True)
+        form.addRow(self._seismic_summary)
+        note = QLabel(
+            "<i>The base shear is the coefficient times the weight of the steel, the roof "
+            "dead load and this part of the roof live load, shared between the joints by "
+            "weight and height. The coefficient is that of the plateau of the spectrum: the "
+            "period is not used. Accidental torsion is not included.</i>"
+        )
+        note.setWordWrap(True)
+        form.addRow(note)
+
+        self._seismic_on.toggled.connect(self._refresh_seismic)
+        self._seismic_method.currentIndexChanged.connect(self._on_seismic_method_changed)
+        for field in (
+            self._seismic_a0,
+            self._seismic_reduction,
+            self._seismic_sds,
+            self._seismic_ie,
+            self._seismic_live,
+        ):
+            field.valueChanged.connect(self._refresh_seismic)
+        for combo in (self._seismic_soil, self._seismic_class, self._seismic_regularity):
+            combo.currentIndexChanged.connect(self._refresh_seismic)
+        self._page_seismic = page
+        self._on_seismic_method_changed()
+
     # ── live state ──────────────────────────────────────────────────
     def _on_code_changed(self, _index: int = 0) -> None:
         preset = CODE_PRESETS[self._code.currentData()]
@@ -617,6 +748,92 @@ class WarehouseWizard(QWizard):
             self._wind_method.setCurrentIndex(index)
         else:
             self._on_wind_method_changed()
+        index = self._seismic_method.findData(preset.seismic_method)
+        if index != self._seismic_method.currentIndex():
+            self._seismic_method.setCurrentIndex(index)
+        else:
+            self._on_seismic_method_changed()
+
+    def _on_seismic_method_changed(self, _index: int = 0) -> None:
+        method = str(self._seismic_method.currentData())
+        chosen = CODE_PRESETS[self._code.currentData()]
+        # The numbers of the method, also when the combinations follow another code.
+        preset = next(p for p in (chosen, *CODE_PRESETS.values()) if p.seismic_method == method)
+        for combo, choices, default in (
+            (self._seismic_soil, SEISMIC_SOILS[method], DEFAULT_SOIL.get(method, "")),
+            (self._seismic_class, SEISMIC_CLASSES[method], DEFAULT_CLASS.get(method, "")),
+        ):
+            combo.blockSignals(True)
+            combo.clear()
+            for item in choices:
+                combo.addItem(item, userData=item)
+            combo.setCurrentIndex(max(0, combo.findData(default)))
+            combo.blockSignals(False)
+        for field, value in (
+            (self._seismic_a0, DEFAULT_A0[method]),
+            (self._seismic_reduction, preset.seismic_reduction),
+            (self._seismic_live, pressure_from_kpa(preset.seismic_live_kpa, self._units)),
+        ):
+            field.blockSignals(True)
+            field.setValue(value)
+            field.blockSignals(False)
+        self._refresh_seismic()
+
+    def seismic(self) -> WarehouseSeismic | None:
+        """The earthquake the fields describe; None when no earthquake cases are wanted.
+
+        Raises:
+            WarehouseError: if they do not describe one.
+        """
+        if not self._seismic_on.isChecked():
+            return None
+        return WarehouseSeismic(
+            method=str(self._seismic_method.currentData()),
+            a0=self._seismic_a0.value(),
+            soil=str(self._seismic_soil.currentData() or ""),
+            importance_class=str(self._seismic_class.currentData() or ""),
+            reduction=self._seismic_reduction.value(),
+            regularity=str(self._seismic_regularity.currentData()),
+            sds=self._seismic_sds.value(),
+            importance=self._seismic_ie.value(),
+            roof_live=self._seismic_live.value(),
+            directions=tuple(d for d, box in self._seismic_directions.items() if box.isChecked()),
+        )
+
+    def _refresh_seismic(self, *_args: object) -> None:
+        if not hasattr(self, "_page_seismic"):
+            return
+        on = self._seismic_on.isChecked()
+        method = self._seismic_method.currentData()
+        asce = method == "asce7"
+        for widget, enabled in (
+            (self._seismic_method, True),
+            (self._seismic_a0, not asce),
+            (self._seismic_soil, not asce),
+            (self._seismic_class, not asce),
+            (self._seismic_reduction, True),
+            (self._seismic_regularity, method == "rnc07"),
+            (self._seismic_sds, asce),
+            (self._seismic_ie, asce),
+            (self._seismic_live, True),
+            *((box, True) for box in self._seismic_directions.values()),
+        ):
+            widget.setEnabled(on and enabled)
+        self._seismic_error = ""
+        text = ""
+        try:
+            seismic = self.seismic()
+            if seismic is not None:
+                coefficient, clause = seismic_coefficient(seismic)
+                text = tr(
+                    "<b>{cases}</b> earthquake cases. Seismic coefficient "
+                    "<b>c = {c}</b> of the weight ({clause})."
+                ).format(cases=len(seismic.directions), c=f"{coefficient:.4g}", clause=clause)
+        except WarehouseError as exc:
+            self._seismic_error = str(exc)
+            text = "<b>" + tr("Check the numbers:") + f"</b> {tr(self._seismic_error)}"
+        self._seismic_summary.setText(text)
+        self._page_seismic.completeChanged.emit()
 
     def _on_wind_method_changed(self, _index: int = 0) -> None:
         method = str(self._wind_method.currentData())
@@ -865,6 +1082,7 @@ class WarehouseWizard(QWizard):
             combinations=self._combinations.isChecked(),
             design_lengths=self._design_lengths.isChecked(),
             wind=self.wind(),
+            seismic=self.seismic(),
         )
 
 
