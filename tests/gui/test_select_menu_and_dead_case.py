@@ -115,7 +115,7 @@ def test_by_section_adds_to_the_selection(qtbot) -> None:  # type: ignore[no-unt
     _model(mw)
     sel = mw._canvas.selection
 
-    entries = _submenu_entries(mw, mw._menu_select_by_section, mw._fill_select_by_section)
+    entries = _submenu_entries(mw, mw.select.by_section_menu, mw.select.fill_by_section)
     assert sorted(entries) == ["#1 B (1)", "#2 C (1)"]
     entries["#1 B (1)"].trigger()
     assert sel.elements == {1}
@@ -130,12 +130,12 @@ def test_by_type_and_by_pattern(qtbot) -> None:  # type: ignore[no-untyped-def]
     mw._vm.project.load_patterns.append(PlainLoadPattern(id=7, time_series_id=1, self_weight=1.0))
     sel = mw._canvas.selection
 
-    by_type = _submenu_entries(mw, mw._menu_select_by_type, mw._fill_select_by_type)
+    by_type = _submenu_entries(mw, mw.select.by_type_menu, mw.select.fill_by_type)
     by_type["Truss (1)"].trigger()
     assert sel.elements == {3}
 
     sel.clear()
-    by_pattern = _submenu_entries(mw, mw._menu_select_by_pattern, mw._fill_select_by_pattern)
+    by_pattern = _submenu_entries(mw, mw.select.by_pattern_menu, mw.select.fill_by_pattern)
     (entry,) = by_pattern.values()
     entry.trigger()
     assert sel.elements == {1}  # only section B has a unit weight
@@ -147,11 +147,11 @@ def test_by_material_lists_what_the_elements_use(qtbot) -> None:  # type: ignore
 
     mw = _window(qtbot)
     _model(mw)
-    entries = _submenu_entries(mw, mw._menu_select_by_material, mw._fill_select_by_material)
+    entries = _submenu_entries(mw, mw.select.by_material_menu, mw.select.fill_by_material)
     assert list(entries) == ["(none in the model)"]  # material 1 is not defined yet
 
     mw._vm.project.materials.append(ElasticUniaxial(id=1, name="steel", E=1.0))
-    entries = _submenu_entries(mw, mw._menu_select_by_material, mw._fill_select_by_material)
+    entries = _submenu_entries(mw, mw.select.by_material_menu, mw.select.fill_by_material)
     entries["#1 steel (1)"].trigger()
     assert mw._canvas.selection.elements == {3}
 

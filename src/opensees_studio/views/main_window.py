@@ -53,13 +53,10 @@ from opensees_studio import __version__
 from opensees_studio.commands import (
     AddNodesCommand,
     AddSectionsCommand,
-    AssignMaterialCommand,
-    AssignSectionCommand,
     DeleteElementsCommand,
     DeleteNodesCommand,
     MeshCommand,
     SetCoordSystemsCommand,
-    SetMassCommand,
     SetProjectMetaCommand,
     SetRestraintCommand,
 )
@@ -79,17 +76,9 @@ from opensees_studio.core import (
     make_default_truss_material,
     shortcut_profiles,
 )
-from opensees_studio.core import selection as selection_queries
 from opensees_studio.core.combinations import model_fingerprint
-from opensees_studio.core.connectivity import (
-    joints_on_bars,
-    joints_on_shell_edges,
-    loose_joints,
-)
 from opensees_studio.core.design.settings import DesignSettings
-from opensees_studio.core.duplicates import default_tolerance
 from opensees_studio.core.generated import GeneratedModel
-from opensees_studio.core.groups import group_members
 from opensees_studio.core.help import ACTION_TOPICS, TOPIC_PROPERTY
 from opensees_studio.core.i18n import LANGUAGES
 from opensees_studio.core.materials.library import is_uniaxial
@@ -165,7 +154,10 @@ from opensees_studio.views.controllers.loads import LoadsController
 from opensees_studio.views.controllers.members import MembersController
 from opensees_studio.views.controllers.model_tools import ModelToolsController
 from opensees_studio.views.controllers.patterns import PatternsController
+from opensees_studio.views.controllers.property_edits import PropertyEditsController
+from opensees_studio.views.controllers.select import SelectController
 from opensees_studio.views.controllers.transforms import TransformsController
+from opensees_studio.views.controllers.viewport import ViewportController
 from opensees_studio.views.dialogs import (
     AddNodeDialog,
     AnalysisCaseManagerDialog,
@@ -182,7 +174,6 @@ from opensees_studio.views.dialogs import (
     RunAnalysisDialog,
 )
 from opensees_studio.views.dialogs.batch_run import BatchRunDialog
-from opensees_studio.views.dialogs.grid_line_view import GridLineViewDialog
 from opensees_studio.views.dialogs.grid_wizard import GridWizardDialog
 from opensees_studio.views.dialogs.load_combinations import LoadCombinationsDialog
 from opensees_studio.views.dialogs.load_display import LoadDisplayDialog
@@ -318,11 +309,6 @@ def _add_actions(menu: QMenu, actions: Sequence[QAction | None]) -> None:
             menu.addAction(action)
 
 
-def _pairs_selection(pairs: list[tuple[int, int]]) -> tuple[set[int], set[int]]:
-    """``(element, node)`` fault pairs as a selection: the joints and the members."""
-    return {node for _, node in pairs}, {element for element, _ in pairs}
-
-
 class MainWindow(QMainWindow):
     """Top-level application shell."""
 
@@ -343,8 +329,6 @@ class MainWindow(QMainWindow):
         self._case_results = CaseResultsCache()
         self._report_extra: dict[int, tuple[str, Any]] = {}
         #: View → Grid Line View: (line label, window) while active, else None.
-        self._grid_view: tuple[str, float] | None = None
-        self._grid_view_window: float | None = None
         self._analysis_error_box: QMessageBox | None = None  # last failure report
         self._stability_box: QMessageBox | None = None  # last stability check answer
         self._run_dialog: RunAnalysisDialog | None = None  # open while a Run dialog is shown
@@ -424,6 +408,12 @@ class MainWindow(QMainWindow):
         self.library = LibraryController(shell, new_project=lambda: self._on_new())
         self.members = MembersController(shell)
         self.patterns = PatternsController(shell, new_project=self._on_new)
+        #: The camera, the working plane and its level, a grid line view, what is hidden.
+        self.viewport = ViewportController(shell, action=lambda action_id: self.action(action_id))
+        #: What the Properties dock changes in the model.
+        self.property_edits = PropertyEditsController(shell)
+        #: The Select menu: everything, inverted, the previous one, the queries.
+        self.select = SelectController(shell, action=lambda action_id: self.action(action_id))
         #: Loads on joints, frames and areas, joint patterns, Edit → Delete Loads.
         self.loads = LoadsController(shell)
         #: The Design menu: basis, members, steel and concrete checks, connections, footings.
@@ -532,14 +522,14 @@ class MainWindow(QMainWindow):
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, tree_dock)
 
         self._props = PropertyEditorDock()
-        self._props.on_apply_mass = self._on_apply_mass
-        self._props.on_change_element_type = self._on_change_element_type
-        self._props.on_change_element_material = self._on_change_element_material
-        self._props.on_change_element_section = self._on_change_element_section
-        self._props.on_change_element_fields = self._on_change_element_fields
-        self._props.on_assign_node_restraints = self._on_assign_node_restraints
-        self._props.on_assign_node_masses = self._on_assign_node_masses
-        self._props.on_assign_elements = self._on_assign_elements
+        self._props.on_apply_mass = self.property_edits.apply_mass
+        self._props.on_change_element_type = self.property_edits.change_element_type
+        self._props.on_change_element_material = self.property_edits.change_element_material
+        self._props.on_change_element_section = self.property_edits.change_element_section
+        self._props.on_change_element_fields = self.property_edits.change_element_fields
+        self._props.on_assign_node_restraints = self.property_edits.assign_node_restraints
+        self._props.on_assign_node_masses = self.property_edits.assign_node_masses
+        self._props.on_assign_elements = self.property_edits.assign_elements
         props_dock = QDockWidget("Properties", self)
         props_dock.setObjectName("propertiesDock")
         props_dock.setWidget(self._props)
@@ -594,32 +584,19 @@ class MainWindow(QMainWindow):
             "&Delete selection", self, shortcut=QKeySequence.StandardKey.Delete
         )
         self._act_clear_selection = QAction("Clear &selection", self, shortcut="Esc")
-        self._act_select_all = QAction("Select &all", self, shortcut="Ctrl+A")
         self._act_table_editing = QAction("Interactive &Table Editing…", self)
         self._act_table_editing.setShortcut("Ctrl+T")
 
         # Select menu: queries that add to (or invert) the current selection.
-        self._act_invert_selection = QAction("&Invert Selection", self, shortcut="Ctrl+I")
-        self._act_previous_selection = QAction("Get &Previous Selection", self, shortcut="Ctrl+P")
         self._act_select_line = QAction("Intersecting &Line", self, checkable=True)
         self._act_select_line.setToolTip(
             "Drag a line across the model: every member and shell it cuts is selected"
         )
         # SAP2000's side buttons read all / ps / clr / line.
-        self._act_select_all.setIconText("all")
-        self._act_previous_selection.setIconText("ps")
+        self.action("select.all").setIconText("all")
+        self.action("select.previous").setIconText("ps")
         self._act_clear_selection.setIconText("clr")
         self._act_select_line.setIconText("line")
-        self._act_select_all_joints = QAction("All &Joints", self)
-        self._act_select_all_elements = QAction("All &Elements", self)
-        self._act_select_supports = QAction("&Supported Joints", self)
-        self._act_select_joints_with_mass = QAction("Joints with &Mass", self)
-        self._act_select_joints_of_elements = QAction("Joints of Selected Elements", self)
-        self._act_select_elements_within_joints = QAction("Elements between Selected Joints", self)
-        self._act_select_weighted = QAction("Elements with Self &Weight", self)
-        self._act_select_loose_joints = QAction("&Loose Joints", self)
-        self._act_select_joints_in_bars = QAction("Joints &Inside Members", self)
-        self._act_select_shell_edge_joints = QAction("Joints on S&hell Edges", self)
 
         # Edit → transforms
 
@@ -765,37 +742,12 @@ class MainWindow(QMainWindow):
 
         # View
         self._act_zoom_extents = QAction("Zoom &Extents", self, shortcut="Ctrl+E")
-        self._act_view_iso = QAction("&Isometric", self, shortcut="Ctrl+1")
-        self._act_view_top = QAction("&Top (XY)", self, shortcut="Ctrl+2")
-        self._act_view_front = QAction("&Front (XZ)", self, shortcut="Ctrl+3")
-        self._act_view_right = QAction("&Right (YZ)", self, shortcut="Ctrl+4")
-        # SAP2000's Move Up/Down in List: the next plan level or elevation line.
-        self._act_level_up = QAction("▲ Move Up in List", self, shortcut=QKeySequence("Ctrl+Up"))
-        self._act_level_down = QAction(
-            "▼ Move Down in List", self, shortcut=QKeySequence("Ctrl+Down")
-        )
-        self._act_level_up.setToolTip(
-            "Next level up (plan) or the next grid line (elevation), showing only its objects"
-        )
-        self._act_level_down.setToolTip(
-            "Next level down (plan) or the previous grid line (elevation), showing only its objects"
-        )
-        self._act_level_up.setEnabled(False)
-        self._act_level_down.setEnabled(False)
+        # Move Up/Down in List wait for a plan or an elevation with several levels.
+        self.action("view.level_up").setEnabled(False)
+        self.action("view.level_down").setEnabled(False)
         # View → Rotate: the camera turns, the model does not.
-        self._act_rotate_left = QAction("↺ Rotate Left", self, shortcut=QKeySequence("Alt+Left"))
-        self._act_rotate_right = QAction("↻ Rotate Right", self, shortcut=QKeySequence("Alt+Right"))
-        self._act_rotate_up = QAction("⤒ Tilt Up", self, shortcut=QKeySequence("Alt+Up"))
-        self._act_rotate_down = QAction("⤓ Tilt Down", self, shortcut=QKeySequence("Alt+Down"))
         self._act_spin = QAction("⟳ Spin", self, checkable=True)
-        for action, tip in (
-            (self._act_rotate_left, "Turn the view 15° to the left about the vertical axis"),
-            (self._act_rotate_right, "Turn the view 15° to the right about the vertical axis"),
-            (self._act_rotate_up, "Tilt the view 15° up"),
-            (self._act_rotate_down, "Tilt the view 15° down"),
-            (self._act_spin, "Turn the view continuously, to present the model"),
-        ):
-            action.setToolTip(tip)
+        self._act_spin.setToolTip("Turn the view continuously, to present the model")
         self._act_toggle_parallel = QAction("&Parallel projection", self, checkable=True)
         self._act_show_extruded = QAction("Show &Extruded Sections", self, checkable=True)
         self._act_show_local_axes = QAction("Show Local A&xes", self, checkable=True)
@@ -819,9 +771,7 @@ class MainWindow(QMainWindow):
             self._color_by_group.addAction(action)
         self._act_color_none.setChecked(True)
         self._act_show_grids = QAction("Show &Grids", self, checkable=True, checked=True)
-        self._act_grid_line_view = QAction("Grid &Line View…", self)
-        self._act_show_all_objects = QAction("Show &All Objects", self)
-        self._act_show_all_objects.setEnabled(False)
+        self.action("view.show_all_objects").setEnabled(False)
         self._act_show_grid_labels = QAction(
             "Show Grid &Labels", self, checkable=True, checked=True
         )
@@ -836,11 +786,6 @@ class MainWindow(QMainWindow):
 
         # Per-viewport hiding. These never touch the project: the ids stay in
         # the model, they are only not drawn in this one canvas.
-        self._act_hide_selected = QAction("&Hide Selected", self, shortcut=QKeySequence("Ctrl+H"))
-        self._act_isolate_selected = QAction(
-            "&Isolate Selected", self, shortcut=QKeySequence("Ctrl+Shift+I")
-        )
-        self._act_invert_visible = QAction("&Invert Visible", self)
         self._act_view_colors = QAction("&Colors…", self)
 
         # A second (third, …) viewport on the same project, in its own window.
@@ -943,7 +888,7 @@ class MainWindow(QMainWindow):
         m_edit.addSeparator()
         m_edit.addActions([act("edit.copy"), act("edit.paste")])
         m_edit.addSeparator()
-        m_edit.addActions([self._act_delete, self._act_select_all, self._act_clear_selection])
+        m_edit.addActions([self._act_delete, self.action("select.all"), self._act_clear_selection])
         m_edit.addSeparator()
         m_edit.addActions(
             [act("edit.move"), act("edit.replicate"), act("edit.mirror"), act("edit.extrude")]
@@ -1162,16 +1107,21 @@ class MainWindow(QMainWindow):
         m_view.addAction(self._act_zoom_extents)
         m_view.addSeparator()
         m_view.addActions(
-            [self._act_view_iso, self._act_view_top, self._act_view_front, self._act_view_right]
+            [
+                self.action("view.iso"),
+                self.action("view.top"),
+                self.action("view.front"),
+                self.action("view.right"),
+            ]
         )
-        m_view.addActions([self._act_level_up, self._act_level_down])
+        m_view.addActions([self.action("view.level_up"), self.action("view.level_down")])
         m_rotate = m_view.addMenu("&Rotate")
         m_rotate.addActions(
             [
-                self._act_rotate_left,
-                self._act_rotate_right,
-                self._act_rotate_up,
-                self._act_rotate_down,
+                self.action("view.rotate_left"),
+                self.action("view.rotate_right"),
+                self.action("view.rotate_up"),
+                self.action("view.rotate_down"),
             ]
         )
         m_rotate.addSeparator()
@@ -1209,12 +1159,12 @@ class MainWindow(QMainWindow):
             ]
         )
         m_view.addSeparator()
-        m_view.addAction(self._act_hide_selected)
-        m_view.addAction(self._act_isolate_selected)
-        m_view.addAction(self._act_invert_visible)
-        m_view.addAction(self._act_show_all_objects)
+        m_view.addAction(self.action("view.hide_selected"))
+        m_view.addAction(self.action("view.isolate_selected"))
+        m_view.addAction(self.action("view.invert_visible"))
+        m_view.addAction(self.action("view.show_all_objects"))
         m_view.addSeparator()
-        m_view.addAction(self._act_grid_line_view)
+        m_view.addAction(self.action("view.grid_line_view"))
         m_view.addAction(self._act_view_colors)
         m_view.addSeparator()
         m_view.addAction(self._act_new_view)
@@ -1317,16 +1267,16 @@ class MainWindow(QMainWindow):
         tb.addAction(self._act_zoom_extents)
         tb.addAction(self._act_zoom_window)
         tb.addSeparator()
-        tb.addAction(self._act_view_iso)
-        tb.addAction(self._act_view_top)
-        tb.addAction(self._act_view_front)
-        tb.addAction(self._act_view_right)
+        tb.addAction(self.action("view.iso"))
+        tb.addAction(self.action("view.top"))
+        tb.addAction(self.action("view.front"))
+        tb.addAction(self.action("view.right"))
         tb.addSeparator()
         for action in (
-            self._act_rotate_left,
-            self._act_rotate_right,
-            self._act_rotate_up,
-            self._act_rotate_down,
+            self.action("view.rotate_left"),
+            self.action("view.rotate_right"),
+            self.action("view.rotate_up"),
+            self.action("view.rotate_down"),
             self._act_spin,
         ):
             tb.addAction(action)
@@ -1335,16 +1285,9 @@ class MainWindow(QMainWindow):
         # Right mode AND the grid has multiple perpendicular-axis lines,
         # this picks which one is active for drawing + snap filtering.
         tb.addWidget(QLabel("Level: "))
-        self._level_combo = QComboBox()
-        self._level_combo.setMinimumWidth(120)
-        self._level_combo.setToolTip(
-            "Active plan / elevation level. Click a view button first "
-            "(Top, Front, Right) to populate the list from the grid."
-        )
-        self._level_combo.currentIndexChanged.connect(self._on_level_changed)
-        tb.addWidget(self._level_combo)
-        tb.addAction(self._act_level_up)
-        tb.addAction(self._act_level_down)
+        tb.addWidget(self.viewport.level_combo)
+        tb.addAction(self.action("view.level_up"))
+        tb.addAction(self.action("view.level_down"))
         tb.addSeparator()
         # Which results case the viewport represents: the layers (deformed
         # shape, diagrams, reactions) follow it.
@@ -1437,8 +1380,8 @@ class MainWindow(QMainWindow):
 
     def _selection_toolbar_actions(self) -> list[QAction]:
         return [
-            self._act_select_all,
-            self._act_previous_selection,
+            self.action("select.all"),
+            self.action("select.previous"),
             self._act_clear_selection,
             self._act_select_line,
         ]
@@ -1821,41 +1764,12 @@ class MainWindow(QMainWindow):
                 self._act_delete,
                 self._act_undo,
                 self._act_redo,
-                self._act_select_all,
+                self.action("select.all"),
                 self._act_clear_selection,
             ]
         )
         self._act_clear_selection.triggered.connect(self._on_clear_selection)
-        self._act_select_all.triggered.connect(self._on_select_all)
         self._act_table_editing.triggered.connect(self._on_table_editing)
-        self._act_invert_selection.triggered.connect(self._on_invert_selection)
-        self._act_previous_selection.triggered.connect(self._on_previous_selection)
-        q = selection_queries
-        for action, query in (
-            (self._act_select_all_joints, lambda p, sel: ({n.id for n in p.nodes}, set())),
-            (self._act_select_all_elements, lambda p, sel: (set(), {e.id for e in p.elements})),
-            (self._act_select_supports, lambda p, sel: (q.restrained_nodes(p), set())),
-            (self._act_select_joints_with_mass, lambda p, sel: (q.nodes_with_mass(p), set())),
-            (self._act_select_weighted, lambda p, sel: (set(), q.weighted_elements(p))),
-            (
-                self._act_select_joints_of_elements,
-                lambda p, sel: (q.nodes_of_elements(p, sel.elements), set()),
-            ),
-            (
-                self._act_select_elements_within_joints,
-                lambda p, sel: (set(), q.elements_within_nodes(p, sel.nodes)),
-            ),
-            (self._act_select_loose_joints, lambda p, sel: (set(loose_joints(p)), set())),
-            (
-                self._act_select_joints_in_bars,
-                lambda p, sel: _pairs_selection(joints_on_bars(p, default_tolerance(p))),
-            ),
-            (
-                self._act_select_shell_edge_joints,
-                lambda p, sel: _pairs_selection(joints_on_shell_edges(p, default_tolerance(p))),
-            ),
-        ):
-            action.triggered.connect(lambda _=False, query=query: self._select_from(query))
 
         # Tools
         self._act_tool_select.triggered.connect(self._on_select_tool)
@@ -1875,8 +1789,6 @@ class MainWindow(QMainWindow):
         self._act_grid_wizard.triggered.connect(self._on_grid_wizard)
         self._act_show_grids.triggered.connect(self._set_grids_shown)
         self._act_show_grid_labels.triggered.connect(self._set_grid_labels_shown)
-        self._act_grid_line_view.triggered.connect(self._on_grid_line_view)
-        self._act_show_all_objects.triggered.connect(self._clear_grid_line_view)
         self._canvas.contextMenuRequested.connect(self._on_canvas_context_menu)
         self._canvas.cursorMoved.connect(self._on_cursor_moved)
         self._canvas.lineSelectFinished.connect(lambda: self._act_select_line.setChecked(False))
@@ -1943,18 +1855,8 @@ class MainWindow(QMainWindow):
 
         # View
         self._act_zoom_extents.triggered.connect(self._canvas.reset_camera)
-        self._act_view_iso.triggered.connect(self._on_view_iso)
-        self._act_view_top.triggered.connect(self._on_view_top)
-        self._act_view_front.triggered.connect(self._on_view_front)
-        self._act_view_right.triggered.connect(self._on_view_right)
-        self._act_level_up.triggered.connect(lambda: self._step_level(1))
-        self._act_level_down.triggered.connect(lambda: self._step_level(-1))
-        self._act_rotate_left.triggered.connect(lambda: self._on_rotate_view(-1, 0))
-        self._act_rotate_right.triggered.connect(lambda: self._on_rotate_view(1, 0))
-        self._act_rotate_up.triggered.connect(lambda: self._on_rotate_view(0, 1))
-        self._act_rotate_down.triggered.connect(lambda: self._on_rotate_view(0, -1))
-        self._act_spin.toggled.connect(self._on_spin)
-        self._act_toggle_parallel.toggled.connect(self._on_toggle_parallel)
+        self._act_spin.toggled.connect(self.viewport.spin)
+        self._act_toggle_parallel.toggled.connect(self.viewport.toggle_parallel)
         # Lambdas: ``triggered`` sends ``checked`` (False), which the canvas
         # would take as its zoom factor (Zoom Out divided by it), and the active
         # viewport is looked up on every click, not frozen at start-up.
@@ -1962,9 +1864,6 @@ class MainWindow(QMainWindow):
         self._act_zoom_out.triggered.connect(lambda: self._canvas.zoom_out())
         self._act_zoom_window.toggled.connect(self._on_zoom_window)
         self._canvas.zoomWindowFinished.connect(lambda: self._act_zoom_window.setChecked(False))
-        self._act_hide_selected.triggered.connect(self._on_hide_selected)
-        self._act_isolate_selected.triggered.connect(self._on_isolate_selected)
-        self._act_invert_visible.triggered.connect(self._on_invert_visible)
         self._act_view_colors.triggered.connect(self._on_view_colors)
         self._act_new_view.triggered.connect(self._on_new_view_window)
         self._act_reset_layout.triggered.connect(self._on_reset_layout)
@@ -2088,7 +1987,7 @@ class MainWindow(QMainWindow):
                 return
             self._log(f"{TEMPLATES[key]}: {model.summary()}")
             if key == "beam":
-                self._on_view_front()
+                self.viewport.front()
             self._canvas.reframe()
 
     def _on_new_2d(self) -> None:
@@ -2455,14 +2354,6 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, "Interactive Table Editing failed", str(exc))
 
-    def _on_select_all(self) -> None:
-        """Select all nodes AND all elements in the project."""
-        if self._vm.project is None:
-            return
-        node_ids = {n.id for n in self._vm.project.nodes}
-        elem_ids = {e.id for e in self._vm.project.elements}
-        self._canvas.selection.set_selection(node_ids, elem_ids)
-
     # ── slots: select menu ──────────────────────────────────────────
     def _build_select_menu(self, menu: Any) -> None:
         """Select: everything, by property, by load pattern, inverted or the previous one.
@@ -2471,188 +2362,32 @@ class MainWindow(QMainWindow):
         every query *adds* to the current selection (SAP2000 style), so "frames
         of section A" then "frames of section B" selects both.
         """
-        menu.addActions([self._act_select_all, self._act_clear_selection])
-        menu.addActions([self._act_invert_selection, self._act_previous_selection])
+        menu.addActions([self.action("select.all"), self._act_clear_selection])
+        menu.addActions([self.action("select.invert"), self.action("select.previous")])
         menu.addAction(self._act_select_line)
         menu.addSeparator()
-        menu.addActions([self._act_select_all_joints, self._act_select_all_elements])
-        self._menu_select_by_type = menu.addMenu("By Element &Type")
-        self._menu_select_by_section = menu.addMenu("By Se&ction")
-        self._menu_select_by_material = menu.addMenu("By Mate&rial")
-        self._menu_select_by_pattern = menu.addMenu("By &Load Pattern")
-        self._menu_select_by_group = menu.addMenu("By &Group")
+        menu.addActions([self.action("select.all_joints"), self.action("select.all_elements")])
+        self.select.add_by_menus(menu)
         menu.addSeparator()
         menu.addActions(
             [
-                self._act_select_supports,
-                self._act_select_joints_with_mass,
-                self._act_select_weighted,
+                self.action("select.supports"),
+                self.action("select.joints_with_mass"),
+                self.action("select.weighted"),
             ]
         )
         menu.addSeparator()
         menu.addActions(
             [
-                self._act_select_loose_joints,
-                self._act_select_joints_in_bars,
-                self._act_select_shell_edge_joints,
+                self.action("select.loose_joints"),
+                self.action("select.joints_in_bars"),
+                self.action("select.shell_edge_joints"),
             ]
         )
         menu.addSeparator()
         menu.addActions(
-            [self._act_select_joints_of_elements, self._act_select_elements_within_joints]
+            [self.action("select.joints_of_elements"), self.action("select.elements_within_joints")]
         )
-        for submenu, fill in (
-            (self._menu_select_by_type, self._fill_select_by_type),
-            (self._menu_select_by_section, self._fill_select_by_section),
-            (self._menu_select_by_material, self._fill_select_by_material),
-            (self._menu_select_by_pattern, self._fill_select_by_pattern),
-            (self._menu_select_by_group, self._fill_select_by_group),
-        ):
-            submenu.aboutToShow.connect(lambda submenu=submenu, fill=fill: fill(submenu))
-        menu.aboutToShow.connect(self._refresh_select_menu)
-
-    def _refresh_select_menu(self) -> None:
-        project = self._vm.project
-        has = project is not None
-        self._act_invert_selection.setEnabled(has)
-        self._act_previous_selection.setEnabled(has and any(self._canvas.selection.previous))
-        sel = self._canvas.selection
-        self._act_select_joints_of_elements.setEnabled(has and bool(sel.elements))
-        self._act_select_elements_within_joints.setEnabled(has and bool(sel.nodes))
-        for submenu in (
-            self._menu_select_by_type,
-            self._menu_select_by_section,
-            self._menu_select_by_material,
-            self._menu_select_by_pattern,
-            self._menu_select_by_group,
-        ):
-            submenu.setEnabled(has)
-
-    def _fill_submenu(self, submenu: Any, entries: list[tuple[str, Callable[[], None]]]) -> None:
-        submenu.clear()
-        if not entries:
-            submenu.addAction("(none in the model)").setEnabled(False)
-            return
-        for label, callback in entries:
-            # ``triggered`` passes ``checked``; keep it away from the callback.
-            submenu.addAction(label).triggered.connect(lambda _checked=False, cb=callback: cb())
-
-    def _fill_select_by_type(self, submenu: Any) -> None:
-        project = self._vm.project
-        if project is None:
-            return
-        entries = []
-        for element_type in selection_queries.element_types(project):
-            ids = selection_queries.elements_of_type(project, element_type)
-            entries.append(
-                (
-                    f"{element_type} ({len(ids)})",
-                    lambda ids=ids: self._add_to_selection(elements=ids),
-                )
-            )
-        self._fill_submenu(submenu, entries)
-
-    def _fill_select_by_section(self, submenu: Any) -> None:
-        project = self._vm.project
-        if project is None:
-            return
-        entries = []
-        for section in selection_queries.sections_in_use(project):
-            ids = selection_queries.elements_with_section(project, section.id)
-            entries.append(
-                (
-                    f"#{section.id} {section.name or section.type} ({len(ids)})",
-                    lambda ids=ids: self._add_to_selection(elements=ids),
-                )
-            )
-        self._fill_submenu(submenu, entries)
-
-    def _fill_select_by_material(self, submenu: Any) -> None:
-        project = self._vm.project
-        if project is None:
-            return
-        entries = []
-        for material in selection_queries.materials_in_use(project):
-            ids = selection_queries.elements_with_material(project, material.id)
-            entries.append(
-                (
-                    f"#{material.id} {material.name or material.type} ({len(ids)})",
-                    lambda ids=ids: self._add_to_selection(elements=ids),
-                )
-            )
-        self._fill_submenu(submenu, entries)
-
-    def _fill_select_by_pattern(self, submenu: Any) -> None:
-        project = self._vm.project
-        if project is None:
-            return
-        entries = []
-        for pattern in project.load_patterns:
-            nodes, elements = selection_queries.loaded_by_pattern(project, pattern.id)
-            if not nodes and not elements:
-                continue
-            entries.append(
-                (
-                    f"#{pattern.id} {pattern.name or pattern.type} "
-                    f"({len(nodes)} joint(s), {len(elements)} element(s))",
-                    lambda nodes=nodes, elements=elements: self._add_to_selection(
-                        nodes=nodes, elements=elements
-                    ),
-                )
-            )
-        self._fill_submenu(submenu, entries)
-
-    def _fill_select_by_group(self, submenu: Any) -> None:
-        project = self._vm.project
-        if project is None:
-            return
-        entries: list[tuple[str, Callable[[], None]]] = []
-        for group in project.groups:
-            nodes, elements = group_members(project, group.id)
-            entries.append(
-                (
-                    f"{group.name} ({len(nodes)} joint(s), {len(elements)} element(s))",
-                    partial(self._add_to_selection, nodes=nodes, elements=elements),
-                )
-            )
-        self._fill_submenu(submenu, entries)
-
-    def _select_from(self, query: Callable[[Project, Any], tuple[set[int], set[int]]]) -> None:
-        """Add what ``query(project, selection)`` returns to the selection."""
-        if self._vm.project is None:
-            return
-        nodes, elements = query(self._vm.project, self._canvas.selection)
-        self._add_to_selection(nodes=nodes, elements=elements)
-
-    def _add_to_selection(
-        self, *, nodes: set[int] | None = None, elements: set[int] | None = None
-    ) -> None:
-        """Add ``nodes`` / ``elements`` to what is selected and report the count."""
-        if self._vm.project is None:
-            return
-        sel = self._canvas.selection
-        new_nodes = set(sel.nodes) | set(nodes or ())
-        new_elements = set(sel.elements) | set(elements or ())
-        sel.set_selection(new_nodes, new_elements)
-        self.statusBar().showMessage(
-            f"Selected {len(new_nodes)} joint(s), {len(new_elements)} element(s).", 4000
-        )
-
-    def _on_invert_selection(self) -> None:
-        if self._vm.project is None:
-            return
-        sel = self._canvas.selection
-        nodes, elements = selection_queries.invert(self._vm.project, sel.nodes, sel.elements)
-        sel.set_selection(nodes, elements)
-
-    def _on_previous_selection(self) -> None:
-        nodes, elements = self._canvas.selection.previous
-        if self._vm.project is None:
-            return
-        # Drop ids deleted since (the previous selection can outlive them).
-        node_ids = {n.id for n in self._vm.project.nodes}
-        element_ids = {e.id for e in self._vm.project.elements}
-        self._canvas.selection.set_selection(set(nodes) & node_ids, set(elements) & element_ids)
 
     def _on_clear_selection(self) -> None:
         """Esc: clear selection AND reset any in-progress tool gesture."""
@@ -3078,7 +2813,7 @@ class MainWindow(QMainWindow):
             self._log(f"Grid '{grid.name}' created with {lines} line(s) from the same numbers.")
             if project.ndm == 2:
                 # A 2D model has one plane, X-Z: show it face on.
-                self._on_view_front()
+                self.viewport.front()
 
     def _on_warehouse_wizard(self) -> None:
         """Define → Create Warehouse: a parametric 3D warehouse, one undo step.
@@ -3309,63 +3044,6 @@ class MainWindow(QMainWindow):
     def _on_vis_extruded(self, checked: bool) -> None:
         """Show Extruded Sections, from either of its two actions."""
         self._apply_view_settings(show_extruded=checked)
-
-    def _on_hide_selected(self) -> None:
-        """Hide the selection in this viewport; the project keeps the entities."""
-        selection = self._canvas.selection
-        hidden_nodes, hidden_elements = self._canvas.hidden
-        self._canvas.set_hidden(
-            nodes=set(hidden_nodes) | set(selection.nodes),
-            elements=set(hidden_elements) | set(selection.elements),
-        )
-        self._refresh_action_enablement()
-
-    def _on_isolate_selected(self) -> None:
-        """Show only the selection (and the joints of selected elements)."""
-        project = self._vm.project
-        selection = self._canvas.selection
-        if project is None or selection.is_empty:
-            return
-        selected_elements = set(selection.elements)
-        visible_nodes = set(selection.nodes)
-        for element in project.elements:
-            if element.id in selected_elements:
-                visible_nodes.update(element.nodes)
-        all_nodes = {node.id for node in project.nodes}
-        all_elements = {element.id for element in project.elements}
-        self._canvas.set_hidden(
-            nodes=all_nodes - visible_nodes,
-            elements=all_elements - selected_elements,
-        )
-        self._refresh_action_enablement()
-        parts = []
-        if visible_nodes:
-            parts.append(f"{len(visible_nodes)} joint(s)")
-        if selected_elements:
-            parts.append(f"{len(selected_elements)} element(s)")
-        self.statusBar().showMessage(
-            f"Isolated {', '.join(parts)}. View > Show All Objects to restore.",
-            5000,
-        )
-
-    def _sync_show_all_action(self) -> None:
-        """Enable Show All when a viewport filter or a hidden set is active."""
-        hidden_nodes, hidden_elements = self._canvas.hidden
-        self._act_show_all_objects.setEnabled(
-            self._grid_view is not None or bool(hidden_nodes) or bool(hidden_elements)
-        )
-
-    def _on_invert_visible(self) -> None:
-        """Swap what this viewport shows: hidden becomes visible and vice versa."""
-        project = self._vm.project
-        if project is None:
-            return
-        hidden_nodes, hidden_elements = self._canvas.hidden
-        self._canvas.set_hidden(
-            nodes={n.id for n in project.nodes} - hidden_nodes,
-            elements={e.id for e in project.elements} - hidden_elements,
-        )
-        self._refresh_action_enablement()
 
     def _on_view_colors(self) -> None:
         """View → Colors: edit the six viewport colours in one dialog."""
@@ -3714,11 +3392,16 @@ class MainWindow(QMainWindow):
         menu.addAction(self._act_grid)
         menu.addAction(self._act_grid_wizard)
         menu.addSeparator()
-        menu.addAction(self._act_grid_line_view)
-        menu.addAction(self._act_show_all_objects)
+        menu.addAction(self.action("view.grid_line_view"))
+        menu.addAction(self.action("view.show_all_objects"))
         menu.addSeparator()
         menu.addActions(
-            [self._act_view_iso, self._act_view_top, self._act_view_front, self._act_view_right]
+            [
+                self.action("view.iso"),
+                self.action("view.top"),
+                self.action("view.front"),
+                self.action("view.right"),
+            ]
         )
         menu.addAction(self._act_zoom_extents)
         return menu
@@ -3764,100 +3447,16 @@ class MainWindow(QMainWindow):
         menu.addSeparator()
         if elements:
             hide = menu.addAction("Hide Selected Elements")
-            hide.triggered.connect(self._on_hide_selected)
-        menu.addAction(self._act_isolate_selected)
-        if self._act_show_all_objects.isEnabled():
-            menu.addAction(self._act_show_all_objects)
+            hide.triggered.connect(self.viewport.hide_selected)
+        menu.addAction(self.action("view.isolate_selected"))
+        if self.action("view.show_all_objects").isEnabled():
+            menu.addAction(self.action("view.show_all_objects"))
         menu.addSeparator()
         menu.addAction(self._act_delete)
         menu.addAction(self._act_clear_selection)
         return menu
 
     # ── View → Grid Line View ───────────────────────────────────────
-    def _on_grid_line_view(self) -> None:
-        """Show only the objects on one grid line (± a window) and look at it face on."""
-        project = self._vm.project
-        if project is None:
-            return
-        current = self._grid_view[0] if self._grid_view is not None else None
-        dlg = GridLineViewDialog(
-            project, current=current, window=self._grid_view_window, parent=self
-        )
-        if dlg.exec() != QDialog.DialogCode.Accepted or dlg.line() is None:
-            return
-        ref = dlg.line()
-        assert ref is not None
-        self._grid_view_window = dlg.tolerance()
-        self._grid_view = (ref.label, self._grid_view_window)
-        self._apply_grid_line_view()
-        self._face_grid_line(ref)
-
-    def _apply_grid_line_view(self) -> None:
-        """(Re)install the canvas filter for the current grid line view, if any."""
-        from opensees_studio.core.grid_view import (
-            filtered_project,
-            find_grid_line,
-            objects_on_line,
-        )
-
-        project = self._vm.project
-        state = self._grid_view
-        ref = find_grid_line(project, state[0]) if project is not None and state else None
-        if state is None or ref is None:
-            if state is not None:
-                self._log(f"Grid line view: '{state[0]}' no longer exists, showing everything.")
-            self._grid_view = None
-            self._canvas.set_view_filter(None)
-            self._sync_show_all_action()
-            return
-        window = state[1]
-
-        def keep(full: Project) -> Project:
-            nodes, elements = objects_on_line(full, ref, window)
-            return filtered_project(full, nodes, elements)
-
-        self._canvas.set_view_filter(keep)
-        self._sync_show_all_action()
-        nodes, elements = objects_on_line(project, ref, window)  # type: ignore[arg-type]
-        self.statusBar().showMessage(
-            f"Grid line view {ref.label} ± {window:g}: {len(nodes)} joint(s), "
-            f"{len(elements)} element(s). View → Show All Objects to see everything."
-        )
-
-    def _face_grid_line(self, ref: Any) -> None:
-        """Look at a plane line face on, with its level as the working plane."""
-        if ref.cylindrical and ref.axis != 2:
-            self._on_view_iso()
-            return
-        plane = ("YZ", "XZ", "XY")[ref.axis]
-        project = self._vm.project
-        system = next(cs for cs in project.coord_systems if cs.name == ref.system)  # type: ignore[union-attr]
-        point = [0.0, 0.0, 0.0]
-        point[ref.axis] = ref.ordinate
-        offset = system.coord.local_to_world((point[0], point[1], point[2]))[ref.axis]
-        {"YZ": self._on_view_right, "XZ": self._on_view_front, "XY": self._on_view_top}[plane]()
-        index = next(
-            (
-                i
-                for i in range(self._level_combo.count())
-                if abs(float(self._level_combo.itemData(i)) - offset) < 1e-6
-            ),
-            -1,
-        )
-        if index >= 0:
-            self._level_combo.setCurrentIndex(index)
-        else:
-            self._canvas.set_working_plane(plane, offset)
-        self._canvas.reframe()
-
-    def _clear_grid_line_view(self) -> None:
-        self._grid_view = None
-        self._canvas.set_view_filter(None)
-        self._canvas.set_hidden(nodes=set(), elements=set())
-        self._canvas.reframe()
-        self._refresh_action_enablement()
-        self.statusBar().showMessage("Showing all objects.", 3000)
-
     def _on_add_node(self) -> None:
         if self._vm.project is None:
             self._on_new()
@@ -3906,151 +3505,8 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, "Custom OpenSees Commands failed", str(exc))
 
-    def _on_apply_mass(self, node_id: int, mass) -> None:  # type: ignore[no-untyped-def]
-        """Callback from the property editor — dispatch as an undoable command."""
-        try:
-            self._vm.apply_command(SetMassCommand(self._vm, {node_id}, mass))
-        except Exception as exc:
-            QMessageBox.critical(self, "Apply mass failed", str(exc))
-
     # ── property editor: live-edit callbacks ─────────────────────────
-    def _on_change_element_type(self, element_id: int, new_type: str) -> None:
-        """User picked a different element type from the Properties dock."""
-        command = self._convert_command({element_id}, new_type)
-        if command is None:
-            return
-        try:
-            self._vm.apply_command(command)
-            self._log(f"Element {element_id} → {new_type}.")
-        except Exception as exc:
-            QMessageBox.critical(self, "Convert element failed", str(exc))
-
-    def _convert_command(self, element_ids: set[int], new_type: str) -> Any:
-        """The command converting ``element_ids`` to ``new_type``, None if it cannot."""
-        from opensees_studio.commands import ConvertElementTypeCommand
-
-        project = self._vm.project
-        if project is None:
-            return None
-        # Supply sensible defaults for fields the target type requires.
-        defaults: dict[str, object] = {}
-        if new_type in ("Truss", "CorotTruss"):
-            # Prefer an existing ElasticUniaxial + a nominal area.
-            from opensees_studio.core import ElasticUniaxial
-
-            mat = next((m for m in project.materials if isinstance(m, ElasticUniaxial)), None)
-            if mat is None and project.materials:
-                mat = project.materials[0]
-            if mat is None:
-                QMessageBox.warning(
-                    self,
-                    "Convert element",
-                    "Define a material before converting to a truss type.",
-                )
-                return None
-            defaults["material_id"] = mat.id
-            defaults["area"] = 0.001
-        elif new_type in ("ElasticBeamColumn", "ForceBeamColumn", "DispBeamColumn"):
-            if not project.sections:
-                QMessageBox.warning(
-                    self,
-                    "Convert element",
-                    f"Define a section before converting to {new_type}.",
-                )
-                return None
-            defaults["section_id"] = project.sections[0].id
-        return ConvertElementTypeCommand(self._vm, element_ids, new_type, defaults=defaults)
-
     # ── property editor: multi-selection edits (one undo step each) ──
-    def _on_assign_node_restraints(self, restraints: dict[int, tuple[bool, ...]]) -> None:
-        self._apply_grouped(restraints, SetRestraintCommand, "Edit restraints")
-
-    def _on_assign_node_masses(self, masses: dict[int, tuple[float, ...]]) -> None:
-        self._apply_grouped(masses, SetMassCommand, "Edit masses")
-
-    def _apply_grouped(self, values: dict[int, Any], command: Any, text: str) -> None:
-        """One command per distinct value, all in one undo step."""
-        groups: dict[Any, set[int]] = {}
-        for node_id, value in values.items():
-            groups.setdefault(tuple(value), set()).add(node_id)
-        stack = self._vm.undo_stack
-        stack.beginMacro(f"{text} of {len(values)} joint(s)")
-        try:
-            for value, ids in groups.items():
-                self._vm.apply_command(command(self._vm, ids, value))
-        except Exception as exc:
-            QMessageBox.critical(self, text, str(exc))
-        finally:
-            stack.endMacro()
-
-    def _on_assign_elements(self, edit: Any) -> None:
-        """Properties dock, several elements: type, section, material and fields at once."""
-        from opensees_studio.commands import AssignElementFieldsCommand
-
-        ids = set(edit.element_ids)
-        convert = None
-        if edit.new_type is not None:
-            convert = self._convert_command(ids, edit.new_type)
-            if convert is None:
-                return
-        stack = self._vm.undo_stack
-        stack.beginMacro(f"Edit {len(ids)} element(s)")
-        try:
-            # The type first: the other edits then apply to what the elements became.
-            if convert is not None:
-                self._vm.apply_command(convert)
-            project = self._vm.project
-            assert project is not None
-            has = {
-                key: {e.id for e in project.elements if e.id in ids and hasattr(e, key)}
-                for key in ("section_id", "material_id")
-            }
-            if edit.material_id is not None and has["material_id"]:
-                self._vm.apply_command(
-                    AssignMaterialCommand(self._vm, has["material_id"], edit.material_id)
-                )
-            for key, value in edit.fields.items():
-                # One field at a time: each lands on the elements that have it.
-                self._vm.apply_command(AssignElementFieldsCommand(self._vm, ids, {key: value}))
-            if edit.per_element:
-                self._vm.apply_command(
-                    AssignElementFieldsCommand(
-                        self._vm, set(edit.per_element), {}, per_element=edit.per_element
-                    )
-                )
-            # The section goes last: assigning a nonprismatic template splits the
-            # member into pieces, and it must see the other edits on the frame.
-            if edit.section_id is not None and has["section_id"]:
-                self._vm.apply_command(
-                    AssignSectionCommand(self._vm, has["section_id"], edit.section_id)
-                )
-            self._log(f"Edited {len(ids)} element(s) from the Properties panel.")
-        except Exception as exc:
-            QMessageBox.critical(self, "Edit elements failed", str(exc))
-        finally:
-            stack.endMacro()
-
-    def _on_change_element_material(self, element_id: int, material_id: int) -> None:
-        try:
-            self._vm.apply_command(AssignMaterialCommand(self._vm, {element_id}, material_id))
-        except Exception as exc:
-            QMessageBox.critical(self, "Assign material failed", str(exc))
-
-    def _on_change_element_section(self, element_id: int, section_id: int) -> None:
-        try:
-            self._vm.apply_command(AssignSectionCommand(self._vm, {element_id}, section_id))
-        except Exception as exc:
-            QMessageBox.critical(self, "Assign section failed", str(exc))
-
-    def _on_change_element_fields(self, element_id: int, fields: dict) -> None:  # type: ignore[type-arg]
-        """Inline scalar edit dispatched from Properties dock (e.g. area)."""
-        from opensees_studio.commands import UpdateElementFieldsCommand
-
-        try:
-            self._vm.apply_command(UpdateElementFieldsCommand(self._vm, element_id, fields))
-        except Exception as exc:
-            QMessageBox.critical(self, "Edit element failed", str(exc))
-
     def node_tooltip(self, node_id: int) -> str | None:
         """Hover text for a joint: where it is, its restraint, mass, members and loads."""
         from opensees_studio.core.hover import node_summary
@@ -5531,159 +4987,7 @@ class MainWindow(QMainWindow):
             window.close()
         self._element_diagram_windows.clear()
 
-    def _on_toggle_parallel(self, on: bool) -> None:
-        cam = self._canvas.camera
-        cam.parallel_projection = on
-        self._canvas.render()
-
     # ── SAP2000-style view switching + working level ───────────────
-    def _leave_plane_view(self) -> None:
-        """Turning the camera leaves a plan or elevation: back to full 3D snapping."""
-        self._canvas.clear_working_plane()
-        self._populate_level_combo(None)
-
-    def _on_rotate_view(self, left_right: int, up_down: int) -> None:
-        """View → Rotate: turn the camera one step (15°) about the model."""
-        self._leave_plane_view()
-        step = self._canvas.ROTATE_STEP_DEG
-        self._canvas.orbit(azimuth=left_right * step, elevation=up_down * step)
-
-    def _on_spin(self, on: bool) -> None:
-        """View → Spin: turn the view continuously until switched off."""
-        if on:
-            self._leave_plane_view()
-        self._canvas.set_spinning(on)
-
-    def _on_view_iso(self) -> None:
-        """Isometric: clear any working plane (full 3D snap)."""
-        self._canvas.clear_working_plane()
-        self._canvas.view_isometric()
-        self._populate_level_combo(None)
-
-    def _on_view_top(self) -> None:
-        """Top (XY): camera looks down -Z. Level = perpendicular axis Z."""
-        self._canvas.view_xy()
-        self._activate_working_plane("XY")
-
-    def _on_view_front(self) -> None:
-        """Front (XZ): camera looks down -Y. Level = perpendicular axis Y."""
-        self._canvas.view_xz()
-        self._activate_working_plane("XZ")
-
-    def _on_view_right(self) -> None:
-        """Right (YZ): camera looks down -X. Level = perpendicular axis X."""
-        self._canvas.view_yz()
-        self._activate_working_plane("YZ")
-
-    def _activate_working_plane(self, plane: str) -> None:
-        """Populate the Level combo from the grid and default to the first
-        ordinate on the perpendicular axis. Commits the working plane to
-        the canvas so snap / drawing filter by that level."""
-        ordinates = self._ordinates_for_plane(plane)
-        self._populate_level_combo((plane, ordinates))
-        if ordinates:
-            # Default to the first level (usually 0). Sets working plane.
-            self._canvas.set_working_plane(plane, ordinates[0])
-        else:
-            # No grid on the perpendicular axis — keep the plane active at 0.
-            self._canvas.set_working_plane(plane, 0.0)
-
-    def _ordinates_for_plane(self, plane: str) -> list[float]:
-        """Return the ordinate list of the axis PERPENDICULAR to ``plane``.
-
-        Pulls from every visible CoordinateGridSystem's Global-frame
-        contribution — that's a conservative superset that works even
-        when multiple coord systems overlap.
-        """
-        if self._vm.project is None:
-            return []
-        axis_to_attr = {"XY": "z_lines", "XZ": "y_lines", "YZ": "x_lines"}
-        attr = axis_to_attr[plane]
-        acc: set[float] = set()
-        for cs in self._vm.project.coord_systems:
-            if not cs.grid.shown or (cs.grid.is_cylindrical and plane != "XY"):
-                # A cylindrical grid has levels (Z) but no X or Y lines.
-                continue
-            ords = cs.grid.visible_ordinates()[{"x_lines": 0, "y_lines": 1, "z_lines": 2}[attr]]
-            # For non-Global systems we'd need to transform through the
-            # coord system's origin+rotation. For the first cut we apply
-            # a simple translation (ignore rotation) since only the
-            # perpendicular component matters for plan/elevation choice.
-            idx = {"z_lines": 2, "y_lines": 1, "x_lines": 0}[attr]
-            for o in ords:
-                acc.add(round(o + cs.coord.origin[idx], 6))
-        return sorted(acc)
-
-    def _populate_level_combo(self, state: tuple[str, list[float]] | None) -> None:
-        """Fill or empty the Level combo.
-
-        ``state`` is ``(plane_name, ordinates)`` — the combo shows each
-        ordinate as e.g. "Z = 3.000". Passing ``None`` empties the
-        combo (iso / no working plane).
-        """
-        self._level_combo.blockSignals(True)
-        self._level_combo.clear()
-        if state is not None and state[1]:
-            plane, ordinates = state
-            letter = {"XY": "Z", "XZ": "Y", "YZ": "X"}[plane]
-            for o in ordinates:
-                self._level_combo.addItem(f"{letter} = {o:g}", o)
-            self._level_combo.setEnabled(True)
-        else:
-            self._level_combo.setEnabled(False)
-        self._level_combo.blockSignals(False)
-        stepping = self._level_combo.count() > 1
-        self._act_level_up.setEnabled(stepping)
-        self._act_level_down.setEnabled(stepping)
-
-    def _on_level_changed(self, _idx: int) -> None:
-        """User picked a different level from the combo."""
-        data = self._level_combo.currentData()
-        if data is None:
-            return
-        plane = self._canvas.working_plane_type()
-        if plane is None:
-            return
-        self._canvas.set_working_plane(plane, float(data))
-        if self._grid_view is not None:
-            # Showing one level's objects: follow the level that was picked.
-            self._show_level_only(plane, float(data))
-
-    def _step_level(self, step: int) -> None:
-        """View → Move Up/Down in List: the next level of the plan or elevation.
-
-        As in SAP2000, the view then shows only the objects on that level
-        (View → Show All Objects brings the rest back).
-        """
-        plane = self._canvas.working_plane_type()
-        count = self._level_combo.count()
-        if plane is None or count == 0:
-            return
-        index = self._level_combo.currentIndex() + step
-        if not 0 <= index < count:
-            self.statusBar().showMessage("No further level in that direction.", 3000)
-            return
-        showing_level = self._grid_view is not None
-        self._level_combo.setCurrentIndex(index)  # moves the working plane
-        if not showing_level:
-            self._show_level_only(plane, float(self._level_combo.itemData(index)))
-
-    def _show_level_only(self, plane: str, level: float) -> None:
-        """Show only the objects on the grid line at ``level`` (a grid line view)."""
-        from opensees_studio.core.grid_view import default_window, line_at_level
-
-        project = self._vm.project
-        if project is None:
-            return
-        ref = line_at_level(project, {"YZ": 0, "XZ": 1, "XY": 2}[plane], level)
-        if ref is None:
-            return
-        window = self._grid_view_window
-        if window is None:
-            window = default_window(project.meta.units)
-        self._grid_view = (ref.label, window)
-        self._apply_grid_line_view()
-
     # ── autosave ────────────────────────────────────────────────────
     @staticmethod
     def _stored_autosave_minutes() -> int:
@@ -5756,13 +5060,12 @@ class MainWindow(QMainWindow):
         )
         self._sync_grid_actions()
         # Another project: its grid lines are not the ones being viewed.
-        self._grid_view = None
-        self._grid_view_window = None
+        self.viewport.forget_grid_line()
         self._main_canvas.set_view_filter(None)
         # Another project has its own ids; do not carry this viewport's hidden
         # set into it.
         self._main_canvas.set_hidden(nodes=set(), elements=set())
-        self._act_show_all_objects.setEnabled(False)
+        self.action("view.show_all_objects").setEnabled(False)
         # Results of another project (or of the closed one) never feed a combination.
         self._case_results.clear()
         self._report_extra.clear()
@@ -5780,12 +5083,12 @@ class MainWindow(QMainWindow):
             if project.ndm == 2:
                 # A 2D model lives in the X-Z plane (core.plane): face on,
                 # drawing at y = 0.
-                self._on_view_front()
+                self.viewport.front()
             else:
                 # `reset_camera()` only re-fits the bounds: it preserves the
                 # previous direction. A 2D file left the camera face-on, and
                 # the next 3D model would then open as a long, flat elevation.
-                self._on_view_iso()
+                self.viewport.iso()
             if project.nodes:
                 # `view_isometric`/`view_xz` change the direction but keep the
                 # previous distance; fit the new model after choosing the view.
@@ -5800,9 +5103,9 @@ class MainWindow(QMainWindow):
         # Same project, contents changed: re-render but DON'T reset camera.
         # We still clear and re-add actors, which loses selection — but the
         # selection state persists, so highlights re-apply.
-        if self._grid_view is not None:
+        if self.viewport.grid_view is not None:
             # The line may have moved or gone: re-resolve it (this redraws).
-            self._apply_grid_line_view()
+            self.viewport.apply_grid_line_view()
         elif self._vm.project is not None:
             self._canvas._renderer.render(self._vm.project)
             self._canvas.render()
@@ -6031,7 +5334,7 @@ class MainWindow(QMainWindow):
             )
         )
         # The side "ps" button shows it, so it cannot wait for the Select menu.
-        self._act_previous_selection.setEnabled(
+        self.action("select.previous").setEnabled(
             has_project and any(self._canvas.selection.previous)
         )
         self._act_select_line.setEnabled(has_project)
@@ -6095,9 +5398,6 @@ class MainWindow(QMainWindow):
             and self._vm.project.ndm == 3
         )
         self._act_delete.setEnabled(has_project and has_selection)
-        self._act_hide_selected.setEnabled(has_project and has_selection)
-        self._act_isolate_selected.setEnabled(has_project and has_selection)
-        self._act_invert_visible.setEnabled(has_project)
         self.action("edit.paste").setEnabled(bool(self.transforms.clipboard_contents()[0]))
         self._act_tool_draw_frame.setEnabled(has_project)
         self._act_tool_draw_node.setEnabled(has_project)
@@ -6145,7 +5445,7 @@ class MainWindow(QMainWindow):
                 menu.setEnabled(has_project)
         self._explain_disabled_actions()
         self._sync_visibility_actions()
-        self._sync_show_all_action()
+        self.viewport.sync_show_all()
 
     #: Why an action is greyed out, by the condition it waits for. The tooltip
     #: and the status bar say it, so a disabled entry is not a dead end.

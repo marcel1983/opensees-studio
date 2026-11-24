@@ -58,7 +58,7 @@ def test_the_menus_hold_the_group_actions(qtbot) -> None:  # type: ignore[no-unt
     menus = {a.text(): a.menu() for a in mw.menuBar().actions()}
     assert mw._act_groups in menus["&Define"].actions()
     assert mw._act_assign_group in menus["&Assign"].actions()
-    assert mw._menu_select_by_group.menuAction() in menus["&Select"].actions()
+    assert mw.select.by_group_menu.menuAction() in menus["&Select"].actions()
 
 
 @pytest.mark.gui
@@ -78,8 +78,8 @@ def test_assign_a_new_group_then_select_it_back(qtbot, monkeypatch) -> None:  # 
     assert (group.name, group.node_ids, group.element_ids) == ("Bay A", [1, 2], [1])
 
     mw._canvas.selection.set_selection(set(), set())
-    mw._fill_select_by_group(mw._menu_select_by_group)
-    (action,) = mw._menu_select_by_group.actions()
+    mw.select.fill_by_group(mw.select.by_group_menu)
+    (action,) = mw.select.by_group_menu.actions()
     action.trigger()
     assert (set(mw._canvas.selection.nodes), set(mw._canvas.selection.elements)) == ({1, 2}, {1})
 
