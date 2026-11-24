@@ -67,7 +67,6 @@ from opensees_studio.core.warehouse import (
 )
 from opensees_studio.views.dialogs.frame_wizard import SUPPORT_CHOICES, _CompletablePage, _field
 from opensees_studio.views.dialogs.warehouse_wizard import (
-    CREATE_DEFAULT,
     DEFAULT_A0,
     DEFAULT_CLASS,
     DEFAULT_SOIL,
@@ -75,6 +74,13 @@ from opensees_studio.views.dialogs.warehouse_wizard import (
     SEISMIC_SOILS,
 )
 from opensees_studio.views.dialogs.wireframe_preview import WireframePreview
+from opensees_studio.views.dialogs.wizard_sections import (
+    DefineSections,
+    chosen_section,
+    define_sections_button,
+    fill_section_combo,
+    new_section_combo,
+)
 from opensees_studio.views.i18n import tr
 from opensees_studio.views.screen_fit import fit_to_available_screen
 
@@ -182,10 +188,12 @@ class BuildingWizard(QWizard):
         *,
         units: UnitSystem = UnitSystem.SI_M_N,
         planner: Planner | None = None,
+        define_sections: DefineSections | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._sections = sections
+        self._define_sections = define_sections
         self._units = units
         self._planner = planner
         labels = labels_for(units)
@@ -337,18 +345,13 @@ class BuildingWizard(QWizard):
         form = QFormLayout(page)
         self._section_combos: dict[str, QComboBox] = {}
         for key in SECTION_KEYS:
-            combo = QComboBox()
-            combo.addItem("", userData=CREATE_DEFAULT)
-            for section in self._sections:
-                combo.addItem(f"#{section.id}  {section.name or '(unnamed)'}", userData=section.id)
-            # A long section name must not push the page wider than the wizard.
-            combo.setSizeAdjustPolicy(
-                QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
-            )
-            combo.setMinimumContentsLength(24)
+            combo = new_section_combo("", self._sections)
             combo.currentIndexChanged.connect(self._refresh_plan)
             self._section_combos[key] = combo
             form.addRow(tr(SECTION_LABELS[key]) + ":", combo)
+        button = define_sections_button(self, self._define_sections, self.set_sections)
+        if button is not None:
+            form.addRow(button)
         note = QLabel(
             "<i>The sections that do not exist yet are created with the building, as the "
             "same undoable step: shapes of the AISC library for a steel frame, solid "
@@ -550,12 +553,19 @@ class BuildingWizard(QWizard):
     def _frame_material(self) -> str:
         return FRAME_MATERIALS[self._frame.currentIndex()]
 
+    def _default_section_text(self, key: str) -> str:
+        name = default_section_name(key, self._frame_material())
+        return tr("{name} (will be created)").format(name=name)
+
     def _name_default_sections(self) -> None:
-        frame = self._frame_material()
         for key, combo in self._section_combos.items():
-            combo.setItemText(
-                0, tr("{name} (will be created)").format(name=default_section_name(key, frame))
-            )
+            combo.setItemText(0, self._default_section_text(key))
+
+    def set_sections(self, sections: list[Any]) -> None:
+        """Offer ``sections`` (after Section Library…), keeping each choice still there."""
+        self._sections = sections
+        for key, combo in self._section_combos.items():
+            fill_section_combo(combo, self._default_section_text(key), sections)
 
     def _on_frame_changed(self, _index: int = 0) -> None:
         self._name_default_sections()
@@ -788,8 +798,7 @@ class BuildingWizard(QWizard):
         """Section id per member kind; None means "create the default one"."""
         out: dict[str, int | None] = {}
         for key, combo in self._section_combos.items():
-            data = combo.currentData()
-            out[key] = None if data in (None, CREATE_DEFAULT) else int(data)
+            out[key] = chosen_section(combo)
         return out
 
     def seismic(self) -> BuildingSeismic | None:

@@ -257,6 +257,13 @@ TRUSS_GROUPS: tuple[str, ...] = (
 #: The groups that are X bracing.
 BRACING_GROUPS: tuple[str, ...] = ("roof_bracing", "wall_bracing", "sway_bracing")
 
+#: Members that stay one piece when Run auto-meshes the model (their
+#: ``auto_mesh`` is off): a purlin or girt spans from frame to frame on its two
+#: supports, a brace from corner to corner. Without it the two diagonals of an
+#: X are cut where they cross, and the purlins and girts where a diagonal
+#: passes over them, joining members that are not joined.
+WHOLE_MEMBERS: tuple[str, ...] = (*SECONDARY_MEMBERS, *BRACING_GROUPS, "chord_ties")
+
 #: A girt line of an end wall stays this share of the girt spacing below the rafter.
 END_GIRT_CLEARANCE = 0.25
 
@@ -813,6 +820,8 @@ def build_warehouse(
             extra["releases"] = releases
         if angle:
             extra["local_axis_angle"] = angle
+        if group in WHOLE_MEMBERS:
+            extra["auto_mesh"] = False
         elements.append(
             ElasticBeamColumn(
                 id=element_id, nodes=(i, j), section_id=int(sections[section]), **extra
@@ -2490,6 +2499,7 @@ __all__ = [
     "TRUSS_GROUPS",
     "TRUSS_SECTION_KEYS",
     "WAREHOUSE_NDF",
+    "WHOLE_MEMBERS",
     "WIND_METHODS",
     "CodePreset",
     "EndWall",

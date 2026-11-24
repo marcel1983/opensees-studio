@@ -303,6 +303,26 @@ def test_the_chosen_sections_are_used_and_only_the_others_are_created(qtbot, mon
     assert len(project.storeys) == 2
 
 
+def test_the_section_library_button_offers_what_it_defines(qtbot) -> None:  # type: ignore[no-untyped-def]
+    from types import SimpleNamespace
+
+    from PySide6.QtWidgets import QPushButton
+
+    added = SimpleNamespace(id=7, name="W12X53")
+    wizard = BuildingWizard([], define_sections=lambda parent: [added])
+    qtbot.addWidget(wizard)
+    wizard._frame.setCurrentIndex(1)  # concrete: the default entries name its rectangles
+    (button,) = [b for b in wizard.findChildren(QPushButton) if b.text() == "Section Library…"]
+
+    button.click()
+
+    column = wizard._section_combos["column"]
+    assert [column.itemData(i) for i in range(column.count())] == [-1, 7]
+    assert column.itemText(0).startswith("COL ") and column.itemText(1) == "#7  W12X53"
+    column.setCurrentIndex(1)
+    assert wizard.section_choice()["column"] == 7
+
+
 def test_cancelling_leaves_the_project_alone(qtbot, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     mw = _window(qtbot)
     monkeypatch.setattr(BuildingWizard, "exec", lambda self: int(QDialog.DialogCode.Rejected))

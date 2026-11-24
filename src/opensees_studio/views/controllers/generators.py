@@ -6,7 +6,7 @@ from collections.abc import Callable, Mapping
 from typing import Any
 
 from PySide6.QtCore import QObject, QSettings
-from PySide6.QtWidgets import QDialog, QMessageBox
+from PySide6.QtWidgets import QDialog, QMessageBox, QWidget
 
 from opensees_studio.commands.building import insert_building_plan, plan_problems
 from opensees_studio.commands.generated import insert_generated
@@ -99,9 +99,12 @@ class GeneratorsController(QObject):
                 raise ValueError(" ".join(problems))
             return plan
 
-        sections = [s for s in project.sections if isinstance(s, ElasticSection)]
         wizard = BuildingWizard(
-            sections, units=project.meta.units, planner=plan_for, parent=self._window
+            self._frame_sections(),
+            units=project.meta.units,
+            planner=plan_for,
+            define_sections=self._define_sections,
+            parent=self._window,
         )
         if wizard.exec() != QDialog.DialogCode.Accepted:
             return
@@ -389,8 +392,12 @@ class GeneratorsController(QObject):
                 ).format(ndm=project.ndm, ndf=project.ndf),
             )
             return
-        sections = [s for s in project.sections if isinstance(s, ElasticSection)]
-        wizard = WarehouseWizard(sections, units=project.meta.units, parent=self._window)
+        wizard = WarehouseWizard(
+            self._frame_sections(),
+            units=project.meta.units,
+            define_sections=self._define_sections,
+            parent=self._window,
+        )
         if wizard.exec() != QDialog.DialogCode.Accepted:
             return
         try:
@@ -413,6 +420,18 @@ class GeneratorsController(QObject):
         for note in plan.notes:
             self._shell.log(note)
         self._shell.canvas().reframe()
+
+    def _frame_sections(self) -> list[Any]:
+        """The sections a wizard offers for its members: the project's elastic ones."""
+        project = self._vm.project
+        return [s for s in project.sections if isinstance(s, ElasticSection)] if project else []
+
+    def _define_sections(self, parent: QWidget) -> list[Any]:
+        """A wizard's Section Library…: Define → Section Library over it, each addition undoable."""
+        from opensees_studio.views.dialogs import SectionLibraryDialog
+
+        SectionLibraryDialog(self._vm, parent).exec()
+        return self._frame_sections()
 
 
 __all__ = ["NEW_MODEL_UNITS_KEY", "GeneratorsController"]

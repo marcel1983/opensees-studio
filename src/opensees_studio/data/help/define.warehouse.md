@@ -2,7 +2,7 @@
 title: Define → Create Warehouse
 group: Define
 summary: A 3D steel warehouse from a few numbers: loads, wind, earthquake, ash or snow.
-see_also: define.portal_frame, define.truss, define.building, file.new_model
+see_also: define.section_library, define.portal_frame, define.truss, define.building, file.new_model
 order: 930
 ---
 
@@ -112,10 +112,20 @@ take every purlin as a bracing point. The major-axis length stays as modelled.
 In the analysis model the purlins, girts and braces are **pinned at both ends**
 (no bending moments; a purlin's torsion is held at one end only), so they bring
 their load to the frames and add no bending or torsional restraint to them.
+They also stay **one piece**: their Auto Mesh is off (Assign → Frame → Auto
+Mesh), so Run does not cut the two diagonals of an X where they cross, nor a
+purlin or girt where a diagonal passes over it. A purlin spans from rafter to
+rafter and a brace from corner to corner.
 
 # Sections
 One section per kind of member. Choose one the project has, or let the wizard
-create the default: **W14X48** columns, **W16X40** rafters, **L3X3X1/4**
+create the default. **Section Library…** opens Define → Section Library over the
+wizard: add shapes of the AISC library (Add from AISC…), a cold-formed
+profile (Add Cold-Formed (AISI)…) or a section of your own, close it, and the
+new sections are in every list of the page. Each one is added as its own
+undoable step, so it stays in the project even if you cancel the wizard.
+
+The defaults are **W14X48** columns, **W16X40** rafters, **L3X3X1/4**
 braces and **W8X31** end wall columns from the AISC library, and a cold-formed
 lipped channel **C 150 × 50 × 15 × 2.38 mm** for purlins and girts, of the
 project's default steels. A roof truss takes **HSS6X6X1/4** chords,

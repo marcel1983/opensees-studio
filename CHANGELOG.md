@@ -7,6 +7,26 @@ that this is pre-alpha: minor and patch releases may change the `.osmodel`
 schema (it carries a `schema_version`, and a file from a newer build is now
 refused instead of silently downgraded).
 
+## [Unreleased]
+
+### Added
+
+- **Section Library… on the Sections page of the warehouse and building
+  wizards.** On a new project the lists offered only the default sections; the
+  button opens Define → Section Library over the wizard (AISC shapes,
+  cold-formed profiles, a section of your own) and what it adds is offered for
+  every kind of member.
+
+### Fixed
+
+- **Purlins, girts and braces of a generated warehouse stay one piece when Run
+  auto-meshes the model.** The two diagonals of each X were cut where they
+  cross, and the purlins and girts where a diagonal passes over them, joining
+  members that are not joined. Those members now have Auto Mesh off
+  (Assign → Frame → Auto Mesh): a purlin spans from rafter to rafter and a
+  brace from corner to corner. Results of the analysis CLI do not change; the
+  warehouse examples gain `"auto_mesh": false` on those members.
+
 ## [0.0.79] - 2026-11-24
 
 ### Added

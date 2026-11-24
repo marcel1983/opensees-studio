@@ -227,6 +227,82 @@ def test_the_menu_builds_the_warehouse_in_one_undo_step(qtbot, monkeypatch) -> N
     assert len(project.elements) == len(grouped)
 
 
+def _section_library_button(wizard):  # type: ignore[no-untyped-def]
+    """The page's Section Library… button, or None."""
+    from PySide6.QtWidgets import QPushButton
+
+    found = [b for b in wizard.findChildren(QPushButton) if b.text() == "Section Library…"]
+    return found[0] if found else None
+
+
+@pytest.mark.gui
+def test_the_section_library_button_offers_the_sections_it_defines(qtbot) -> None:  # type: ignore[no-untyped-def]
+    from types import SimpleNamespace
+
+    first = SimpleNamespace(id=4, name="W10X33")
+    added = SimpleNamespace(id=9, name="C200X75X20X2")
+    calls: list[object] = []
+
+    def define(parent):  # type: ignore[no-untyped-def]
+        calls.append(parent)
+        return [first, added]
+
+    bare = WarehouseWizard([])
+    qtbot.addWidget(bare)
+    assert _section_library_button(bare) is None  # no hook, no button
+    wizard = WarehouseWizard([first], define_sections=define)
+    qtbot.addWidget(wizard)
+    columns = wizard._section_combos["column"]
+    columns.setCurrentIndex(columns.findData(4))
+
+    _section_library_button(wizard).click()
+
+    assert calls == [wizard]
+    assert columns.currentData() == 4  # the choice made before stays
+    purlins = wizard._section_combos["purlin"]
+    assert [purlins.itemData(i) for i in range(purlins.count())] == [-1, 4, 9]
+    assert purlins.itemText(0) == "C150X50X15X2.38 (will be created)"
+    purlins.setCurrentIndex(2)
+    choice = wizard.section_choice()
+    assert choice["column"] == 4 and choice["purlin"] == 9 and choice["rafter"] is None
+
+
+@pytest.mark.gui
+def test_the_wizard_builds_with_a_section_defined_from_it(qtbot, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """Section Library… opens Define → Section Library; what it adds is offered."""
+    from opensees_studio.commands.sections import AddSectionsCommand
+    from opensees_studio.core.aisc import get_shape, shape_to_elastic_section
+    from opensees_studio.views.dialogs import SectionLibraryDialog
+
+    mw = _window(qtbot)
+    monkeypatch.setattr(QMessageBox, "critical", lambda *a, **k: pytest.fail(str(a[2])))
+    project = mw._vm.project
+    new_id = project.next_section_id()
+
+    def _add_from_aisc(dialog: SectionLibraryDialog) -> int:
+        section = shape_to_elastic_section(
+            get_shape("W12X50"), elastic_modulus=200e9, section_id=new_id, ndm=3
+        )
+        mw._vm.apply_command(AddSectionsCommand(mw._vm, [section]))
+        return int(QDialog.DialogCode.Accepted)
+
+    monkeypatch.setattr(SectionLibraryDialog, "exec", _add_from_aisc)
+
+    def _setup(wizard: WarehouseWizard) -> None:
+        wizard._n_frames.setValue(3)
+        _section_library_button(wizard).click()
+        columns = wizard._section_combos["column"]
+        columns.setCurrentIndex(columns.findData(new_id))
+
+    _accept(monkeypatch, _setup)
+    mw._act_warehouse_wizard.trigger()
+
+    columns = next(g for g in project.groups if g.name == GROUPS["columns"])
+    sections = {e.id: e.section_id for e in project.elements}
+    assert {sections[eid] for eid in columns.element_ids} == {new_id}
+    assert [s.name for s in project.sections].count("W14X48") == 0  # no default column
+
+
 @pytest.mark.gui
 def test_cancelling_leaves_the_project_alone(qtbot, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     mw = _window(qtbot)
