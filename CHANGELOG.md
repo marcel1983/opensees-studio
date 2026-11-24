@@ -28,9 +28,25 @@ refused instead of silently downgraded).
   n-th purlin, or none): the wizard writes the resulting minor-axis and
   lateral-torsional unbraced lengths of every rafter and side column for
   Design → Steel Frame Check, which would otherwise take every purlin as a
-  bracing point. Wind and earthquake cases, end wall columns and trussed roofs
-  are not generated yet. The same generator is `core.warehouse.plan_warehouse`
-  for scripts; `examples/warehouse_gable.py` uses it.
+  bracing point. The same generator is `core.warehouse.plan_warehouse` for
+  scripts; `examples/warehouse_gable.py` uses it.
+- **Wind on the warehouse, and end wall columns.** The Warehouse Wizard has a
+  **Wind** page: one load case per wind direction (+X, -X, +Y, -Y) with the net
+  pressures of the main structure on the four walls and the roof, by **RNC-07
+  Título IV** (regional velocity per wind zone and group, roughness R1 to R4,
+  topography T1 to T5, the coefficients of Tabla 8 and the internal pressure of
+  Art. 55) or by **ASCE 7-16** chapter 26 and the directional procedure of
+  chapter 27 (exposure B, C or D, Kzt, Figure 27.3-1, enclosed or partially
+  enclosed; two cases per direction, the largest uplift and the largest
+  downward load). The roof pressure goes on the purlins, normal to the roof;
+  a wall's on its girts, or on its columns when it has none. The code's
+  combinations take each wind case with its own sign only. On the second page,
+  **End wall column spacing** adds the columns of the two end walls (pinned,
+  under a purlin line, web against the wind) and their girts, with the same
+  stabilising-angle rule for their unbraced lengths. Not created: the local
+  pressures of purlins, girts and cladding (RNC-07 Art. 58, ASCE 7 chapter 30).
+  `core.wind` has the pressures for scripts; `examples/warehouse_wind.py` builds
+  a warehouse with them.
 
 ## [0.0.78] - 2026-11-23
 
