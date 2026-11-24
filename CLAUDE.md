@@ -223,6 +223,11 @@ These are non-obvious things that are easy to break if you don't know:
   (`seismic_coefficient`, no period), as nodal loads from the weight lumped on
   each joint (`seismic_loads`); its cases go to the generator as role `E`, both
   signs, never as `peak_cases`.
+  Ash and snow (`core.snow`, a load per area of plan against the position
+  across the roof) go on the purlins through `snow_loads`; the balanced and the
+  drifted cases are alternatives, so the plan passes `ALTERNATIVE_ROLES` to the
+  combination generator, and a code without a snow role (RNC-07) takes the one
+  balanced case as a live load.
   `core.building.plan_building` is the same idea for a multi-storey building
   (`BuildingPlan`; no command or dialog yet, `plan.apply(project)` in a script).
   The slab is never modelled: it is `FloorLoad` panels, the mass is the mass

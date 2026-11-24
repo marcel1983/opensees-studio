@@ -51,6 +51,10 @@ EARTHQUAKE_DIRECTIONS = "earthquake_directions"
 Not a dialog setting: a generator of load cases that knows the direction of
 each one passes it, so that the 100% + 30% rule never adds two cases of the same
 direction (see :func:`opensees_studio.core.combinations.lateral_variants`)."""
+#: Programmatic generator option: the roles whose cases never act together (the
+#: balanced and the drifted snow, ``{"S"}``). Where a code adds "the snow", it
+#: gets one combination per case of such a role instead of their sum.
+ALTERNATIVE_ROLES = "alternative_roles"
 
 
 @dataclass(frozen=True)
@@ -164,6 +168,7 @@ class _Builder:
         symbols: Mapping[str, str],
         orthogonal: bool = False,
         directions: Mapping[int, str] | None = None,
+        alternatives: Iterable[str] = (),
     ) -> None:
         self.by_role = {role: list(dict.fromkeys(roles.get(role, ()))) for role in LOAD_ROLES}
         self.peaks = list(peak_cases)
@@ -171,6 +176,7 @@ class _Builder:
         self.symbols = dict(symbols)
         self.orthogonal = orthogonal
         self.directions = dict(directions or {})
+        self.alternatives = set(alternatives or ())
 
     def symbol(self, role: str) -> str:
         return self.symbols.get(role, role)
@@ -186,6 +192,8 @@ class _Builder:
         cases = self.by_role[role]
         if not cases or factor == 0.0:
             return _Slot([], required)
+        if role in self.alternatives and len(cases) > 1:
+            return self.one_of((role,), factor, required=required)
         return _Slot([_Choice(f"{_num(factor)}{self.symbol(role)}", [(factor, cases)])], required)
 
     def one_of(self, roles: Sequence[str], factor: float, *, required: bool = False) -> _Slot:
@@ -293,6 +301,7 @@ def generate_asce7_lrfd(
             peak_cases=peak_cases,
             orthogonal=bool(opts.get("orthogonal", False)),
             directions=opts.get(EARTHQUAKE_DIRECTIONS),
+            alternatives=opts.get(ALTERNATIVE_ROLES, ()),
             omega0=float(opts.get("omega0", 2.5)) if opts.get("overstrength", False) else None,
             sds=float(opts.get("sds", 1.0)),
         )
@@ -328,6 +337,7 @@ def generate_asce7_asd(
         symbols={},
         orthogonal=bool((options or {}).get("orthogonal", False)),
         directions=(options or {}).get(EARTHQUAKE_DIRECTIONS),
+        alternatives=(options or {}).get(ALTERNATIVE_ROLES, ()),
     )
     if not b.by_role["D"]:
         return []
@@ -450,6 +460,7 @@ def generate_en1990(
         symbols=EN_SYMBOLS,
         orthogonal=bool(opts.get("orthogonal", False)),
         directions=opts.get(EARTHQUAKE_DIRECTIONS),
+        alternatives=opts.get(ALTERNATIVE_ROLES, ()),
     )
     if not b.by_role["D"]:
         return []
@@ -574,6 +585,7 @@ def generate_tbdy(
         symbols=TBDY_SYMBOLS,
         orthogonal=bool(opts.get("orthogonal", False)),
         directions=opts.get(EARTHQUAKE_DIRECTIONS),
+        alternatives=opts.get(ALTERNATIVE_ROLES, ()),
     )
     if not b.by_role["D"]:
         return []
@@ -620,6 +632,7 @@ def generate_rnc07(
         symbols=RNC07_SYMBOLS,
         orthogonal=bool(opts.get("orthogonal", False)),
         directions=opts.get(EARTHQUAKE_DIRECTIONS),
+        alternatives=opts.get(ALTERNATIVE_ROLES, ()),
     )
     if not b.by_role["D"]:
         return []
@@ -685,6 +698,7 @@ def generate_nscm(
         symbols=NSCM_SYMBOLS,
         orthogonal=bool(opts.get("orthogonal", False)),
         directions=opts.get(EARTHQUAKE_DIRECTIONS),
+        alternatives=opts.get(ALTERNATIVE_ROLES, ()),
     )
     if not b.by_role["D"]:
         return []

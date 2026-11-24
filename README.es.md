@@ -128,7 +128,10 @@ script o un notebook de Jupyter: la interfaz es una forma de usarlo, no la únic
   correas, largueros y columnas; casos de sismo estático `EQ X` y `EQ Y` según
   RNC-07 Art. 32, NSCM 8.2.1 o ASCE 7-16 12.8, con el coeficiente de la meseta
   del espectro por el peso sísmico (acero, carga muerta de techo y carga viva
-  reducida) repartido entre los nudos según peso y altura; las correas van
+  reducida) repartido entre los nudos según peso y altura; carga de ceniza
+  volcánica según RNC-07 Art. 14 y NSCM 7.3 (20 kg/m²) o de nieve según ASCE
+  7-16 capítulo 7 o EN 1991-1-3, balanceada y desbalanceada, sobre la
+  proyección horizontal del techo; las correas van
   articuladas y solo arriostran la viga de techo donde llevan angular de
   estabilización, y el asistente escribe esas longitudes no arriostradas para la
   verificación de acero); la losa **Slab 20cm** de concreto

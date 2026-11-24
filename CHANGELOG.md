@@ -74,7 +74,25 @@ refused instead of silently downgraded).
   30 % of the other. Off
   by default; accidental torsion is not included. `examples/warehouse_seismic.py`
   builds a warehouse in Managua with it.
-
+- **Volcanic ash and snow on the warehouse.** The Warehouse Wizard has a
+  seventh page, **Ash and snow**: what settles on the roof, as a load per area
+  of horizontal projection on the purlins. **Volcanic ash** by RNC-07 Art. 14
+  and NSCM 7.3 is one case, `ASH`, of 20 kg/m² unless you have a local record;
+  NSCM combines it as its own load (CCV), RNC-07 with the live load. **Snow**
+  by **ASCE 7-16 chapter 7** (pf = 0.7 Ce Ct Is pg, the slope factor Cs, the
+  minimum of 7.3.4) or **EN 1991-1-3** (s = μ Ce Ct sk) is the balanced case
+  `SNOW` and the unbalanced ones the code asks for on that roof: `SNOW +X` and
+  `SNOW -X` on a gable (the drift of ASCE 7.6.1, or half the snow on one slope
+  by EN 5.3.3). A balanced and an unbalanced case never enter the same
+  combination. Off by default. Not included: build-up against parapets and
+  taller walls, sliding snow, ash gathered in gutters, and the snow ASCE 7
+  counts as seismic weight. `examples/warehouse_ash.py` builds a warehouse in
+  Masaya with the ash load.
+- **Combination generators take alternative cases.** Called from a script with
+  the option `alternative_roles` (`("S",)`), the cases of that role never act
+  together: where a code adds "the snow" (ASCE 7 combination 5, NSCM), there is
+  one combination per snow case instead of their sum. Without the option
+  nothing changes.
 - **Parametric building, for scripts.** `core.building.plan_building` makes a
   regular multi-storey building of a few numbers (bay widths along X and Y,
   storey heights, steel or concrete frame, fixed or pinned bases): columns and

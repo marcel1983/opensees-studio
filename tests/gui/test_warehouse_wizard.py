@@ -25,11 +25,13 @@ from opensees_studio.core.warehouse import (
     GROUPS,
     TRUSS_GROUPS,
     WarehouseSeismic,
+    WarehouseSnow,
     WarehouseSpec,
     WarehouseWind,
     plan_warehouse,
 )
 from opensees_studio.core.wind import KGF
+from opensees_studio.views.dialogs.frame_wizard import ROOF_CHOICES
 from opensees_studio.views.dialogs.warehouse_wizard import WarehouseWizard
 
 
@@ -426,6 +428,91 @@ def test_the_menu_adds_the_earthquake_cases_to_the_warehouse(qtbot, monkeypatch)
     names = [c.name for c in project.combinations]
     assert "0.9CM+Fs:EQ X+0.3Fs:EQ Y" in names and "0.9CM-Fs:EQ Y-0.3Fs:EQ X" in names
     assert "2 earthquake case(s) by RNC-07 Art. 32" in mw._console.toPlainText()
+    project.validate_references()
+
+    mw._vm.undo_stack.undo()
+    assert project.model_dump() == before
+
+
+@pytest.mark.gui
+def test_the_ash_and_snow_page_follows_the_code_and_reaches_the_loads(qtbot) -> None:  # type: ignore[no-untyped-def]
+    wizard = WarehouseWizard([])
+    qtbot.addWidget(wizard)
+    # Off until asked for.
+    assert wizard.loads().snow is None
+    assert wizard._page_snow.isComplete() and not wizard._snow_ground.isEnabled()
+    assert wizard._snow_summary.text() == ""
+
+    def chosen() -> WarehouseSnow:
+        snow = wizard.loads().snow
+        assert snow is not None
+        return dataclasses.replace(snow, ground=round(snow.ground, 4))
+
+    wizard._snow_on.setChecked(True)
+    # RNC-07 by default: 20 kg/m² of wet ash (Art. 14), one case.
+    assert chosen() == WarehouseSnow(method="ash", ground=round(20.0 * KGF, 4))
+    assert wizard._snow_ground.isEnabled() and not wizard._snow_ce.isEnabled()
+    assert not wizard._snow_unbalanced.isEnabled() and not wizard._snow_slippery.isEnabled()
+    assert wizard._snow_summary.text().startswith("Load case ASH: <b>196.1 ")
+    wizard._code.setCurrentIndex(wizard._code.findData("nscm"))
+    assert wizard._snow_method.currentData() == "ash"
+
+    wizard._code.setCurrentIndex(wizard._code.findData("asce7_lrfd"))
+    assert wizard._snow_method.currentData() == "asce7"
+    assert chosen() == WarehouseSnow(method="asce7", ground=957.6)  # 20 psf
+    assert wizard._snow_is.isEnabled() and wizard._snow_slippery.isEnabled()
+    # The default roof is a gable at 10 %: the balanced load and the two drifts.
+    assert "SNOW, SNOW +X, SNOW -X" in wizard._snow_summary.text()
+    wizard._snow_unbalanced.setChecked(False)
+    assert wizard._snow_summary.text().startswith("Load case SNOW:")
+    wizard._snow_ce.setValue(0.9)
+    wizard._snow_ct.setValue(1.2)
+    wizard._snow_is.setValue(1.1)
+    wizard._snow_slippery.setChecked(True)
+    assert chosen() == WarehouseSnow(
+        method="asce7", ground=957.6, exposure=0.9, thermal=1.2, importance=1.1,
+        slippery=True, unbalanced=False,
+    )  # fmt: skip
+
+    wizard._snow_method.setCurrentIndex(wizard._snow_method.findData("en1991"))
+    assert chosen().ground == 1000.0  # sk = 1 kN/m²
+    assert wizard._snow_ce.isEnabled() and not wizard._snow_is.isEnabled()
+    wizard._snow_unbalanced.setChecked(True)
+    assert "SNOW, SNOW +X, SNOW -X" in wizard._snow_summary.text()
+    # The cases follow the roof: a single slope has the one arrangement.
+    wizard._roof.setCurrentIndex(
+        next(i for i, choice in enumerate(ROOF_CHOICES) if choice[1] is RoofType.MONO_PITCH)
+    )
+    assert wizard._snow_summary.text().startswith("Load case SNOW:")
+    wizard._snow_ground.setValue(0.0)
+    assert wizard._snow_summary.text() != "" and "<b>" not in wizard._snow_summary.text()
+    wizard._snow_on.setChecked(False)
+    assert wizard.loads().snow is None and wizard._snow_summary.text() == ""
+
+
+@pytest.mark.gui
+def test_the_menu_adds_the_ash_case_to_the_warehouse(qtbot, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    mw = _window(qtbot)
+    monkeypatch.setattr(QMessageBox, "critical", lambda *a, **k: pytest.fail(str(a[2])))
+
+    def setup(wizard: WarehouseWizard) -> None:
+        wizard._n_frames.setValue(3)
+        wizard._wind_on.setChecked(False)
+        wizard._code.setCurrentIndex(wizard._code.findData("nscm"))
+        wizard._snow_on.setChecked(True)
+
+    _accept(monkeypatch, setup)
+    project = mw._vm.project
+    before = project.model_dump()
+
+    mw._act_warehouse_wizard.trigger()
+
+    assert [c.name for c in project.analyses] == ["DEAD", "ROOF LIVE", "ASH"]
+    patterns = {p.name: p for p in project.load_patterns}
+    assert len(patterns["ASH"].element_loads) == len(patterns["ROOF LIVE"].element_loads)
+    # NSCM 7.5.1: the ash has its own load, CCV.
+    assert any("CCV" in c.name for c in project.combinations)
+    assert "1 case(s) by Volcanic ash" in mw._console.toPlainText()
     project.validate_references()
 
     mw._vm.undo_stack.undo()

@@ -56,6 +56,12 @@ The rules that are easy to get wrong, and that the tests pin:
   girts and the eave purlin (a wall with girts) or on the columns (a wall
   without), normal to the surface. The lower half of the lowest wall strip goes
   straight into the ground and is not applied.
+* **Snow and ash fall on the plan of the roof.** A case of
+  :mod:`opensees_studio.core.snow` (volcanic ash by RNC-07 Art. 14 and NSCM
+  7.3, snow by ASCE 7-16 chapter 7 or EN 1991-1-3) is a vertical load per area
+  of horizontal projection that varies across the building; :func:`snow_loads`
+  gives each purlin what falls on the half strip to either neighbour. The
+  balanced and the drifted arrangements are alternatives in the combinations.
 * **The earthquake is a share of the weight at each joint.**
   :func:`seismic_coefficient` gives ``c = V / W`` on the plateau of the spectrum
   of RNC-07, NSCM or ASCE 7 (the period is not used); the seismic weight is the
@@ -98,6 +104,14 @@ from opensees_studio.core.geometry.grid import (
 )
 from opensees_studio.core.geometry.local_axes import frame_local_axes
 from opensees_studio.core.geometry.node import Node, Restraint6
+from opensees_studio.core.snow import (
+    SnowCase,
+    SnowError,
+    asce7_snow_cases,
+    ash_cases,
+    en1991_snow_cases,
+    roof_planes,
+)
 from opensees_studio.core.trusses import TrussType
 from opensees_studio.core.units import UnitSystem, force_scale, length_scale
 from opensees_studio.core.wind import (
@@ -1633,6 +1647,112 @@ def seismic_loads(
     return loads
 
 
+# ───────────────────────────── snow and ash ─────────────────────────────
+#: What can settle on the roof, by the rule that gives its load.
+SNOW_METHODS: dict[str, str] = {
+    "ash": "Volcanic ash (RNC-07 Art. 14, NSCM 7.3)",
+    "asce7": "ASCE 7-16 chapter 7",
+    "en1991": "EN 1991-1-3",
+}
+
+
+@dataclass(frozen=True)
+class WarehouseSnow:
+    """Snow or volcanic ash on the roof of a warehouse."""
+
+    method: str = "ash"
+    """Key of :data:`SNOW_METHODS`."""
+    ground: float = 0.0
+    """A load per area of plan, in project units: the ash itself, the ground
+    snow load ``pg`` of ASCE 7 or the characteristic ``sk`` of EN 1991-1-3."""
+    exposure: float = 1.0
+    """Exposure factor Ce (ASCE 7 Table 7.3-1, EN 1991-1-3 Table 5.1)."""
+    thermal: float = 1.0
+    """Thermal factor Ct."""
+    importance: float = 1.0
+    """ASCE 7: snow importance factor Is."""
+    slippery: bool = False
+    """ASCE 7: an unobstructed slippery roof, which sheds snow at a lower slope."""
+    unbalanced: bool = True
+    """Also the drifted arrangements the code asks for on this roof."""
+
+    def __post_init__(self) -> None:
+        if self.method not in SNOW_METHODS:
+            raise WarehouseError(f"Unknown snow method {self.method!r}.")
+        if self.ground < 0.0:
+            raise WarehouseError("Loads are entered as positive, downward values.")
+        if min(self.exposure, self.thermal, self.importance) <= 0.0:
+            raise WarehouseError("The snow factors Ce, Ct and Is must be positive.")
+
+
+def warehouse_snow_cases(
+    spec: WarehouseSpec, snow: WarehouseSnow, units: UnitSystem
+) -> list[SnowCase]:
+    """The snow or ash cases of ``snow`` on ``spec``, positions and pressures in project units."""
+    metres = length_scale(units, UnitSystem.SI_M_N)
+    unit = pressure_from_kpa(1.0, units)  # one kN/m² in project units
+    roof = {RoofType.MONO_PITCH: "mono", RoofType.GABLE: "gable"}.get(spec.roof, "flat")
+    ground = snow.ground / unit
+    try:
+        # Naves stand under one roof: a single ridge (or slope) over the whole width.
+        planes = roof_planes(spec.width * metres, 1, roof)
+        if snow.method == "ash":
+            cases = ash_cases(planes, ground)
+        elif snow.method == "asce7":
+            cases = asce7_snow_cases(
+                planes,
+                spec.slope,
+                ground,
+                ce=snow.exposure,
+                ct=snow.thermal,
+                importance=snow.importance,
+                slippery=snow.slippery,
+                unbalanced=snow.unbalanced,
+            )
+        else:
+            cases = en1991_snow_cases(
+                planes,
+                spec.slope,
+                ground,
+                ce=snow.exposure,
+                ct=snow.thermal,
+                drifted=snow.unbalanced,
+            )
+    except SnowError as exc:
+        raise WarehouseError(str(exc)) from exc
+    return [
+        SnowCase(case.name, tuple((x / metres, p * unit) for x, p in case.points)) for case in cases
+    ]
+
+
+def snow_loads(warehouse: Warehouse, case: SnowCase) -> list[Any]:
+    """A snow or ash case as uniform loads on the purlins.
+
+    Each purlin takes what falls on the half strip of plan to either
+    neighbour: the case's mean pressure over it times its width, downwards.
+    """
+    from opensees_studio.core.loads import UniformElementLoad
+
+    nodes = {n.id: n for n in warehouse.nodes}
+    purlins = {e.id: e for e in warehouse.elements if e.id in warehouse.purlin_station}
+    stations = warehouse.stations
+    last = len(stations) - 1
+    loads: list[Any] = []
+    for element_id, k in warehouse.purlin_station.items():
+        here = stations[k]
+        per_length = 0.0
+        for other in (k - 1, k + 1):
+            if not 0 <= other <= last:
+                continue
+            middle = 0.5 * (here.x + stations[other].x)
+            per_length += case.mean(here.x, middle) * abs(middle - here.x)
+        if per_length == 0.0:
+            continue
+        _wx, wy, wz = _components(_gravity_components(nodes, purlins[element_id]) * per_length)
+        loads.append(UniformElementLoad(element_id=element_id, wy=wy, wz=wz))
+    return loads
+
+
 # ───────────────────────── code presets and defaults ─────────────────────────
 @dataclass(frozen=True)
 class CodePreset:
@@ -1660,6 +1780,8 @@ class CodePreset:
     """Roof live load that counts as seismic weight, kN/m² of horizontal projection."""
     seismic_reduction: float = 2.0
     """Default Q, Ro or R of a steel warehouse of limited ductility."""
+    snow_method: str = "ash"
+    """Key of :data:`SNOW_METHODS`: what settles on a roof under this code."""
 
 
 _KGF = 9.80665e-3  # one kilogram-force in kN
@@ -1690,11 +1812,13 @@ CODE_PRESETS: dict[str, CodePreset] = {
             "asce7_lrfd", "Lr", "ROOF LIVE", 0.9576, 0.0, "LRFD",
             "ASCE 7-16 Table 4.3-1: ordinary roofs, 20 psf (before any reduction).",
             "asce7", 57.0, seismic_method="asce7", seismic_reduction=3.0,
+            snow_method="asce7",
         ),
         CodePreset(
             "asce7_asd", "Lr", "ROOF LIVE", 0.9576, 0.0, "ASD",
             "ASCE 7-16 Table 4.3-1: ordinary roofs, 20 psf (before any reduction).",
             "asce7", 57.0, seismic_method="asce7", seismic_reduction=3.0,
+            snow_method="asce7",
         ),
     )
 }  # fmt: skip
@@ -1738,6 +1862,8 @@ class WarehouseLoads:
     """Wind cases to create, one or two per direction; None for no wind."""
     seismic: WarehouseSeismic | None = None
     """Earthquake cases to create, one per direction; None for no earthquake."""
+    snow: WarehouseSnow | None = None
+    """Snow or ash cases to create; None for neither."""
 
     def __post_init__(self) -> None:
         if self.code not in CODE_PRESETS:
@@ -1956,6 +2082,7 @@ def _plan_loads(
 ) -> None:
     """The load cases, the roof loads, the combinations and the design lengths."""
     from opensees_studio.core.code_combinations import (
+        ALTERNATIVE_ROLES,
         CODES,
         envelope_groups,
         generate_for_code,
@@ -2055,6 +2182,44 @@ def _plan_loads(
             "pressures of the code."
         )
 
+    snow_case_ids: list[int] = []
+    # A code without a snow role (RNC-07) takes the ash with the live load,
+    # "adicional a la carga viva" (Art. 14).
+    snow_role = "S" if "S" in CODES[loads.code].roles else "L"
+    if loads.snow is not None:
+        snow_cases = warehouse_snow_cases(warehouse.spec, loads.snow, project.meta.units)
+        if snow_role != "S" and len(snow_cases) > 1:
+            plan.notes.append(
+                f"{CODES[loads.code].label} has no snow load in its combinations: only the "
+                f"balanced case {snow_cases[0].name} was created, as a live load."
+            )
+            snow_cases = snow_cases[:1]
+        taken = {p.name for p in scratch.load_patterns} | {c.name for c in scratch.analyses}
+        names = []
+        for snow_case in snow_cases:
+            name, n = snow_case.name, 2
+            while name in taken:
+                name, n = f"{snow_case.name} ({n})", n + 1
+            taken.add(name)
+            names.append(name)
+        series, patterns, cases = make_load_cases(scratch, names)
+        for snow_case, one_series, pattern, case in zip(
+            snow_cases, series, patterns, cases, strict=True
+        ):
+            add_case(one_series, pattern, case)
+            snow_case_ids.append(plan.cases[-1].id)
+            plan.pattern_loads.append(
+                (pattern.id, "element_loads", snow_loads(warehouse, snow_case))
+            )
+        if snow_cases:
+            peak = max(c.peak for c in snow_cases)
+            plan.notes.append(
+                f"{len(snow_cases)} case(s) by {SNOW_METHODS[loads.snow.method]}: "
+                f"{snow_cases[0].points[0][1]:.6g} per area of plan on the whole roof"
+                + (f", up to {peak:.6g} where it drifts" if len(snow_cases) > 1 else "")
+                + ". Build-up against parapets, taller walls and in gutters is not included."
+            )
+
     seismic_case_ids: list[int] = []
     if loads.seismic is not None:
         seismic = loads.seismic
@@ -2106,6 +2271,8 @@ def _plan_loads(
             roles["W"] = wind_case_ids
         if seismic_case_ids:
             roles["E"] = seismic_case_ids
+        if snow_case_ids:
+            roles[snow_role] = [*roles.get(snow_role, []), *snow_case_ids]
         case_names = {c.id: c.name or str(c.id) for c in scratch.analyses}
         # A wind case has its direction and its suctions in it: reversing it is
         # not another wind, so each one enters the combinations with one sign.
@@ -2115,6 +2282,9 @@ def _plan_loads(
         # NSCM also folds the vertical component Ev = 0.2 a0 Fas CM (Ec. 7.8-4)
         # into the dead load factor: with the site of the earthquake page.
         options: dict[str, Any] = {}
+        if snow_role == "S" and len(snow_case_ids) > 1:
+            # The balanced and the drifted snow never lie on the roof together.
+            options[ALTERNATIVE_ROLES] = ("S",)
         if loads.code in ORTHOGONAL_RULE_CODES and len(seismic_case_ids) > 1:
             options["orthogonal"] = True
         if (
@@ -2182,6 +2352,7 @@ __all__ = [
     "SECTION_KEYS",
     "SEISMIC_DIRECTIONS",
     "SEISMIC_METHODS",
+    "SNOW_METHODS",
     "TRUSS_BOTTOMS",
     "TRUSS_GROUPS",
     "TRUSS_SECTION_KEYS",
@@ -2195,6 +2366,7 @@ __all__ = [
     "WarehouseLoads",
     "WarehousePlan",
     "WarehouseSeismic",
+    "WarehouseSnow",
     "WarehouseSpec",
     "WarehouseWind",
     "bottom_chord_ties",
@@ -2217,7 +2389,9 @@ __all__ = [
     "roof_weights",
     "seismic_coefficient",
     "seismic_loads",
+    "snow_loads",
     "warehouse_grid",
+    "warehouse_snow_cases",
     "warehouse_wind_cases",
     "wind_loads",
 ]

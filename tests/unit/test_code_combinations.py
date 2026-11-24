@@ -190,6 +190,26 @@ def test_every_code_takes_the_earthquake_directions(code: str) -> None:
         assert sorted(used) == ["X", "Y"], combination.name
 
 
+@pytest.mark.parametrize("code", ["asce7_lrfd", "asce7_asd", "nscm", "en1990"])
+def test_the_cases_of_an_alternative_role_never_act_together(code: str) -> None:
+    # A balanced snow and two drifted ones, with wind and earthquake around.
+    roles = {"D": [D], "L": [L], "S": [30, 31, 32], "W": [W], "E": [E]}
+    snow = {30, 31, 32}
+    together = generate_for_code(code, roles)
+    apart = generate_for_code(code, roles, options={"alternative_roles": ("S",)})
+    assert all(len(snow & {t.ref_id for t in c.terms}) <= 1 for c in apart), code
+    assert {t.ref_id for c in apart for t in c.terms} >= snow
+    names = [c.name for c in apart]
+    assert len(names) == len(set(names))
+    if code in ("asce7_lrfd", "nscm"):  # the others already take one snow case at a time
+        assert any(len(snow & {t.ref_id for t in c.terms}) == 3 for c in together), code
+    # One snow case is the same with or without the option.
+    single = {**roles, "S": [30]}
+    assert [c.name for c in generate_for_code(code, single)] == [
+        c.name for c in generate_for_code(code, single, options={"alternative_roles": ("S",)})
+    ]
+
+
 def test_orthogonal_option_applies_to_every_code_with_earthquake() -> None:
     roles = {"D": [D], "E": [E, 7]}
     for code in ("asce7_lrfd", "asce7_asd", "en1990", "tbdy"):

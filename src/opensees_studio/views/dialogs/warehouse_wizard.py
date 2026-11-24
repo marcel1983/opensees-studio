@@ -37,6 +37,7 @@ from opensees_studio.core.code_combinations import CODES
 from opensees_studio.core.help import TOPIC_PROPERTY
 from opensees_studio.core.nscm import NSCM_IMPORTANCE
 from opensees_studio.core.rnc07 import RNC07_REGULARITY_LABELS, RNC07_SOILS, RNC07_ZONE_A0
+from opensees_studio.core.snow import ASH_LOAD_KPA
 from opensees_studio.core.trusses import TRUSS_TYPE_LABELS
 from opensees_studio.core.units import UnitSystem, labels_for
 from opensees_studio.core.warehouse import (
@@ -49,6 +50,7 @@ from opensees_studio.core.warehouse import (
     SECTION_KEYS,
     SEISMIC_DIRECTIONS,
     SEISMIC_METHODS,
+    SNOW_METHODS,
     TRUSS_BOTTOMS,
     TRUSS_SECTION_KEYS,
     WIND_METHODS,
@@ -56,6 +58,7 @@ from opensees_studio.core.warehouse import (
     WarehouseError,
     WarehouseLoads,
     WarehouseSeismic,
+    WarehouseSnow,
     WarehouseSpec,
     WarehouseWind,
     build_warehouse,
@@ -64,6 +67,7 @@ from opensees_studio.core.warehouse import (
     length_from_m,
     pressure_from_kpa,
     seismic_coefficient,
+    warehouse_snow_cases,
     warehouse_wind_cases,
 )
 from opensees_studio.core.wind import (
@@ -139,6 +143,10 @@ DEFAULT_CLASS: dict[str, str] = {"rnc07": "B", "nscm": "II"}
 
 #: a0 each method starts with, g: RNC-07 zone C; NSCM Tabla 14.2, Managua.
 DEFAULT_A0: dict[str, float] = {"rnc07": RNC07_ZONE_A0["C"], "nscm": 0.36667, "asce7": 0.0}
+
+#: Load each rule of the ash and snow page starts with, kN/m²: 20 kg/m² of wet
+#: ash (RNC-07 Art. 14); 20 psf of ground snow; a characteristic sk of 1 kN/m².
+DEFAULT_SNOW_KPA: dict[str, float] = {"ash": ASH_LOAD_KPA, "asce7": 0.9576, "en1991": 1.0}
 
 #: Labels of :data:`opensees_studio.core.wind.OPENINGS`, in its order.
 WIND_OPENINGS: tuple[str, ...] = (
@@ -247,6 +255,7 @@ class WarehouseWizard(QWizard):
         self._build_loads_page()
         self._build_wind_page()
         self._build_seismic_page()
+        self._build_snow_page()
         for index, page in enumerate(
             (
                 self._page_geometry,
@@ -255,6 +264,7 @@ class WarehouseWizard(QWizard):
                 self._page_loads,
                 self._page_wind,
                 self._page_seismic,
+                self._page_snow,
             )
         ):
             self.setPage(index, page)
@@ -734,6 +744,86 @@ class WarehouseWizard(QWizard):
         self._page_seismic = page
         self._on_seismic_method_changed()
 
+    def _build_snow_page(self) -> None:
+        page = _CompletablePage()
+        page.complete_check = lambda: not self._snow_error
+        page.setTitle("Ash and snow")
+        page.setSubTitle("What settles on the roof: volcanic ash, or snow.")
+        form = QFormLayout(page)
+        self._snow_error = ""
+
+        self._snow_on = QCheckBox("Create the ash or snow load cases")
+        self._snow_method = QComboBox()
+        for key, label in SNOW_METHODS.items():
+            self._snow_method.addItem(tr(label), userData=key)
+        self._snow_method.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self._snow_method.setMinimumContentsLength(34)
+        self._snow_ground = _field(0.0, minimum=0.0, maximum=1e12, step=0.0, suffix=self._pressure)
+        self._snow_ground.setToolTip(
+            "Per area of horizontal projection. Volcanic ash: the load itself, 20 kg/m² of "
+            "wet ash when there is no local record (RNC-07 Art. 14, NSCM 7.3; mandatory in "
+            "León, Chinandega, Carazo, Ometepe and Masaya). ASCE 7-16: the ground snow "
+            "load pg of Fig. 7.2-1. EN 1991-1-3: the characteristic value sk of the "
+            "National Annex."
+        )
+        self._snow_ce = _field(1.0, minimum=0.01, maximum=10.0, step=0.1)
+        self._snow_ce.setToolTip(
+            "ASCE 7-16 Table 7.3-1: 0.9 fully exposed (0.8 in terrain D), 1.0 partially "
+            "exposed, 1.2 sheltered in terrain B (1.1 in C, 1.0 in D). EN 1991-1-3 Table "
+            "5.1: 0.8 windswept, 1.0 normal, 1.2 sheltered."
+        )
+        self._snow_ct = _field(1.0, minimum=0.01, maximum=10.0, step=0.1)
+        self._snow_ct.setToolTip(
+            "ASCE 7-16 Table 7.3-2: 1.0 heated, 1.1 kept just above freezing or cold and "
+            "ventilated, 1.2 unheated or open, 1.3 kept below freezing. EN 1991-1-3 5.2 (8): "
+            "1.0 unless the roof loses much heat."
+        )
+        self._snow_is = _field(1.0, minimum=0.01, maximum=10.0, step=0.1)
+        self._snow_is.setToolTip(
+            "ASCE 7-16 Table 1.5-2: 0.8, 1.0, 1.1 or 1.2 for risk category I to IV."
+        )
+        self._snow_slippery = QCheckBox("Slippery roof the snow can slide off")
+        self._snow_slippery.setToolTip(
+            "ASCE 7-16 7.4: an unobstructed metal or membrane roof with room below the "
+            "eaves for the snow. It sheds snow from a lower slope."
+        )
+        self._snow_unbalanced = QCheckBox("Also the unbalanced arrangements")
+        self._snow_unbalanced.setChecked(True)
+        self._snow_unbalanced.setToolTip(
+            "ASCE 7-16 7.6.1: the drift to either side of the ridge of a gable roof. "
+            "EN 1991-1-3 5.3.3: half the snow on one slope."
+        )
+        form.addRow(self._snow_on)
+        form.addRow("Rule:", self._snow_method)
+        form.addRow("Ash load, or snow load on the ground:", self._snow_ground)
+        form.addRow("Exposure factor Ce:", self._snow_ce)
+        form.addRow("Thermal factor Ct:", self._snow_ct)
+        form.addRow("Importance factor Is:", self._snow_is)
+        form.addRow(self._snow_slippery)
+        form.addRow(self._snow_unbalanced)
+        self._snow_summary = QLabel()
+        self._snow_summary.setWordWrap(True)
+        form.addRow(self._snow_summary)
+        note = QLabel(
+            "<i>The load falls on the horizontal projection of the roof and goes to the "
+            "purlins. A balanced and an unbalanced case never enter the same combination. "
+            "Build-up against parapets or taller walls and in gutters is not included, and "
+            "neither is the part of the snow some codes count as seismic weight.</i>"
+        )
+        note.setWordWrap(True)
+        form.addRow(note)
+
+        self._snow_on.toggled.connect(self._refresh_snow)
+        self._snow_method.currentIndexChanged.connect(self._on_snow_method_changed)
+        for field in (self._snow_ground, self._snow_ce, self._snow_ct, self._snow_is):
+            field.valueChanged.connect(self._refresh_snow)
+        self._snow_slippery.toggled.connect(self._refresh_snow)
+        self._snow_unbalanced.toggled.connect(self._refresh_snow)
+        self._page_snow = page
+        self._on_snow_method_changed()
+
     # ── live state ──────────────────────────────────────────────────
     def _on_code_changed(self, _index: int = 0) -> None:
         preset = CODE_PRESETS[self._code.currentData()]
@@ -753,6 +843,85 @@ class WarehouseWizard(QWizard):
             self._seismic_method.setCurrentIndex(index)
         else:
             self._on_seismic_method_changed()
+        index = self._snow_method.findData(preset.snow_method)
+        if index != self._snow_method.currentIndex():
+            self._snow_method.setCurrentIndex(index)
+        else:
+            self._on_snow_method_changed()
+
+    def _on_snow_method_changed(self, _index: int = 0) -> None:
+        method = str(self._snow_method.currentData())
+        self._snow_ground.blockSignals(True)
+        self._snow_ground.setValue(pressure_from_kpa(DEFAULT_SNOW_KPA[method], self._units))
+        self._snow_ground.blockSignals(False)
+        self._refresh_snow()
+
+    def snow(self) -> WarehouseSnow | None:
+        """The ash or snow the fields describe; None when no such cases are wanted.
+
+        Raises:
+            WarehouseError: if they do not describe one.
+        """
+        if not self._snow_on.isChecked():
+            return None
+        return WarehouseSnow(
+            method=str(self._snow_method.currentData()),
+            ground=self._snow_ground.value(),
+            exposure=self._snow_ce.value(),
+            thermal=self._snow_ct.value(),
+            importance=self._snow_is.value(),
+            slippery=self._snow_slippery.isChecked(),
+            unbalanced=self._snow_unbalanced.isChecked(),
+        )
+
+    def _refresh_snow(self, *_args: object) -> None:
+        if not hasattr(self, "_page_snow"):
+            return
+        on = self._snow_on.isChecked()
+        method = self._snow_method.currentData()
+        ash, asce = method == "ash", method == "asce7"
+        for widget, enabled in (
+            (self._snow_method, True),
+            (self._snow_ground, True),
+            (self._snow_ce, not ash),
+            (self._snow_ct, not ash),
+            (self._snow_is, asce),
+            (self._snow_slippery, asce),
+            (self._snow_unbalanced, not ash),
+        ):
+            widget.setEnabled(on and enabled)
+        self._snow_error = ""
+        text = ""
+        try:
+            snow = self.snow()
+            if snow is not None and not self._error:
+                cases = warehouse_snow_cases(self.spec(), snow, self._units)
+                if len(cases) == 1:
+                    text = tr(
+                        "Load case {names}: <b>{pressure} {unit}</b> on the whole roof."
+                    ).format(
+                        names=cases[0].name,
+                        pressure=f"{cases[0].peak:.4g}",
+                        unit=self._pressure,
+                    )
+                elif cases:
+                    text = tr(
+                        "<b>{cases}</b> load cases: {names}. On the whole roof "
+                        "<b>{pressure} {unit}</b>, up to <b>{peak} {unit}</b>."
+                    ).format(
+                        cases=len(cases),
+                        names=", ".join(case.name for case in cases),
+                        pressure=f"{cases[0].points[0][1]:.4g}",
+                        peak=f"{max(case.peak for case in cases):.4g}",
+                        unit=self._pressure,
+                    )
+                else:
+                    text = tr("No load: nothing is created.")
+        except WarehouseError as exc:
+            self._snow_error = str(exc)
+            text = "<b>" + tr("Check the numbers:") + f"</b> {tr(self._snow_error)}"
+        self._snow_summary.setText(text)
+        self._page_snow.completeChanged.emit()
 
     def _on_seismic_method_changed(self, _index: int = 0) -> None:
         method = str(self._seismic_method.currentData())
@@ -1060,6 +1229,7 @@ class WarehouseWizard(QWizard):
         for page in (self._page_geometry, self._page_secondary):
             page.completeChanged.emit()
         self._refresh_wind()
+        self._refresh_snow()
 
     # ── results ─────────────────────────────────────────────────────
     def section_choice(self) -> dict[str, int | None]:
@@ -1083,6 +1253,7 @@ class WarehouseWizard(QWizard):
             design_lengths=self._design_lengths.isChecked(),
             wind=self.wind(),
             seismic=self.seismic(),
+            snow=self.snow(),
         )
 
 
