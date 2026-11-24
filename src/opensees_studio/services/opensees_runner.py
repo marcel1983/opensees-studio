@@ -46,8 +46,6 @@ from typing import Any
 import numpy as np
 
 from opensees_studio.core import (
-    BEARING_CLASSES,
-    SLIDING_BEARING_CLASSES,
     BeamWithHingesElement,
     CatalogMaterial,
     ConstantTimeSeries,
@@ -55,43 +53,29 @@ from opensees_studio.core import (
     CoulombFriction,
     DispBeamColumn,
     ElasticBeamColumn,
-    ElasticMembranePlateSection,
-    ElasticSection,
-    FiberSection,
     ForceBeamColumn,
     ImposedSupportMotionPattern,
     InfluenceLineCase,
-    LayeredShellSection,
     LinearTimeSeries,
     ModalCase,
-    MVLEMElement,
     NodalLoad,
-    NonprismaticSection,
     PathTimeSeries,
     PlainLoadPattern,
-    PlateFiberSection,
     PointElementLoad,
     Project,
     PulseTimeSeries,
     PushoverCase,
-    QuadElement,
     RectangularTimeSeries,
     ResponseSpectrumCase,
-    SectionAggregator,
-    ShellDKGTElement,
-    ShellMITC4Element,
     StagedCase,
     StaticCase,
     TransientCase,
     TriangleTimeSeries,
     TrigTimeSeries,
-    TripleFrictionPendulumElement,
     TrussElement,
-    TwoNodeLinkElement,
     UniformExcitationPattern,
     VelDependentFriction,
     VelNormalFrcDepFriction,
-    ZeroLengthElement,
     ZeroLengthSectionElement,
 )
 from opensees_studio.core.analysis import test_args, transient_integrator_args
@@ -122,7 +106,7 @@ from opensees_studio.core.modal import (
     resolve_modal_solver,
 )
 from opensees_studio.core.modal_combination import DEFAULT_MODAL_DAMPING, closely_spaced_pairs
-from opensees_studio.core.plane import dof_signs, to_solver_coords, to_solver_vector3
+from opensees_studio.core.plane import dof_signs, to_solver_coords
 from opensees_studio.core.prestress import tendon_equivalent_loads
 from opensees_studio.core.section_cuts import cut_resultant, section_cuts
 from opensees_studio.core.section_materials import shear_dropped_note, sync_material_links
@@ -132,6 +116,10 @@ from opensees_studio.core.support_springs import nodal_springs
 from opensees_studio.core.thermal import equivalent_nodal_loads, fixed_end_forces
 from opensees_studio.diagnostics.performance import perf
 from opensees_studio.services.catalog_emitters import emit_catalog_material
+from opensees_studio.services.element_emitters import (
+    SKIP_BEARING_ORIENT_ENV as SKIP_BEARING_ORIENT_ENV,
+)
+from opensees_studio.services.element_emitters import ElementContext, emit_element
 from opensees_studio.services.frame_members import FramePlan, plan_frame_members
 from opensees_studio.services.material_emitters import emit_material
 from opensees_studio.services.opensees_io import (
@@ -148,15 +136,16 @@ from opensees_studio.services.results import (
     StaticResults,
     TransientResults,
 )
+from opensees_studio.services.section_emitters import (
+    SectionContext,
+    emit_section,
+    fiber_torsion_materials,
+)
 
 # Derived-series tag block: the runner materialises the velocity companion of an
 # ImposedSupportMotion displacement record as its own Path series. The tag lives
 # far above any hand-authored model id and is collision-checked at emission.
 _IMPOSED_VEL_TS_OFFSET = 900_000
-
-SKIP_BEARING_ORIENT_ENV = "OPENSEES_STUDIO_TEST_SKIP_BEARING_ORIENT"
-"""Tests only: ``1`` leaves ``-orient`` off bearings, so OpenSees itself hard-exits on a
-zero-length bearing (a real solver crash for the crash-reporting tests)."""
 
 
 # ─────────────────────── DOF-index helper ───────────────────────
@@ -326,12 +315,7 @@ class OpenSeesRunner:
         # SectionAggregator that wraps the fiber section with a T pairing.
         # Used by _emit_section to satisfy OpenSees FiberSection3d's torsion
         # requirement when GJ is not set directly on the FiberSection.
-        self._fiber_torsion_mat: dict[int, int] = {}
-        for sec in self.project.sections:
-            if isinstance(sec, SectionAggregator) and sec.section_id is not None:
-                for pair in sec.pairings:
-                    if pair.dof == "T":
-                        self._fiber_torsion_mat[sec.section_id] = pair.material_id
+        self._fiber_torsion_mat = fiber_torsion_materials(self.project.sections)
 
         for section in self.project.sections:
             self._emit_section(section)
@@ -592,99 +576,8 @@ class OpenSeesRunner:
                 raise NotImplementedError(f"Friction model type not supported: {fm.type}")
 
     def _emit_section(self, sec: Any) -> None:
-        ops = self._ops
-        if isinstance(sec, NonprismaticSection):
-            # A library template. Members that use it are materialised as
-            # ordinary elastic elements before the script is built.
-            return
-        if isinstance(sec, ElasticMembranePlateSection):
-            self._emit_plate_section(sec)
-            return
-        if isinstance(sec, LayeredShellSection):
-            layers = [v for layer in sec.layers for v in (layer.material_id, layer.thickness)]
-            ops.section("LayeredShell", sec.id, len(sec.layers), *layers)
-            return
-        if isinstance(sec, PlateFiberSection):
-            ops.section("PlateFiber", sec.id, sec.material_id, sec.h)
-            return
-        match sec:
-            case ElasticSection():
-                if self.project.ndm == 2:
-                    ops.section("Elastic", sec.id, sec.E, sec.A, sec.Iz)
-                else:
-                    if sec.Iy is None or sec.G is None or sec.J is None:
-                        raise ValueError(f"ElasticSection {sec.id} needs Iy, G, J for 3D models.")
-                    ops.section("Elastic", sec.id, sec.E, sec.A, sec.Iz, sec.Iy, sec.G, sec.J)
-            case FiberSection():
-                if sec.GJ is not None:
-                    ops.section("Fiber", sec.id, "-GJ", sec.GJ)
-                elif self.project.ndm == 3:
-                    torsion_mat = self._fiber_torsion_mat.get(sec.id)
-                    if torsion_mat is not None:
-                        # FiberSection3d requires torsion. The SectionAggregator
-                        # wrapping this section will override T — use the same
-                        # material so the intent is transparent.
-                        ops.section("Fiber", sec.id, "-torsion", torsion_mat)
-                    else:
-                        raise ValueError(
-                            f"FiberSection {sec.id!r} is used in a 3D model but has no "
-                            "torsion defined. Either set GJ on the section or wrap it in "
-                            "a SectionAggregator with a T DOF pairing."
-                        )
-                else:
-                    ops.section("Fiber", sec.id)
-                # Emit patches: rectangular / circular.
-                for patch in sec.patches:
-                    if patch.kind == "rect":
-                        ops.patch(
-                            "rect",
-                            patch.material_id,
-                            patch.n_fib_y,
-                            patch.n_fib_z,
-                            patch.y_i,
-                            patch.z_i,
-                            patch.y_j,
-                            patch.z_j,
-                        )
-                    elif patch.kind == "circ":
-                        ops.patch(
-                            "circ",
-                            patch.material_id,
-                            patch.n_fib_circ,
-                            patch.n_fib_rad,
-                            patch.y_center,
-                            patch.z_center,
-                            patch.r_inner,
-                            patch.r_outer,
-                            patch.start_angle,
-                            patch.end_angle,
-                        )
-                # Emit layers: straight.
-                for layer in sec.layers:
-                    if layer.kind == "straight":
-                        ops.layer(
-                            "straight",
-                            layer.material_id,
-                            layer.n_bars,
-                            layer.bar_area,
-                            layer.y_start,
-                            layer.z_start,
-                            layer.y_end,
-                            layer.z_end,
-                        )
-                # Emit individual fibres (legacy / custom).
-                for fb in sec.fibres:
-                    ops.fiber(fb.y, fb.z, fb.area, fb.material_id)
-            case SectionAggregator():
-                # section Aggregator $secTag $matTag1 $dof1 ... <-section $baseSec>
-                args: list[Any] = [sec.id]
-                for p in sec.pairings:
-                    args.extend([p.material_id, p.dof])
-                if sec.section_id is not None:
-                    args.extend(["-section", sec.section_id])
-                ops.section("Aggregator", *args)
-            case _:
-                raise NotImplementedError(f"Section type not yet handled: {type(sec).__name__}")
+        """One section's commands (``services/section_emitters.py``)."""
+        emit_section(sec, SectionContext(self._ops, self.project.ndm, self._fiber_torsion_mat))
 
     # ─────────────────────── geomTransf ───────────────────────
     def _allocate_and_emit_geom_transfs(self) -> None:
@@ -754,272 +647,14 @@ class OpenSeesRunner:
         self._geom_transf_tags = {k[0]: v for k, v in combo_to_tag.items()}
 
     # ─────────────────────── elements ───────────────────────
-    def _bearing_orient(self, el: Any) -> tuple[float, ...]:
-        """``(x1, x2, x3, y1, y2, y3)`` for an elastomeric or sliding bearing.
-
-        The user's ``orient`` wins. Otherwise x is the element axis (node i
-        to node j) or, for coincident nodes, the vertical (global Z; OpenSees'
-        y of a 2D model, see core.plane); y is the shear direction, global X unless the axis
-        is horizontal, then the horizontal perpendicular to the axis.
-        OpenSees 3.8 terminates the process when a zero-length bearing has
-        no -orient, so the six values are always written.
-        """
-        if el.orient is not None:
-            ndm_o = self.project.ndm
-            return (
-                *to_solver_vector3(el.orient[:3], ndm_o),
-                *to_solver_vector3(el.orient[3:6], ndm_o),
-            )
-        ndm = self.project.ndm
-        # Worked out in OpenSees' own frame: a 2D model's (X, Z) are its (x, y).
-        pi = np.asarray(to_solver_vector3(self.project.node(el.nodes[0]).coords, ndm), dtype=float)
-        pj = np.asarray(to_solver_vector3(self.project.node(el.nodes[1]).coords, ndm), dtype=float)
-        if ndm == 2:
-            pi[2] = pj[2] = 0.0
-        axis = pj - pi
-        length = float(np.linalg.norm(axis))
-        up = np.array([0.0, 1.0, 0.0]) if ndm == 2 else np.array([0.0, 0.0, 1.0])
-        x = axis / length if length > 1e-12 else up
-        y = np.cross(up, x) if ndm == 3 else np.array([x[1], -x[0], 0.0])
-        if float(np.linalg.norm(y)) < 1e-9:
-            y = np.array([1.0, 0.0, 0.0])
-        y = y / float(np.linalg.norm(y))
-        return (*(float(v) for v in x), *(float(v) for v in y))
-
-    def _bearing_args(self, el: Any) -> list[Any]:
-        """Argument list of ``ops.element`` for a bearing element.
-
-        Matches the live OpenSeesPy 3.8.0 signatures::
-
-            elastomericBearingPlasticity tag i j kInit qd alpha1 alpha2 mu
-                -P p -Mz mz            (2D)
-                -P p -T t -My my -Mz mz  (3D)
-                -orient x1 x2 x3 y1 y2 y3 <-shearDist s> <-doRayleigh> <-mass m>
-            elastomericBearingBoucWen tag i j kInit qd alpha1 alpha2 mu eta beta gamma
-                ... same trailing arguments
-            flatSliderBearing tag i j frnTag kInit
-                ... same materials and trailing arguments, then <-iter maxIter tol>
-            singleFPBearing tag i j frnTag Reff kInit
-                ... same materials and trailing arguments, then <-iter maxIter tol>
-        """
-        args: list[Any]
-        if isinstance(el, SLIDING_BEARING_CLASSES):
-            if el.type == "SingleFPBearing":
-                args = ["singleFPBearing", el.id, *el.nodes, el.friction_model_id, el.r_eff]
-            else:
-                args = ["flatSliderBearing", el.id, *el.nodes, el.friction_model_id]
-            args.append(el.k_init)
-        else:
-            name = (
-                "elastomericBearingBoucWen"
-                if el.type == "ElastomericBearingBoucWen"
-                else "elastomericBearingPlasticity"
-            )
-            args = [name, el.id, *el.nodes, el.k_init, el.qd, el.alpha1, el.alpha2, el.mu]
-            if el.type == "ElastomericBearingBoucWen":
-                args += [el.eta, el.beta, el.gamma]
-        if self.project.ndm == 3:
-            if el.t_material_id is None or el.my_material_id is None:
-                raise ValueError(
-                    f"Bearing {el.id} needs T and My materials in a 3D model "
-                    "(t_material_id, my_material_id)."
-                )
-            args += [
-                "-P",
-                el.p_material_id,
-                "-T",
-                el.t_material_id,
-                "-My",
-                el.my_material_id,
-                "-Mz",
-                el.mz_material_id,
-            ]
-        else:
-            args += ["-P", el.p_material_id, "-Mz", el.mz_material_id]
-        if os.environ.get(SKIP_BEARING_ORIENT_ENV, "").strip() != "1":
-            args += ["-orient", *self._bearing_orient(el)]
-        if el.shear_dist != 0.5:
-            args += ["-shearDist", el.shear_dist]
-        if el.do_rayleigh:
-            args.append("-doRayleigh")
-        if el.mass > 0.0:
-            args += ["-mass", el.mass]
-        if isinstance(el, SLIDING_BEARING_CLASSES) and (el.max_iter != 25 or el.tol != 1e-12):
-            args += ["-iter", el.max_iter, el.tol]
-        return args
-
-    def _emit_plate_section(self, sec: Any) -> None:
-        """``section ElasticMembranePlateSection tag E nu h rho``.
-
-        The section ShellMITC4 takes. OpenSees defines it by its own (E, nu, h,
-        rho), so it never references an nDMaterial.
-        """
-        self._ops.section("ElasticMembranePlateSection", sec.id, sec.E, sec.nu, sec.h, sec.rho)
-
-    def _frame_nodes(self, el: Any) -> tuple[int, int]:
-        """The node tags a frame's ``element`` command uses: a released end's hidden node."""
-        member = self._frame_plan.members.get(el.id)
-        return member.nodes if member is not None else (el.nodes[0], el.nodes[1])
-
-    def _frame_section(self, el: Any) -> int:
-        """The section a frame uses: a derived section when its stiffness is modified."""
-        member = self._frame_plan.members.get(el.id)
-        if member is not None and member.section_id is not None:
-            return member.section_id
-        return int(el.section_id)
-
     def _emit_element(self, el: Any) -> None:
-        ops = self._ops
-        match el:
-            case TrussElement():
-                ops.element("truss", el.id, *el.nodes, el.area, el.material_id, "-rho", el.rho)
-            case CorotTrussElement():
-                ops.element("corotTruss", el.id, *el.nodes, el.area, el.material_id, "-rho", el.rho)
-            case ElasticBeamColumn():
-                tag = self._element_geom_transf_tag[el.id]
-                member = self._frame_plan.members.get(el.id)
-                rho = member.rho if member is not None and member.rho is not None else el.rho
-                ebc_args: list[Any] = [self._frame_section(el), tag, "-mass", rho]
-                if el.consistent_mass:
-                    ebc_args.append("-cMass")
-                if member is not None and member.timoshenko is not None:
-                    # Shear areas on the section: a Timoshenko beam (no sections, no -release).
-                    t_args: list[Any] = [*member.timoshenko, tag, "-mass", rho]
-                    if el.consistent_mass:
-                        t_args.append("-cMass")
-                    ops.element("ElasticTimoshenkoBeam", el.id, *self._frame_nodes(el), *t_args)
-                    return
-                # A release at a constrained joint is condensed in the element.
-                if member is not None:
-                    ebc_args.extend(member.release_args)
-                ops.element(
-                    "elasticBeamColumn",
-                    el.id,
-                    *self._frame_nodes(el),
-                    *ebc_args,
-                )
-            case ForceBeamColumn():
-                tag = self._element_geom_transf_tag[el.id]
-                ops.beamIntegration(
-                    el.integration, el.id, self._frame_section(el), el.integration_points
-                )
-                ops.element(
-                    "forceBeamColumn",
-                    el.id,
-                    *self._frame_nodes(el),
-                    tag,
-                    el.id,
-                    "-iter",
-                    el.max_iter,
-                    el.tolerance,
-                )
-            case DispBeamColumn():
-                tag = self._element_geom_transf_tag[el.id]
-                ops.beamIntegration(
-                    el.integration, el.id, self._frame_section(el), el.integration_points
-                )
-                ops.element("dispBeamColumn", el.id, *self._frame_nodes(el), tag, el.id)
-            case ZeroLengthElement():
-                zl_args: list[Any] = [
-                    "zeroLength",
-                    el.id,
-                    *el.nodes,
-                    "-mat",
-                    *el.material_ids,
-                    "-dir",
-                    *el.dofs,
-                ]
-                # ``-doRayleigh 1`` only when requested (default off, matching
-                # OpenSees' zeroLength default) — so an isolator can opt its
-                # stiffness into a Kinit-proportional Rayleigh damping matrix.
-                if el.do_rayleigh:
-                    zl_args += ["-doRayleigh", 1]
-                ops.element(*zl_args)
-            case el if isinstance(el, BEARING_CLASSES):
-                ops.element(*self._bearing_args(el))
-            case TwoNodeLinkElement():
-                ops.element("twoNodeLink", el.id, *el.nodes, *el.opensees_args(self.project.ndm))
-            case TripleFrictionPendulumElement():
-                ops.element("TripleFrictionPendulum", el.id, *el.nodes, *el.opensees_args())
-            case MVLEMElement():
-                ops.element("MVLEM", el.id, *el.opensees_args())
-            case ZeroLengthSectionElement():
-                # element zeroLengthSection $eleTag $iNode $jNode $secTag
-                ops.element(
-                    "zeroLengthSection",
-                    el.id,
-                    *el.nodes,
-                    el.section_id,
-                )
-            case ShellMITC4Element():
-                # element ShellMITC4|ShellDKGQ|ShellNLDKGQ eleTag n1 n2 n3 n4 secTag
-                ops.element(el.type, el.id, *el.nodes, el.section_id)
-            case ShellDKGTElement():
-                # element ShellDKGT|ShellNLDKGT eleTag n1 n2 n3 secTag
-                ops.element(el.type, el.id, *el.nodes, el.section_id)
-            case QuadElement() if True:
-                # element quad         eleTag n1 n2 n3 n4 thk type matTag <pressure rho b1 b2>
-                # element bbarQuad     eleTag n1 n2 n3 n4 thk matTag
-                # element enhancedQuad eleTag n1 n2 n3 n4 thk type matTag
-                if el.variant == "quad":
-                    ops.element(
-                        "quad",
-                        el.id,
-                        *el.nodes,
-                        el.thickness,
-                        el.behaviour,
-                        el.material_id,
-                        el.pressure,
-                        el.rho,
-                        el.b1,
-                        el.b2,
-                    )
-                elif el.variant == "bbarQuad":
-                    ops.element(
-                        "bbarQuad",
-                        el.id,
-                        *el.nodes,
-                        el.thickness,
-                        el.material_id,
-                    )
-                else:  # enhancedQuad
-                    ops.element(
-                        "enhancedQuad",
-                        el.id,
-                        *el.nodes,
-                        el.thickness,
-                        el.behaviour,
-                        el.material_id,
-                    )
-            case BeamWithHingesElement():
-                tag = self._element_geom_transf_tag[el.id]
-                # OpenSees 3D signature:
-                #   element beamWithHinges id ni nj secI lpI secJ lpJ E A Iz Iy G J transfTag
-                # 2D signature drops Iy, G, J:
-                #   element beamWithHinges id ni nj secI lpI secJ lpJ E A Iz transfTag
-                member = self._frame_plan.members.get(el.id)
-                inline = member.inline if member is not None else {}
-                args = [
-                    el.id,
-                    *self._frame_nodes(el),
-                    el.section_i_id,
-                    el.lp_i,
-                    el.section_j_id,
-                    el.lp_j,
-                    el.E,
-                    inline.get("A", el.A),
-                    inline.get("Iz", el.Iz),
-                ]
-                if self.project.ndm == 3:
-                    if el.Iy is None or el.G is None or el.J is None:
-                        raise ValueError(
-                            f"BeamWithHinges {el.id} needs Iy, G, J in 3D models.",
-                        )
-                    args.extend([inline.get("Iy", el.Iy), el.G, inline.get("J", el.J)])
-                args.append(tag)
-                ops.element("beamWithHinges", *args)
-            case _:
-                raise NotImplementedError(f"Element type not yet handled: {type(el).__name__}")
+        """One element's commands (``services/element_emitters.py``)."""
+        emit_element(
+            el,
+            ElementContext(
+                self._ops, self.project, self._frame_plan, self._element_geom_transf_tag
+            ),
+        )
 
     # ─────────────────────── time series + patterns ───────────────────────
     def _emit_time_series(self, ts: Any) -> None:
@@ -1647,12 +1282,10 @@ class OpenSeesRunner:
         """
         from opensees_studio.core import (
             BeamWithHingesElement,
-            CorotTrussElement,
             DispBeamColumn,
             ElasticBeamColumn,
             ForceBeamColumn,
             TrussElement,
-            ZeroLengthSectionElement,
         )
 
         if any(block.enabled for block in self.project.custom_commands):

@@ -258,6 +258,10 @@ These are non-obvious things that are easy to break if you don't know:
   method (`window.geometry` would replace `QWidget.geometry()`):
   `tests/gui/test_action_registry.py` checks it, hence `model_tools`.
   The rest of the window is being moved out the same way.
+- What a material, section or element sends to OpenSees is its emitter
+  (`services/material_emitters.py`, `section_emitters.py`,
+  `element_emitters.py`, registered by type or class); a new kind is an
+  emitter there, never a branch in `OpenSeesRunner`.
 - An unregistered material type is not a crash: `material_forms.form_for`
   returns a read-only placeholder, the same contract `section_forms` has.
 - Never hardcode how the analysis child is spawned. Every spawn site
