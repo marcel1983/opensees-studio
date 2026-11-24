@@ -56,6 +56,13 @@ The rules that are easy to get wrong, and that the tests pin:
   girts and the eave purlin (a wall with girts) or on the columns (a wall
   without), normal to the surface. The lower half of the lowest wall strip goes
   straight into the ground and is not applied.
+* **The earthquake is a share of the weight at each joint.**
+  :func:`seismic_coefficient` gives ``c = V / W`` on the plateau of the spectrum
+  of RNC-07, NSCM or ASCE 7 (the period is not used); the seismic weight is the
+  steel, the roof dead load and the part of the roof live load the code counts,
+  lumped on the joints, and :func:`seismic_loads` shares ``c W`` between them by
+  weight and height. An earthquake case acts both ways in the combinations; a
+  wind case never does.
 
 The module is pure (no Qt, no OpenSees): :func:`build_warehouse` returns the
 geometry, :func:`plan_warehouse` everything a project needs to become that
@@ -417,8 +424,15 @@ class WarehouseSpec:
 
 
 def portable(value: float) -> float:
-    """``value`` to :data:`PORTABLE_DIGITS` significant digits (and never ``-0.0``)."""
-    return float(f"{value:.{PORTABLE_DIGITS}g}") + 0.0
+    """``value`` to :data:`PORTABLE_DIGITS` significant digits (and never ``-0.0``).
+
+    In two steps. A product of round inputs is often exactly half way between
+    two rounded values (294.4254031875), and its last bit would decide the side
+    it falls to: the first rounding, two digits further, takes the round-off
+    away and leaves that number exact, so it always falls to the same side.
+    """
+    exact = float(f"{value:.{PORTABLE_DIGITS + 2}g}")
+    return float(f"{exact:.{PORTABLE_DIGITS}g}") + 0.0
 
 
 def _portable_model(model: Any) -> Any:
@@ -1435,6 +1449,190 @@ def member_design_overrides(warehouse: Warehouse) -> list[Any]:
     ]
 
 
+# ───────────────────────────── earthquake ─────────────────────────────
+#: The static methods the wizard offers.
+SEISMIC_METHODS: dict[str, str] = {
+    "rnc07": "RNC-07 Art. 32",
+    "nscm": "NSCM Managua 8.2.1",
+    "asce7": "ASCE 7-16 12.8",
+}
+
+#: The directions an earthquake case can act in.
+SEISMIC_DIRECTIONS: tuple[str, ...] = ("X", "Y")
+#: Design codes whose combinations take each earthquake direction with 30 % of
+#: the other: RNC-07 Art. 32 f (Efectos bidireccionales) and NSCM.
+ORTHOGONAL_RULE_CODES: tuple[str, ...] = ("rnc07", "nscm")
+
+
+@dataclass(frozen=True)
+class WarehouseSeismic:
+    """The earthquake on a warehouse by the static method of a code.
+
+    The coefficient is that of the plateau of the design spectrum: the period
+    of the building is not used, which is on the safe side and what a
+    single-storey building of this height takes anyway.
+    """
+
+    method: str = "rnc07"
+    """Key of :data:`SEISMIC_METHODS`."""
+    a0: float = 0.3
+    """RNC-07 and NSCM: peak ground acceleration, in g (RNC-07 zone C; NSCM Tabla 14.2)."""
+    soil: str = "II"
+    """RNC-07 soil type I to III, or NSCM site class A to D."""
+    importance_class: str = ""
+    """RNC-07 group A to C or NSCM risk category I to IV; "" = Group B / category II."""
+    reduction: float = 2.0
+    """Q of RNC-07, Ro of NSCM or R of ASCE 7."""
+    regularity: str = "regular"
+    """RNC-07 Art. 23 regularity, for Q'."""
+    sds: float = 1.0
+    """ASCE 7: design spectral acceleration at short periods, g."""
+    importance: float = 1.0
+    """ASCE 7: importance factor Ie."""
+    roof_live: float = 0.0
+    """Roof live load that counts as seismic weight, per area of horizontal
+    projection, in project units (the CVR of RNC-07)."""
+    directions: tuple[str, ...] = SEISMIC_DIRECTIONS
+
+    def __post_init__(self) -> None:
+        if self.method not in SEISMIC_METHODS:
+            raise WarehouseError(f"Unknown seismic method {self.method!r}.")
+        if self.reduction <= 0.0:
+            raise WarehouseError("The seismic reduction factor must be positive.")
+        if self.roof_live < 0.0:
+            raise WarehouseError("Loads are entered as positive, downward values.")
+        if not self.directions:
+            raise WarehouseError("Choose at least one earthquake direction.")
+        for direction in self.directions:
+            if direction not in SEISMIC_DIRECTIONS:
+                raise WarehouseError(f"Unknown earthquake direction {direction!r}.")
+
+
+def seismic_coefficient(seismic: WarehouseSeismic) -> tuple[float, str]:
+    """``c = V / W`` of the static method, and the clause it comes from.
+
+    Raises:
+        WarehouseError: when the code refuses the values (a soil that needs a
+            site study, an Ro below 1, ...).
+    """
+    from opensees_studio.core import nscm
+    from opensees_studio.core.equivalent_lateral import (
+        ElfError,
+        ElfParameters,
+        asce7_cs,
+        rnc07_coefficient,
+    )
+
+    try:
+        if seismic.method == "rnc07":
+            found = rnc07_coefficient(
+                ElfParameters(
+                    code="rnc07",
+                    period=0.0,
+                    sds=0.0,
+                    sd1=0.0,
+                    r=seismic.reduction,
+                    a0=seismic.a0,
+                    soil=seismic.soil,
+                    importance_class=seismic.importance_class,
+                    regularity=seismic.regularity,
+                )
+            )
+            return found.c, f"RNC-07 {found.why}"
+        if seismic.method == "nscm":
+            site = nscm.NscmSite(
+                a0=seismic.a0,
+                site_class=seismic.soil,
+                risk_category=seismic.importance_class or "II",
+                r0=seismic.reduction,
+            )
+            _tb, tc, _td = site.corner_periods()
+            cs, why = site.seismic_coefficient(tc)
+            return cs, f"NSCM {why}"
+        if seismic.sds <= 0.0:
+            raise WarehouseError("SDS must be positive.")
+        cs, why = asce7_cs(
+            ElfParameters(
+                code="asce7_16",
+                period=0.0,
+                sds=seismic.sds,
+                sd1=0.0,
+                r=seismic.reduction,
+                importance=seismic.importance,
+            )
+        )
+        return cs, f"ASCE 7-16 {why}"
+    except (ElfError, nscm.NscmError, KeyError) as exc:
+        raise WarehouseError(str(exc)) from exc
+
+
+def nscm_a0_fas(seismic: WarehouseSeismic) -> float:
+    """``a0 Fas`` of the NSCM site (Tabla 6.4.1), which sets the vertical component Ev.
+
+    Raises:
+        WarehouseError: when the site class needs a site response study.
+    """
+    from opensees_studio.core import nscm
+
+    try:
+        site = nscm.NscmSite(
+            a0=seismic.a0,
+            site_class=seismic.soil,
+            risk_category=seismic.importance_class or "II",
+            r0=seismic.reduction,
+        )
+        return float(site.a0 * site.fas)
+    except (nscm.NscmError, KeyError, ValueError) as exc:
+        raise WarehouseError(str(exc)) from exc
+
+
+def roof_weights(warehouse: Warehouse, pressure: float, *, projected: bool) -> dict[int, float]:
+    """Node id -> weight of a roof load per area, half of each purlin's strip per end."""
+    if pressure == 0.0:
+        return {}
+    nodes = {n.id: np.asarray(n.coords, dtype=float) for n in warehouse.nodes}
+    elements = {e.id: e for e in warehouse.elements}
+    out: dict[int, float] = {}
+    for element_id, k in warehouse.purlin_station.items():
+        station = warehouse.stations[k]
+        width = station.tributary_plan if projected else station.tributary_slope
+        i, j = elements[element_id].nodes
+        half = 0.5 * pressure * width * float(np.linalg.norm(nodes[j] - nodes[i]))
+        out[i] = out.get(i, 0.0) + half
+        out[j] = out.get(j, 0.0) + half
+    return out
+
+
+def seismic_loads(
+    warehouse: Warehouse, weights: Mapping[int, float], coefficient: float, direction: str
+) -> list[Any]:
+    """The static earthquake forces along ``direction`` ("X" or "Y"), one per node.
+
+    ``weights`` is the seismic weight lumped on each node of the warehouse. The
+    base shear ``coefficient × ΣW`` is shared in proportion to weight times
+    height above the base, ``Fi = c Wi hi ΣW / ΣWi hi`` (RNC-07 Art. 32, ASCE 7
+    Eq. 12.8-12 with k = 1), so the roof takes almost all of it and a joint
+    half way up a wall its smaller part.
+    """
+    from opensees_studio.core.loads import NodalLoad
+
+    axis = SEISMIC_DIRECTIONS.index(direction)
+    base = warehouse.spec.origin[2]
+    heights = {n.id: n.coords[2] - base for n in warehouse.nodes}
+    total = sum(weights.get(n, 0.0) for n in heights)
+    moment = sum(weights.get(n, 0.0) * h for n, h in heights.items())
+    if total <= 0.0 or moment <= 0.0:
+        return []
+    loads: list[Any] = []
+    for node_id in sorted(heights):
+        force = coefficient * weights.get(node_id, 0.0) * heights[node_id] * total / moment
+        if force == 0.0:
+            continue
+        fx, fy = (force, 0.0) if axis == 0 else (0.0, force)
+        loads.append(NodalLoad(node_id=node_id, forces=(fx, fy, 0.0, 0.0, 0.0, 0.0)))
+    return loads
+
+
 # ───────────────────────── code presets and defaults ─────────────────────────
 @dataclass(frozen=True)
 class CodePreset:
@@ -1456,6 +1654,12 @@ class CodePreset:
     """Key of :data:`WIND_METHODS`: the wind procedure that goes with the code."""
     wind_speed: float = 45.0
     """Default wind speed, m/s (see :class:`WarehouseWind`)."""
+    seismic_method: str = "rnc07"
+    """Key of :data:`SEISMIC_METHODS`: the static method that goes with the code."""
+    seismic_live_kpa: float = 0.0
+    """Roof live load that counts as seismic weight, kN/m² of horizontal projection."""
+    seismic_reduction: float = 2.0
+    """Default Q, Ro or R of a steel warehouse of limited ductility."""
 
 
 _KGF = 9.80665e-3  # one kilogram-force in kN
@@ -1466,26 +1670,31 @@ _KGF = 9.80665e-3  # one kilogram-force in kN
 #: Wind: NSCM 7.2 sends the wind loads to RNC-07 Título IV, whose regional
 #: velocity is a 50-year one (45 m/s in zone 2); the basic wind speed of ASCE
 #: 7-16 is an ultimate one, about sqrt(1.6) times that, hence 57 m/s.
+#: Earthquake: RNC-07 Art. 11 a counts 10 kg/m² of the roof live load as seismic
+#: weight (CVR); NSCM 9.6 b counts 0.3 CV in warehouses (W = CM + 0.3 CV), 3 kg/m²
+#: of that roof; ASCE 7-16 12.7.2 counts no roof live load.
 CODE_PRESETS: dict[str, CodePreset] = {
     preset.key: preset
     for preset in (
         CodePreset(
             "rnc07", "L", "LIVE", 10 * _KGF, 200 * _KGF, "LRFD",
             "RNC-07 Art. 11 a: light roofs, 10 kg/m² plus 200 kg at mid-span of the main members.",
+            seismic_live_kpa=10 * _KGF,
         ),
         CodePreset(
             "nscm", "Lr", "ROOF LIVE", 10 * _KGF, 200 * _KGF, "LRFD",
             "RNC-07 Art. 11 a: light roofs, 10 kg/m² plus 200 kg at mid-span of the main members.",
+            seismic_method="nscm", seismic_live_kpa=0.3 * 10 * _KGF,
         ),
         CodePreset(
             "asce7_lrfd", "Lr", "ROOF LIVE", 0.9576, 0.0, "LRFD",
             "ASCE 7-16 Table 4.3-1: ordinary roofs, 20 psf (before any reduction).",
-            "asce7", 57.0,
+            "asce7", 57.0, seismic_method="asce7", seismic_reduction=3.0,
         ),
         CodePreset(
             "asce7_asd", "Lr", "ROOF LIVE", 0.9576, 0.0, "ASD",
             "ASCE 7-16 Table 4.3-1: ordinary roofs, 20 psf (before any reduction).",
-            "asce7", 57.0,
+            "asce7", 57.0, seismic_method="asce7", seismic_reduction=3.0,
         ),
     )
 }  # fmt: skip
@@ -1527,6 +1736,8 @@ class WarehouseLoads:
     design_lengths: bool = True
     wind: WarehouseWind | None = None
     """Wind cases to create, one or two per direction; None for no wind."""
+    seismic: WarehouseSeismic | None = None
+    """Earthquake cases to create, one per direction; None for no earthquake."""
 
     def __post_init__(self) -> None:
         if self.code not in CODE_PRESETS:
@@ -1753,6 +1964,7 @@ def _plan_loads(
     from opensees_studio.core.defaults import make_dead_load_case, make_load_cases
     from opensees_studio.core.design.settings import DesignSettings
     from opensees_studio.core.loads import PlainLoadPattern
+    from opensees_studio.core.mass_source import self_weight_per_node
 
     preset = CODE_PRESETS[loads.code]
     warehouse = plan.warehouse
@@ -1843,17 +2055,81 @@ def _plan_loads(
             "pressures of the code."
         )
 
+    seismic_case_ids: list[int] = []
+    if loads.seismic is not None:
+        seismic = loads.seismic
+        coefficient, clause = seismic_coefficient(seismic)
+        own = {n.id for n in warehouse.nodes}
+        weights = {
+            n: w for n, w in self_weight_per_node(scratch, dead.self_weight).items() if n in own
+        }
+        for extra in (
+            roof_weights(warehouse, loads.roof_dead, projected=False),
+            roof_weights(warehouse, seismic.roof_live, projected=True),
+        ):
+            for node_id, weight in extra.items():
+                weights[node_id] = weights.get(node_id, 0.0) + weight
+        taken = {p.name for p in scratch.load_patterns} | {c.name for c in scratch.analyses}
+        names = []
+        for direction in seismic.directions:
+            name, n = f"EQ {direction}", 2
+            while name in taken:
+                name, n = f"EQ {direction} ({n})", n + 1
+            taken.add(name)
+            names.append(name)
+        series, patterns, cases = make_load_cases(scratch, names)
+        for direction, one_series, pattern, case in zip(
+            seismic.directions, series, patterns, cases, strict=True
+        ):
+            add_case(one_series, pattern, case)
+            seismic_case_ids.append(plan.cases[-1].id)
+            plan.pattern_loads.append(
+                (
+                    pattern.id,
+                    "nodal_loads",
+                    seismic_loads(warehouse, weights, coefficient, direction),
+                )
+            )
+        total = sum(weights.values())
+        plan.notes.append(
+            f"{len(names)} earthquake case(s) by {SEISMIC_METHODS[seismic.method]}: "
+            f"c = {coefficient:.4g} ({clause}), seismic weight {total:.6g}, base shear "
+            f"{coefficient * total:.6g}. The period is not used, and the accidental torsion "
+            "is not included."
+        )
+
     if loads.combinations:
         roles: dict[str, list[int]] = {"D": _static_cases_of(scratch, dead.id)}
         if live is not None:
             roles[preset.roof_live_role] = _static_cases_of(scratch, live.id)
         if wind_case_ids:
             roles["W"] = wind_case_ids
+        if seismic_case_ids:
+            roles["E"] = seismic_case_ids
         case_names = {c.id: c.name or str(c.id) for c in scratch.analyses}
         # A wind case has its direction and its suctions in it: reversing it is
         # not another wind, so each one enters the combinations with one sign.
+        # An earthquake acts both ways, and by RNC-07 Art. 32 f and by NSCM each
+        # direction goes with 30 % of the other. ASCE 7-16 12.5 asks for that
+        # only in some seismic design categories: its generator has the option.
+        # NSCM also folds the vertical component Ev = 0.2 a0 Fas CM (Ec. 7.8-4)
+        # into the dead load factor: with the site of the earthquake page.
+        options: dict[str, Any] = {}
+        if loads.code in ORTHOGONAL_RULE_CODES and len(seismic_case_ids) > 1:
+            options["orthogonal"] = True
+        if (
+            loads.code == "nscm"
+            and loads.seismic is not None
+            and loads.seismic.method == "nscm"
+            and seismic_case_ids
+        ):
+            options["a0_fas"] = round(nscm_a0_fas(loads.seismic), 4)
         generated = generate_for_code(
-            loads.code, roles, case_names=case_names, peak_cases=wind_case_ids
+            loads.code,
+            roles,
+            case_names=case_names,
+            peak_cases=wind_case_ids,
+            options=options or None,
         )
         used = {c.name for c in project.combinations}
         fresh = [g for g in generated if g.name not in used]
@@ -1899,10 +2175,13 @@ __all__ = [
     "DEFAULT_ROOF_DEAD_KPA",
     "GROUPS",
     "GROUP_COLOURS",
+    "ORTHOGONAL_RULE_CODES",
     "ROOF_STRUCTURES",
     "ROOF_TRUSS_TYPES",
     "SECONDARY_RELEASES",
     "SECTION_KEYS",
+    "SEISMIC_DIRECTIONS",
+    "SEISMIC_METHODS",
     "TRUSS_BOTTOMS",
     "TRUSS_GROUPS",
     "TRUSS_SECTION_KEYS",
@@ -1915,6 +2194,7 @@ __all__ = [
     "WarehouseError",
     "WarehouseLoads",
     "WarehousePlan",
+    "WarehouseSeismic",
     "WarehouseSpec",
     "WarehouseWind",
     "bottom_chord_ties",
@@ -1928,11 +2208,15 @@ __all__ = [
     "length_from_m",
     "member_design_overrides",
     "midspan_point_loads",
+    "nscm_a0_fas",
     "plan_warehouse",
     "portable",
     "pressure_from_kpa",
     "roof_pressure_loads",
     "roof_stations",
+    "roof_weights",
+    "seismic_coefficient",
+    "seismic_loads",
     "warehouse_grid",
     "warehouse_wind_cases",
     "wind_loads",

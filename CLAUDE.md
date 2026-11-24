@@ -219,6 +219,10 @@ These are non-obvious things that are easy to break if you don't know:
   goes through `core.warehouse.portable` (12 significant digits): the last
   digit of those differs between processors and C libraries, and the committed
   examples must regenerate byte for byte on every CI runner.
+  The earthquake is static and on the plateau of the spectrum
+  (`seismic_coefficient`, no period), as nodal loads from the weight lumped on
+  each joint (`seismic_loads`); its cases go to the generator as role `E`, both
+  signs, never as `peak_cases`.
 - `Entity.id` is `PositiveInt` (>0). The sentinel `999999` is reserved
   for in-flight / temporary objects that haven't been assigned a real id.
 - Eigen determinism rule. ARPACK keeps its random start vector across

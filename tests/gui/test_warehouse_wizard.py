@@ -8,6 +8,8 @@ that does not fit is refused before anything is pushed.
 
 from __future__ import annotations
 
+import dataclasses
+
 import pytest
 
 pytest.importorskip("PySide6")
@@ -22,10 +24,12 @@ from opensees_studio.core.units import UnitSystem
 from opensees_studio.core.warehouse import (
     GROUPS,
     TRUSS_GROUPS,
+    WarehouseSeismic,
     WarehouseSpec,
     WarehouseWind,
     plan_warehouse,
 )
+from opensees_studio.core.wind import KGF
 from opensees_studio.views.dialogs.warehouse_wizard import WarehouseWizard
 
 
@@ -333,6 +337,95 @@ def test_the_menu_builds_a_trussed_warehouse_in_one_undo_step(qtbot, monkeypatch
     assert {s.name for s in project.sections} >= {"HSS6X6X1_4", "HSS3X3X3_16"}
     assert "W16X40" not in {s.name for s in project.sections}  # no rafter, no rafter section
     assert project.design is not None and project.design.members
+    project.validate_references()
+
+    mw._vm.undo_stack.undo()
+    assert project.model_dump() == before
+
+
+@pytest.mark.gui
+def test_the_earthquake_page_follows_the_code_and_reaches_the_loads(qtbot) -> None:  # type: ignore[no-untyped-def]
+    wizard = WarehouseWizard([])
+    qtbot.addWidget(wizard)
+    # Off until asked for: a0, the soil and Q belong to the site and the structure.
+    assert wizard.loads().seismic is None
+    assert wizard._page_seismic.isComplete() and not wizard._seismic_a0.isEnabled()
+    assert wizard._seismic_summary.text() == ""
+
+    def chosen() -> WarehouseSeismic:
+        seismic = wizard.loads().seismic
+        assert seismic is not None
+        return dataclasses.replace(seismic, roof_live=round(seismic.roof_live, 6))
+
+    cvr = round(10.0 * KGF, 6)  # 10 kg/m², in N/m²
+    wizard._seismic_on.setChecked(True)
+    # RNC-07 by default: zone C, soil II, Group B, Q = 2, 10 kg/m² of roof live load.
+    assert chosen() == WarehouseSeismic(
+        method="rnc07", a0=0.3, soil="II", importance_class="B", roof_live=cvr
+    )
+    assert "c = 0.45" in wizard._seismic_summary.text()
+    assert wizard._seismic_regularity.isEnabled() and not wizard._seismic_sds.isEnabled()
+    wizard._seismic_soil.setCurrentIndex(wizard._seismic_soil.findData("I"))
+    wizard._seismic_reduction.setValue(1.0)
+    assert "c = 0.405" in wizard._seismic_summary.text()
+
+    wizard._code.setCurrentIndex(wizard._code.findData("nscm"))
+    assert wizard._seismic_method.currentData() == "nscm"
+    assert [wizard._seismic_soil.itemData(i) for i in range(4)] == ["A", "B", "C", "D"]
+    assert not wizard._seismic_regularity.isEnabled()
+    assert chosen() == WarehouseSeismic(
+        method="nscm",
+        a0=0.36667,
+        soil="C",
+        importance_class="II",
+        roof_live=round(0.3 * cvr, 6),  # NSCM 9.6 b: 0.3 CV in a warehouse
+    )
+    wizard._seismic_reduction.setValue(0.5)  # Ro below 1: the code refuses it
+    assert not wizard._page_seismic.isComplete()
+    assert "Ro" in wizard._seismic_summary.text()
+
+    wizard._code.setCurrentIndex(wizard._code.findData("asce7_lrfd"))
+    assert wizard._page_seismic.isComplete()
+    assert wizard._seismic_sds.isEnabled() and not wizard._seismic_a0.isEnabled()
+    assert not wizard._seismic_soil.isEnabled() and wizard._seismic_soil.count() == 0
+    wizard._seismic_sds.setValue(0.9)
+    wizard._seismic_ie.setValue(1.25)
+    wizard._seismic_directions["Y"].setChecked(False)
+    assert chosen() == WarehouseSeismic(
+        method="asce7", a0=0.0, soil="", reduction=3.0, sds=0.9, importance=1.25,
+        directions=("X",),
+    )  # fmt: skip
+    assert "<b>1</b>" in wizard._seismic_summary.text()
+    assert "c = 0.375" in wizard._seismic_summary.text()
+
+    wizard._seismic_directions["X"].setChecked(False)
+    assert not wizard._page_seismic.isComplete()  # an earthquake with no direction
+    wizard._seismic_on.setChecked(False)
+    assert wizard._page_seismic.isComplete() and wizard.loads().seismic is None
+
+
+@pytest.mark.gui
+def test_the_menu_adds_the_earthquake_cases_to_the_warehouse(qtbot, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    mw = _window(qtbot)
+    monkeypatch.setattr(QMessageBox, "critical", lambda *a, **k: pytest.fail(str(a[2])))
+
+    def setup(wizard: WarehouseWizard) -> None:
+        wizard._n_frames.setValue(3)
+        wizard._wind_on.setChecked(False)
+        wizard._seismic_on.setChecked(True)
+
+    _accept(monkeypatch, setup)
+    project = mw._vm.project
+    before = project.model_dump()
+
+    mw._act_warehouse_wizard.trigger()
+
+    assert [c.name for c in project.analyses] == ["DEAD", "LIVE", "EQ X", "EQ Y"]
+    patterns = {p.name: p for p in project.load_patterns}
+    assert patterns["EQ X"].nodal_loads and patterns["EQ Y"].nodal_loads
+    names = [c.name for c in project.combinations]
+    assert "0.9CM+Fs:EQ X+0.3Fs:EQ Y" in names and "0.9CM-Fs:EQ Y-0.3Fs:EQ X" in names
+    assert "2 earthquake case(s) by RNC-07 Art. 32" in mw._console.toPlainText()
     project.validate_references()
 
     mw._vm.undo_stack.undo()

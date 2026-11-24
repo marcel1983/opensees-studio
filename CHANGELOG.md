@@ -61,6 +61,19 @@ refused instead of silently downgraded).
   chord). Default sections: HSS6X6X1/4 chords, HSS3X3X3/16 web members and
   HSS4X4X3/16 ties. The loads and the wind cases are those of the same building
   on rafters. `examples/warehouse_truss.py` builds one.
+- **Earthquake on the warehouse.** The Warehouse Wizard has a sixth page,
+  **Earthquake**: one static load case per direction, `EQ X` and `EQ Y`, by
+  **RNC-07 Art. 32** (a0, soil, group, Q and regularity), **NSCM Managua 8.2.1**
+  (a0, site class, risk category, Ro) or **ASCE 7-16 12.8** (SDS, R, Ie). The
+  base shear is the coefficient of the plateau of the spectrum (the period is
+  not used) times the seismic weight: the steel, the roof dead load and the
+  reduced roof live load (10 kg/m² by RNC-07 Art. 11 a, 0.3 CV by NSCM 9.6).
+  It is shared between
+  the joints by weight and height, as nodal loads. The combinations take the
+  earthquake both ways, and by RNC-07 (Art. 32 f) and NSCM each direction with
+  30 % of the other. Off
+  by default; accidental torsion is not included. `examples/warehouse_seismic.py`
+  builds a warehouse in Managua with it.
 
 ### Changed
 

@@ -3668,13 +3668,13 @@ case carries them: half of each bar's weight goes to each of its joints.
         "define.warehouse": _t(
             "Define → Create Warehouse",
             "Define",
-            "A 3D steel warehouse from a few numbers, with its loads, wind and combinations.",
+            "A 3D steel warehouse from a few numbers: loads, wind, earthquake, combinations.",
             """
 Builds a warehouse (bodega, nave industrial) into the open 3D frame model as one
 undoable step: portal frames in X-Z planes repeated along Y, with rafters or
 with roof trusses, the purlins, girts and X bracing between them, the end wall columns, the supports, a group per kind
-of member, a grid on the column lines, the roof loads, the wind cases and the
-load combinations of a design code.
+of member, a grid on the column lines, the roof loads, the wind and earthquake
+cases and the load combinations of a design code.
 File → New Model → **Warehouse** starts a new model with it. The preview on the
 left follows every field.
 
@@ -3794,9 +3794,8 @@ run the cases and the steel check, and size the members from them.
 
 The area loads are applied to the purlins as uniform loads over their tributary
 width, in the purlin's local axes. With **Generate the load combinations of the
-code** the combinations of the gravity and wind cases are added with their
-envelope; the earthquake combinations appear once those cases exist (Define →
-Load Combinations → Generate).
+code** the combinations of the gravity, wind and earthquake cases the wizard
+creates are added with their envelope.
 
 The load cases the wizard creates use the sparse solver **UmfPack** (Define →
 Load Cases → System). A warehouse has hundreds of pinned members, each with its
@@ -3856,8 +3855,63 @@ which are larger near the edges; the envelope procedure of ASCE 7 chapter 28,
 open buildings, the minimum wind load of ASCE 7 27.1.5 and the torsional load
 cases are not created either.
 
+# Earthquake
+With **Create the earthquake load cases** (off until you tick it: the ground
+acceleration, the soil and the reduction factor belong to your site and your
+structure) the wizard adds one static load case per direction ticked under
+**Earthquake along**: `EQ X`, across the ridge, on the frames, and `EQ Y`,
+along the building, on the bracing.
+
+The base shear is **V = c W**. The coefficient **c** is that of the *plateau*
+of the design spectrum: the period of the building is not computed and not
+used, which is the simplification the codes allow for a low building and is on
+the safe side. The summary on the page shows c and the clause it comes from.
+
+- **RNC-07 Art. 32** — c = S (2.7 a0) / (Q' Ω), not less than S a0 (Ec. 3),
+  times 1.5 for Group A. **a0** is the ground acceleration of Art. 24 (zone A
+  0.1, B 0.2, C 0.3 g, or the map of Anexo C), **Soil** the type I to III of
+  Art. 25 (the factor S depends on the zone too), **Reduction factor** the
+  ductility Q of Art. 21, reduced by the **Regularity** of Art. 23 to Q', and
+  Ω = 2.
+- **NSCM Managua 8.2.1** — the plateau β A0 / Ro of its spectrum, with **a0**
+  of Tabla 14.2 (Managua 0.36667 g), the **site class** A to D, the **risk
+  category** I to IV and **Ro**, which cannot be below 1.
+- **ASCE 7-16 12.8** — Cs = SDS / (R / Ie) (Eq. 12.8-2): **SDS**, **R** and
+  the **importance factor Ie**.
+
+The **Reduction factor** is one number for both directions: enter that of the
+lateral system with the least (the frames across, the bracing along). The value
+the page starts with is not a recommendation.
+
+**Seismic weight W** — the self weight of the steel (as the dead case counts
+it), the roof dead load, and the **roof live load in the seismic weight**:
+10 kg/m² of horizontal projection by RNC-07 Art. 11 a (the reduced live load of
+light roofs), 0.3 CV by NSCM 9.6 b (warehouses and storage: W = CM + 0.3 CV, so
+3 kg/m² of that roof), none by ASCE 7-16 12.7.2. Wall cladding is not in the model: add
+its weight to the roof dead load if it matters.
+
+**Where the forces go** — each joint of the warehouse gets
+Fi = c Wi hi ΣW / ΣWi hi, with Wi the weight gathered at the joint and hi its
+height above the bases (RNC-07 Art. 32; ASCE 7 Eq. 12.8-12 with k = 1), as
+nodal loads. So the roof takes almost all of it, and a joint half way up a wall
+its smaller part.
+
+In the combinations an earthquake case acts **both ways**. RNC-07 (Art. 32 f)
+and NSCM take each direction with 30 % of the other, in every sign; the ASCE 7
+combinations here take the two directions one at a time (12.5 asks for the
+100 % + 30 % rule only in some seismic design categories: Define → Load
+Combinations → Generate has the option). NSCM's vertical component
+Ev = 0.2 a0 Fas CM (Ec. 7.8-4) goes into the dead load factor with the a0 and
+the site class of this page. **Accidental torsion** is
+not included, nor the vertical component, the redundancy factor ρ and the
+overstrength combinations of ASCE 7. Check the drifts with the rules of the
+code: the displacements of these cases are those of the reduced forces.
+
+For the period, a response spectrum or other buildings use Define → Seismic
+Loads (Equivalent Lateral Force) and the response spectrum cases.
+
 # Not included yet
-Earthquake load cases, haunches, and trusses with a Warren web without
+Haunches, and trusses with a Warren web without
 verticals. The X braces are modelled as bars that also take compression:
 the steel check reports the compressed diagonal of each X, which in a
 tension-only bracing is ignored. RNC-07 Art. 11 also asks

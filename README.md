@@ -205,8 +205,11 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   case per wind direction, by RNC-07 Título IV or ASCE 7-16 chapter 27 (main
   structure pressures on the purlins, the girts and the columns), and the end
   walls can get their own columns and girts; default sections come
-  from the AISC library and a cold-formed lipped channel. Earthquake cases are
-  not generated yet.
+  from the AISC library and a cold-formed lipped channel. An earthquake page
+  adds the static cases `EQ X` and `EQ Y` by RNC-07 Art. 32, NSCM 8.2.1 or
+  ASCE 7-16 12.8: the coefficient of the plateau of the spectrum times the
+  seismic weight (steel, roof dead load and the reduced roof live load), shared
+  between the joints by weight and height.
 - **Materials** — `Steel01`, `Steel02`, `Concrete01`, `Concrete02`,
   `Concrete04` (Popovics), `ElasticPP`, `Hardening`, `Hysteretic`,
   `HystereticSM`, elastic uniaxial and `ElasticIsotropic`.
