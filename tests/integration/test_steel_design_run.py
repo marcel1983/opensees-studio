@@ -945,3 +945,42 @@ def test_chapter_j_j10_not_required_cases_are_reported() -> None:
     assert report.chapter_j[1].nominal == pytest.approx(0.0)
     assert any("0.15 bf" in note for note in report.chapter_j[0].notes)
     assert any("does not apply" in note for note in report.chapter_j[1].notes)
+
+
+# ───────────────────────────── cold-formed: the sheeted flange ─────────────────────────────
+@pytest.mark.parametrize("ndm", [2, 3])
+def test_gravity_compresses_the_flange_on_the_positive_side_of_the_bending_axis(ndm: int) -> None:
+    """A beam along X bends towards local y in 2D (M3) and local z in 3D (M2): both point up.
+
+    Sheeting on the + flange (the top one) braces it under gravity; on the -
+    flange it is the free, compressed flange that governs.
+    """
+    from opensees_studio.core.cold_formed_sections import cold_formed_section
+    from opensees_studio.core.sections.cold_formed import ColdFormedShape
+
+    project = _beam(ndm=ndm)
+    shape = ColdFormedShape(profile="CS", d=9.0, bf=2.5, t=0.059, r=0.1875, lip=0.773)
+    project.sections[0] = cold_formed_section(
+        shape,
+        section_id=1,
+        ndm=ndm,
+        name="9CS2.5x059",
+        units=KIP_IN,
+        elastic_modulus=E,
+        shear_modulus=G,
+    )
+    results = _results(project)
+    notes: dict[str, str] = {}
+    for side in ("+", "-"):
+        settings = DesignSettings(
+            members=[
+                SteelMemberDesign(element_id=e.id, sheeted_flange=side) for e in project.elements
+            ]
+        )
+        report = steel_frame_check(project, results, settings)
+        assert all(m.equation.startswith("AISI S100-16") for m in report.members)
+        notes[side] = " ".join(note for m in report.members for note in m.notes)
+    assert "the sheeting braces the compression flange" in notes["+"]
+    assert "the sheeting is on the tension flange" not in notes["+"]
+    assert "the sheeting braces the compression flange" not in notes["-"]
+    assert "I6.2.1" in notes["-"]

@@ -23,11 +23,14 @@ from opensees_studio.core.design.aisi_s100 import (
     cold_formed_member,
     compression,
     distortional_closed_form,
+    flexure_local_only,
     flexure_major,
     flexure_minor,
+    flexure_sheeted,
     global_column_stress,
     shear_major,
     tension,
+    uplift_r_factor,
 )
 from opensees_studio.core.sections.cold_formed import ColdFormedShape
 
@@ -378,6 +381,84 @@ def test_tension_with_bending_checks_both_flanges() -> None:
     on_tension = 30.0 / (0.9 * 55.0 * member.Sx) + t
     on_compression = check.ratios["Major flexure"] - t
     assert check.ratios["P-M interaction"] == pytest.approx(max(on_tension, on_compression))
+
+
+# ───────────────────────────── sheeting ─────────────────────────────
+def test_the_r_factor_follows_the_depth_and_the_profile() -> None:
+    """I6.2.1, simple span: 0.70 up to 6.5 in, 0.65 up to 8.5 in, then C 0.40 and Z 0.50."""
+    assert uplift_r_factor(cold_formed_member(_c9(), E), inch=1.0) == (0.40, ())
+    assert uplift_r_factor(cold_formed_member(_z8(), E), inch=1.0) == (0.65, ())
+    deep_zee = _z8().model_copy(update={"d": 10.0, "t": 0.085})
+    assert uplift_r_factor(cold_formed_member(deep_zee, E), inch=1.0) == (0.50, ())
+    shallow = ColdFormedShape(profile="CS", d=6.0, bf=2.125, t=0.07, r=0.1875, lip=0.6)
+    assert uplift_r_factor(cold_formed_member(shallow, E), inch=1.0) == (0.70, ())
+    assert uplift_r_factor(cold_formed_member(_c9(), E), inch=1.0, continuous=True) == (0.60, ())
+    assert uplift_r_factor(cold_formed_member(_z8(), E), inch=1.0, continuous=True) == (0.70, ())
+
+
+def test_the_r_factor_is_refused_outside_its_limits() -> None:
+    # 150 x 50 mm: the flange is narrower than 2.125 in (54 mm).
+    r, reasons = uplift_r_factor(cold_formed_member(_purlin_mm(), 200000.0), inch=25.4)
+    assert r is None
+    assert reasons == ("flange width 1.97 in < 2.125 in",)
+    r, reasons = uplift_r_factor(cold_formed_member(_track(), E), inch=1.0)
+    assert r is None
+    assert "the flanges have no edge stiffener" in reasons
+    # The same channel read in millimetres is 9 mm deep: every length limit depends on the unit.
+    assert uplift_r_factor(cold_formed_member(_c9(), E), inch=25.4)[0] is None
+
+
+def test_sheeting_on_the_compression_flange_braces_the_member() -> None:
+    member = cold_formed_member(_c9(), E)
+    steel = _steel()
+    braced = flexure_major(member, steel, "LRFD", unbraced=0.0)
+    unbraced = flexure_major(member, steel, "LRFD", unbraced=240.0)
+    sheeted = flexure_sheeted(member, steel, "LRFD", in_compression=True, unbraced=240.0)
+    assert sheeted.available == braced.available
+    assert sheeted.available > 3.0 * unbraced.available
+    assert "the sheeting braces the compression flange" in sheeted.notes[0]
+
+
+def test_sheeting_on_the_tension_flange_takes_the_r_factor() -> None:
+    """Uplift: ``Mn = R Mnlo``, and never less than the discrete braces give."""
+    member = cold_formed_member(_c9(), E)
+    steel = _steel()
+    malo = flexure_local_only(member, steel, "LRFD")
+    uplift = flexure_sheeted(member, steel, "LRFD", in_compression=False, unbraced=240.0)
+    assert uplift.equation == "AISI S100-16 I6.2.1 R = 0.4"
+    assert uplift.available == pytest.approx(0.40 * malo)
+    assert _value(uplift, "Globally braced strength") == pytest.approx(malo / 0.9)
+    # Braced every 2 ft the member is stronger than R Mnlo: the braces govern.
+    close = flexure_sheeted(member, steel, "LRFD", in_compression=False, unbraced=24.0)
+    assert close.available == flexure_major(member, steel, "LRFD", unbraced=24.0).available
+    assert close.available > uplift.available
+    assert "I6.2.1" not in close.equation
+
+
+def test_outside_the_limits_of_the_r_factor_the_unbraced_length_governs() -> None:
+    member = cold_formed_member(_purlin_mm(), 200000.0)
+    steel = Steel(Fy=345.0, E=200000.0, G=77000.0, Fu=450.0)
+    uplift = flexure_sheeted(
+        member, steel, "LRFD", in_compression=False, unbraced=6000.0, cb=1.14, inch=25.4
+    )
+    plain = flexure_major(member, steel, "LRFD", unbraced=6000.0, cb=1.14)
+    assert uplift.available == plain.available
+    assert "I6.2.1 does not apply (flange width 1.97 in < 2.125 in)" in uplift.notes[0]
+
+
+def test_the_member_check_takes_the_side_of_the_sheeting() -> None:
+    member = cold_formed_member(_c9(), E)
+    lengths = {"length_x": 240.0, "length_y": 240.0, "length_ltb": 240.0}
+    demand = Demand(axial=0.0, moment_major=20.0, moment_minor=0, shear_major=0, shear_minor=0)
+    bare = check_member(member, _steel(), "LRFD", demand, **lengths)
+    gravity = check_member(member, _steel(), "LRFD", demand, sheeted=True, **lengths)
+    uplift = check_member(member, _steel(), "LRFD", demand, sheeted=False, **lengths)
+    assert gravity.ratios["Major flexure"] < uplift.ratios["Major flexure"]
+    assert uplift.ratios["Major flexure"] < bare.ratios["Major flexure"]
+    assert uplift.equations["Major flexure"].endswith("I6.2.1 R = 0.4")
+    assert gravity.ratios["Major flexure"] == pytest.approx(
+        20.0 / flexure_major(member, _steel(), "LRFD", unbraced=0.0).available
+    )
 
 
 # ───────────────────────────── what is covered ─────────────────────────────

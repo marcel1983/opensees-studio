@@ -46,6 +46,12 @@ The rules that are easy to get wrong, and that the tests pin:
 * **A purlin does brace the top chord of a truss**, because it is fixed to the
   chord itself; the bottom chord is braced only at its tie lines, and
   :func:`member_design_overrides` gives it that length.
+* **The sheeting braces the flange it is screwed to, and nothing else.** With
+  ``WarehouseSpec.sheeting`` every purlin and girt gets
+  ``SteelMemberDesign.sheeted_flange``: the outer flange, by the side of the
+  member's local z it lies on. The AISI check takes that flange as braced when
+  it is in compression; under uplift or suction it counts on the sag rods
+  (``purlin_sag_rods``, ``girt_sag_rods``: design lengths only, no elements).
 * **Loads act on the purlins**, as on the real roof: a load per area becomes a
   uniform load per length on each purlin element (its tributary width times the
   pressure), in the element's local axes — a purlin's web stands normal to the
@@ -304,6 +310,13 @@ class WarehouseSpec:
     bottom_chord_tie_every: int = 0
     """Every n-th panel point of the bottom chord is tied to the next frame; the
     column lines and the ridge always are. 0 = only those."""
+    sheeting: bool = True
+    """The roof and wall sheeting is screwed to the purlins and girts (through-fastened):
+    it braces the flange it sits on. False for a standing seam roof or no cladding."""
+    purlin_sag_rods: int = 0
+    """Lines of sag rods (tensores) per bay: each one holds every purlin sideways."""
+    girt_sag_rods: int = 0
+    """Lines of sag rods per bay of wall, holding the girts."""
 
     def __post_init__(self) -> None:
         if self.span <= 0.0:
@@ -326,6 +339,8 @@ class WarehouseSpec:
             raise WarehouseError("The end wall column spacing cannot be negative.")
         if self.rafter_fly_brace_every < 0 or self.column_fly_brace_every < 0:
             raise WarehouseError("A stabilising angle interval cannot be negative.")
+        if self.purlin_sag_rods < 0 or self.girt_sag_rods < 0:
+            raise WarehouseError("The number of sag rod lines cannot be negative.")
         if len(self.origin) != 3:
             raise WarehouseError("The origin needs three coordinates.")
         if self.roof_structure not in ROOF_STRUCTURES:
@@ -1473,6 +1488,15 @@ def wind_loads(warehouse: Warehouse, case: WindCase, units: UnitSystem) -> list[
 
 
 # ─────────────────────────── design lengths ───────────────────────────
+#: Outward normal of each wall (:data:`opensees_studio.core.wind.WALLS`).
+WALL_NORMALS: dict[str, tuple[float, float, float]] = {
+    "x0": (-1.0, 0.0, 0.0),
+    "x1": (1.0, 0.0, 0.0),
+    "y0": (0.0, -1.0, 0.0),
+    "y1": (0.0, 1.0, 0.0),
+}
+
+
 def member_design_overrides(warehouse: Warehouse) -> list[Any]:
     """Unbraced lengths of the rafters, side columns, purlins and girts for the steel check.
 
@@ -1483,11 +1507,14 @@ def member_design_overrides(warehouse: Warehouse) -> list[Any]:
 
     A purlin or girt is held at every frame it rests on, so its major-axis
     buckling length is its own span: as modelled, the line over all the bays
-    would count as one member. Its minor-axis and lateral-torsional lengths
-    stay as modelled (the span): the sheeting is not counted as a brace.
+    would count as one member. Sideways it is held by the sag rods, at equal
+    parts of the span. A screwed sheeting is on the outer flange
+    (``sheeted_flange``, by the side of the member's local z it lies on): the
+    check takes that flange as braced when it is in compression.
     """
     from opensees_studio.core.design.settings import SteelMemberDesign
 
+    spec = warehouse.spec
     overrides = [
         SteelMemberDesign(
             element_id=element_id, length_minor=portable(length), length_ltb=portable(length)
@@ -1495,11 +1522,33 @@ def member_design_overrides(warehouse: Warehouse) -> list[Any]:
         for element_id, length in sorted(warehouse.unbraced.items())
     ]
     coords = {node.id: np.asarray(node.coords, dtype=float) for node in warehouse.nodes}
-    secondary = {eid for key in SECONDARY_MEMBERS for eid in warehouse.members.get(key, ())}
+    sag_rods = (spec.purlin_sag_rods, spec.girt_sag_rods)
+    rods = {
+        eid: count
+        for key, count in zip(SECONDARY_MEMBERS, sag_rods, strict=True)
+        for eid in warehouse.members.get(key, ())
+    }
+    purlins = set(warehouse.members.get("purlins", ()))
     for element in warehouse.elements:
-        if element.id in secondary and element.id not in warehouse.unbraced:
-            span = float(np.linalg.norm(coords[element.nodes[1]] - coords[element.nodes[0]]))
-            overrides.append(SteelMemberDesign(element_id=element.id, length_major=portable(span)))
+        if element.id not in rods or element.id in warehouse.unbraced:
+            continue
+        start, end = (coords[node_id] for node_id in element.nodes)
+        span = float(np.linalg.norm(end - start))
+        values: dict[str, Any] = {"length_major": portable(span)}
+        if rods[element.id]:
+            between = portable(span / (rods[element.id] + 1))
+            values |= {"length_minor": between, "length_ltb": between}
+        if spec.sheeting:
+            outward: Sequence[float] | None = (0.0, 0.0, 1.0)
+            if element.id not in purlins:
+                wall = warehouse.wall_girts.get(element.id)
+                outward = WALL_NORMALS.get(wall[0]) if wall else None
+            axes = frame_local_axes(
+                3, tuple(start.tolist()), tuple(end.tolist()), element.local_axis_angle
+            )
+            if outward is not None and axes is not None:
+                values["sheeted_flange"] = "+" if float(np.dot(axes[2], outward)) > 0.0 else "-"
+        overrides.append(SteelMemberDesign(element_id=element.id, **values))
     return overrides
 
 

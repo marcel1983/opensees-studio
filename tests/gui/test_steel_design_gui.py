@@ -100,6 +100,45 @@ def test_overrides_apply_to_the_selection(qtbot) -> None:  # type: ignore[no-unt
 
 
 @pytest.mark.gui
+def test_apply_keeps_what_the_dialog_does_not_edit(qtbot) -> None:  # type: ignore[no-untyped-def]
+    """A wizard's lengths about the two axes and the sheeted flange survive an Apply."""
+    from opensees_studio.core.design.settings import SteelMemberDesign
+
+    project = _beam_project()
+    project.design = DesignSettings(
+        members=[
+            SteelMemberDesign(
+                element_id=2, length_major=6.0, length_minor=3.0, sheeted_flange="+", role="beam"
+            ),
+            SteelMemberDesign(element_id=3, length_major=6.0, sheeted_flange="-"),
+        ]
+    )
+    dialog = SteelDesignDialog(project, _results(project), selected_elements=frozenset({2, 3}))
+    qtbot.addWidget(dialog)
+    assert dialog._sheeted.currentIndex() == 0  # Unchanged
+    dialog._lb.setValue(1.5)
+    dialog._apply_overrides()
+    members = {m.element_id: m for m in dialog.settings().members}
+    assert members[2] == SteelMemberDesign(
+        element_id=2,
+        length_major=6.0,
+        length_minor=3.0,
+        length_ltb=1.5,
+        sheeted_flange="+",
+        role="beam",
+    )
+    assert members[3].sheeted_flange == "-" and members[3].length_ltb == 1.5
+
+    dialog._sheeted.setCurrentIndex(1)  # No sheeting
+    dialog._apply_overrides()
+    assert {m.sheeted_flange for m in dialog.settings().members} == {None}
+
+    one = SteelDesignDialog(project, _results(project), selected_elements=frozenset({3}))
+    qtbot.addWidget(one)
+    assert one._sheeted.currentIndex() == 3  # the member's own: the - side
+
+
+@pytest.mark.gui
 def test_fu_and_the_net_area_round_trip(qtbot) -> None:  # type: ignore[no-untyped-def]
     project = _beam_project()
     dialog = SteelDesignDialog(project, _results(project), selected_elements=frozenset({2}))
