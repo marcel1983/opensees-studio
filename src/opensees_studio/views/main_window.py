@@ -52,15 +52,12 @@ from PySide6.QtWidgets import (
 from opensees_studio import __version__
 from opensees_studio.commands import (
     AddNodesCommand,
-    DeleteElementsCommand,
-    DeleteNodesCommand,
     MeshCommand,
     SetCoordSystemsCommand,
     SetProjectMetaCommand,
     SetRestraintCommand,
 )
 from opensees_studio.commands.generated import insert_generated
-from opensees_studio.commands.tables import ApplyModelTablesCommand
 from opensees_studio.core import (
     SUPPORTED_NDF,
     ElasticSection,
@@ -175,7 +172,6 @@ from opensees_studio.views.dialogs.batch_run import BatchRunDialog
 from opensees_studio.views.dialogs.grid_wizard import GridWizardDialog
 from opensees_studio.views.dialogs.load_combinations import LoadCombinationsDialog
 from opensees_studio.views.dialogs.load_display import LoadDisplayDialog
-from opensees_studio.views.dialogs.model_tables import ModelTablesDialog
 from opensees_studio.views.dialogs.object_info import ObjectInfoDialog
 from opensees_studio.views.dialogs.reactions import ReactionsDialog
 from opensees_studio.views.dialogs.run_cases import RunCasesDialog
@@ -572,12 +568,7 @@ class MainWindow(QMainWindow):
         self._act_undo.setShortcut(QKeySequence.StandardKey.Undo)
         self._act_redo = self._vm.undo_stack.createRedoAction(self, "Redo")
         self._act_redo.setShortcut(QKeySequence.StandardKey.Redo)
-        self._act_delete = QAction(
-            "&Delete selection", self, shortcut=QKeySequence.StandardKey.Delete
-        )
         self._act_clear_selection = QAction("Clear &selection", self, shortcut="Esc")
-        self._act_table_editing = QAction("Interactive &Table Editing…", self)
-        self._act_table_editing.setShortcut("Ctrl+T")
 
         # Select menu: queries that add to (or invert) the current selection.
         self._act_select_line = QAction("Intersecting &Line", self, checkable=True)
@@ -880,13 +871,15 @@ class MainWindow(QMainWindow):
         m_edit.addSeparator()
         m_edit.addActions([act("edit.copy"), act("edit.paste")])
         m_edit.addSeparator()
-        m_edit.addActions([self._act_delete, self.action("select.all"), self._act_clear_selection])
+        m_edit.addActions(
+            [self.action("edit.delete"), self.action("select.all"), self._act_clear_selection]
+        )
         m_edit.addSeparator()
         m_edit.addActions(
             [act("edit.move"), act("edit.replicate"), act("edit.mirror"), act("edit.extrude")]
         )
         m_edit.addSeparator()
-        m_edit.addAction(self._act_table_editing)
+        m_edit.addAction(self.action("edit.table_editing"))
         m_edit.addAction(self.action("edit.check_duplicates"))
         m_edit.addAction(self.action("edit.merge_joints"))
         m_edit.addAction(self.action("edit.divide_frames"))
@@ -1526,8 +1519,8 @@ class MainWindow(QMainWindow):
             dock.raise_()
 
         self._project_dock.editRequested.connect(self._on_project_edit)
-        self._project_dock.tableRequested.connect(self._on_table_editing)
-        self._project_dock.deleteRequested.connect(self._on_delete)
+        self._project_dock.tableRequested.connect(self.model_tools.table_editing)
+        self._project_dock.deleteRequested.connect(self.model_tools.delete_selection)
 
         self._act_use_ribbon.toggled.connect(self._apply_interface_mode)
         self._menus_visible = True
@@ -1737,13 +1730,12 @@ class MainWindow(QMainWindow):
         self._act_solver_settings.triggered.connect(self._on_solver_settings)
 
         # Edit
-        self._act_delete.triggered.connect(self._on_delete)
         # Delete, Undo, Redo and the selection keys have to work while the ribbon
         # hides the menu bar and shows a tab without the Edit group: a shortcut
         # only fires when a visible widget carries its action.
         self.addActions(
             [
-                self._act_delete,
+                self.action("edit.delete"),
                 self._act_undo,
                 self._act_redo,
                 self.action("select.all"),
@@ -1751,7 +1743,6 @@ class MainWindow(QMainWindow):
             ]
         )
         self._act_clear_selection.triggered.connect(self._on_clear_selection)
-        self._act_table_editing.triggered.connect(self._on_table_editing)
 
         # Tools
         self._act_tool_select.triggered.connect(self.drawing.select)
@@ -2293,45 +2284,6 @@ class MainWindow(QMainWindow):
         ]
         if errors:
             QMessageBox.warning(self, "Saving with invalid case references", "\n".join(errors))
-
-    def _on_delete(self) -> None:
-        if self._vm.project is None:
-            return
-        sel = self._canvas.selection
-        if sel.is_empty:
-            return
-        elements, nodes = set(sel.elements), set(sel.nodes)
-        stack = self._vm.undo_stack
-        # Frames and joints go in one undo step, so one Undo brings the whole
-        # selection back (and the model lock asks once).
-        stack.beginMacro(f"Delete {len(elements) + len(nodes)} object(s)")
-        try:
-            if elements:
-                self._vm.apply_command(DeleteElementsCommand(self._vm, elements))
-            if nodes:
-                self._vm.apply_command(DeleteNodesCommand(self._vm, nodes))
-        except Exception as exc:
-            QMessageBox.critical(self, "Delete failed", str(exc))
-        finally:
-            stack.endMacro()
-        sel.clear()
-
-    def _on_table_editing(self) -> None:
-        """Edit → Interactive Table Editing: joints, elements and joint loads as tables."""
-        project = self._vm.project
-        if project is None:
-            return
-        dlg = ModelTablesDialog(project, self)
-        if dlg.exec() != QDialog.DialogCode.Accepted or dlg.edited is None:
-            return
-        try:
-            self._vm.apply_command(ApplyModelTablesCommand(self._vm, dlg.edited))
-            self._log(
-                f"Tables applied: {len(project.nodes)} joint(s), "
-                f"{len(project.elements)} element(s)."
-            )
-        except Exception as exc:
-            QMessageBox.critical(self, "Interactive Table Editing failed", str(exc))
 
     # ── slots: select menu ──────────────────────────────────────────
     def _build_select_menu(self, menu: Any) -> None:
@@ -3210,7 +3162,7 @@ class MainWindow(QMainWindow):
         if self.action("view.show_all_objects").isEnabled():
             menu.addAction(self.action("view.show_all_objects"))
         menu.addSeparator()
-        menu.addAction(self._act_delete)
+        menu.addAction(self.action("edit.delete"))
         menu.addAction(self._act_clear_selection)
         return menu
 
@@ -5101,7 +5053,6 @@ class MainWindow(QMainWindow):
         self._act_truss_wizard.setEnabled(has_project)
         self._act_warehouse_wizard.setEnabled(has_project)
         self.action("define.create_shell").setEnabled(has_project and n_sel in (3, 4))
-        self._act_table_editing.setEnabled(has_project)
         has_cases = has_project and bool(self._vm.project and self._vm.project.analyses)
         # Without a solver the model is still built, exported and reported; only
         # what calls OpenSees waits for one (Options → Solver).
@@ -5154,7 +5105,6 @@ class MainWindow(QMainWindow):
             and self._vm.project is not None
             and self._vm.project.ndm == 3
         )
-        self._act_delete.setEnabled(has_project and has_selection)
         self.action("edit.paste").setEnabled(bool(self.transforms.clipboard_contents()[0]))
         self._act_tool_draw_frame.setEnabled(has_project)
         self._act_tool_draw_node.setEnabled(has_project)

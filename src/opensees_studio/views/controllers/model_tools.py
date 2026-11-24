@@ -8,21 +8,26 @@ from PySide6.QtCore import QObject
 from PySide6.QtWidgets import QDialog, QMessageBox
 
 from opensees_studio.commands import (
+    DeleteElementsCommand,
+    DeleteNodesCommand,
     FixDuplicatesCommand,
     JoinFramesCommand,
     MergeJointsCommand,
     MeshCommand,
 )
+from opensees_studio.commands.tables import ApplyModelTablesCommand
 from opensees_studio.views.controllers.shell import Shell
 from opensees_studio.views.dialogs import DuplicatesDialog, MeshDialog
 from opensees_studio.views.dialogs.connect_joints import DivideFramesDialog, MergeJointsDialog
+from opensees_studio.views.dialogs.model_tables import ModelTablesDialog
 
 
 class ModelToolsController(QObject):
     """What repairs and refines the geometry of a model, one undo step each.
 
     Check Model for Duplicates, Merge Joints, Divide Frames at Joints, Join
-    Frames and Mesh. The plans and reports come from ``core``; this shows the
+    Frames and Mesh; and the two blunt edits, Delete selection and Interactive
+    Table Editing. The plans and reports come from ``core``; this shows the
     dialog, applies one command and leaves selected what the command made.
     ``select_rows`` is the window's "show me this row" of a report (it selects
     the joints and elements of the row in the viewport). It keeps no state.
@@ -186,3 +191,43 @@ class ModelToolsController(QObject):
             self._shell.canvas().selection.select_node(node.id, additive=True)
         self._shell.canvas().render()
         self._shell.log(f"Mesh: {plan.summary()}")
+
+    def delete_selection(self) -> None:
+        """Edit → Delete selection: the selected joints and elements, as one undo step."""
+        if self._vm.project is None:
+            return
+        sel = self._shell.canvas().selection
+        if sel.is_empty:
+            return
+        elements, nodes = set(sel.elements), set(sel.nodes)
+        stack = self._vm.undo_stack
+        # Frames and joints go in one undo step, so one Undo brings the whole
+        # selection back (and the model lock asks once).
+        stack.beginMacro(f"Delete {len(elements) + len(nodes)} object(s)")
+        try:
+            if elements:
+                self._vm.apply_command(DeleteElementsCommand(self._vm, elements))
+            if nodes:
+                self._vm.apply_command(DeleteNodesCommand(self._vm, nodes))
+        except Exception as exc:
+            QMessageBox.critical(self._window, "Delete failed", str(exc))
+        finally:
+            stack.endMacro()
+        sel.clear()
+
+    def table_editing(self) -> None:
+        """Edit → Interactive Table Editing: joints, elements and joint loads as tables."""
+        project = self._vm.project
+        if project is None:
+            return
+        dlg = ModelTablesDialog(project, self._window)
+        if dlg.exec() != QDialog.DialogCode.Accepted or dlg.edited is None:
+            return
+        try:
+            self._vm.apply_command(ApplyModelTablesCommand(self._vm, dlg.edited))
+            self._shell.log(
+                f"Tables applied: {len(project.nodes)} joint(s), "
+                f"{len(project.elements)} element(s)."
+            )
+        except Exception as exc:
+            QMessageBox.critical(self._window, "Interactive Table Editing failed", str(exc))

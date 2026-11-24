@@ -80,7 +80,7 @@ handler: `"transforms.move"` is `window.transforms.move`.
 | `ImportsController` | `imports` | File → Import: DXF drawing (into the project), PORTICO, SAP2000 text, IFC and Tcl (a new project). Gets `confirm_discard` (the unsaved-changes prompt) and `apply_view_settings` as hooks |
 | `LibraryController` | `library` | Define → material library, default materials, MC2010 concrete, friction models, material tester, ground motions, section library, concrete section, steel deck and section designer. Owns the two windows it keeps open (`material_tester_dialog`, `ground_motions_dialog`); gets `new_project` as a hook |
 | `GroupsController` | `groups` | Define → Groups, Section Cuts; Assign → Assign to Group |
-| `ModelToolsController` | `model_tools` | Edit → Check Model for Duplicates, Merge Joints, Divide Frames at Joints, Join Frames, Mesh. Gets `select_rows` (select a report row in the viewport) as a hook |
+| `ModelToolsController` | `model_tools` | Edit → Delete selection, Interactive Table Editing, Check Model for Duplicates, Merge Joints, Divide Frames at Joints, Join Frames, Mesh. Gets `select_rows` (select a report row in the viewport) as a hook |
 | `AreasController` | `areas` | Define → Create Shell; Assign → Shell Formulation, Area Springs, Edge Springs, Line Springs |
 | `PatternsController` | `patterns` | Define → linear, path, function and constant time series; plain load pattern, uniform excitation, multi-support excitation. Gets `new_project` as a hook (a series can be defined with no project open); `Needs.TIME_SERIES` enables the patterns |
 | `JointsController` | `joints` | Assign → restraints, masses, springs; EqualDOF, zero-length element and section, bearing, link (exactly two joints: `Needs.TWO_NODES`) |

@@ -60,4 +60,5 @@
 # The Select menu is declared too (three `shortcut=` strings went with it): Linux 171 -> 168.
 # The camera, level and hide commands of the View menu are declared too (`shortcut=QKeySequence(...)`
 # matched no overload either): Linux 168 -> 164.
-164
+# Delete is declared too (`shortcut=QKeySequence.StandardKey.Delete` matched no overload): Linux 164 -> 163.
+163
