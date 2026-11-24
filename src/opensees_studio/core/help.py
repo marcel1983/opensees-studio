@@ -3668,12 +3668,13 @@ case carries them: half of each bar's weight goes to each of its joints.
         "define.warehouse": _t(
             "Define → Create Warehouse",
             "Define",
-            "A 3D steel warehouse from a few numbers, with its loads and combinations.",
+            "A 3D steel warehouse from a few numbers, with its loads, wind and combinations.",
             """
 Builds a warehouse (bodega, nave industrial) into the open 3D frame model as one
 undoable step: portal frames in X-Z planes repeated along Y, the purlins, girts
-and X bracing between them, the supports, a group per kind of member, a grid on
-the column lines, the roof loads and the load combinations of a design code.
+and X bracing between them, the end wall columns, the supports, a group per kind
+of member, a grid on the column lines, the roof loads, the wind cases and the
+load combinations of a design code.
 File → New Model → **Warehouse** starts a new model with it. The preview on the
 left follows every field.
 
@@ -3691,8 +3692,14 @@ left follows every field.
   surface. Each stretch of roof between a column line and the next (or the
   ridge) is divided into equal parts no longer than it. The eave and ridge
   purlins are also the eave strut and the ridge tie.
-- **Girt spacing** — the same on the two side walls; 0 builds no girts. The
-  gable end walls get none: their columns come with the wind loads.
+- **Girt spacing** — the same on the two side walls; 0 builds no girts.
+- **End wall column spacing** — the largest distance between the columns of
+  the two end walls; 0 builds none. Each nave is divided into equal parts and
+  each column goes under the nearest purlin line, so its top reaction enters a
+  purlin and reaches the roof bracing. An end wall column is pinned at its base
+  and at the rafter, with its web along Y to span against the wind; it also
+  props the end rafter. With end wall columns the end walls get girts too, at
+  the girt spacing, up to the roof line.
 - **X bracing** in the roof and in the side walls, in the **braced bays**
   (bay 1 is between the first two frames; empty means the first and the last).
   A roof slope is cut into panels about as long as the bay, on purlin lines.
@@ -3710,9 +3717,10 @@ point. So:
 - with **1**, every purlin has an angle and the length is the purlin spacing;
   with **2**, every second purlin, and so on.
 
-The girts and the side columns follow the same rule. With **Set the unbraced
+The girts follow the same rule for the side columns and for the columns of the
+end walls. With **Set the unbraced
 lengths of the steel check** ticked, the wizard writes these lengths as the
-minor-axis and lateral-torsional overrides of every rafter and side column
+minor-axis and lateral-torsional overrides of every rafter and of those columns
 (Design → Steel Frame Check → member overrides); without them the check would
 take every purlin as a bracing point. The major-axis length stays as modelled.
 
@@ -3722,12 +3730,14 @@ their load to the frames and add no bending or torsional restraint to them.
 
 # Sections
 One section per kind of member. Choose one the project has, or let the wizard
-create the default: **W14X48** columns, **W16X40** rafters and **L3X3X1/4**
-braces from the AISC library, and a cold-formed lipped channel
-**C 150 × 50 × 15 × 2.38 mm** for purlins and girts, of the project's default
-steels. Change them afterwards with Assign → Frame → Section on the groups the
-wizard creates (Columns, Rafters, Purlins, Girts, Roof bracing, Wall bracing).
-A purlin's web stands normal to the roof and a girt's lies flat.
+create the default: **W14X48** columns, **W16X40** rafters, **L3X3X1/4**
+braces and **W8X31** end wall columns from the AISC library, and a cold-formed
+lipped channel **C 150 × 50 × 15 × 2.38 mm** for purlins and girts, of the
+project's default steels. Change them afterwards with Assign → Frame → Section
+on the groups the wizard creates (Columns, Rafters, Purlins, Girts, Roof
+bracing, Wall bracing, End wall columns). A purlin's web stands normal to the
+roof and a girt's lies flat. The defaults are a starting point, not a design:
+run the cases and the steel check, and size the members from them.
 
 # Loads and design code
 - **Roof dead load** — cladding and fixings, per area of roof surface; it goes
@@ -3743,14 +3753,65 @@ A purlin's web stands normal to the roof and a girt's lies flat.
 
 The area loads are applied to the purlins as uniform loads over their tributary
 width, in the purlin's local axes. With **Generate the load combinations of the
-code** the gravity combinations are added with their envelope; the code's wind
-and earthquake combinations appear once those cases exist (Define → Load
-Combinations → Generate).
+code** the combinations of the gravity and wind cases are added with their
+envelope; the earthquake combinations appear once those cases exist (Define →
+Load Combinations → Generate).
+
+# Wind
+With **Create the wind load cases** the wizard adds one load case per wind
+direction ticked under **Wind towards** (the wind blows towards +X, -X, +Y or
+-Y; X is across the ridge), with the net pressures of the main structure on the
+four walls and the roof.
+
+- **Procedure** — follows the design code; it can be changed.
+- **RNC-07 Título IV** (static method, Type 1 structures; NSCM 7.2 sends the
+  wind loads here too). **Wind zone** fills the regional velocity VR of Tabla 5
+  (zone 1: 30 m/s, zone 2: 45, zone 3: 56 for Group B, 50 years; 36, 60 and 70
+  for Group A, 200 years); type another one in **Wind speed**. **Exposure** is
+  the terrain roughness R1 to R4 (Tabla 6) and **Topography** T1 to T5 (Tabla
+  7). The pressure is pz = 0.0479 Cp VD² kg/m² with VD = FTR Fα VR, and Cp of
+  Tabla 8: windward wall 0.8, leeward wall -0.4, side walls -0.8, flat roof
+  -0.8, leeward slope -0.7, windward slope 0.04 θ - 1.6 between -0.8 and 1.8.
+  With the wind along the ridge the roof takes -0.8 (a surface parallel to the
+  flow; Tabla 8 has no row for it). One case per direction: `WIND +X`, …
+- **ASCE 7-16**, chapter 26 and the directional procedure of chapter 27.
+  **Wind speed** is the basic wind speed V of the risk category, an *ultimate*
+  speed: a 50 year velocity such as RNC-07's is multiplied by 1.26 (√1.6)
+  first. **Exposure** B, C or D, **Kzt** the topographic factor; Kd = 0.85 and
+  G = 0.85. qz = 0.613 Kz Kzt Kd V² on the windward wall and qh, at the mean
+  roof height, everywhere else; Cp of Figure 27.3-1. Two cases per direction:
+  **A** takes the most negative roof coefficients with positive internal
+  pressure (the largest uplift), **B** the other roof coefficients with
+  negative internal pressure (the largest downward load and the largest push on
+  the windward wall): `WIND +X A`, `WIND +X B`, …
+- **Openings** — a closed building has no internal pressure in RNC-07 and
+  ±0.18 in ASCE 7. Openings spread over the four walls: -0.3 (RNC-07 Art. 55)
+  and ±0.18. Openings mainly in one wall (more than 30 % of it): 0.75 when
+  that wall faces the wind, -0.6 when it is to leeward and -0.5 when it is
+  parallel to the wind (RNC-07), or ±0.55, a partially enclosed building
+  (ASCE 7).
+
+Where the pressures go: the roof to the **purlins**, each taking half the strip
+to its neighbours, normal to the roof. A wall with girts to its **girts**; the
+top half strip of a side wall goes to the eave purlin, the strip under the roof
+line of an end wall to the end rafter, and the lower half of the lowest strip
+straight into the ground (it is not applied). A wall without girts loads its
+**columns** directly, each with the wall half way to its neighbours.
+
+In the combinations each wind case enters with **its own sign only**: a case
+already has its direction and its suctions, and reversing it is not another
+wind. Define → Load Combinations → Generate treats a static wind case as acting
+both ways, so delete the reversed ones if you regenerate there.
+
+The wizard's wind is that of the main structure. Purlins, girts and cladding
+also need the local pressures of the code (RNC-07 Art. 58, ASCE 7 chapter 30),
+which are larger near the edges; the envelope procedure of ASCE 7 chapter 28,
+open buildings, the minimum wind load of ASCE 7 27.1.5 and the torsional load
+cases are not created either.
 
 # Not included yet
-Wind and earthquake load cases, gable end wall columns and girts, trussed
-roofs and haunches. RNC-07 Art. 11 also asks each purlin for 100 kg at
-mid-span: check the purlins for it separately.
+Earthquake load cases, trussed roofs and haunches. RNC-07 Art. 11 also asks
+each purlin for 100 kg at mid-span: check the purlins for it separately.
 """,
             "define.portal_frame",
             "define.truss",

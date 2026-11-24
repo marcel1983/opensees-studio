@@ -120,7 +120,10 @@ script o un notebook de Jupyter: la interfaz es una forma de usarlo, no la únic
   3D a dos aguas, a una agua o plana, de una o varias naves, con correas y
   largueros a una separación máxima, arriostramiento en X de techo y paredes,
   grupos por tipo de miembro, cargas muerta y viva de techo sobre las correas y
-  las combinaciones gravitacionales de RNC-07, NSCM o ASCE 7-16; las correas van
+  las combinaciones de RNC-07, NSCM o ASCE 7-16; columnas y largueros de los
+  muros hastiales, y casos de viento por dirección según RNC-07 Título IV o
+  ASCE 7-16 capítulo 27, con las presiones de la estructura principal sobre
+  correas, largueros y columnas; las correas van
   articuladas y solo arriostran la viga de techo donde llevan angular de
   estabilización, y el asistente escribe esas longitudes no arriostradas para la
   verificación de acero); la losa **Slab 20cm** de concreto

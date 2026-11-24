@@ -18,7 +18,12 @@ from PySide6.QtWidgets import QDialog, QMessageBox
 from opensees_studio.commands.warehouse import insert_warehouse_plan, plan_problems
 from opensees_studio.core.frames import RoofType, SupportCondition
 from opensees_studio.core.units import UnitSystem
-from opensees_studio.core.warehouse import GROUPS, WarehouseSpec, plan_warehouse
+from opensees_studio.core.warehouse import (
+    GROUPS,
+    WarehouseSpec,
+    WarehouseWind,
+    plan_warehouse,
+)
 from opensees_studio.views.dialogs.warehouse_wizard import WarehouseWizard
 
 
@@ -55,6 +60,7 @@ def test_the_fields_reach_the_spec(qtbot) -> None:  # type: ignore[no-untyped-de
     wizard._purlin_spacing.setValue(1.2)
     wizard._girt_spacing.setValue(0.0)
     wizard._rafter_fly.setValue(3)
+    wizard._end_wall_spacing.setValue(4.0)
     wizard._wall_bracing.setChecked(False)
     wizard._braced_bays.setText("1, 4; 7")
 
@@ -74,8 +80,11 @@ def test_the_fields_reach_the_spec(qtbot) -> None:  # type: ignore[no-untyped-de
         roof_bracing=True,
         wall_bracing=False,
         braced_bays=(0, 3, 6),
+        end_wall_column_spacing=4.0,
     )
-    assert wizard.section_choice() == dict.fromkeys(("column", "rafter", "purlin", "girt", "brace"))
+    assert wizard.section_choice() == dict.fromkeys(
+        ("column", "rafter", "purlin", "girt", "brace", "end_column")
+    )
 
 
 @pytest.mark.gui
@@ -136,9 +145,17 @@ def test_the_menu_builds_the_warehouse_in_one_undo_step(qtbot, monkeypatch) -> N
     assert [g.name for g in project.groups] == list(GROUPS.values())
     grouped = {eid for g in project.groups for eid in g.element_ids}
     assert grouped == {e.id for e in project.elements}
-    assert {s.name for s in project.sections} >= {"W14X48", "W16X40", "C150X50X15X2.38"}
-    assert [c.name for c in project.analyses] == ["DEAD", "LIVE"]
-    assert [c.name for c in project.combinations][:2] == ["1.4CM", "1.2CM+1.6CV"]
+    assert {s.name for s in project.sections} >= {
+        "W14X48", "W16X40", "C150X50X15X2.38", "W8X31"
+    }  # fmt: skip
+    assert [c.name for c in project.analyses] == [
+        "DEAD", "LIVE", "WIND +X", "WIND -X", "WIND +Y", "WIND -Y"
+    ]  # fmt: skip
+    names = [c.name for c in project.combinations]
+    assert names[:2] == ["1.4CM", "1.2CM+1.6CV"]
+    # A wind case enters with its own sign only: reversing a suction is not a wind.
+    assert "1.2CM+1.6Pz:WIND +X+CV" in names and "0.9CM+1.6Pz:WIND -Y" in names
+    assert not any("-1.6Pz" in name for name in names)
     assert project.design is not None and project.design.members
     assert project.coord_systems[-1].name == "Warehouse"
     assert "Warehouse 20 x 12" in mw._console.toPlainText()
@@ -206,3 +223,39 @@ def test_a_plan_that_does_not_fit_is_refused_before_anything_is_pushed(qtbot) ->
         insert_warehouse_plan(mw._vm, plan)
     assert project.model_dump() == before
     assert mw._vm.undo_stack.index() == index
+
+
+@pytest.mark.gui
+def test_the_wind_page_follows_the_code_and_reaches_the_loads(qtbot) -> None:  # type: ignore[no-untyped-def]
+    wizard = WarehouseWizard([])
+    qtbot.addWidget(wizard)
+    wind = wizard.loads().wind
+    # RNC-07 by default: zone 2, Group B, roughness R2, flat terrain.
+    assert wind == WarehouseWind(method="rnc07", speed=45.0, exposure="R2", topography="T3")
+    assert not wizard._wind_kzt.isEnabled() and wizard._wind_topography.isEnabled()
+    assert "4</b>" in wizard._wind_summary.text()
+
+    wizard._wind_zone.setCurrentIndex(5)  # zone 3, Group A
+    assert wizard._wind_speed.value() == 70.0
+    wizard._wind_speed.setValue(50.0)  # not a value of Tabla 5
+    assert wizard._wind_zone.currentIndex() == wizard._wind_zone.count() - 1
+
+    wizard._code.setCurrentIndex(wizard._code.findData("asce7_lrfd"))
+    assert wizard._wind_method.currentData() == "asce7"
+    assert wizard._wind_speed.value() == 57.0  # an ultimate speed, not RNC-07's 50 year one
+    assert [wizard._wind_exposure.itemData(i) for i in range(3)] == ["B", "C", "D"]
+    assert wizard._wind_kzt.isEnabled() and not wizard._wind_zone.isEnabled()
+    wizard._wind_openings.setCurrentIndex(4)  # mainly in the end wall at the smallest Y
+    wizard._wind_directions["-X"].setChecked(False)
+    wizard._wind_directions["-Y"].setChecked(False)
+    assert wizard.loads().wind == WarehouseWind(
+        method="asce7", speed=57.0, exposure="C", openings="y0", directions=("+X", "+Y")
+    )
+    assert "4</b>" in wizard._wind_summary.text()  # two cases per direction
+
+    for box in wizard._wind_directions.values():
+        box.setChecked(False)
+    assert not wizard._page_wind.isComplete()  # a wind with no direction
+    wizard._wind_on.setChecked(False)
+    assert wizard._page_wind.isComplete() and wizard.loads().wind is None
+    assert not wizard._wind_speed.isEnabled()

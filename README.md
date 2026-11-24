@@ -198,10 +198,13 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   a grid on the column lines. Purlins, girts and braces are pinned, and a purlin
   braces the rafter only where it has a stabilising angle (fly brace): the wizard
   writes the resulting unbraced lengths for the steel check. The roof dead and
-  live loads go on the purlins over their tributary width, with the gravity
-  combinations of RNC-07, NSCM (Managua) or ASCE 7-16; default sections come
-  from the AISC library and a cold-formed lipped channel. Wind and earthquake
-  cases are not generated yet.
+  live loads go on the purlins over their tributary width, with the
+  combinations of RNC-07, NSCM (Managua) or ASCE 7-16. A wind page adds one load
+  case per wind direction, by RNC-07 Título IV or ASCE 7-16 chapter 27 (main
+  structure pressures on the purlins, the girts and the columns), and the end
+  walls can get their own columns and girts; default sections come
+  from the AISC library and a cold-formed lipped channel. Earthquake cases are
+  not generated yet.
 - **Materials** — `Steel01`, `Steel02`, `Concrete01`, `Concrete02`,
   `Concrete04` (Popovics), `ElasticPP`, `Hardening`, `Hysteretic`,
   `HystereticSM`, elastic uniaxial and `ElasticIsotropic`.

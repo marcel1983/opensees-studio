@@ -151,6 +151,7 @@ def test_every_member_is_in_one_group_with_its_section() -> None:
     section_of = {
         "columns": 1, "rafters": 2, "purlins": 3, "girts": 4, "roof_bracing": 5, "wall_bracing": 5,
     }  # fmt: skip
+    assert warehouse.members.pop("end_columns") == []  # none asked for
     for group, ids in warehouse.members.items():
         assert ids, group
         assert {by_id[i].section_id for i in ids} == {section_of[group]}
@@ -336,7 +337,9 @@ def test_planning_does_not_touch_the_project_and_applying_builds_it() -> None:
 
     plan.apply(project)
     assert [s.name for s in plan.sections] == ["W14X48", "W16X40", "C150X50X15X2.38", "L3X3X1_4"]
-    assert [g.name for g in project.groups] == list(GROUPS.values())
+    assert [g.name for g in project.groups] == [
+        name for key, name in GROUPS.items() if key != "end_columns"
+    ]
     assert project.coord_systems[-1].name == "Warehouse"
     assert [c.name for c in project.analyses] == ["DEAD", "LIVE"]
     dead, live = (p for p in project.load_patterns if isinstance(p, PlainLoadPattern))
@@ -430,4 +433,5 @@ def test_the_default_sections_follow_the_project_units() -> None:
     for name, section in a.items():
         assert pytest.approx(section.A * 1e6) == b[name].A
     assert a["C150X50X15X2.38"].shape.d == pytest.approx(0.150)
-    assert set(SECTION_KEYS) == {"column", "rafter", "purlin", "girt", "brace"}
+    assert set(SECTION_KEYS) == {"column", "rafter", "purlin", "girt", "brace", "end_column"}
+    assert "W8X31" not in a  # the end wall column section only with end wall columns

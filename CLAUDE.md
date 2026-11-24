@@ -203,7 +203,13 @@ These are non-obvious things that are easy to break if you don't know:
   generated warehouse a purlin or girt is pinned and is **not** a bracing point
   of the rafter or column unless it has a stabilising angle: the plan writes
   `SteelMemberDesign.length_minor`/`length_ltb`, because `core.design.members`
-  would take every member framing in as a brace.
+  would take every member framing in as a brace. Wind (`core.wind`, SI whatever
+  the project's units) is a net pressure per surface, positive pushing inwards;
+  `core.warehouse.wind_loads` puts it on the purlins, girts or columns. A wind
+  case carries its direction and its suctions, so the plan passes the wind
+  cases as `peak_cases` to the combination generator: one sign each, never
+  reversed. A warehouse without end wall columns must keep its node and element
+  ids (the end walls are built last), or `warehouse_gable` changes.
 - `Entity.id` is `PositiveInt` (>0). The sentinel `999999` is reserved
   for in-flight / temporary objects that haven't been assigned a real id.
 - Eigen determinism rule. ARPACK keeps its random start vector across
