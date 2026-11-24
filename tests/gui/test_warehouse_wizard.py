@@ -97,7 +97,13 @@ def test_the_fields_reach_the_spec(qtbot) -> None:  # type: ignore[no-untyped-de
         sheeting=False,
         purlin_sag_rods=2,
         girt_sag_rods=1,
+        tension_only_braces=True,  # asked, and ticked unless told otherwise
     )
+    wizard._roof_bracing.setChecked(False)
+    assert not wizard._tension_only.isEnabled()  # no bracing, nothing to ask
+    wizard._roof_bracing.setChecked(True)
+    wizard._tension_only.setChecked(False)
+    assert not wizard.spec().tension_only_braces
     assert wizard.section_choice() == dict.fromkeys(
         ("column", "rafter", "purlin", "girt", "brace", "end_column")
     )
@@ -209,9 +215,19 @@ def test_the_menu_builds_the_warehouse_in_one_undo_step(qtbot, monkeypatch) -> N
     assert {s.name for s in project.sections} >= {
         "W14X48", "W16X40", "C150X50X15X2.38", "W8X31"
     }  # fmt: skip
-    assert [c.name for c in project.analyses] == [
-        "DEAD", "LIVE", "WIND +X", "WIND -X", "WIND +Y", "WIND -Y"
-    ]  # fmt: skip
+    base = ["DEAD", "LIVE", "WIND +X", "WIND -X", "WIND +Y", "WIND -Y"]
+    assert [c.name for c in project.analyses][: len(base)] == base
+    # The braces work in tension only (the wizard asks, ticked): each combination
+    # is a case of its own, and the combination reads that case alone.
+    braces = {eid for g in project.groups if "bracing" in g.name for eid in g.element_ids}
+    assert braces and all(project.element(eid).tension_only for eid in braces)
+    analysed = {c.id: c for c in project.analyses[len(base) :]}
+    for combination in project.combinations:
+        if combination.combination_type == "LinearAdd":
+            (term,) = combination.terms
+            assert analysed[term.ref_id].name == f"Comb: {combination.name}"
+            assert analysed[term.ref_id].algorithm == "Newton"
+    assert len(analysed) == sum(c.combination_type == "LinearAdd" for c in project.combinations)
     names = [c.name for c in project.combinations]
     assert names[:2] == ["1.4CM", "1.2CM+1.6CV"]
     # A wind case enters with its own sign only: reversing a suction is not a wind.
@@ -544,7 +560,9 @@ def test_the_menu_adds_the_earthquake_cases_to_the_warehouse(qtbot, monkeypatch)
 
     mw._act_warehouse_wizard.trigger()
 
-    assert [c.name for c in project.analyses] == ["DEAD", "LIVE", "EQ X", "EQ Y"]
+    assert [c.name for c in project.analyses if not c.name.startswith("Comb: ")] == [
+        "DEAD", "LIVE", "EQ X", "EQ Y"
+    ]  # fmt: skip
     patterns = {p.name: p for p in project.load_patterns}
     assert patterns["EQ X"].nodal_loads and patterns["EQ Y"].nodal_loads
     names = [c.name for c in project.combinations]
@@ -629,7 +647,9 @@ def test_the_menu_adds_the_ash_case_to_the_warehouse(qtbot, monkeypatch) -> None
 
     mw._act_warehouse_wizard.trigger()
 
-    assert [c.name for c in project.analyses] == ["DEAD", "ROOF LIVE", "ASH"]
+    assert [c.name for c in project.analyses if not c.name.startswith("Comb: ")] == [
+        "DEAD", "ROOF LIVE", "ASH"
+    ]  # fmt: skip
     patterns = {p.name: p for p in project.load_patterns}
     assert len(patterns["ASH"].element_loads) == len(patterns["ROOF LIVE"].element_loads)
     # NSCM 7.5.1: the ash has its own load, CCV.

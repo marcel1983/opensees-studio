@@ -230,5 +230,6 @@ FRAME_OPTION_FIELDS: tuple[str, ...] = (
     "modifiers",
     "local_axis_angle",
     "auto_mesh",
+    "tension_only",
 )
 """Fields every frame element carries for the options above (left out of a dump at default)."""

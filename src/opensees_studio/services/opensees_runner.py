@@ -252,7 +252,10 @@ class OpenSeesRunner:
         if (
             isinstance(ops, ModuleType)
             and (self.project.ndm, self.project.ndf) == (2, 3)
-            and any(isinstance(el, TrussElement) for el in self.project.elements)
+            and any(
+                isinstance(el, TrussElement) or getattr(el, "tension_only", False)
+                for el in self.project.elements
+            )
         ):
             self._clear_truss_scratch()
         ops.wipe()
@@ -801,6 +804,8 @@ class OpenSeesRunner:
                     *self_weight_loads(self.project, pat.self_weight, self._self_weight_scope),
                     *tendon_uniform,
                 ]
+                if bars := self._tension_only_members():
+                    self._refuse_tension_only_loads(pat, bars)
                 for el in uniform:
                     # eleLoad -ele N -type -beamUniform wy wz wx
                     # (the pattern's self weight is a uniform load per frame).
@@ -842,6 +847,25 @@ class OpenSeesRunner:
                 self._emit_imposed_support_motion(pat)
             case _:
                 raise NotImplementedError(f"Pattern type not yet handled: {type(pat).__name__}")
+
+    def _refuse_tension_only_loads(self, pat: PlainLoadPattern, bars: set[int]) -> None:
+        """A tension-only member runs as a truss: no load along it but its self weight.
+
+        Its self weight goes to its joints (``core.self_weight``); a uniform, point
+        or distributed load of the pattern would have no span to act on.
+        """
+        loaded = (
+            {load.element_id for load in pat.element_loads}
+            | {pl.element_id for pl in pat.point_loads}
+            | {dl.element_id for dl in pattern_distributed_loads(self.project, pat)}
+        )
+        if loaded & bars:
+            raise ValueError(
+                f"Element {min(loaded & bars)} is tension only and carries a load along "
+                f"it in pattern {pat.id}; a tension-only member takes its self weight only "
+                "(at its joints). Put the load on the joints, or make the member a frame "
+                "again (Assign → Frame → Tension Only…)."
+            )
 
     def _emit_member_loads(
         self, pat: PlainLoadPattern, rigid: set[int], uniform: list[Any]
@@ -1241,12 +1265,20 @@ class OpenSeesRunner:
         ops.numberer(case.numberer)
         self._constraints(case)
         ops.test(case.test, *test_args(case.test, case.tolerance, case.max_iter))
-        if case.algorithm == "Linear" and self._one_sided_springs():
-            # A compression- or tension-only spring is nonlinear: a Linear solve
-            # would keep every one engaged whatever the structure does.
+        one_sided = [
+            what
+            for what, present in (
+                ("compression- or tension-only support springs", self._one_sided_springs()),
+                ("tension-only members", self._tension_only_members()),
+            )
+            if present
+        ]
+        if case.algorithm == "Linear" and one_sided:
+            # A one-sided spring or bar is nonlinear: a Linear solve would keep
+            # every one engaged whatever the structure does.
             ops.algorithm("Newton")
             self._case_notes.append(
-                f"Case '{case.name}' has compression- or tension-only support springs: "
+                f"Case '{case.name}' has {' and '.join(one_sided)}: "
                 "solved by Newton iteration instead of Linear."
             )
         else:
@@ -1816,6 +1848,9 @@ class OpenSeesRunner:
             full = state[nid]
             out[nid] = [full[slots[d]] * self._dof_sign[d] for d in range(ndf)]
         return out
+
+    def _tension_only_members(self) -> set[int]:
+        return {eid for eid, m in self._frame_plan.members.items() if m.tension_only is not None}
 
     def _one_sided_springs(self) -> list[Any]:
         return [s for s in self._frame_plan.springs if getattr(s, "one_sided", False)]

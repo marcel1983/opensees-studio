@@ -28,7 +28,7 @@ no shear areas) and trusses on an :class:`ElasticUniaxial`; shells; zero-length
 elements, bearings and links; constraints, rigid links and diaphragms; partial
 fixity springs, end offsets and insertion points; surface, temperature and
 imposed-displacement loads; time series other than Linear and Constant;
-integrators other than LoadControl; corotational members and corotational
+integrators other than LoadControl; tension-only members; corotational members and corotational
 trusses (``CorotTruss``: PyNite would solve them as a plain linear truss, which
 misses the geometric stiffening; they need OpenSeesPy with an iterative
 algorithm such as Newton); a joint lying
@@ -209,6 +209,11 @@ class PyNiteRunner:
             elif isinstance(element, FRAME_ELEMENT_CLASSES):
                 if getattr(element, "geom_transf", "Linear") == "Corotational":
                     problems.append(f"corotational members (element {element.id})")
+                if element.tension_only:
+                    problems.append(
+                        f"tension-only members (element {element.id}: needs OpenSeesPy, "
+                        "which solves them by Newton iteration)"
+                    )
                 if not element.end_offsets.is_default() or not element.insertion.is_default():
                     problems.append(f"end offsets and insertion points (element {element.id})")
                 for end in ("i", "j"):

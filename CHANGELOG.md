@@ -16,6 +16,19 @@ refused instead of silently downgraded).
   button opens Define → Section Library over the wizard (AISC shapes,
   cold-formed profiles, a section of your own) and what it adds is offered for
   every kind of member.
+- **Tension-only members** (Assign → Frame → Tension Only…): a rod or a slender
+  brace that goes slack in compression. It runs as a truss with the E and A of
+  its section and next to no stiffness in compression, its self weight goes to
+  its joints, and a static case of such a model is solved by Newton iteration.
+  Saved as `"tension_only": true` on the element (left out when false).
+- **The warehouse wizard asks whether the braces work in tension only**
+  (ticked by default). They then become tension-only members, and since which
+  diagonal of an X works depends on the whole load, **each combination is
+  analysed as a case of its own** ("Comb: " and its name, its patterns with
+  their factors, Newton): the combinations keep their names and read that
+  case, so envelopes and the steel check work as before.
+  `core.combination_cases.analysed_combinations` does it for any set of
+  combinations of static cases.
 
 ### Fixed
 

@@ -324,6 +324,10 @@ class WarehouseSpec:
     """Lines of sag rods (tensores) per bay: each one holds every purlin sideways."""
     girt_sag_rods: int = 0
     """Lines of sag rods per bay of wall, holding the girts."""
+    tension_only_braces: bool = False
+    """The X braces work in tension only (rods, slender angles): each is a
+    tension-only member, and with loads the plan analyses every combination as a
+    case of its own (:mod:`opensees_studio.core.combination_cases`)."""
 
     def __post_init__(self) -> None:
         if self.span <= 0.0:
@@ -822,6 +826,8 @@ def build_warehouse(
             extra["local_axis_angle"] = angle
         if group in WHOLE_MEMBERS:
             extra["auto_mesh"] = False
+        if spec.tension_only_braces and group in BRACING_GROUPS:
+            extra["tension_only"] = True
         elements.append(
             ElasticBeamColumn(
                 id=element_id, nodes=(i, j), section_id=int(sections[section]), **extra
@@ -2466,6 +2472,26 @@ def _plan_loads(
                         terms=[CombinationTerm(source="combination", ref_id=i) for i in ids],
                     )
                 )
+        tension_only = any(getattr(e, "tension_only", False) for e in plan.warehouse.elements)
+        if tension_only and plan.combinations:
+            # Which diagonal of an X works depends on the whole load: each
+            # combination is solved under its factored loads together.
+            from opensees_studio.core.combination_cases import analysed_combinations
+
+            analysed = analysed_combinations(
+                scratch.analyses,
+                plan.combinations,
+                first_case_id=scratch.next_analysis_id(),
+                options={"system": CASE_SYSTEM},
+            )
+            plan.cases.extend(analysed.cases)
+            scratch.analyses.extend(analysed.cases)
+            plan.combinations[:] = analysed.combinations
+            plan.notes.extend(analysed.notes)
+            plan.notes.append(
+                f"The braces work in tension only: {len(analysed.cases)} combination(s) "
+                "are analysed each as a case of its own."
+            )
 
     if loads.design_lengths:
         overrides = member_design_overrides(warehouse)

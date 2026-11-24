@@ -425,6 +425,15 @@ class WarehouseWizard(QWizard):
         self._roof_bracing.setChecked(True)
         self._wall_bracing = QCheckBox("X bracing in the side walls")
         self._wall_bracing.setChecked(True)
+        self._tension_only = QCheckBox("Braces work in tension only")
+        self._tension_only.setChecked(True)
+        self._tension_only.setToolTip(
+            "Rods and slender angles buckle at once in compression: each X then holds with "
+            "the diagonal the load stretches. The braces become tension-only members, and "
+            "each load combination is analysed as a case of its own (Newton iteration), "
+            "because which diagonal works depends on the whole load. Untick for braces "
+            "that also take compression."
+        )
         self._braced_bays = QLineEdit()
         self._braced_bays.setPlaceholderText("First and last bay")
         self._braced_bays.setToolTip(
@@ -443,6 +452,7 @@ class WarehouseWizard(QWizard):
         form.addRow("Bottom chord tie every (panel points):", self._chord_ties)
         form.addRow(self._roof_bracing)
         form.addRow(self._wall_bracing)
+        form.addRow(self._tension_only)
         form.addRow("Braced bays:", self._braced_bays)
 
         note = QLabel(
@@ -465,7 +475,7 @@ class WarehouseWizard(QWizard):
             self._girt_rods,
         ):
             spin.valueChanged.connect(self._refresh)
-        for box in (self._roof_bracing, self._wall_bracing, self._sheeting):
+        for box in (self._roof_bracing, self._wall_bracing, self._sheeting, self._tension_only):
             box.toggled.connect(self._refresh)
         self._braced_bays.textChanged.connect(self._refresh)
         self._page_secondary = page
@@ -1191,6 +1201,7 @@ class WarehouseWizard(QWizard):
             braced_bays=self._bays(),
             end_wall_column_spacing=self._end_wall_spacing.value(),
             sheeting=self._sheeting.isChecked(),
+            tension_only_braces=self._tension_only.isChecked(),
             purlin_sag_rods=self._purlin_rods.value(),
             girt_sag_rods=self._girt_rods.value(),
             **truss,
@@ -1201,6 +1212,9 @@ class WarehouseWizard(QWizard):
         for widget in (self._truss_type, self._truss_bottom, self._truss_depth, self._chord_ties):
             widget.setEnabled(truss)
         self._rafter_fly.setEnabled(not truss)
+        self._tension_only.setEnabled(
+            self._roof_bracing.isChecked() or self._wall_bracing.isChecked()
+        )
         for key, combo in self._section_combos.items():
             self._sections_form.setRowVisible(combo, self._uses_section(key))
         try:

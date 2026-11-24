@@ -16,7 +16,7 @@ from opensees_studio.commands import (
     AssignSectionCommand,
     ReplaceElementsCommand,
 )
-from opensees_studio.core import BeamWithHingesElement, FrameMember
+from opensees_studio.core import BeamWithHingesElement, ElasticBeamColumn, FrameMember
 from opensees_studio.core.frame_members import connectivity_offsets
 from opensees_studio.core.self_weight import section_weight_per_length
 from opensees_studio.views.controllers.shell import Shell
@@ -32,6 +32,7 @@ from opensees_studio.views.dialogs import (
     FrameModifiersDialog,
     FrameReleasesDialog,
 )
+from opensees_studio.views.i18n import tr
 
 
 class MembersController(QObject):
@@ -250,6 +251,38 @@ class MembersController(QObject):
         if not ok:
             return
         self._assign_element_fields("Auto Mesh", ids, {"auto_mesh": choice == choices[0]})
+
+    def assign_tension_only(self) -> None:
+        """Assign > Frame > Tension Only: rods and slender braces that buckle in compression."""
+        project = self._vm.project
+        ids = {
+            i
+            for i in self._selected_accepting({"tension_only": True})
+            if project is not None and isinstance(project.element(i), ElasticBeamColumn)
+        }
+        if project is None or not ids:
+            QMessageBox.information(
+                self._window,
+                tr("Tension Only"),
+                tr("Select one or more elastic frame elements first."),
+            )
+            return
+        choices = [
+            tr("Frame member (tension and compression)"),
+            tr("Tension only (a truss that goes slack in compression)"),
+        ]
+        current = all(getattr(project.element(i), "tension_only", False) for i in ids)
+        choice, ok = QInputDialog.getItem(
+            self._window,
+            tr("Tension Only"),
+            tr("{n} member(s):").format(n=len(ids)),
+            choices,
+            1 if current else 0,
+            False,
+        )
+        if not ok:
+            return
+        self._assign_element_fields("Tension Only", ids, {"tension_only": choice == choices[1]})
 
     # ── what turns a member into something else ───────────────────────
     def assign_hinge(self) -> None:

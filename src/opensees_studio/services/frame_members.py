@@ -66,6 +66,12 @@ rest from the joint). So at a constrained joint (:func:`constrained_joints`):
   (measured; a stiffer spring loses more to round-off than it gains). A fibre
   member, or such an end with a rigid end zone, is refused with a remedy.
 
+**Tension only.** A member with ``tension_only`` runs as ``element truss``
+between its two joints on a :class:`TensionOnlyBar` material, so its releases,
+offsets and bending stiffness do not apply; its ``localForce`` has the frame's
+layout (zero shears and moments). The runner solves a static case of such a
+model by Newton iteration and lumps the member's uniform loads on its joints.
+
 **Modifiers** become a derived ``section Elastic`` per distinct (section,
 modifiers) pair, or scaled inline properties for ``beamWithHinges``.
 """
@@ -116,6 +122,11 @@ _ZERO_LENGTH_DIR = {"T": 4, "M2": 5, "M3": 6}
 
 _ALIGN_TOL = 1e-9
 
+#: Compression stiffness of a tension-only bar, as a share of its tension one. Not
+#: zero: the two diagonals of an X both shorten under a load that only one of
+#: them resists, and with nothing left the bay would be a mechanism.
+TENSION_ONLY_RESIDUAL = 1.0e-6
+
 
 @dataclass(frozen=True)
 class ExtraNode:
@@ -155,6 +166,25 @@ class DerivedSection:
     """Arguments after ``"Elastic", tag`` of ``ops.section``."""
 
 
+@dataclass(frozen=True)
+class TensionOnlyBar:
+    """A tension-only frame member as ``element truss`` on its own material.
+
+    ``uniaxialMaterial Elastic tag E 0 E*TENSION_ONLY_RESIDUAL``: OpenSees takes
+    the positive branch at zero strain, so the bar starts engaged, and Newton
+    lets it go slack when it shortens.
+    """
+
+    material_tag: int
+    E: float
+    A: float
+    rho: float
+
+    @property
+    def e_negative(self) -> float:
+        return self.E * TENSION_ONLY_RESIDUAL
+
+
 @dataclass
 class MemberPlan:
     """What the ``element`` command of one frame member uses."""
@@ -173,6 +203,8 @@ class MemberPlan:
     element_releases: dict[str, int] = field(default_factory=dict)
     """``-releasez`` / ``-releasey`` (2D: ``-release``) code (1 end i, 2 end j, 3 both) of
     an elastic member released inside the element (see "Releases at a constrained joint")."""
+    tension_only: TensionOnlyBar | None = None
+    """A tension-only member: it runs as this truss instead (see "Tension only")."""
 
     @property
     def release_args(self) -> tuple[Any, ...]:
@@ -339,6 +371,14 @@ def check_frame_options(project: Project) -> list[str]:
                     f"Element {el.id}: a 2D frame can only release M3 (got {', '.join(released)} "
                     f"at end {end})."
                 )
+        if el.tension_only:
+            section_id = getattr(el, "section_id", None)
+            section = next((s for s in project.sections if s.id == section_id), None)
+            if not isinstance(el, ElasticBeamColumn) or not isinstance(section, ElasticSection):
+                problems.append(
+                    f"Element {el.id}: tension only is for an elastic frame with an elastic "
+                    "section."
+                )
         if project.ndm == 2 and el.insertion.offset_3:
             problems.append(
                 f"Element {el.id}: a 2D frame cannot be offset along local 3 (out of plane)."
@@ -379,6 +419,13 @@ def plan_frame_members(project: Project, pattern_ids: set[int] | None = None) ->
 
     for el in project.elements:
         if not isinstance(el, FrameMember):
+            continue
+        if el.tension_only:
+            plan.members[el.id] = MemberPlan(
+                layout=None,
+                nodes=(el.nodes[0], el.nodes[1]),
+                tension_only=_tension_only_bar(project, el, material_tags.take()),
+            )
             continue
         layout = member_layout(project, el)
         member = MemberPlan(layout=layout, nodes=(el.nodes[0], el.nodes[1]))
@@ -700,6 +747,19 @@ def _timoshenko_args(
         section.Iz * mods.i33,
         shear(section.As2, mods.as2),
         shear(section.As3, mods.as3),
+    )
+
+
+def _tension_only_bar(project: Project, el: Any, material_tag: int) -> TensionOnlyBar:
+    """The truss a tension-only member runs as: its section's E and A, its own mass."""
+    section = next(s for s in project.sections if s.id == el.section_id)
+    assert isinstance(section, ElasticSection)  # check_frame_options refused anything else
+    mods = el.modifiers
+    return TensionOnlyBar(
+        material_tag=material_tag,
+        E=float(section.E),
+        A=float(section.A) * mods.area,
+        rho=float(el.rho) * mods.mass,
     )
 
 

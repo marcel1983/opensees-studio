@@ -50,6 +50,13 @@ AUTO_MESH_DESCRIPTION = (
     "(core.mesh.pre_run_auto_mesh). Off: it is never divided automatically."
 )
 
+TENSION_ONLY_DESCRIPTION = (
+    "An axial bar that takes tension only, like a rod or a slender brace: it runs as a "
+    "truss whose stiffness in compression is next to nothing, and a static case solves it "
+    "by Newton iteration (services.frame_members). Elastic frames only; its bending, end "
+    "releases and offsets are ignored."
+)
+
 
 class TrussElement(Entity):
     """Two-node truss with axial stiffness only — ``element truss``."""
@@ -115,6 +122,7 @@ class FrameMember(Entity):
         ),
     )
     auto_mesh: bool = Field(default=True, description=AUTO_MESH_DESCRIPTION)
+    tension_only: bool = Field(default=False, description=TENSION_ONLY_DESCRIPTION)
 
     serialize_without_defaults = omit_when_default(*FRAME_OPTION_FIELDS)
 
