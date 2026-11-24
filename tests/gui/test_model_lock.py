@@ -182,7 +182,7 @@ def test_saving_a_changed_viewport_keeps_the_results_and_the_lock(
     _solve(window)
     window._main_canvas.set_view_settings(ViewSettings(show_grids=False))
 
-    assert window._on_save()
+    assert window.files.save()
     assert window._vm.project.view is not None
     assert window.results.cases.current(window._vm.project)
 

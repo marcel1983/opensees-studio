@@ -335,7 +335,7 @@ def _cantilever_window(qtbot, tmp_path):  # type: ignore[no-untyped-def]
     shutil.copy(EXAMPLES / "cantilever.osmodel", target)
     window = MainWindow()
     qtbot.addWidget(window)
-    assert window.open_project(target)
+    assert window.files.open_project(target)
     project = window._vm.project
     project.combinations.extend(
         [

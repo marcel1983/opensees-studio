@@ -70,7 +70,7 @@ class ActionSpec:
 
     ``id`` is ``"<area>.<name>"`` and is how code and tests ask for the action
     (``window.action("file.save")``). ``handler`` names the method that runs it:
-    a method of the window (``"_on_save"``) or, dotted, of one of its
+    a method of the window (``"_on_quit"``) or, dotted, of one of its
     controllers (``"transforms.move"`` is ``window.transforms.move``).
 
     ``needs`` is what enables it. ``Needs.NOTHING`` leaves the action alone (it

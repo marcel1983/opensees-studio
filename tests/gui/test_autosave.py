@@ -49,11 +49,11 @@ def test_a_saved_project_gets_its_copy_beside_it_and_save_removes_it(window, tmp
     path = tmp_path / "frame.osmodel"
     window._vm.save(path)
     before = path.read_bytes()
-    window._autosave()  # nothing unsaved: nothing written
+    window.files.autosave()  # nothing unsaved: nothing written
     assert not run_snapshot_path(path).exists()
 
     _add_node(window)
-    window._autosave()
+    window.files.autosave()
     assert run_snapshot_path(path).is_file()
     assert path.read_bytes() == before  # the project file is never touched
     window._vm.save(path)
@@ -65,7 +65,7 @@ def test_a_never_saved_project_is_offered_on_the_start_page(window, qtbot) -> No
 
     window._vm.new_project()
     _add_node(window)
-    window._autosave()
+    window.files.autosave()
     snapshot = run_snapshot_path(None)
     assert snapshot.is_file()
 

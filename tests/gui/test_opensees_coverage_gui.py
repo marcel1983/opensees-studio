@@ -212,7 +212,7 @@ def test_custom_commands_dialog_and_the_trust_prompt(qtbot, monkeypatch, tmp_pat
     project.custom_commands = [CustomCommandBlock(id=1, name="foreign", code="pass")]
     save_project(project, path)
     monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: QMessageBox.StandardButton.No)
-    mw.open_project(path)
+    mw.files.open_project(path)
     assert [b.enabled for b in mw._vm.project.custom_commands] == [False]
 
 

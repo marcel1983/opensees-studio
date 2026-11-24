@@ -24,7 +24,7 @@ def window(qtbot):  # type: ignore[no-untyped-def]
 
 
 def test_file_new_starts_with_the_default_materials(window: MainWindow) -> None:
-    window._on_new()
+    window.files.new_blank()
     assert [m.name for m in window._vm.project.materials] == NAMES
     assert not window._vm.is_dirty
 

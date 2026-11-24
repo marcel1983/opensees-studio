@@ -48,7 +48,7 @@ def test_switching_to_srss_on_space_frame_3d_shows_the_warning_after_a_run(qtbot
     shutil.copy(EXAMPLES / "space_frame_3d.osmodel", path)
     window = MainWindow()
     qtbot.addWidget(window)
-    assert window.open_project(path)
+    assert window.files.open_project(path)
     saved = next(c for c in window._vm.project.analyses if isinstance(c, ResponseSpectrumCase))
     logs: list[str] = []
     window._runner.log.connect(logs.append)

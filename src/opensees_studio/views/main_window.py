@@ -12,7 +12,6 @@ from __future__ import annotations
 import contextlib
 from collections.abc import Iterator, Sequence
 from functools import partial
-from pathlib import Path
 from typing import Any, ClassVar
 
 from PySide6.QtCore import QEvent, QPoint, QPointF, QSettings, QSignalBlocker, Qt, QTimer
@@ -30,7 +29,6 @@ from PySide6.QtWidgets import (
     QApplication,
     QDialog,
     QDockWidget,
-    QFileDialog,
     QLabel,
     QMainWindow,
     QMenu,
@@ -45,7 +43,6 @@ from PySide6.QtWidgets import (
 from opensees_studio import __version__
 from opensees_studio.commands import (
     AddNodesCommand,
-    SetProjectMetaCommand,
     SetRestraintCommand,
 )
 from opensees_studio.commands.generated import insert_generated
@@ -69,9 +66,7 @@ from opensees_studio.core.materials.library import is_uniaxial
 from opensees_studio.core.object_info import element_info, node_info
 from opensees_studio.core.view_settings import ViewSettings
 from opensees_studio.services import (
-    PROJECT_FILE_SUFFIX,
     engines,
-    load_project,
     run_snapshot_path,
 )
 from opensees_studio.services.results import (
@@ -101,6 +96,7 @@ from opensees_studio.views.controllers.design import DesignController
 from opensees_studio.views.controllers.display import DisplayController
 from opensees_studio.views.controllers.drawing import DrawingController
 from opensees_studio.views.controllers.exports import ExportsController
+from opensees_studio.views.controllers.files import FilesController
 from opensees_studio.views.controllers.generators import GeneratorsController
 from opensees_studio.views.controllers.grids import GridsController
 from opensees_studio.views.controllers.groups import GroupsController
@@ -124,10 +120,8 @@ from opensees_studio.views.dialogs import (
     FrameWizard,
     MoveDialog,
     PerformanceDialog,
-    ProjectInfoDialog,
     ReplicateDialog,
 )
-from opensees_studio.views.dialogs.batch_run import BatchRunDialog
 from opensees_studio.views.dialogs.load_combinations import LoadCombinationsDialog
 from opensees_studio.views.dialogs.load_display import LoadDisplayDialog
 from opensees_studio.views.dialogs.object_info import ObjectInfoDialog
@@ -318,22 +312,22 @@ class MainWindow(QMainWindow):
         #: Define → Coordinate System/Grids and Grid Wizard; View → Show Grids and labels.
         self.grids = GridsController(
             shell,
-            new_project=lambda: self._on_new(),
+            new_project=lambda: self.files.new_blank(),
             sync_actions=lambda: self._sync_grid_actions(),
         )
         self.groups = GroupsController(shell)
         self.imports = ImportsController(
             shell,
-            confirm_discard=lambda action: self._confirm_discard_changes(action),
+            confirm_discard=lambda action: self.files.confirm_discard(action),
             apply_view_settings=lambda: self._apply_project_view_settings(),
         )
-        self.library = LibraryController(shell, new_project=lambda: self._on_new())
+        self.library = LibraryController(shell, new_project=lambda: self.files.new_blank())
         self.members = MembersController(shell)
-        self.patterns = PatternsController(shell, new_project=self._on_new)
+        self.patterns = PatternsController(shell, new_project=lambda: self.files.new_blank())
         #: The camera, the working plane and its level, a grid line view, what is hidden.
         self.viewport = ViewportController(shell, action=lambda action_id: self.action(action_id))
         #: The results on screen: the case shown, its panels, its reactions.
-        self.results_view = ResultsViewController(
+        self.results_view: ResultsViewController = ResultsViewController(
             shell,
             results=self.results,
             lock=lambda: self.model_lock.lock_for_results(),
@@ -348,7 +342,7 @@ class MainWindow(QMainWindow):
             shell, refresh=lambda converter: self._refresh_displayed_units(converter)
         )
         #: The post-processing views of the Display menu and the dock each one opens.
-        self.display = DisplayController(
+        self.display: DisplayController = DisplayController(
             shell,
             results=self.results,
             diagram=self._diagram_renderer,
@@ -363,7 +357,7 @@ class MainWindow(QMainWindow):
             set_display_units=lambda units: self.units.set_display(units),
         )
         #: Options → Lock Model: results make an edit of the model ask first.
-        self.model_lock = ModelLockController(
+        self.model_lock: ModelLockController = ModelLockController(
             shell,
             results=self.results,
             drop_results=lambda: self.results_view.drop(),
@@ -376,10 +370,21 @@ class MainWindow(QMainWindow):
             stability=self._stability,
             results=self.results,
             finished=lambda results: self.results_view.on_finished(results),
-            new_project=lambda: self._on_new(),
+            new_project=lambda: self.files.new_blank(),
             select_rows=lambda nodes, elements: self._select_report_row(nodes, elements),
             show_mechanism=lambda finding: self.display.mechanism(finding),
             console=lambda text: self._console.appendPlainText(text),
+        )
+        #: The project file: New, Open, Open Recent, Save, the recovery copy.
+        self.files: FilesController = FilesController(
+            shell,
+            recent=self._recent,
+            recent_changed=lambda: self._start_page.refresh(),
+            busy=lambda message: self._busy(message),
+            store_view=lambda: self._store_view_settings_in_project(),
+            restore_view=lambda: self._apply_project_view_settings(),
+            offer_stored_results=lambda: self.results_view.offer_stored(),
+            is_running=lambda: self._runner.is_running,
         )
         #: What the Properties dock changes in the model.
         self.property_edits = PropertyEditsController(shell)
@@ -412,7 +417,7 @@ class MainWindow(QMainWindow):
         self._refresh_action_enablement()
         self._restore_session_state()
         self._autosave_timer = QTimer(self)
-        self._autosave_timer.timeout.connect(self._autosave)
+        self._autosave_timer.timeout.connect(self.files.autosave)
         self._set_autosave(self._stored_autosave_minutes(), remember=False)
         # Every action exists now: its keys are the defaults a profile starts from.
         self._default_shortcuts = {
@@ -431,19 +436,20 @@ class MainWindow(QMainWindow):
         #: one and follows focus to a secondary ViewWindow when one is active.
         self._active_canvas: ModelCanvas = self._main_canvas
         # With no project the start page takes the viewport's place.
+        #: The recent projects, shared by the start page and File → Open Recent.
         self._recent = RecentFiles()
         self._start_page = StartPage(
             {
                 "new_model": self._on_new_model,
-                "new_3d": self._on_new,
+                "new_3d": lambda: self.files.new_blank(),
                 "new_2d": self._on_new_2d,
-                "new_truss": self._on_new_2d_truss,
-                "open": self._on_open,
+                "new_truss": lambda: self.files.new_2d_truss(),
+                "open": lambda: self.files.open_file(),
             },
             self._recent,
         )
-        self._start_page.openRequested.connect(self._on_open_recent)
-        self._start_page.recoverRequested.connect(self._on_recover_untitled)
+        self._start_page.openRequested.connect(lambda path: self.files.open_recent(path))
+        self._start_page.recoverRequested.connect(lambda: self.files.recover_untitled())
         untitled = run_snapshot_path(None)
         self._start_page.set_recovery(untitled if untitled.is_file() else None)
         self._central = QStackedWidget(self)
@@ -794,7 +800,9 @@ class MainWindow(QMainWindow):
             ]
         )
         self._menu_recent = m_file.addMenu("Open &Recent")
-        self._menu_recent.aboutToShow.connect(self._fill_recent_menu)
+        self._menu_recent.aboutToShow.connect(
+            lambda: self.files.fill_recent_menu(self._menu_recent)
+        )
         self._menu_recent.menuAction().setProperty(TOPIC_PROPERTY, "file.recent")
         m_file.addSeparator()
         m_file.addActions([act("file.save"), act("file.save_as")])
@@ -1677,11 +1685,6 @@ class MainWindow(QMainWindow):
         self._help_controller.install()
 
     # ── slots: file ──────────────────────────────────────────────────
-    def _on_new(self) -> None:
-        if not self._confirm_discard_changes("Creating a new project"):
-            return
-        self._vm.new_project(dead_case=True, default_materials=True)
-
     def _on_new_model(self) -> None:
         """File → New Model: units and a template, as SAP2000 starts a model."""
         from opensees_studio.views.dialogs.new_model import NewModelDialog
@@ -1694,7 +1697,7 @@ class MainWindow(QMainWindow):
         dlg = NewModelDialog(units, parent=self)
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
-        if not self._confirm_discard_changes("Creating a new model"):
+        if not self.files.confirm_discard("Creating a new model"):
             return
         units = dlg.units()
         QSettings().setValue(NEW_MODEL_UNITS_KEY, units.value)
@@ -1766,144 +1769,11 @@ class MainWindow(QMainWindow):
         turns "new 2D frame" into a frame. Cancelling leaves the empty project,
         which is still the right start for drawing by hand.
         """
-        if not self._confirm_discard_changes("Creating a new 2D frame"):
+        if not self.files.confirm_discard("Creating a new 2D frame"):
             return
         self._vm.new_project(ndm=2, ndf=3, dead_case=True, default_materials=True)
         self._log("New 2D frame project (ndm = 2, ndf = 3).")
         self._create_portal_frame(with_grid=True)
-
-    def _on_new_2d_truss(self) -> None:
-        """Planar truss model — (ndm=2, ndf=2): only Ux, Uz per joint (the X-Z plane).
-
-        Matches OpenSees's ``model BasicBuilder -ndm 2 -ndf 2`` from
-        the Basic Truss Example and keeps the stiffness matrix well
-        posed (no empty rotational rows).
-        """
-        if not self._confirm_discard_changes("Creating a new project"):
-            return
-        self._vm.new_project(ndm=2, ndf=2, dead_case=True, default_materials=True)
-        self._log("New empty project.")
-
-    def _on_open(self) -> None:
-        if not self._confirm_discard_changes("Opening another project"):
-            return
-        path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Open project",
-            "",
-            f"OpenSees Studio model (*{PROJECT_FILE_SUFFIX});;All files (*)",
-        )
-        if not path:
-            return
-        self.open_project(path)
-
-    def _on_open_recent(self, path: str) -> None:
-        """File → Open Recent, or a project picked on the start page."""
-        if not self._confirm_discard_changes("Opening another project"):
-            return
-        self.open_project(path)
-
-    def _fill_recent_menu(self) -> None:
-        """Rebuild File → Open Recent from the stored list each time it opens."""
-        menu = self._menu_recent
-        menu.clear()
-        paths = self._recent.paths()
-        for number, path in enumerate(paths, 1):
-            action = menu.addAction(f"&{number % 10} {path.name}")
-            action.setToolTip(str(path))
-            action.setStatusTip(str(path))
-            action.triggered.connect(lambda _checked=False, p=str(path): self._on_open_recent(p))
-        if not paths:
-            menu.addAction("No recent projects").setEnabled(False)
-        menu.addSeparator()
-        clear = menu.addAction("&Clear List")
-        clear.setEnabled(bool(paths))
-        clear.triggered.connect(self._on_clear_recent)
-
-    def _on_clear_recent(self) -> None:
-        self._recent.clear()
-        self._start_page.refresh()
-
-    def open_project(self, path: str | Path) -> bool:
-        """Open ``path``; offer to restore a newer pre-run snapshot if one exists.
-
-        Returns True when the project was opened (with or without the
-        recovered changes).
-        """
-        try:
-            with self._busy(f"Opening {Path(path).name}…"):
-                self._vm.open(path)
-            self._log(f"Opened: {path}")
-        except Exception as exc:
-            QMessageBox.critical(self, "Open failed", str(exc))
-            return False
-        self._recent.add(path)
-        snapshot = self._vm.pending_run_snapshot()
-        if snapshot is None:
-            self._apply_project_view_settings()
-            self._confirm_custom_commands()
-            self.results_view.offer_stored()
-            return True
-        if self._ask_restore_snapshot(snapshot):
-            try:
-                self._vm.restore_run_snapshot()
-                self._log(f"Restored unsaved changes from {snapshot.name} (not yet saved).")
-            except Exception as exc:
-                QMessageBox.critical(self, "Restore failed", str(exc))
-        else:
-            self._vm.discard_run_snapshot()
-            self._log(f"Discarded {snapshot.name}.")
-        self._apply_project_view_settings()
-        self._confirm_custom_commands()
-        self.results_view.offer_stored()
-        return True
-
-    def _on_run_batch(self) -> None:
-        """File → Run Batch…"""
-        start_dir = self._vm.path.parent if self._vm.path is not None else None
-        dlg = BatchRunDialog(self, start_dir=start_dir)
-        try:
-            dlg.exec()
-        finally:
-            dlg.deleteLater()
-
-    def _confirm_custom_commands(self) -> None:
-        """A file's custom Python blocks run only once the user trusts them."""
-        project = self._vm.project
-        blocks = [b for b in project.custom_commands if b.enabled] if project is not None else []
-        if not blocks:
-            return
-        names = ", ".join(b.name or str(b.id) for b in blocks)
-        answer = QMessageBox.warning(
-            self,
-            "Custom OpenSees commands",
-            f"This project contains {len(blocks)} custom Python block(s) ({names}) that run "
-            "on this computer when the model is analysed.\n\nRun them only if you trust "
-            "where the file came from. Enable them?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        if answer != QMessageBox.StandardButton.Yes:
-            for block in blocks:
-                block.enabled = False
-            self._log(
-                f"Custom command blocks disabled: {names}. "
-                "Enable them in Define → Custom OpenSees Commands."
-            )
-
-    def _ask_restore_snapshot(self, snapshot: Path) -> bool:
-        """Ask whether the newer pre-run snapshot should replace the file's content."""
-        answer = QMessageBox.question(
-            self,
-            "Recover unsaved changes",
-            "A snapshot written before the last analysis run is newer than this "
-            "project file.\n\nRestore unsaved changes from the last analysis run?\n\n"
-            f"Snapshot: {snapshot}\n"
-            "Yes loads the snapshot as unsaved changes; No deletes it.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.Yes,
-        )
-        return answer == QMessageBox.StandardButton.Yes
 
     def closeEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         """Close: confirm unsaved work for a user-initiated close only.
@@ -1916,7 +1786,7 @@ class MainWindow(QMainWindow):
         """
         user_initiated = event.spontaneous() or self._user_close_requested
         self._user_close_requested = False
-        if user_initiated and not self._confirm_discard_changes("Closing the application"):
+        if user_initiated and not self.files.confirm_discard("Closing the application"):
             event.ignore()
             return
         self._vm.discard_run_snapshot()
@@ -1947,91 +1817,11 @@ class MainWindow(QMainWindow):
         self._user_close_requested = True
         self.close()
 
-    def _confirm_discard_changes(self, action: str) -> bool:
-        """Ask before throwing away unsaved work. True when it is safe to go on.
-
-        ``is_dirty`` used to drive only the ``*`` in the window title, so
-        closing, opening and File → New dropped the model without a word.
-        Returns False when the user cancels, or chooses Save and the save
-        does not go through (dialog cancelled, write failed).
-        """
-        if self._vm.project is None or not self._vm.is_dirty:
-            return True
-        answer = QMessageBox.warning(
-            self,
-            "Unsaved changes",
-            f"{action} will discard changes that have not been saved.\n\nSave the project first?",
-            QMessageBox.StandardButton.Save
-            | QMessageBox.StandardButton.Discard
-            | QMessageBox.StandardButton.Cancel,
-            QMessageBox.StandardButton.Save,
-        )
-        if answer == QMessageBox.StandardButton.Cancel:
-            return False
-        if answer == QMessageBox.StandardButton.Save:
-            return self._on_save()
-        return True
-
-    def _on_save(self) -> bool:
-        """Save to the current path (asking for one if needed). True when written."""
-        if self._vm.path is None:
-            return self._on_save_as()
-        try:
-            self._store_view_settings_in_project()
-            self._warn_case_references()
-            self._vm.save()
-            self._log(f"Saved: {self._vm.path}")
-        except Exception as exc:
-            QMessageBox.critical(self, "Save failed", str(exc))
-            return False
-        return True
-
-    def _on_project_info(self) -> None:
-        """File → Project Information: the cover data of the calculation report."""
-        project = self._vm.project
-        if project is None:
-            return
-        dialog = ProjectInfoDialog(project.meta, self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        self._vm.apply_command(SetProjectMetaCommand(self._vm, dialog.meta()))
-        self._log("Project information updated.")
-
-    def _on_save_as(self) -> bool:
-        path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Save project as",
-            "",
-            f"OpenSees Studio model (*{PROJECT_FILE_SUFFIX})",
-        )
-        if not path:
-            return False
-        try:
-            self._store_view_settings_in_project()
-            self._warn_case_references()
-            out = self._vm.save(path)
-            self._log(f"Saved: {out}")
-        except Exception as exc:
-            QMessageBox.critical(self, "Save failed", str(exc))
-            return False
-        self._recent.add(out)
-        return True
-
     def report_results(self) -> list[Any]:
         """The results the report includes: every current case, plus the one on screen."""
         return self.results.for_report(self._vm.project)
 
     # ── slots: edit ──────────────────────────────────────────────────
-    def _warn_case_references(self) -> None:
-        project = self._vm.project
-        if project is None:
-            return
-        errors = [
-            error for case in project.analyses for error in project.case_reference_errors(case)
-        ]
-        if errors:
-            QMessageBox.warning(self, "Saving with invalid case references", "\n".join(errors))
-
     # ── slots: select menu ──────────────────────────────────────────
     def _build_select_menu(self, menu: Any) -> None:
         """Select: everything, by property, by load pattern, inverted or the previous one.
@@ -2669,7 +2459,7 @@ class MainWindow(QMainWindow):
     # ── View → Grid Line View ───────────────────────────────────────
     def _on_add_node(self) -> None:
         if self._vm.project is None:
-            self._on_new()
+            self.files.new_blank()
         proj = self._vm.project
         assert proj is not None
         dlg = AddNodeDialog(
@@ -2726,7 +2516,7 @@ class MainWindow(QMainWindow):
     def _on_load_combinations(self) -> None:
         """Define → Load Combinations…"""
         if self._vm.project is None:
-            self._on_new()
+            self.files.new_blank()
         dlg = LoadCombinationsDialog(self._vm, self)
         try:
             dlg.exec()
@@ -2834,32 +2624,6 @@ class MainWindow(QMainWindow):
             self._autosave_timer.start(minutes * 60_000)
         else:
             self._autosave_timer.stop()
-
-    def _autosave(self) -> None:
-        """Write the recovery copy of unsaved changes (the project file is not touched).
-
-        It is the same copy a run writes before it starts: opening the project
-        after a crash offers it, and a save removes it.
-        """
-        if self._vm.project is None or not self._vm.is_dirty or self._runner.is_running:
-            return
-        try:
-            path = self._vm.write_run_snapshot()
-        except OSError as exc:
-            self._log(f"Autosave failed: {exc}")
-            return
-        self.statusBar().showMessage(f"Recovery copy saved ({path.name}).", 3000)
-
-    def _on_recover_untitled(self) -> None:
-        """Start page → Recover: the autosaved never-saved project, as unsaved changes."""
-        snapshot = run_snapshot_path(None)
-        try:
-            project = load_project(snapshot)
-        except Exception as exc:
-            QMessageBox.critical(self, "Recover failed", str(exc))
-            return
-        self._vm.adopt(project)
-        self._log(f"Recovered the unsaved project from {snapshot} (not yet saved).")
 
     def _show_reactions_dock(self) -> None:
         """Bring the Reactions panel to the front."""

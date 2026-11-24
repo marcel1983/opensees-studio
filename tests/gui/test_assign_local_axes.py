@@ -34,7 +34,7 @@ def test_the_action_stores_the_angle_and_undoes_it(qtbot, monkeypatch) -> None: 
 
     window = MainWindow()
     qtbot.addWidget(window)
-    assert window.open_project(EXAMPLE)
+    assert window.files.open_project(EXAMPLE)
     project = window._vm.project
     element = next(e for e in project.elements if isinstance(e, FRAME_ELEMENT_CLASSES))
     window._canvas.selection.select_element(element.id)
@@ -60,7 +60,7 @@ def test_the_property_editor_edits_the_local_axis_angle(qtbot) -> None:  # type:
 
     window = MainWindow()
     qtbot.addWidget(window)
-    assert window.open_project(EXAMPLE)
+    assert window.files.open_project(EXAMPLE)
     project = window._vm.project
     element = next(e for e in project.elements if isinstance(e, FRAME_ELEMENT_CLASSES))
     window._canvas.selection.select_element(element.id)

@@ -75,7 +75,7 @@ def test_normal_run_through_qprocess_updates_the_results_views(qtbot, tmp_path) 
     path = _copy_example("cantilever", tmp_path)
     window = MainWindow()
     qtbot.addWidget(window)
-    assert window.open_project(path)
+    assert window.files.open_project(path)
     case = window._vm.project.analyses[0]
     assert not window._act_show_deformed.isEnabled()
 
@@ -106,7 +106,7 @@ def test_hard_exit_in_the_child_leaves_the_window_alive_with_a_report(
     window = MainWindow()
     qtbot.addWidget(window)
     window.show()
-    assert window.open_project(path)
+    assert window.files.open_project(path)
     case = next(c for c in window._vm.project.analyses if c.id == 3)
     nodes_before = [n.model_dump() for n in window._vm.project.nodes]
 
@@ -145,7 +145,7 @@ def test_hard_exit_without_stderr_output_shows_the_placeholder(
     window = MainWindow()
     qtbot.addWidget(window)
     window.show()
-    assert window.open_project(path)
+    assert window.files.open_project(path)
     case = next(c for c in window._vm.project.analyses if c.id == 3)
     quiet = case.model_copy(update={"rayleigh_mode1_damping": None})
 
@@ -168,7 +168,7 @@ def test_failure_box_opens_in_front_of_the_run_dialog(qtbot, tmp_path, monkeypat
     window = MainWindow()
     qtbot.addWidget(window)
     window.show()
-    assert window.open_project(path)
+    assert window.files.open_project(path)
     seen: dict[str, object] = {}
 
     def drive_the_dialog() -> None:
@@ -210,7 +210,7 @@ def test_real_opensees_crash_shows_its_own_message_in_front(qtbot, tmp_path, mon
     window = MainWindow()
     qtbot.addWidget(window)
     window.show()
-    assert window.open_project(path)
+    assert window.files.open_project(path)
     seen: dict[str, object] = {}
 
     def drive_the_dialog() -> None:
@@ -263,7 +263,7 @@ def test_cancel_during_a_long_transient_ends_with_cancelled(qtbot, tmp_path) -> 
     window = MainWindow()
     qtbot.addWidget(window)
     window.show()
-    assert window.open_project(path)
+    assert window.files.open_project(path)
     project = window._vm.project
     case = next(c for c in project.analyses if c.id == 3)
     long_case = case.model_copy(update={"n_steps": 2_000_000})
@@ -391,7 +391,7 @@ def test_missing_recorder_output_in_the_child_opens_the_error_dialog(
     window = MainWindow()
     qtbot.addWidget(window)
     window.show()
-    assert window.open_project(path)
+    assert window.files.open_project(path)
     case = next(c for c in window._vm.project.analyses if c.id == 3)
 
     with qtbot.waitSignal(window._runner.failed, timeout=60000) as blocker:
@@ -416,7 +416,7 @@ def test_the_run_dialog_is_modeless_single_and_offers_the_results(qtbot, tmp_pat
     window = MainWindow()
     qtbot.addWidget(window)
     window.show()
-    assert window.open_project(path)
+    assert window.files.open_project(path)
 
     window.analysis.run()
     dlg = window.analysis.run_dialog

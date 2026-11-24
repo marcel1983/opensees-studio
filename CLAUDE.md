@@ -140,10 +140,10 @@ These are non-obvious things that are easy to break if you don't know:
   *user-initiated* close: one the window manager sent (`event.spontaneous()`)
   or `File → Quit`, which goes through `_on_quit`. A programmatic `close()`
   (test teardown, `closeAllWindows()` while shutting down) never prompts — a
-  modal dialog with no event loop running wedges the exit. `_on_save` and
-  `_on_save_as` return `True` when the file was written, and
-  `_confirm_discard_changes(action)` is the one prompt shared by close, New
-  and Open so the three cannot drift apart.
+  modal dialog with no event loop running wedges the exit. New, Open and Save
+  are `FilesController` (`window.files`): `save` and `save_as` return `True`
+  when the file was written, and `confirm_discard(action)` is the one prompt
+  shared by close, New and Open so the three cannot drift apart.
 - Model lock. Results lock the model (`ModelLockController.lock_for_results`,
   `window.model_lock`); the one place that enforces it is its `on_undo_index_changed`, which compares
   `model_fingerprint` with the locked one after every push, undo and redo and
@@ -243,7 +243,11 @@ These are non-obvious things that are easy to break if you don't know:
   (`window.results_view`: the case on screen, the Results and Reactions
   panels, the Case list and step arrows of the View toolbar, Show Results Of,
   the reactions commands, Delete All Results), which owns those widgets; the
-  window only places them. A controller's attribute must not be the name of a `QMainWindow`
+  window only places them. `FilesController` (New Blank, New 2D Truss, Open,
+  Open Recent, Save, Save As, Project Information, Run Batch, the autosaved
+  recovery copy) gets the recent-files list the start page shares and
+  `store_view`/`restore_view` for the viewport a project carries; New Model,
+  New 2D Frame and Quit stay in the window (wizards, `closeEvent`). A controller's attribute must not be the name of a `QMainWindow`
   method (`window.geometry` would replace `QWidget.geometry()`):
   `tests/gui/test_action_registry.py` checks it, hence `model_tools`.
   The rest of the window is being moved out the same way.
