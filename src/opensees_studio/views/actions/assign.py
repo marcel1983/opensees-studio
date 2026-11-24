@@ -20,7 +20,29 @@ def _load(name: str, text: str, needs: Needs | None, shortcut: str | None = None
     )
 
 
+def _member(name: str, text: str) -> ActionSpec:
+    """A member command: ``assign.<name>`` runs ``window.members.assign_<name>``."""
+    return ActionSpec(
+        f"assign.{name}",
+        text,
+        f"members.assign_{name}",
+        needs=_ELEMENTS,
+        legacy_attribute=f"_act_assign_{name}",
+    )
+
+
 ASSIGN_ACTIONS: tuple[ActionSpec, ...] = (
+    # What a member is made of and how it is modelled.
+    _member("section", "S&ection…"),
+    _member("material", "&Material…"),
+    _member("geom_transf", "&Geometric Transformation…"),
+    _member("local_axes", "&Local Axes…"),
+    _member("integration", "Beam &Integration…"),
+    _member("releases", "&Releases/Partial Fixity…"),
+    _member("end_offsets", "&End (Length) Offsets…"),
+    _member("insertion", "I&nsertion Point…"),
+    _member("modifiers", "Property M&odifiers…"),
+    _member("auto_mesh", "&Auto Mesh…"),
     ActionSpec(
         "assign.diaphragm",
         "&Diaphragm…",

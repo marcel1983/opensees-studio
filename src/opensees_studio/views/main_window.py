@@ -179,19 +179,15 @@ from opensees_studio.views.controllers import Shell
 from opensees_studio.views.controllers.building import BuildingController
 from opensees_studio.views.controllers.design import DesignController
 from opensees_studio.views.controllers.loads import LoadsController
+from opensees_studio.views.controllers.members import MembersController
 from opensees_studio.views.controllers.transforms import TransformsController
 from opensees_studio.views.dialogs import (
     AddNodeDialog,
     AnalysisCaseManagerDialog,
-    AssignBeamIntegrationDialog,
     AssignElastomericBearingDialog,
     AssignEqualDOFDialog,
-    AssignGeomTransfDialog,
     AssignHingeDialog,
-    AssignLocalAxesDialog,
     AssignMassesDialog,
-    AssignMaterialDialog,
-    AssignSectionDialog,
     AssignSupportDialog,
     AssignZeroLengthDialog,
     AssignZeroLengthSectionDialog,
@@ -201,10 +197,6 @@ from opensees_studio.views.dialogs import (
     DuplicatesDialog,
     DxfImportDialog,
     ElementDiagramWindow,
-    FrameEndOffsetsDialog,
-    FrameInsertionDialog,
-    FrameModifiersDialog,
-    FrameReleasesDialog,
     FrameWizard,
     FrictionLibraryDialog,
     GroundMotionsDialog,
@@ -463,6 +455,8 @@ class MainWindow(QMainWindow):
 
         #: Storeys, mass source, seismic loads, diaphragms, rigid links.
         self.building = BuildingController(shell)
+        #: Assign → Frame: section, material, formulation, frame member options.
+        self.members = MembersController(shell)
         #: Loads on joints, frames and areas, joint patterns, Edit → Delete Loads.
         self.loads = LoadsController(shell)
         #: The Design menu: basis, members, steel and concrete checks, connections, footings.
@@ -797,16 +791,6 @@ class MainWindow(QMainWindow):
         self._act_assign_bearing = QAction("&Bearing…", self)
         self._act_assign_link = QAction("&Link (twoNodeLink / TFP)…", self)
         self._act_assign_hinge = QAction("Plastic &Hinge…", self)
-        self._act_assign_section = QAction("S&ection…", self)
-        self._act_assign_material = QAction("&Material…", self)
-        self._act_assign_geom_transf = QAction("&Geometric Transformation…", self)
-        self._act_assign_local_axes = QAction("&Local Axes…", self)
-        self._act_assign_integration = QAction("Beam &Integration…", self)
-        self._act_assign_releases = QAction("&Releases/Partial Fixity…", self)
-        self._act_assign_end_offsets = QAction("&End (Length) Offsets…", self)
-        self._act_assign_insertion = QAction("I&nsertion Point…", self)
-        self._act_assign_modifiers = QAction("Property M&odifiers…", self)
-        self._act_assign_auto_mesh = QAction("&Auto Mesh…", self)
         self._act_assign_wall = QAction("RC &Wall (MVLEM)…", self)
         self._act_assign_pile = QAction("&Pile Soil Springs (p-y, t-z, q-z)…", self)
 
@@ -1129,17 +1113,17 @@ class MainWindow(QMainWindow):
             self._act_assign_link,
         ]
         self._frame_actions: list[QAction | None] = [
-            self._act_assign_section,
-            self._act_assign_material,
-            self._act_assign_geom_transf,
-            self._act_assign_local_axes,
-            self._act_assign_integration,
+            self.action("assign.section"),
+            self.action("assign.material"),
+            self.action("assign.geom_transf"),
+            self.action("assign.local_axes"),
+            self.action("assign.integration"),
             None,
-            self._act_assign_releases,
-            self._act_assign_end_offsets,
-            self._act_assign_insertion,
-            self._act_assign_modifiers,
-            self._act_assign_auto_mesh,
+            self.action("assign.releases"),
+            self.action("assign.end_offsets"),
+            self.action("assign.insertion"),
+            self.action("assign.modifiers"),
+            self.action("assign.auto_mesh"),
             None,
             self.action("assign.distributed_load"),
             self.action("assign.trapezoidal_load"),
@@ -2036,15 +2020,6 @@ class MainWindow(QMainWindow):
         self._act_assign_bearing.triggered.connect(self._on_assign_bearing)
         self._act_assign_link.triggered.connect(self._on_assign_link)
         self._act_assign_hinge.triggered.connect(self._on_assign_hinge)
-        self._act_assign_section.triggered.connect(self._on_assign_section)
-        self._act_assign_material.triggered.connect(self._on_assign_material)
-        self._act_assign_geom_transf.triggered.connect(self._on_assign_geom_transf)
-        self._act_assign_local_axes.triggered.connect(self._on_assign_local_axes)
-        self._act_assign_integration.triggered.connect(self._on_assign_integration)
-        self._act_assign_releases.triggered.connect(self._on_assign_releases)
-        self._act_assign_end_offsets.triggered.connect(self._on_assign_end_offsets)
-        self._act_assign_insertion.triggered.connect(self._on_assign_insertion)
-        self._act_assign_modifiers.triggered.connect(self._on_assign_modifiers)
         self._act_assign_wall.triggered.connect(self._on_assign_wall)
 
         # Analyze
@@ -2055,7 +2030,6 @@ class MainWindow(QMainWindow):
         self._act_run_selected.triggered.connect(self._on_run_selected_cases)
         self._act_clear_results.triggered.connect(self._on_clear_results)
         self._act_auto_mesh_frames.toggled.connect(self._on_toggle_auto_mesh_frames)
-        self._act_assign_auto_mesh.triggered.connect(self._on_assign_auto_mesh)
         self._act_dark_mode.toggled.connect(self._apply_dark_mode)
         self._act_check_stability.triggered.connect(self._on_check_stability)
         self._act_cancel_stability.triggered.connect(self._stability.cancel)
@@ -5781,148 +5755,6 @@ class MainWindow(QMainWindow):
         self._log(f"{text}: added {len(materials)} material(s) and section(s) {names}.")
 
     # ── slots: assign property ──────────────────────────────────────
-    def _on_assign_section(self) -> None:
-        if self._vm.project is None:
-            return
-        sel_elements = set(self._canvas.selection.elements)
-        if not sel_elements:
-            QMessageBox.information(
-                self, "Assign Section", "Select one or more frame elements first."
-            )
-            return
-        dlg = AssignSectionDialog(self._vm.project.sections, len(sel_elements), self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            self._vm.apply_command(AssignSectionCommand(self._vm, sel_elements, dlg.section_id()))
-        except Exception as exc:
-            QMessageBox.critical(self, "Assign Section failed", str(exc))
-
-    def _on_assign_material(self) -> None:
-        if self._vm.project is None:
-            return
-        sel_elements = set(self._canvas.selection.elements)
-        if not sel_elements:
-            QMessageBox.information(
-                self, "Assign Material", "Select one or more truss/zero-length elements first."
-            )
-            return
-        dlg = AssignMaterialDialog(self._vm.project.materials, len(sel_elements), self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            self._vm.apply_command(AssignMaterialCommand(self._vm, sel_elements, dlg.material_id()))
-        except Exception as exc:
-            QMessageBox.critical(self, "Assign Material failed", str(exc))
-
-    def _selected_accepting(self, fields: dict[str, Any]) -> set[int]:
-        """Selected elements that declare every one of ``fields`` (frames for a transformation)."""
-        from opensees_studio.commands import AssignElementFieldsCommand
-
-        project = self._vm.project
-        if project is None:
-            return set()
-        selected = set(self._canvas.selection.elements)
-        return {
-            el.id
-            for el in project.elements
-            if el.id in selected and AssignElementFieldsCommand.accepts(el, fields)
-        }
-
-    def _assign_element_fields(self, title: str, ids: set[int], fields: dict[str, Any]) -> None:
-        from opensees_studio.commands import AssignElementFieldsCommand
-
-        try:
-            self._vm.apply_command(AssignElementFieldsCommand(self._vm, ids, fields))
-            self._log(f"{title}: {fields} on {len(ids)} element(s).")
-        except Exception as exc:
-            QMessageBox.critical(self, f"{title} failed", str(exc))
-
-    def _on_assign_geom_transf(self) -> None:
-        """Assign > Frame > Geometric Transformation: Linear, PDelta or Corotational."""
-        project = self._vm.project
-        ids = self._selected_accepting({"geom_transf": "Linear"})
-        if project is None or not ids:
-            QMessageBox.information(
-                self, "Geometric Transformation", "Select one or more frame elements first."
-            )
-            return
-        current = {project.element(i).geom_transf for i in ids}  # type: ignore[union-attr]
-        dlg = AssignGeomTransfDialog(
-            len(ids), project.ndm, current.pop() if len(current) == 1 else None, self
-        )
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        self._assign_element_fields(
-            "Geometric Transformation", ids, {"geom_transf": dlg.transf_type()}
-        )
-
-    def _on_assign_local_axes(self) -> None:
-        """Assign > Frame > Local Axes: rotate the member's section about its axis."""
-        project = self._vm.project
-        ids = self._selected_accepting({"local_axis_angle": 0.0})
-        if project is None or not ids:
-            QMessageBox.information(self, "Local Axes", "Select one or more frame elements first.")
-            return
-        current = {float(getattr(project.element(i), "local_axis_angle", 0.0) or 0.0) for i in ids}
-        dlg = AssignLocalAxesDialog(
-            len(ids),
-            project.ndm,
-            current.pop() if len(current) == 1 else None,
-            self,
-        )
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        self._assign_element_fields("Local Axes", ids, {"local_axis_angle": dlg.angle()})
-
-    def _on_assign_integration(self) -> None:
-        """Assign > Frame > Beam Integration: rule and points of force/disp beam-columns."""
-        project = self._vm.project
-        ids = self._selected_accepting({"integration": "Lobatto", "integration_points": 5})
-        if project is None or not ids:
-            QMessageBox.information(
-                self,
-                "Beam Integration",
-                "Select one or more force or displacement beam-column elements first.",
-            )
-            return
-        frames = [project.element(i) for i in ids]
-        rules = {el.integration for el in frames}  # type: ignore[union-attr]
-        points = {el.integration_points for el in frames}  # type: ignore[union-attr]
-        dlg = AssignBeamIntegrationDialog(
-            len(ids),
-            rules.pop() if len(rules) == 1 else None,
-            points.pop() if len(points) == 1 else None,
-            self,
-        )
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        self._assign_element_fields(
-            "Beam Integration",
-            ids,
-            {"integration": dlg.rule(), "integration_points": dlg.points()},
-        )
-
-    def _frame_option_dialog(self, title: str, field: str) -> tuple[set[int], Any] | None:
-        """Selected frame members and the value of ``field`` they share (None when they differ)."""
-        from opensees_studio.core import FrameMember
-
-        project = self._vm.project
-        selected = set(self._canvas.selection.elements)
-        frames = (
-            []
-            if project is None
-            else [
-                el for el in project.elements if el.id in selected and isinstance(el, FrameMember)
-            ]
-        )
-        if not frames:
-            QMessageBox.information(self, title, "Select one or more frame elements first.")
-            return None
-        values = [getattr(el, field) for el in frames]
-        shared = values[0] if all(v == values[0] for v in values) else None
-        return {el.id for el in frames}, shared
-
     # ── area loads and imposed displacements ─────────────────────────
     def _on_assign_springs_of(self, kind: str) -> None:
         """Assign → Area → Area/Edge Springs, Assign → Frame → Line Springs."""
@@ -6008,78 +5840,6 @@ class MainWindow(QMainWindow):
         self._log(
             f"{kind.capitalize()} springs: {mode} on {count} {'edge' if kind == 'edge' else 'element'}(s)."
         )
-
-    def _on_assign_releases(self) -> None:
-        """Assign > Frame > Releases/Partial Fixity."""
-        picked = self._frame_option_dialog("Frame Releases", "releases")
-        if picked is None or self._vm.project is None:
-            return
-        ids, current = picked
-        dlg = FrameReleasesDialog(len(ids), self._vm.project.ndm, current, self)
-        if dlg.exec() == QDialog.DialogCode.Accepted:
-            self._assign_element_fields("Frame Releases", ids, {"releases": dlg.releases()})
-
-    def _on_assign_end_offsets(self) -> None:
-        """Assign > Frame > End (Length) Offsets."""
-        picked = self._frame_option_dialog("Frame End Offsets", "end_offsets")
-        if picked is None:
-            return
-        ids, current = picked
-        dlg = FrameEndOffsetsDialog(len(ids), current, self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        offsets = dlg.offsets()
-        if not dlg.automatic:
-            self._assign_element_fields("Frame End Offsets", ids, {"end_offsets": offsets})
-            return
-        from opensees_studio.commands import AssignElementFieldsCommand
-        from opensees_studio.core.frame_members import connectivity_offsets
-
-        project = self._vm.project
-        assert project is not None
-        try:
-            per_element = {}
-            for i in ids:
-                li, lj = connectivity_offsets(project, i)
-                per_element[i] = {
-                    "end_offsets": offsets.model_copy(update={"length_i": li, "length_j": lj})
-                }
-            self._vm.apply_command(
-                AssignElementFieldsCommand(
-                    self._vm,
-                    ids,
-                    {"end_offsets": offsets},
-                    per_element=per_element,
-                    text=f"Assign automatic end offsets to {len(ids)} element(s)",
-                )
-            )
-            self._log(f"Frame End Offsets (from connectivity) on {len(ids)} element(s).")
-        except Exception as exc:
-            QMessageBox.critical(self, "Frame End Offsets failed", str(exc))
-
-    def _on_assign_insertion(self) -> None:
-        """Assign > Frame > Insertion Point."""
-        picked = self._frame_option_dialog("Frame Insertion Point", "insertion")
-        if picked is None or self._vm.project is None:
-            return
-        ids, current = picked
-        dlg = FrameInsertionDialog(len(ids), self._vm.project.ndm, current, self)
-        if dlg.exec() == QDialog.DialogCode.Accepted:
-            self._assign_element_fields(
-                "Frame Insertion Point", ids, {"insertion": dlg.insertion()}
-            )
-
-    def _on_assign_modifiers(self) -> None:
-        """Assign > Frame > Property Modifiers."""
-        picked = self._frame_option_dialog("Frame Property Modifiers", "modifiers")
-        if picked is None:
-            return
-        ids, current = picked
-        dlg = FrameModifiersDialog(len(ids), current, self)
-        if dlg.exec() == QDialog.DialogCode.Accepted:
-            self._assign_element_fields(
-                "Frame Property Modifiers", ids, {"modifiers": dlg.modifiers()}
-            )
 
     # ── slots: analyze ──────────────────────────────────────────────
     def _on_check_stability(self) -> None:
@@ -6258,32 +6018,6 @@ class MainWindow(QMainWindow):
         if project is None or project.auto_mesh_frames == checked:
             return
         self._vm.apply_command(SetAutoMeshFramesCommand(self._vm, checked))
-
-    def _on_assign_auto_mesh(self) -> None:
-        """Assign > Frame > Auto Mesh: whether Run may divide the selected members."""
-        project = self._vm.project
-        ids = self._selected_accepting({"auto_mesh": True})
-        if project is None or not ids:
-            QMessageBox.information(
-                self, "Auto Mesh", "Select one or more frame or truss elements first."
-            )
-            return
-        choices = [
-            "Divide automatically where members end on it or cross it",
-            "Never divide automatically",
-        ]
-        current = all(getattr(project.element(i), "auto_mesh", True) for i in ids)
-        choice, ok = QInputDialog.getItem(
-            self,
-            "Auto Mesh",
-            f"{len(ids)} member(s):",
-            choices,
-            0 if current else 1,
-            False,
-        )
-        if not ok:
-            return
-        self._assign_element_fields("Auto Mesh", ids, {"auto_mesh": choice == choices[0]})
 
     def _review_model_before_run(self) -> bool:
         """Check the model on the way into Run; ``False`` means the run was called off.
@@ -8037,18 +7771,8 @@ class MainWindow(QMainWindow):
         self._act_assign_bearing.setEnabled(has_project and n_sel == 2)
         self._act_assign_link.setEnabled(has_project and n_sel == 2)
         self._act_assign_hinge.setEnabled(has_project and has_selected_elements)
-        self._act_assign_geom_transf.setEnabled(has_project and has_selected_elements)
-        self._act_assign_local_axes.setEnabled(has_project and has_selected_elements)
-        self._act_assign_integration.setEnabled(has_project and has_selected_elements)
         for action in (
-            self._act_assign_releases,
-            self._act_assign_end_offsets,
-            self._act_assign_insertion,
-            self._act_assign_modifiers,
-            self._act_assign_auto_mesh,
             self._act_assign_wall,
-            self._act_assign_section,
-            self._act_assign_material,
             self._act_assign_pile,
         ):
             action.setEnabled(has_project and has_selected_elements)
