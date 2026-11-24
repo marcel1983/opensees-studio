@@ -55,6 +55,23 @@ built by hand in `MainWindow._build_actions`. A declared action is also stored
 as `_act_<name>`, the name the ribbon layout, `core.help.ACTION_TOPICS` and the
 icon files use.
 
+## Wizards and generated models
+
+A wizard does not edit the project. Its geometry lives in `core` as a pure
+function (`core.frames.build_portal_frame`, `core.trusses.build_truss`,
+`core.templates`, `core.warehouse.plan_warehouse`), and what the project gains
+is collected in a `core.generated.GeneratedModel`: materials, sections, joints,
+members, groups, a grid, cases, loads, combinations. One function inserts it,
+`commands.generated.insert_generated(vm, model, text=...)`:
+
+1. `model_problems` checks the model against the project (ids already taken,
+   a member whose section, material or joint exists nowhere, a grid name in
+   use) and raises before anything is pushed;
+2. the parts go in as one macro, so one Ctrl+Z takes the whole structure back;
+3. if a command still refuses, the macro is undone and removed from the stack.
+
+A script uses `GeneratedModel.apply(project)` instead, with no undo stack.
+
 ## Threading and the analysis process
 
 The Qt main thread owns all widgets. OpenSees never runs in it:

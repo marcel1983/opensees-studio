@@ -204,12 +204,18 @@ These are non-obvious things that are easy to break if you don't know:
   2D never writes the rotation rows, so `OpenSeesRunner.build` clears them
   (`_clear_truss_scratch`) before a 2D ndf 3 model with trusses. Suspect the
   same when a result depends on what ran earlier in the process.
-- Parametric generators plan, then insert. `core.warehouse.plan_warehouse`
-  returns a `WarehousePlan` (sections, nodes, elements, groups, grid, cases,
-  loads, combinations, design overrides) without touching the project;
-  `commands.warehouse.insert_warehouse_plan` checks it against the project
-  first and only then pushes one macro (an error inside `redo` is lost by
-  `QUndoStack.push`, and a macro that fails half way stays half applied). In a
+- Parametric generators plan, then insert. A wizard computes what the project
+  gains without touching it and hands it over as a `core.generated.GeneratedModel`
+  (materials, sections, nodes, elements, groups, grid, cases, loads,
+  combinations, design settings); `commands.generated.insert_generated` checks
+  it against the project first (`model_problems`: ids taken, references to
+  something that is not there) and only then pushes one macro, which it takes
+  back whole if a command still refuses (an error inside `redo` is lost by
+  `QUndoStack.push`, and a macro that fails half way stays half applied). The
+  portal frame, the truss, the New Model templates and the warehouse
+  (`core.warehouse.plan_warehouse` → `WarehousePlan` →
+  `commands.warehouse.insert_warehouse_plan`) all go through it: a new wizard
+  does not open its own `beginMacro` in `MainWindow`. In a
   generated warehouse a purlin or girt is pinned and is **not** a bracing point
   of the rafter or column unless it has a stabilising angle: the plan writes
   `SteelMemberDesign.length_minor`/`length_ltb`, because `core.design.members`

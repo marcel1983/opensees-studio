@@ -270,6 +270,29 @@ def test_a_project_without_sections_gets_the_default_one_inside_the_same_macro(
 
 
 @pytest.mark.gui
+def test_a_frame_that_cannot_be_built_leaves_nothing_behind(qtbot, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    # The default section used to stay in the project, inside a half-made
+    # "Create portal frame" undo step, when the frame itself failed.
+    from opensees_studio.views import main_window
+
+    mw = _window(qtbot, sections=False)
+    _accept_wizard(monkeypatch)
+    seen: list[str] = []
+    monkeypatch.setattr(QMessageBox, "critical", lambda _p, _t, text, *a, **k: seen.append(text))
+
+    def _fail(*_args: object, **_kwargs: object) -> None:
+        raise ValueError("no frame today")
+
+    monkeypatch.setattr(main_window, "build_portal_frame", _fail)
+    mw._act_frame_wizard.trigger()
+
+    project = mw._vm.project
+    assert seen == ["no frame today"]
+    assert (project.sections, project.nodes, project.elements) == ([], [], [])
+    assert mw._vm.undo_stack.count() == 0
+
+
+@pytest.mark.gui
 def test_a_truss_project_is_refused_with_an_explanation(qtbot, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     mw = _window(qtbot, ndm=2, ndf=2, sections=False)
     seen: list[str] = []

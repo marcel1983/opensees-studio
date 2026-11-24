@@ -32,6 +32,15 @@ refused instead of silently downgraded).
   are not generated yet. The same generator is `core.warehouse.plan_warehouse`
   for scripts; `examples/warehouse_gable.py` uses it.
 
+### Fixed
+
+- **A wizard that fails no longer leaves half a model behind.** Define → Create
+  Portal Frame, Create Truss and the Beam and 3D Frame templates of File → New
+  Model inserted their parts one by one, so when a later part could not be made
+  the first ones stayed in the project, as a half-made undo step (for example
+  the default section without its frame). What a wizard builds is now checked
+  against the project first and goes in whole, as one undo step, or not at all.
+
 ## [0.0.78] - 2026-11-23
 
 ### Changed

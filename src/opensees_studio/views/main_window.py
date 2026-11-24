@@ -92,6 +92,7 @@ from opensees_studio.commands.buildings import (
     SetMassSourceCommand,
     SetStoreysCommand,
 )
+from opensees_studio.commands.generated import insert_generated
 from opensees_studio.commands.groups import (
     EditGroupMembersCommand,
     SetGroupsCommand,
@@ -130,6 +131,7 @@ from opensees_studio.core.default_materials import missing_default_materials
 from opensees_studio.core.design.settings import DesignSettings
 from opensees_studio.core.design.stability import notional_pattern
 from opensees_studio.core.duplicates import default_tolerance
+from opensees_studio.core.generated import GeneratedModel
 from opensees_studio.core.geometry.ordering import QuadOrderError, order_quad_nodes
 from opensees_studio.core.groups import Group, colour_for, group_members
 from opensees_studio.core.help import ACTION_TOPICS, TOPIC_PROPERTY
@@ -2329,10 +2331,8 @@ class MainWindow(QMainWindow):
         elif key in ("beam", "frame3d"):
             project = self._vm.project
             assert project is not None
-            self._vm.undo_stack.beginMacro(f"New model: {TEMPLATES[key]}")
             try:
                 section = make_default_section(project.next_section_id(), project)
-                self._vm.apply_command(AddSectionsCommand(self._vm, [section]))
                 if key == "beam":
                     spans, span = dlg.beam_numbers()
                     model = build_beam(spans, span, section_id=section.id)
@@ -2342,14 +2342,20 @@ class MainWindow(QMainWindow):
                         column_section_id=section.id,
                         beam_section_id=section.id,
                     )
-                self._vm.apply_command(AddNodesCommand(self._vm, model.nodes))
-                self._vm.apply_command(AddElementsCommand(self._vm, model.elements))
-                self._vm.apply_command(SetCoordSystemsCommand(self._vm, [model.grid]))
+                insert_generated(
+                    self._vm,
+                    GeneratedModel(
+                        sections=[section],
+                        nodes=model.nodes,
+                        elements=model.elements,
+                        grid=model.grid,
+                        replace_grids=True,
+                    ),
+                    text=f"New model: {TEMPLATES[key]}",
+                )
             except Exception as exc:
                 QMessageBox.critical(self, "Cannot create the model", str(exc))
                 return
-            finally:
-                self._vm.undo_stack.endMacro()
             self._log(f"{TEMPLATES[key]}: {model.summary()}")
             if key == "beam":
                 self._on_view_front()
@@ -4654,12 +4660,11 @@ class MainWindow(QMainWindow):
             return
         column_id, rafter_id = wizard.section_choice()
 
-        self._vm.undo_stack.beginMacro("Create portal frame")
-        grid = None
         try:
+            new_sections = []
             if column_id is None or rafter_id is None:
                 section = make_default_section(project.next_section_id(), project)
-                self._vm.apply_command(AddSectionsCommand(self._vm, [section]))
+                new_sections.append(section)
                 column_id = rafter_id = section.id
             spec = wizard.spec(column_section_id=column_id, rafter_section_id=rafter_id)
             frame = build_portal_frame(
@@ -4669,19 +4674,18 @@ class MainWindow(QMainWindow):
                 first_node_id=project.next_node_id(),
                 first_element_id=project.next_element_id(),
             )
-            self._vm.apply_command(AddNodesCommand(self._vm, frame.nodes))
-            self._vm.apply_command(AddElementsCommand(self._vm, frame.elements))
-            if with_grid:
-                # The same undo step as the frame: one Ctrl+Z takes both back.
-                grid = frame_grid(spec)
-                self._vm.apply_command(
-                    SetCoordSystemsCommand(self._vm, [*project.coord_systems, grid])
-                )
+            # The same undo step as the frame: one Ctrl+Z takes both back.
+            grid = frame_grid(spec) if with_grid else None
+            insert_generated(
+                self._vm,
+                GeneratedModel(
+                    sections=new_sections, nodes=frame.nodes, elements=frame.elements, grid=grid
+                ),
+                text="Create portal frame",
+            )
         except Exception as exc:
             QMessageBox.critical(self, "Cannot create the frame", str(exc))
             return
-        finally:
-            self._vm.undo_stack.endMacro()
 
         # Leave the frame selected: the next thing most users do is copy it.
         self._canvas.selection.clear()
@@ -4783,11 +4787,11 @@ class MainWindow(QMainWindow):
             return
         material_id = wizard.material_choice()
 
-        self._vm.undo_stack.beginMacro("Create truss")
         try:
+            new_materials = []
             if material_id is None:
                 material = make_default_truss_material(project.next_material_id())
-                self._vm.apply_command(AddMaterialsCommand(self._vm, [material]))
+                new_materials.append(material)
                 material_id = material.id
             truss = build_truss(
                 wizard.spec(material_id=material_id),
@@ -4796,13 +4800,14 @@ class MainWindow(QMainWindow):
                 first_node_id=project.next_node_id(),
                 first_element_id=project.next_element_id(),
             )
-            self._vm.apply_command(AddNodesCommand(self._vm, truss.nodes))
-            self._vm.apply_command(AddElementsCommand(self._vm, truss.elements))
+            insert_generated(
+                self._vm,
+                GeneratedModel(materials=new_materials, nodes=truss.nodes, elements=truss.elements),
+                text="Create truss",
+            )
         except Exception as exc:
             QMessageBox.critical(self, "Cannot create the truss", str(exc))
             return
-        finally:
-            self._vm.undo_stack.endMacro()
 
         self._canvas.selection.set_selection(
             {node.id for node in truss.nodes}, {element.id for element in truss.elements}
