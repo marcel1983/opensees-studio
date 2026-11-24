@@ -52,16 +52,11 @@ from PySide6.QtWidgets import (
 from opensees_studio import __version__
 from opensees_studio.commands import (
     AddNodesCommand,
-    AddSectionsCommand,
-    DeleteElementsCommand,
-    DeleteNodesCommand,
     MeshCommand,
-    SetCoordSystemsCommand,
     SetProjectMetaCommand,
     SetRestraintCommand,
 )
 from opensees_studio.commands.generated import insert_generated
-from opensees_studio.commands.tables import ApplyModelTablesCommand
 from opensees_studio.core import (
     SUPPORTED_NDF,
     ElasticSection,
@@ -72,7 +67,6 @@ from opensees_studio.core import (
     frame_grid,
     labels_for,
     make_default_section,
-    make_default_slab_section,
     make_default_truss_material,
     shortcut_profiles,
 )
@@ -144,8 +138,10 @@ from opensees_studio.views.controllers import Shell
 from opensees_studio.views.controllers.areas import AreasController
 from opensees_studio.views.controllers.building import BuildingController
 from opensees_studio.views.controllers.design import DesignController
+from opensees_studio.views.controllers.drawing import DrawingController
 from opensees_studio.views.controllers.exports import ExportsController
 from opensees_studio.views.controllers.generators import GeneratorsController
+from opensees_studio.views.controllers.grids import GridsController
 from opensees_studio.views.controllers.groups import GroupsController
 from opensees_studio.views.controllers.imports import ImportsController
 from opensees_studio.views.controllers.joints import JointsController
@@ -161,7 +157,6 @@ from opensees_studio.views.controllers.viewport import ViewportController
 from opensees_studio.views.dialogs import (
     AddNodeDialog,
     AnalysisCaseManagerDialog,
-    CoordinateGridSystemsDialog,
     DisplayOptionsDialog,
     ElementDiagramWindow,
     FrameWizard,
@@ -174,10 +169,8 @@ from opensees_studio.views.dialogs import (
     RunAnalysisDialog,
 )
 from opensees_studio.views.dialogs.batch_run import BatchRunDialog
-from opensees_studio.views.dialogs.grid_wizard import GridWizardDialog
 from opensees_studio.views.dialogs.load_combinations import LoadCombinationsDialog
 from opensees_studio.views.dialogs.load_display import LoadDisplayDialog
-from opensees_studio.views.dialogs.model_tables import ModelTablesDialog
 from opensees_studio.views.dialogs.object_info import ObjectInfoDialog
 from opensees_studio.views.dialogs.reactions import ReactionsDialog
 from opensees_studio.views.dialogs.run_cases import RunCasesDialog
@@ -206,11 +199,6 @@ from opensees_studio.views.run_status import RunStatusWidget
 from opensees_studio.views.start_page import RecentFiles, StartPage
 from opensees_studio.views.theme import apply_theme, viewport_style
 from opensees_studio.views.tools import (
-    DrawFrameTool,
-    DrawNodeTool,
-    DrawShellTool,
-    DrawTrussTool,
-    MeasureDistanceTool,
     SelectTool,
     ToolController,
 )
@@ -362,13 +350,6 @@ class MainWindow(QMainWindow):
         self._build_central_canvas()
         self._tool_controller = ToolController(self._canvas, self._vm, self)
         self._select_tool = SelectTool(self._canvas, self._vm, self)
-        self._draw_frame_tool: DrawFrameTool | None = None  # lazy-created on activation
-        self._draw_node_tool: DrawNodeTool | None = None
-        self._draw_truss_tool: DrawTrussTool | None = None
-        self._quick_frame_tool: DrawFrameTool | None = None
-        self._quick_shell_tool: DrawShellTool | None = None
-        self._draw_shell_tool: DrawShellTool | None = None
-        self._measure_tool: MeasureDistanceTool | None = None
 
         shell = Shell(
             window=self,
@@ -377,11 +358,19 @@ class MainWindow(QMainWindow):
             log=self._log,
             refresh_actions=self._refresh_action_enablement,
         )
+        #: The draw tools, Measure Distance and the Section boxes of the Tools bar.
+        self.drawing = DrawingController(
+            shell,
+            tools=self._tool_controller,
+            check_select=lambda: self._act_tool_select.setChecked(True),
+            check_measure=lambda: self._act_tool_measure.setChecked(True),
+            offset_dialog=lambda: self.transforms.offset_dialog,
+        )
         #: Edit → Copy, Paste, Move, Replicate, Mirror, Extrude.
         self.transforms = TransformsController(
             shell,
-            arm_measure=self._arm_measure_tool,
-            release_measure=self._release_measure_tool,
+            arm_measure=lambda: self.drawing.arm_measure(),
+            release_measure=lambda: self.drawing.release_measure(),
         )
 
         #: Storeys, mass source, seismic loads, diaphragms, rigid links.
@@ -398,6 +387,12 @@ class MainWindow(QMainWindow):
             shell,
             results=lambda: self._current_case_results(),
             report_results=lambda: self.report_results(),
+        )
+        #: Define → Coordinate System/Grids and Grid Wizard; View → Show Grids and labels.
+        self.grids = GridsController(
+            shell,
+            new_project=lambda: self._on_new(),
+            sync_actions=lambda: self._sync_grid_actions(),
         )
         self.groups = GroupsController(shell)
         self.imports = ImportsController(
@@ -580,12 +575,7 @@ class MainWindow(QMainWindow):
         self._act_undo.setShortcut(QKeySequence.StandardKey.Undo)
         self._act_redo = self._vm.undo_stack.createRedoAction(self, "Redo")
         self._act_redo.setShortcut(QKeySequence.StandardKey.Redo)
-        self._act_delete = QAction(
-            "&Delete selection", self, shortcut=QKeySequence.StandardKey.Delete
-        )
         self._act_clear_selection = QAction("Clear &selection", self, shortcut="Esc")
-        self._act_table_editing = QAction("Interactive &Table Editing…", self)
-        self._act_table_editing.setShortcut("Ctrl+T")
 
         # Select menu: queries that add to (or invert) the current selection.
         self._act_select_line = QAction("Intersecting &Line", self, checkable=True)
@@ -650,8 +640,6 @@ class MainWindow(QMainWindow):
             self._snap_actions[mode] = action
 
         # Define
-        self._act_grid = QAction("&Coordinate System/Grids…", self, shortcut="Ctrl+G")
-        self._act_grid_wizard = QAction("Grid &Wizard…", self)
         # No shortcut: Ctrl+N is File → New, and F4 draws nodes.
         self._act_add_node = QAction("Add &Node…", self)
         self._act_custom_commands = QAction("Custom OpenSees Co&mmands…", self)
@@ -888,13 +876,15 @@ class MainWindow(QMainWindow):
         m_edit.addSeparator()
         m_edit.addActions([act("edit.copy"), act("edit.paste")])
         m_edit.addSeparator()
-        m_edit.addActions([self._act_delete, self.action("select.all"), self._act_clear_selection])
+        m_edit.addActions(
+            [self.action("edit.delete"), self.action("select.all"), self._act_clear_selection]
+        )
         m_edit.addSeparator()
         m_edit.addActions(
             [act("edit.move"), act("edit.replicate"), act("edit.mirror"), act("edit.extrude")]
         )
         m_edit.addSeparator()
-        m_edit.addAction(self._act_table_editing)
+        m_edit.addAction(self.action("edit.table_editing"))
         m_edit.addAction(self.action("edit.check_duplicates"))
         m_edit.addAction(self.action("edit.merge_joints"))
         m_edit.addAction(self.action("edit.divide_frames"))
@@ -907,8 +897,8 @@ class MainWindow(QMainWindow):
         self._build_select_menu(m_select)
 
         m_define = mb.addMenu("&Define")
-        m_define.addAction(self._act_grid)
-        m_define.addAction(self._act_grid_wizard)
+        m_define.addAction(self.action("define.grid"))
+        m_define.addAction(self.action("define.grid_wizard"))
         m_define.addAction(self.action("define.storeys"))
         m_define.addAction(self.action("define.groups"))
         m_define.addAction(self.action("define.joint_patterns"))
@@ -1332,22 +1322,13 @@ class MainWindow(QMainWindow):
         tb.addAction(self._act_tool_quick_shell)
         tb.addAction(self._act_tool_measure)
         # The plate section Draw Shell gives its shells; shown while it is armed.
-        self._draw_shell_section_combo = QComboBox()
-        self._draw_shell_section_combo.setMinimumWidth(110)
-        self._draw_shell_section_combo.setToolTip("Plate section of the shells Draw Shell creates.")
-        self._draw_shell_section_combo.currentIndexChanged.connect(self._on_shell_section_changed)
-        self._draw_shell_section_action = tb.addWidget(self._draw_shell_section_combo)
-        self._draw_shell_section_action.setVisible(False)
+        shell_sections = tb.addWidget(self.drawing.shell_section_combo)
+        shell_sections.setVisible(False)
+        self.drawing.shell_section_action = shell_sections
         # The section Draw Frame gives its frames; shown while it is armed.
-        self._draw_section_combo = QComboBox()
-        self._draw_section_combo.setMinimumWidth(110)
-        self._draw_section_combo.setToolTip(
-            "Section of the frames Draw Frame creates. A fibre section draws "
-            "force-based frames; the others elastic ones."
-        )
-        self._draw_section_combo.currentIndexChanged.connect(self._on_draw_section_changed)
-        self._draw_section_action = tb.addWidget(self._draw_section_combo)
-        self._draw_section_action.setVisible(False)
+        sections = tb.addWidget(self.drawing.section_combo)
+        sections.setVisible(False)
+        self.drawing.section_action = sections
 
     def _build_snap_toolbar(self) -> None:
         """The left-hand object-snap icon bar (midpoint / perpendicular / on member)."""
@@ -1544,8 +1525,8 @@ class MainWindow(QMainWindow):
             dock.raise_()
 
         self._project_dock.editRequested.connect(self._on_project_edit)
-        self._project_dock.tableRequested.connect(self._on_table_editing)
-        self._project_dock.deleteRequested.connect(self._on_delete)
+        self._project_dock.tableRequested.connect(self.model_tools.table_editing)
+        self._project_dock.deleteRequested.connect(self.model_tools.delete_selection)
 
         self._act_use_ribbon.toggled.connect(self._apply_interface_mode)
         self._menus_visible = True
@@ -1755,13 +1736,12 @@ class MainWindow(QMainWindow):
         self._act_solver_settings.triggered.connect(self._on_solver_settings)
 
         # Edit
-        self._act_delete.triggered.connect(self._on_delete)
         # Delete, Undo, Redo and the selection keys have to work while the ribbon
         # hides the menu bar and shows a tab without the Edit group: a shortcut
         # only fires when a visible widget carries its action.
         self.addActions(
             [
-                self._act_delete,
+                self.action("edit.delete"),
                 self._act_undo,
                 self._act_redo,
                 self.action("select.all"),
@@ -1769,26 +1749,22 @@ class MainWindow(QMainWindow):
             ]
         )
         self._act_clear_selection.triggered.connect(self._on_clear_selection)
-        self._act_table_editing.triggered.connect(self._on_table_editing)
 
         # Tools
-        self._act_tool_select.triggered.connect(self._on_select_tool)
-        self._act_tool_draw_node.triggered.connect(self._on_draw_node_tool)
-        self._act_tool_draw_frame.triggered.connect(self._on_draw_frame_tool)
-        self._act_tool_draw_truss.triggered.connect(self._on_draw_truss_tool)
-        self._act_tool_quick_frame.triggered.connect(self._on_quick_frame_tool)
-        self._act_tool_quick_shell.triggered.connect(self._on_quick_shell_tool)
-        self._act_tool_draw_shell.triggered.connect(self._on_draw_shell_tool)
-        self._act_tool_measure.triggered.connect(self._on_measure_tool)
-        self._tool_controller.toolChanged.connect(self._on_tool_changed)
+        self._act_tool_select.triggered.connect(self.drawing.select)
+        self._act_tool_draw_node.triggered.connect(self.drawing.draw_node)
+        self._act_tool_draw_frame.triggered.connect(self.drawing.draw_frame)
+        self._act_tool_draw_truss.triggered.connect(self.drawing.draw_truss)
+        self._act_tool_quick_frame.triggered.connect(self.drawing.quick_frame)
+        self._act_tool_quick_shell.triggered.connect(self.drawing.quick_shell)
+        self._act_tool_draw_shell.triggered.connect(self.drawing.draw_shell)
+        self._act_tool_measure.triggered.connect(self.drawing.measure)
         for action in self._snap_actions.values():
             action.toggled.connect(self._on_snap_mode_toggled)
 
         # Define
-        self._act_grid.triggered.connect(self._on_grid_system)
-        self._act_grid_wizard.triggered.connect(self._on_grid_wizard)
-        self._act_show_grids.triggered.connect(self._set_grids_shown)
-        self._act_show_grid_labels.triggered.connect(self._set_grid_labels_shown)
+        self._act_show_grids.triggered.connect(self.grids.set_shown)
+        self._act_show_grid_labels.triggered.connect(self.grids.set_labels_shown)
         self._canvas.contextMenuRequested.connect(self._on_canvas_context_menu)
         self._canvas.cursorMoved.connect(self._on_cursor_moved)
         self._canvas.lineSelectFinished.connect(lambda: self._act_select_line.setChecked(False))
@@ -1948,7 +1924,7 @@ class MainWindow(QMainWindow):
         self._vm.new_project(ndm, ndf, dead_case=True, units=units, default_materials=True)
         self._log(f"New model: {TEMPLATES[key]} ({units.value}).")
         if key == "grid":
-            self._on_grid_wizard()
+            self.grids.wizard()
         elif key == "truss2d":
             self._on_truss_wizard()
         elif key == "frame2d":
@@ -2315,45 +2291,6 @@ class MainWindow(QMainWindow):
         if errors:
             QMessageBox.warning(self, "Saving with invalid case references", "\n".join(errors))
 
-    def _on_delete(self) -> None:
-        if self._vm.project is None:
-            return
-        sel = self._canvas.selection
-        if sel.is_empty:
-            return
-        elements, nodes = set(sel.elements), set(sel.nodes)
-        stack = self._vm.undo_stack
-        # Frames and joints go in one undo step, so one Undo brings the whole
-        # selection back (and the model lock asks once).
-        stack.beginMacro(f"Delete {len(elements) + len(nodes)} object(s)")
-        try:
-            if elements:
-                self._vm.apply_command(DeleteElementsCommand(self._vm, elements))
-            if nodes:
-                self._vm.apply_command(DeleteNodesCommand(self._vm, nodes))
-        except Exception as exc:
-            QMessageBox.critical(self, "Delete failed", str(exc))
-        finally:
-            stack.endMacro()
-        sel.clear()
-
-    def _on_table_editing(self) -> None:
-        """Edit → Interactive Table Editing: joints, elements and joint loads as tables."""
-        project = self._vm.project
-        if project is None:
-            return
-        dlg = ModelTablesDialog(project, self)
-        if dlg.exec() != QDialog.DialogCode.Accepted or dlg.edited is None:
-            return
-        try:
-            self._vm.apply_command(ApplyModelTablesCommand(self._vm, dlg.edited))
-            self._log(
-                f"Tables applied: {len(project.nodes)} joint(s), "
-                f"{len(project.elements)} element(s)."
-            )
-        except Exception as exc:
-            QMessageBox.critical(self, "Interactive Table Editing failed", str(exc))
-
     # ── slots: select menu ──────────────────────────────────────────
     def _build_select_menu(self, menu: Any) -> None:
         """Select: everything, by property, by load pattern, inverted or the previous one.
@@ -2397,187 +2334,6 @@ class MainWindow(QMainWindow):
         self._act_zoom_window.setChecked(False)
 
     # ── slots: tools ────────────────────────────────────────────────
-    def _on_select_tool(self) -> None:
-        self._tool_controller.set_active(None)
-
-    def _has_grid_lines(self) -> bool:
-        """True when some visible coordinate system carries grid lines."""
-        project = self._vm.project
-        if project is None:
-            return False
-        return any(cs.grid.shown for cs in project.coord_systems)
-
-    def _abort_tool_activation(self) -> None:
-        """Fall back to Select when a draw tool refused to arm."""
-        self._act_tool_select.setChecked(True)
-        self._tool_controller.set_active(None)
-
-    def _on_draw_frame_tool(self) -> None:
-        if self._vm.project is None:
-            self._abort_tool_activation()
-            return
-        if self._draw_frame_tool is None or self._draw_frame_tool.canvas is not self._canvas:
-            self._draw_frame_tool = DrawFrameTool(self._canvas, self._vm, self)
-            self._draw_frame_tool.statusChanged.connect(
-                lambda msg: self.statusBar().showMessage(msg)
-            )
-        self._tool_controller.set_active(self._draw_frame_tool)
-
-    def _on_draw_node_tool(self) -> None:
-        if self._vm.project is None:
-            self._abort_tool_activation()
-            return
-        if self._draw_node_tool is None or self._draw_node_tool.canvas is not self._canvas:
-            self._draw_node_tool = DrawNodeTool(self._canvas, self._vm, self)
-            self._draw_node_tool.statusChanged.connect(
-                lambda msg: self.statusBar().showMessage(msg)
-            )
-        self._tool_controller.set_active(self._draw_node_tool)
-
-    def _on_draw_truss_tool(self) -> None:
-        if self._vm.project is None:
-            self._abort_tool_activation()
-            return
-        if self._draw_truss_tool is None or self._draw_truss_tool.canvas is not self._canvas:
-            self._draw_truss_tool = DrawTrussTool(self._canvas, self._vm, self)
-            self._draw_truss_tool.statusChanged.connect(
-                lambda msg: self.statusBar().showMessage(msg)
-            )
-        self._tool_controller.set_active(self._draw_truss_tool)
-
-    def _on_quick_frame_tool(self) -> None:
-        """Tools → Quick Draw Frame: a click on a grid line draws the member there."""
-        from opensees_studio.views.tools.quick_draw import QuickDrawFrameTool
-
-        if self._vm.project is None:
-            self._abort_tool_activation()
-            return
-        if not self._has_grid_lines():
-            self._abort_tool_activation()
-            QMessageBox.information(
-                self,
-                "Quick Draw Frame",
-                "Quick Draw Frame draws on grid lines, and this project has none. "
-                "Define them in Define → Coordinate System/Grids.",
-            )
-            return
-        if self._quick_frame_tool is None or self._quick_frame_tool.canvas is not self._canvas:
-            self._quick_frame_tool = QuickDrawFrameTool(self._canvas, self._vm, self)
-            self._quick_frame_tool.statusChanged.connect(
-                lambda msg: self.statusBar().showMessage(msg)
-            )
-        self._tool_controller.set_active(self._quick_frame_tool)
-
-    def _on_quick_shell_tool(self) -> None:
-        """Tools → Quick Draw Shell: a click inside a grid bay draws the shell there."""
-        from opensees_studio.views.tools.draw_shell import shell_sections
-        from opensees_studio.views.tools.quick_draw import QuickDrawShellTool
-
-        project = self._vm.project
-        if project is None:
-            self._abort_tool_activation()
-            return
-        if not self._has_grid_lines():
-            self._abort_tool_activation()
-            QMessageBox.information(
-                self,
-                "Quick Draw Shell",
-                "Quick Draw Shell needs grid lines. Define them in "
-                "Define → Coordinate System/Grids.",
-            )
-            return
-        if not shell_sections(project):
-            self._add_default_slab()
-        if self._quick_shell_tool is None or self._quick_shell_tool.canvas is not self._canvas:
-            self._quick_shell_tool = QuickDrawShellTool(self._canvas, self._vm, self)
-            self._quick_shell_tool.statusChanged.connect(
-                lambda msg: self.statusBar().showMessage(msg)
-            )
-        self._tool_controller.set_active(self._quick_shell_tool)
-
-    def _on_draw_shell_tool(self) -> None:
-        """Tools → Draw Shell: needs a plate section, as Create Shell does."""
-        from opensees_studio.views.tools.draw_shell import shell_sections
-
-        project = self._vm.project
-        if project is None:
-            self._abort_tool_activation()
-            return
-        if not shell_sections(project):
-            self._add_default_slab()
-        if self._draw_shell_tool is None or self._draw_shell_tool.canvas is not self._canvas:
-            self._draw_shell_tool = DrawShellTool(self._canvas, self._vm, self)
-            self._draw_shell_tool.statusChanged.connect(
-                lambda msg: self.statusBar().showMessage(msg)
-            )
-        self._tool_controller.set_active(self._draw_shell_tool)
-
-    def _add_default_slab(self) -> None:
-        """Give a project with no plate section the default 20 cm concrete slab (undoable).
-
-        The values live in ``core.defaults`` (shared with headless callers), as
-        Draw Frame's default section does; this only owns the insert.
-        """
-        project = self._vm.project
-        assert project is not None
-        section = make_default_slab_section(project.next_section_id(), project)
-        self._vm.apply_command(AddSectionsCommand(self._vm, [section]))
-        self._log(f"Added the default slab section '{section.name}' for the shells.")
-
-    def _fill_shell_sections(self) -> None:
-        """List the plate sections in the shell Section box, keeping the current choice."""
-        from opensees_studio.views.tools.draw_shell import shell_sections
-
-        combo = self._draw_shell_section_combo
-        chosen = combo.currentData()
-        combo.blockSignals(True)
-        combo.clear()
-        for section_id, name in shell_sections(self._vm.project):
-            combo.addItem(name, section_id)
-        combo.setCurrentIndex(max(combo.findData(chosen), 0))
-        combo.blockSignals(False)
-        self._on_shell_section_changed()
-
-    def _on_shell_section_changed(self, _index: int = 0) -> None:
-        data = self._draw_shell_section_combo.currentData()
-        # Draw Shell and Quick Draw Shell share the box, and so the choice.
-        for tool in (self._draw_shell_tool, self._quick_shell_tool):
-            if tool is not None:
-                tool.section_id = None if data is None else int(data)
-
-    def _on_measure_tool(self) -> None:
-        if self._vm.project is None:
-            self._abort_tool_activation()
-            return
-        if self._measure_tool is None or self._measure_tool.canvas is not self._canvas:
-            self._measure_tool = MeasureDistanceTool(self._canvas, self._vm, self)
-            self._measure_tool.statusChanged.connect(lambda msg: self.statusBar().showMessage(msg))
-        dialog = self.transforms.offset_dialog
-        if dialog is not None and dialog.isVisible():
-            # Measure is being used from the open Move/Replicate window: its
-            # fields are the destination of the vector between the two joints.
-            target = "Move" if isinstance(dialog, MoveDialog) else "Replicate"
-            self._measure_tool.measure_for(target, dialog.set_measurement)
-        else:
-            self._measure_tool.stop_measuring_for()
-        self._tool_controller.set_active(self._measure_tool)
-
-    def _arm_measure_tool(self) -> None:
-        """Switch to Measure Distance on behalf of the open Move/Replicate window."""
-        self._act_tool_measure.setChecked(True)
-        self._on_measure_tool()
-
-    def _release_measure_tool(self) -> None:
-        """That window closed: Measure has no target, and the tool goes back to Select.
-
-        A stray click after the window closed must not pick points for nothing.
-        """
-        if self._measure_tool is not None:
-            self._measure_tool.stop_measuring_for()
-            if self._tool_controller.active is self._measure_tool:
-                self._act_tool_select.setChecked(True)
-                self._tool_controller.set_active(None)
-
     @property
     def _offset_dialog(self) -> MoveDialog | ReplicateDialog | None:
         """The open Move/Replicate window (now the transforms controller's)."""
@@ -2587,64 +2343,7 @@ class MainWindow(QMainWindow):
     def _paste_offset(self) -> tuple[float, float, float]:
         return self.transforms.paste_offset
 
-    def _on_tool_changed(self, tool) -> None:  # type: ignore[no-untyped-def]
-        drawing_shells = isinstance(tool, DrawShellTool)
-        if drawing_shells:
-            self._fill_shell_sections()
-        self._draw_shell_section_action.setVisible(drawing_shells)
-        drawing_frames = isinstance(tool, DrawFrameTool)
-        if drawing_frames:
-            self._fill_draw_sections()
-        self._draw_section_action.setVisible(drawing_frames)
-        if tool is None:
-            self._act_tool_select.setChecked(True)
-            self.statusBar().showMessage("Select tool active.", 3000)
-        else:
-            self.statusBar().showMessage(tool.prompt())
-
-    def _fill_draw_sections(self) -> None:
-        """List the frame sections in the Section box, keeping the current choice."""
-        from opensees_studio.views.tools.draw_frame import frame_sections
-
-        combo = self._draw_section_combo
-        chosen = combo.currentData()
-        combo.blockSignals(True)
-        combo.clear()
-        sections = frame_sections(self._vm.project)
-        for section_id, name in sections:
-            combo.addItem(name, section_id)
-        if not sections:
-            combo.addItem(tr("Default Section"), None)
-        index = combo.findData(chosen)
-        combo.setCurrentIndex(max(index, 0))
-        combo.blockSignals(False)
-        self._on_draw_section_changed()
-
-    def _on_draw_section_changed(self, _index: int = 0) -> None:
-        data = self._draw_section_combo.currentData()
-        # Draw Frame and Quick Draw Frame share the box, and so the choice.
-        for tool in (self._draw_frame_tool, self._quick_frame_tool):
-            if tool is not None:
-                tool.section_id = None if data is None else int(data)
-
     # ── slots: define ────────────────────────────────────────────────
-    def _on_grid_system(self) -> None:
-        """Open the SAP2000-style Coordinate/Grid Systems manager."""
-        if self._vm.project is None:
-            self._on_new()
-        proj = self._vm.project
-        assert proj is not None
-        dlg = CoordinateGridSystemsDialog(proj.coord_systems, parent=self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            new_systems = dlg.result_systems()
-            self._vm.apply_command(SetCoordSystemsCommand(self._vm, new_systems))
-            names = ", ".join(cs.name for cs in new_systems)
-            self._log(f"Coordinate/Grid Systems updated: {names}.")
-        except Exception as exc:
-            QMessageBox.critical(self, "Grid update failed", str(exc))
-
     def _select_report_row(self, node_ids: Sequence[int], element_ids: Sequence[int]) -> None:
         """Highlight the nodes/elements of a report row so they can be inspected."""
         self._canvas.selection.clear()
@@ -2925,59 +2624,6 @@ class MainWindow(QMainWindow):
             {node.id for node in truss.nodes}, {element.id for element in truss.elements}
         )
         self._log(f"{truss.summary()} Left selected.")
-
-    def _on_grid_wizard(self) -> None:
-        """Define → Grid Wizard: a regular Cartesian or radial grid, one undo step."""
-        if self._vm.project is None:
-            self._on_new()
-        project = self._vm.project
-        assert project is not None
-        dlg = GridWizardDialog(project.coord_systems, ndm=project.ndm, parent=self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        target = dlg.target()
-        if target:
-            systems = [
-                cs.model_copy(update={"grid": dlg.grid_system()}) if cs.name == target else cs
-                for cs in project.coord_systems
-            ]
-            name = target
-        else:
-            new = dlg.system()
-            systems = [*project.coord_systems, new]
-            name = new.name
-        self._vm.apply_command(SetCoordSystemsCommand(self._vm, systems))
-        self._log(f"Grid Wizard: grid of '{name}' set.")
-
-    def _set_grids_shown(self, shown: bool, name: str | None = None) -> None:
-        """Show or hide the grids (all, or the system called ``name``): an undo step.
-
-        The same flag as the Hide All Grid Lines box of the grid dialog.
-        """
-        project = self._vm.project
-        if project is None:
-            return
-        systems = [
-            cs.model_copy(update={"grid": cs.grid.model_copy(update={"hide_all": not shown})})
-            if name is None or cs.name == name
-            else cs
-            for cs in project.coord_systems
-        ]
-        if systems != project.coord_systems:
-            self._vm.apply_command(SetCoordSystemsCommand(self._vm, systems))
-        self._sync_grid_actions()
-
-    def _set_grid_labels_shown(self, shown: bool) -> None:
-        project = self._vm.project
-        if project is None:
-            return
-        systems = [
-            cs.model_copy(update={"grid": cs.grid.model_copy(update={"show_labels": shown})})
-            for cs in project.coord_systems
-        ]
-        if systems != project.coord_systems:
-            self._vm.apply_command(SetCoordSystemsCommand(self._vm, systems))
-        self._sync_grid_actions()
 
     def _sync_grid_actions(self) -> None:
         """Tick View → Show Grids / Labels from the project (checked when any shows)."""
@@ -3385,12 +3031,12 @@ class MainWindow(QMainWindow):
                     action.setCheckable(True)
                     action.setChecked(not cs.grid.hide_all)
                     action.triggered.connect(
-                        lambda checked, name=cs.name: self._set_grids_shown(checked, name)
+                        lambda checked, name=cs.name: self.grids.set_shown(checked, name)
                     )
             menu.addAction(self._act_show_grid_labels)
             menu.addSeparator()
-        menu.addAction(self._act_grid)
-        menu.addAction(self._act_grid_wizard)
+        menu.addAction(self.action("define.grid"))
+        menu.addAction(self.action("define.grid_wizard"))
         menu.addSeparator()
         menu.addAction(self.action("view.grid_line_view"))
         menu.addAction(self.action("view.show_all_objects"))
@@ -3452,7 +3098,7 @@ class MainWindow(QMainWindow):
         if self.action("view.show_all_objects").isEnabled():
             menu.addAction(self.action("view.show_all_objects"))
         menu.addSeparator()
-        menu.addAction(self._act_delete)
+        menu.addAction(self.action("edit.delete"))
         menu.addAction(self._act_clear_selection)
         return menu
 
@@ -5111,8 +4757,7 @@ class MainWindow(QMainWindow):
             self._canvas.render()
         self._sync_grid_actions()
         self._refresh_tree(self._vm.project)
-        if self._draw_section_action.isVisible():
-            self._fill_draw_sections()  # a section may have been added or renamed
+        self.drawing.model_changed()
         # Update the property editor with the (possibly new) entity values
         # at the current selection.
         self._props.update_for_selection(
@@ -5338,13 +4983,11 @@ class MainWindow(QMainWindow):
             has_project and any(self._canvas.selection.previous)
         )
         self._act_select_line.setEnabled(has_project)
-        self._act_grid.setEnabled(True)
         self._act_add_node.setEnabled(True)
         self._act_frame_wizard.setEnabled(has_project)
         self._act_truss_wizard.setEnabled(has_project)
         self._act_warehouse_wizard.setEnabled(has_project)
         self.action("define.create_shell").setEnabled(has_project and n_sel in (3, 4))
-        self._act_table_editing.setEnabled(has_project)
         has_cases = has_project and bool(self._vm.project and self._vm.project.analyses)
         # Without a solver the model is still built, exported and reported; only
         # what calls OpenSees waits for one (Options → Solver).
@@ -5397,7 +5040,6 @@ class MainWindow(QMainWindow):
             and self._vm.project is not None
             and self._vm.project.ndm == 3
         )
-        self._act_delete.setEnabled(has_project and has_selection)
         self.action("edit.paste").setEnabled(bool(self.transforms.clipboard_contents()[0]))
         self._act_tool_draw_frame.setEnabled(has_project)
         self._act_tool_draw_node.setEnabled(has_project)

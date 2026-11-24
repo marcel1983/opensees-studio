@@ -63,13 +63,13 @@ def test_move_dialog_measure_fills_the_offset(qtbot) -> None:  # type: ignore[no
     assert not dlg.isModal(), "the viewport must stay usable while the dialog is open"
 
     dlg._measure_button.click()
-    assert window._tool_controller.active is window._measure_tool
+    assert window._tool_controller.active is window.drawing.measure_tool
     assert window._act_tool_measure.isChecked()
 
     # Measure 2 -> 3; the selection moves to the measured joints, but the
     # dialog must keep acting on the joints selected when it opened (1).
-    window._measure_tool.on_node_picked(2)
-    window._measure_tool.on_node_picked(3)
+    window.drawing.measure_tool.on_node_picked(2)
+    window.drawing.measure_tool.on_node_picked(3)
 
     assert dlg.offset() == pytest.approx((0.0, 0.0, 12.0))
     assert "Measured 12" in dlg._message.text()
@@ -93,8 +93,8 @@ def test_replicate_dialog_measure_fills_the_offset(qtbot) -> None:  # type: igno
     assert isinstance(dlg, ReplicateDialog)
     dlg._measure_button.click()
 
-    window._measure_tool.on_node_picked(1)
-    window._measure_tool.on_node_picked(2)
+    window.drawing.measure_tool.on_node_picked(1)
+    window.drawing.measure_tool.on_node_picked(2)
 
     assert dlg.offset() == pytest.approx((3.0, 4.0, 0.0))
     dlg._n.setValue(1)
@@ -115,9 +115,9 @@ def test_f7_with_the_dialog_open_sends_the_measurement_to_it(qtbot) -> None:  # 
     assert isinstance(dlg, MoveDialog)
 
     # F7 once the viewport has the focus: the same slot as the Measure button.
-    window._on_measure_tool()
-    window._measure_tool.on_node_picked(1)
-    window._measure_tool.on_node_picked(2)
+    window.drawing.measure()
+    window.drawing.measure_tool.on_node_picked(1)
+    window.drawing.measure_tool.on_node_picked(2)
 
     assert dlg.offset() == pytest.approx((3.0, 4.0, 0.0))
 
@@ -130,7 +130,7 @@ def test_closing_the_dialog_stops_measuring(qtbot) -> None:  # type: ignore[no-u
     dlg = window._offset_dialog
     assert isinstance(dlg, MoveDialog)
     dlg._measure_button.click()
-    assert window._tool_controller.active is window._measure_tool
+    assert window._tool_controller.active is window.drawing.measure_tool
 
     dlg.reject()
 

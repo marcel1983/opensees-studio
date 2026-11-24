@@ -30,6 +30,8 @@ DECLARED = {
     "edit.divide_frames": "_act_divide_frames",
     "edit.join_frames": "_act_join_frames",
     "edit.mesh": "_act_mesh",
+    "edit.delete": "_act_delete",
+    "edit.table_editing": "_act_table_editing",
 }
 
 
@@ -102,10 +104,12 @@ def test_the_window_owns_one_controller_and_the_commands_point_at_it(qtbot) -> N
 
     mw._vm.adopt(_project())
     mw._canvas.selection.clear()
-    always = set(DECLARED) - {"edit.join_frames"}
+    always = set(DECLARED) - {"edit.join_frames", "edit.delete"}
     assert enabled() == always
+    # Delete waits for a selection.
     mw._canvas.selection.set_selection(set(), {1})
-    assert enabled() == always
+    assert enabled() == always | {"edit.delete"}
+    assert mw.action("edit.table_editing").shortcut().toString() == "Ctrl+T"
     # Joining takes two members or more.
     mw._canvas.selection.set_selection(set(), {1, 2})
     assert enabled() == set(DECLARED)
@@ -155,3 +159,22 @@ def test_nothing_to_join_is_a_message_not_an_undo_step(qtbot, monkeypatch) -> No
     controller, vm, _log, _shown, _selection = _controller(qtbot, None)
     controller.check_duplicates()
     assert told[-1] == "Open or create a project first."
+
+
+def test_deleting_the_selection_is_one_undo_step(qtbot) -> None:  # type: ignore[no-untyped-def]
+    controller, vm, _log, _shown, selection = _controller(qtbot, _project(), elements={2})
+    selection.nodes = {4}
+    selection.is_empty = False
+    controller.delete_selection()
+    assert [e.id for e in vm.project.elements] == [1]
+    assert [n.id for n in vm.project.nodes] == [1, 2, 3]
+    assert vm.undo_stack.count() == 1
+    assert vm.undo_stack.undoText() == "Delete 2 object(s)"
+    vm.undo_stack.undo()
+    assert [e.id for e in vm.project.elements] == [1, 2]
+    assert [n.id for n in vm.project.nodes] == [1, 2, 3, 4]
+
+    # Nothing selected: nothing happens.
+    selection.is_empty = True
+    controller.delete_selection()
+    assert vm.undo_stack.count() == 1

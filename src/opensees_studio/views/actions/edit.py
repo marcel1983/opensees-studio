@@ -7,6 +7,20 @@ from opensees_studio.views.actions.spec import ActionSpec, Needs
 _SELECTION = Needs.PROJECT | Needs.SELECTION
 
 EDIT_ACTIONS: tuple[ActionSpec, ...] = (
+    ActionSpec(
+        "edit.delete",
+        "&Delete selection",
+        "model_tools.delete_selection",
+        shortcut="std:Delete",
+        needs=_SELECTION,
+    ),
+    ActionSpec(
+        "edit.table_editing",
+        "Interactive &Table Editing…",
+        "model_tools.table_editing",
+        shortcut="Ctrl+T",
+        needs=Needs.PROJECT,
+    ),
     # A text field with focus keeps Ctrl+C / Ctrl+V for itself (Qt's shortcut
     # override), so these act on the model only when the viewport has focus.
     ActionSpec("edit.copy", "&Copy", "transforms.copy", shortcut="std:Copy", needs=_SELECTION),

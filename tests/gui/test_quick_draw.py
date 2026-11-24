@@ -141,7 +141,7 @@ def test_the_window_refuses_it_without_grid_lines(qtbot, monkeypatch) -> None:
         window._act_tool_quick_frame.trigger()
         assert isinstance(window._tool_controller.active, QuickDrawFrameTool)
         assert window._canvas.plane_click_handler is not None
-        assert window._draw_section_action.isVisible()  # the Section box applies
+        assert window.drawing.section_action.isVisible()  # the Section box applies
         window._act_tool_select.trigger()
         assert window._canvas.plane_click_handler is None
     finally:

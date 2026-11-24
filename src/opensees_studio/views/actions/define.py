@@ -29,6 +29,9 @@ def _library(
 
 
 DEFINE_ACTIONS: tuple[ActionSpec, ...] = (
+    # Both start a project when there is none, so they are always offered.
+    ActionSpec("define.grid", "&Coordinate System/Grids…", "grids.define", shortcut="Ctrl+G"),
+    ActionSpec("define.grid_wizard", "Grid &Wizard…", "grids.wizard"),
     _library("material_library", "&Material Library…", shortcut="Ctrl+Shift+M"),
     ActionSpec(
         "define.default_materials",
