@@ -221,11 +221,45 @@ These are non-obvious things that are easy to break if you don't know:
   `SteelMemberDesign.length_minor`/`length_ltb`, because `core.design.members`
   would take every member framing in as a brace. Wind (`core.wind`, SI whatever
   the project's units) is a net pressure per surface, positive pushing inwards;
-  `core.warehouse.wind_loads` puts it on the purlins, girts or columns. A wind
+  `core.warehouse.wind_loads` puts it on the purlins, girts or columns. A
+  pressure that depends on two coordinates (the roof zones F to J and the side
+  wall zones A to C of EN 1991-1-4) is a `wind.Surface` in `RoofLoad.zones` or
+  `WindCase.wall_zones`, and wins over the one-coordinate profile. Several
+  naves stand under **one** roof (one ridge over the whole width): wind and
+  snow take `spec.width`, never `spec.span` per nave. A wind
   case carries its direction and its suctions, so the plan passes the wind
   cases as `peak_cases` to the combination generator: one sign each, never
   reversed. A warehouse without end wall columns must keep its node and element
-  ids (the end walls are built last), or `warehouse_gable` changes.
+  ids (the end walls are built last), or `warehouse_gable` changes. With
+  `roof_structure="truss"` the top chord takes the rafter's place
+  (`Warehouse.rafter_elements`); every purlin braces it, and the bottom chord is
+  braced only at its tie lines. The cases the plan creates use
+  `core.warehouse.CASE_SYSTEM` (UmfPack): BandGeneral takes tens of seconds per
+  case on a model with that many released members. What a plan writes out of
+  square roots, sines or dot products (purlin angle, loads, unbraced lengths)
+  goes through `core.warehouse.portable` (12 significant digits): the last
+  digit of those differs between processors and C libraries, and the committed
+  examples must regenerate byte for byte on every CI runner.
+  The earthquake is static and on the plateau of the spectrum
+  (`seismic_coefficient`, no period), as nodal loads from the weight lumped on
+  each joint (`seismic_loads`); its cases go to the generator as role `E`, both
+  signs, never as `peak_cases`.
+  Ash and snow (`core.snow`, a load per area of plan against the position
+  across the roof) go on the purlins through `snow_loads`; the balanced and the
+  drifted cases are alternatives, so the plan passes `ALTERNATIVE_ROLES` to the
+  combination generator, and a code without a snow role (RNC-07) takes the one
+  balanced case as a live load.
+  `core.building.plan_building` is the same idea for a multi-storey building
+  (`BuildingPlan`; no command or dialog yet, `plan.apply(project)` in a script).
+  The slab is never modelled: it is `FloorLoad` panels, the mass is the mass
+  source (`DEAD` plus the live load the code counts), and the earthquake is
+  `core.equivalent_lateral` on the project's storeys, applied at each
+  diaphragm's retained node, which the plan puts at the centre of the floor's
+  mass and exactly at the storey's elevation. The `±e` cases of one direction
+  are alternatives: pass `EARTHQUAKE_DIRECTIONS` to the combination generator,
+  or the 100 % + 30 % rule pairs `EQ X +e` with `EQ X -e`. The plan keeps a
+  scratch copy of the project for ids and masses; what goes into it is a copy,
+  never the object the plan returns.
 - `Entity.id` is `PositiveInt` (>0). The sentinel `999999` is reserved
   for in-flight / temporary objects that haven't been assigned a real id.
 - Eigen determinism rule. ARPACK keeps its random start vector across

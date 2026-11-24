@@ -192,19 +192,28 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   whole frame is one undoable step that arrives selected for copying.
 - **A warehouse wizard** (Define → Create Warehouse, or File → New Model →
   Warehouse): a 3D steel warehouse from a few numbers, with a live wireframe
-  preview. Portal frames (gable, one slope or flat, one or several naves)
+  preview. Portal frames (gable, one slope or flat, one or several naves),
+  with rafters or with Pratt, Howe or Warren roof trusses (horizontal or
+  parallel bottom chord, tied from frame to frame),
   repeated along the building, purlins and girts at a maximum spacing, X bracing
   of the roof and side walls in the braced bays, a group per kind of member and
   a grid on the column lines. Purlins, girts and braces are pinned, and a purlin
   braces the rafter only where it has a stabilising angle (fly brace): the wizard
   writes the resulting unbraced lengths for the steel check. The roof dead and
   live loads go on the purlins over their tributary width, with the
-  combinations of RNC-07, NSCM (Managua) or ASCE 7-16. A wind page adds one load
-  case per wind direction, by RNC-07 Título IV or ASCE 7-16 chapter 27 (main
-  structure pressures on the purlins, the girts and the columns), and the end
+  combinations of RNC-07, NSCM (Managua), ASCE 7-16 or EN 1990. A wind page
+  adds the load cases of each wind direction, by RNC-07 Título IV, ASCE 7-16
+  chapter 27 or EN 1991-1-4 with its roof and wall zones (main structure
+  pressures on the purlins, the girts and the columns), and the end
   walls can get their own columns and girts; default sections come
-  from the AISC library and a cold-formed lipped channel. Earthquake cases are
-  not generated yet.
+  from the AISC library and a cold-formed lipped channel. An earthquake page
+  adds the static cases `EQ X` and `EQ Y` by RNC-07 Art. 32, NSCM 8.2.1,
+  ASCE 7-16 12.8 or EN 1998-1 4.3.3.2: the coefficient of the plateau of the spectrum times the
+  seismic weight (steel, roof dead load and the reduced roof live load), shared
+  between the joints by weight and height. An ash and snow page adds the
+  volcanic ash of RNC-07 Art. 14 and NSCM 7.3 (20 kg/m²) or the snow of ASCE
+  7-16 chapter 7 or EN 1991-1-3, balanced and unbalanced, as loads on the plan
+  of the roof.
 - **Materials** — `Steel01`, `Steel02`, `Concrete01`, `Concrete02`,
   `Concrete04` (Popovics), `ElasticPP`, `Hardening`, `Hysteretic`,
   `HystereticSM`, elastic uniaxial and `ElasticIsotropic`.

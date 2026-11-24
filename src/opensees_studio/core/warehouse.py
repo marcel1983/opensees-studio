@@ -19,7 +19,17 @@ members:
 * **X bracing** of the roof and of the side walls in the braced bays (by
   default the first and the last).
 
-Three rules that are easy to get wrong, and that the tests pin:
+The roof of each frame is a rafter or, with ``roof_structure="truss"``, a
+**roof truss**: a top chord on the roof line with a panel point under every
+purlin line, a bottom chord (level, or parallel to the roof), verticals and
+diagonals (Pratt, Howe or Warren with verticals). The chords are continuous
+and run into the columns, which go on up to the top chord, so the truss and
+its columns work as a frame; the web members are pinned. The bottom chord is
+tied from frame to frame at the column lines, at the ridge and at every n-th
+panel point asked for, and in the braced bays those tie lines get a vertical X
+between the two chords (sway bracing) that takes them to the roof bracing.
+
+The rules that are easy to get wrong, and that the tests pin:
 
 * **Secondary members are pinned.** Purlins, girts and braces release both
   bending moments at both ends (and a purlin or girt its torsion at one end),
@@ -33,6 +43,9 @@ Three rules that are easy to get wrong, and that the tests pin:
   eave-to-ridge length when there are none; the girts and the side columns
   follow the same rule. Without the overrides ``core.design.members`` would take
   every purlin as a bracing point.
+* **A purlin does brace the top chord of a truss**, because it is fixed to the
+  chord itself; the bottom chord is braced only at its tie lines, and
+  :func:`member_design_overrides` gives it that length.
 * **Loads act on the purlins**, as on the real roof: a load per area becomes a
   uniform load per length on each purlin element (its tributary width times the
   pressure), in the element's local axes — a purlin's web stands normal to the
@@ -43,6 +56,19 @@ Three rules that are easy to get wrong, and that the tests pin:
   girts and the eave purlin (a wall with girts) or on the columns (a wall
   without), normal to the surface. The lower half of the lowest wall strip goes
   straight into the ground and is not applied.
+* **Snow and ash fall on the plan of the roof.** A case of
+  :mod:`opensees_studio.core.snow` (volcanic ash by RNC-07 Art. 14 and NSCM
+  7.3, snow by ASCE 7-16 chapter 7 or EN 1991-1-3) is a vertical load per area
+  of horizontal projection that varies across the building; :func:`snow_loads`
+  gives each purlin what falls on the half strip to either neighbour. The
+  balanced and the drifted arrangements are alternatives in the combinations.
+* **The earthquake is a share of the weight at each joint.**
+  :func:`seismic_coefficient` gives ``c = V / W`` on the plateau of the spectrum
+  of RNC-07, NSCM or ASCE 7 (the period is not used); the seismic weight is the
+  steel, the roof dead load and the part of the roof live load the code counts,
+  lumped on the joints, and :func:`seismic_loads` shares ``c W`` between them by
+  weight and height. An earthquake case acts both ways in the combinations; a
+  wind case never does.
 
 The module is pure (no Qt, no OpenSees): :func:`build_warehouse` returns the
 geometry, :func:`plan_warehouse` everything a project needs to become that
@@ -78,6 +104,15 @@ from opensees_studio.core.geometry.grid import (
 )
 from opensees_studio.core.geometry.local_axes import frame_local_axes
 from opensees_studio.core.geometry.node import Node, Restraint6
+from opensees_studio.core.snow import (
+    SnowCase,
+    SnowError,
+    asce7_snow_cases,
+    ash_cases,
+    en1991_snow_cases,
+    roof_planes,
+)
+from opensees_studio.core.trusses import TrussType
 from opensees_studio.core.units import UnitSystem, force_scale, length_scale
 from opensees_studio.core.wind import (
     DIRECTIONS,
@@ -86,6 +121,7 @@ from opensees_studio.core.wind import (
     WindCase,
     WindError,
     asce7_wind_cases,
+    en1991_wind_cases,
     rnc07_wind_cases,
 )
 
@@ -104,6 +140,11 @@ GROUPS: dict[str, str] = {
     "roof_bracing": "Roof bracing",
     "wall_bracing": "Wall bracing",
     "end_columns": "End wall columns",
+    "top_chords": "Truss top chords",
+    "bottom_chords": "Truss bottom chords",
+    "truss_webs": "Truss web members",
+    "chord_ties": "Bottom chord ties",
+    "sway_bracing": "Truss sway bracing",
 }
 
 #: Display colour of each group (#rrggbb).
@@ -115,6 +156,11 @@ GROUP_COLOURS: dict[str, str] = {
     "roof_bracing": "#f58231",
     "wall_bracing": "#911eb4",
     "end_columns": "#9a6324",
+    "top_chords": "#c2185b",
+    "bottom_chords": "#800000",
+    "truss_webs": "#808000",
+    "chord_ties": "#000075",
+    "sway_bracing": "#f032e6",
 }
 
 #: The section each kind of member takes: section key -> the groups it serves.
@@ -125,7 +171,27 @@ SECTION_KEYS: dict[str, str] = {
     "girt": "Girts",
     "brace": "Bracing",
     "end_column": "End wall columns",
+    "top_chord": "Truss top chords",
+    "bottom_chord": "Truss bottom chords",
+    "truss_web": "Truss web members",
+    "chord_tie": "Bottom chord ties",
 }
+
+#: What carries the roof of each frame.
+ROOF_STRUCTURES: tuple[str, ...] = ("rafter", "truss")
+
+#: The web patterns of a roof truss (all with a vertical under every purlin line).
+ROOF_TRUSS_TYPES: tuple[TrussType, ...] = (
+    TrussType.PRATT,
+    TrussType.HOWE,
+    TrussType.WARREN_VERTICALS,
+)
+
+#: The bottom chord of a roof truss: level, or parallel to the roof.
+TRUSS_BOTTOMS: tuple[str, ...] = ("horizontal", "parallel")
+
+#: The section keys only a roof truss needs.
+TRUSS_SECTION_KEYS: tuple[str, ...] = ("top_chord", "bottom_chord", "truss_web", "chord_tie")
 
 #: AISC shape created for a section key when the caller chooses none.
 DEFAULT_AISC_SHAPES: dict[str, str] = {
@@ -133,6 +199,10 @@ DEFAULT_AISC_SHAPES: dict[str, str] = {
     "rafter": "W16X40",
     "brace": "L3X3X1_4",
     "end_column": "W8X31",
+    "top_chord": "HSS6X6X1_4",
+    "bottom_chord": "HSS6X6X1_4",
+    "truss_web": "HSS3X3X3_16",
+    "chord_tie": "HSS4X4X3_16",
 }
 
 #: Default purlin and girt: a lipped channel 150 x 50 x 15 x 2.38 mm (a 2" x 6"
@@ -147,6 +217,37 @@ BRACE_RELEASES = FrameReleases(i=_PINNED, j=_PINNED)
 SECONDARY_RELEASES = FrameReleases(i=_PINNED, j=_PINNED_FREE_TORSION)
 #: The top of an end wall column: it leans on the rafter, it does not frame into it.
 POST_TOP_RELEASES = FrameReleases(j=_PINNED)
+
+#: Linear solver of the load cases the wizard creates. A warehouse is a 3D model
+#: of many pinned members, each with its own released rotations: the band solver
+#: a new case has by default takes tens of seconds per case on it, a sparse one
+#: a fraction of a second, for the same result.
+CASE_SYSTEM = "UmfPack"
+_DEFAULT_SYSTEM = "BandGeneral"
+#: From this many nodes the plan says so when a case of the project keeps the band solver.
+SLOW_SOLVER_NODES = 150
+
+#: Significant digits of the derived numbers a plan writes (the angle of a
+#: purlin, loads, unbraced lengths, the properties of the default purlin).
+#: They come out of square roots, sines and dot products, whose last digit
+#: depends on the processor and on the C library: unrounded, the same
+#: warehouse saves different bytes on two machines.
+PORTABLE_DIGITS = 12
+#: A component of a load this many times smaller than its largest one is the
+#: round-off of a projection onto the member's axes, not a load.
+NEGLIGIBLE_COMPONENT = 1e-9
+
+#: The groups only a roof truss has.
+TRUSS_GROUPS: tuple[str, ...] = (
+    "top_chords",
+    "bottom_chords",
+    "truss_webs",
+    "chord_ties",
+    "sway_bracing",
+)
+
+#: The groups that are X bracing.
+BRACING_GROUPS: tuple[str, ...] = ("roof_bracing", "wall_bracing", "sway_bracing")
 
 #: A girt line of an end wall stays this share of the girt spacing below the rafter.
 END_GIRT_CLEARANCE = 0.25
@@ -188,6 +289,19 @@ class WarehouseSpec:
 
     With end wall columns the end walls also get girts, at the girt spacing.
     """
+    roof_structure: str = "rafter"
+    """``"rafter"`` or ``"truss"`` (:data:`ROOF_STRUCTURES`)."""
+    truss_type: TrussType = TrussType.PRATT
+    """Web pattern of the roof truss, one of :data:`ROOF_TRUSS_TYPES`."""
+    truss_bottom: str = "horizontal"
+    """``"horizontal"``: a level bottom chord; ``"parallel"``: parallel to the roof."""
+    truss_depth: float = 0.0
+    """Depth of the truss, measured plumb: at the eave for a level bottom chord,
+    everywhere for a parallel one. The eave height stays the top of the roof line,
+    so the clear height under the truss is the eave height less this depth."""
+    bottom_chord_tie_every: int = 0
+    """Every n-th panel point of the bottom chord is tied to the next frame; the
+    column lines and the ridge always are. 0 = only those."""
 
     def __post_init__(self) -> None:
         if self.span <= 0.0:
@@ -212,6 +326,22 @@ class WarehouseSpec:
             raise WarehouseError("A stabilising angle interval cannot be negative.")
         if len(self.origin) != 3:
             raise WarehouseError("The origin needs three coordinates.")
+        if self.roof_structure not in ROOF_STRUCTURES:
+            raise WarehouseError(f"Unknown roof structure {self.roof_structure!r}.")
+        if self.has_truss:
+            if self.truss_type not in ROOF_TRUSS_TYPES:
+                raise WarehouseError(
+                    "A roof truss is Pratt, Howe or Warren with verticals: it needs a "
+                    "vertical under every purlin line."
+                )
+            if self.truss_bottom not in TRUSS_BOTTOMS:
+                raise WarehouseError(f"Unknown bottom chord {self.truss_bottom!r}.")
+            if self.truss_depth <= 0.0:
+                raise WarehouseError("The truss depth must be positive.")
+            if self.truss_depth >= self.eave_height:
+                raise WarehouseError("The truss depth must be less than the eave height.")
+            if self.bottom_chord_tie_every < 0:
+                raise WarehouseError("The bottom chord tie interval cannot be negative.")
         for bay in self.braced_bays or ():
             if not 0 <= bay < self.n_frames - 1:
                 raise WarehouseError(
@@ -255,6 +385,24 @@ class WarehouseSpec:
     def ridge_height(self) -> float:
         return self.profile.ridge_height
 
+    @property
+    def has_truss(self) -> bool:
+        """The roof of each frame is a truss, not a rafter."""
+        return self.roof_structure == "truss"
+
+    def bottom_chord_height(self, x: float) -> float:
+        """Elevation of the bottom chord of the roof truss ``x`` across the building."""
+        if self.truss_bottom == "parallel":
+            return self.profile.roof_height(x) - self.truss_depth
+        return self.eave_height - self.truss_depth
+
+    def section_keys(self) -> list[str]:
+        """The keys of :data:`SECTION_KEYS` this warehouse has members for."""
+        skip: set[str] = {"rafter"} if self.has_truss else set(TRUSS_SECTION_KEYS)
+        if self.end_wall_column_spacing <= 0.0:
+            skip.add("end_column")
+        return [key for key in SECTION_KEYS if key not in skip]
+
     def bracing_bays(self) -> tuple[int, ...]:
         """The braced bays, sorted; the first and the last when none were chosen."""
         if self.braced_bays is None:
@@ -290,6 +438,40 @@ class WarehouseSpec:
         return [z for z in levels if z < self.ridge_height - END_GIRT_CLEARANCE * step]
 
 
+def portable(value: float) -> float:
+    """``value`` to :data:`PORTABLE_DIGITS` significant digits (and never ``-0.0``).
+
+    In two steps. A product of round inputs is often exactly half way between
+    two rounded values (294.4254031875), and its last bit would decide the side
+    it falls to: the first rounding, two digits further, takes the round-off
+    away and leaves that number exact, so it always falls to the same side.
+    """
+    exact = float(f"{value:.{PORTABLE_DIGITS + 2}g}")
+    return float(f"{exact:.{PORTABLE_DIGITS}g}") + 0.0
+
+
+def _portable_model(model: Any) -> Any:
+    """``model`` (a load, a section) with its numbers rounded by :func:`portable`."""
+    update: dict[str, Any] = {}
+    for name, value in model:
+        if isinstance(value, float):
+            rounded: Any = portable(value)
+        elif isinstance(value, tuple) and value and all(isinstance(v, float) for v in value):
+            rounded = tuple(portable(v) for v in value)
+        else:
+            continue
+        if repr(rounded) != repr(value):
+            update[name] = rounded
+    return model.model_copy(update=update) if update else model
+
+
+def _components(vector: Iterable[float]) -> tuple[float, ...]:
+    """The components of a load, without the round-off of its projection."""
+    values = [float(v) for v in vector]
+    floor = NEGLIGIBLE_COMPONENT * max(abs(v) for v in values)
+    return tuple(0.0 if abs(v) <= floor else v for v in values)
+
+
 def _distinct(values: Iterable[float]) -> list[float]:
     out: list[float] = []
     for value in sorted(values):
@@ -315,6 +497,23 @@ def _unbraced_lengths(stations: list[float], braced: list[bool]) -> list[float]:
         end = min(i for i in range(k + 1, len(stations)) if braced[i])
         out.append(stations[end] - stations[start])
     return out
+
+
+def bottom_chord_ties(spec: WarehouseSpec, stations: list[RoofStation]) -> list[bool]:
+    """Per roof station: the bottom chord under it is tied to the next frame.
+
+    The column lines and the ridge always are; between them every
+    ``bottom_chord_tie_every``-th panel point.
+    """
+    index = [
+        next(k for k, s in enumerate(stations) if abs(s.x - x) <= GRID_TOLERANCE)
+        for x in spec.roof_breaks()
+    ]
+    flags = [False] * len(stations)
+    for first, last in itertools.pairwise(index):
+        for j, tied in enumerate(_fly_braced(last - first, spec.bottom_chord_tie_every)):
+            flags[first + j] = flags[first + j] or tied
+    return flags
 
 
 @dataclass(frozen=True)
@@ -346,12 +545,16 @@ class Warehouse:
     purlin_station: dict[int, int] = field(default_factory=dict)
     """Purlin element id -> index of its roof station."""
     rafter_elements: list[list[int]] = field(default_factory=list)
-    """Per frame: the rafter element ids from the left eave, one per station interval."""
+    """Per frame: the rafter element ids from the left eave, one per station interval
+    (the top chord elements when the roof is a truss)."""
+    bottom_chord_elements: list[list[int]] = field(default_factory=list)
+    """Per frame: the bottom chord element ids of the roof truss, as ``rafter_elements``."""
     unbraced: dict[int, float] = field(default_factory=dict)
-    """Rafter and side-column element id -> unbraced length of its compression flange."""
+    """Rafter, column and bottom chord element id -> unbraced length of its compression flange."""
     base_node_ids: list[int] = field(default_factory=list)
     wall_girts: dict[int, tuple[str, int, float]] = field(default_factory=dict)
-    """Girt element id -> ``(wall, panel, level)``.
+    """Girt element id -> ``(wall, panel, level)``; also the bottom chord elements of
+    an end truss where the chord lies on a girt line of the end wall.
 
     ``wall`` is a key of :data:`opensees_studio.core.wind.WALLS`; ``panel`` is
     the bay on a side wall and the left vertical on an end wall.
@@ -364,6 +567,21 @@ class Warehouse:
         """One line for the log: what was created."""
         spec = self.spec
         roof = {RoofType.MONO_PITCH: "1 slope", RoofType.GABLE: "2 slopes"}[spec.roof]
+        if spec.has_truss:
+            return (
+                f"Warehouse {spec.width:g} x {spec.length:g}: {spec.n_frames} trussed frames at "
+                f"{spec.frame_spacing:g}, {spec.n_naves} nave(s) of {spec.span:g}, eave "
+                f"{spec.eave_height:g}, ridge {spec.ridge_height:g} ({roof}, "
+                f"{spec.slope * 100:g} %), truss depth {spec.truss_depth:g} - "
+                f"{len(self.members['columns'])} column, "
+                f"{len(self.members['top_chords']) + len(self.members['bottom_chords'])} chord, "
+                f"{len(self.members['truss_webs'])} web, "
+                f"{len(self.members['purlins'])} purlin, {len(self.members['girts'])} girt, "
+                f"{len(self.members['chord_ties'])} tie, "
+                f"{len(self.members['end_columns'])} end wall column and "
+                f"{sum(len(self.members[g]) for g in BRACING_GROUPS)} bracing "
+                f"elements, {len(self.nodes)} nodes."
+            )
         return (
             f"Warehouse {spec.width:g} x {spec.length:g}: {spec.n_frames} frames at "
             f"{spec.frame_spacing:g}, {spec.n_naves} nave(s) of {spec.span:g}, eave "
@@ -413,7 +631,7 @@ def roof_stations(spec: WarehouseSpec) -> list[RoofStation]:
         # A purlin runs along +Y, so its local z is Z turned about Y by the
         # element angle: (sin a, 0, cos a). At the ridge the two normals average
         # to the vertical and the web stands plumb.
-        angle = math.degrees(math.atan2(normal[0], normal[2]))
+        angle = portable(math.degrees(math.atan2(normal[0], normal[2])))
         stations.append(
             RoofStation(
                 x=x,
@@ -542,12 +760,7 @@ def build_warehouse(
     ``sections`` maps every key of :data:`SECTION_KEYS` to a section id. Ids are
     allocated from ``first_node_id`` / ``first_element_id`` upwards.
     """
-    missing = [
-        key
-        for key in SECTION_KEYS
-        if int(sections.get(key, 0) or 0) < 1
-        and (key != "end_column" or spec.end_wall_column_spacing > 0.0)
-    ]
+    missing = [key for key in spec.section_keys() if int(sections.get(key, 0) or 0) < 1]
     if missing:
         raise WarehouseError("No section for: " + ", ".join(missing) + ".")
     ox, oy, oz = spec.origin
@@ -598,7 +811,10 @@ def build_warehouse(
         spec=spec, nodes=nodes, elements=elements, members=members, stations=stations
     )
 
+    truss = spec.has_truss
     roof_nodes: list[list[int]] = []  # [frame][station]
+    chord_nodes: list[list[int]] = []  # [frame][station], the bottom chord of a truss
+    chord_zs = [spec.bottom_chord_height(s.x) for s in stations] if truss else []
     wall_nodes: list[dict[int, list[int]]] = []  # [frame][side line] -> base, girts..., eave
     rafter_lengths = _unbraced_lengths(
         _cumulative([(s.x, s.z) for s in stations]), [s.fly_braced for s in stations]
@@ -616,42 +832,89 @@ def build_warehouse(
     def add_vertical(
         group: str,
         section: str,
-        chain: list[int],
+        place: tuple[float, float],
         levels: Sequence[float],
-        top: float,
+        top: tuple[int, float],
+        restraint: Restraint6,
         *,
+        chord: tuple[float, int | None] | None = None,
         angle: float = 0.0,
         top_releases: FrameReleases | None = None,
-    ) -> list[int]:
-        """The elements of a column along ``chain``, with their unbraced lengths."""
-        lengths = _unbraced_lengths(
-            [0.0, *levels, top], _fly_braced(len(levels) + 1, spec.column_fly_brace_every)
-        )
+    ) -> tuple[list[int], list[int], int | None]:
+        """A column from the base at ``place`` to the roof node ``top`` (node, elevation).
+
+        ``levels`` are the girt lines it carries; ``chord`` is the elevation at
+        which the bottom chord of a truss meets it, and the chord's node when it
+        exists already. Returns the element ids, the nodes ``base, girt
+        lines..., top`` and the chord node. A girt braces the column only with
+        a stabilising angle; the bottom chord, tied from frame to frame, does.
+        """
+        x, y = place
+        base = add_node(x, y, 0.0, restraint)
+        warehouse.base_node_ids.append(base)
+        fly = _fly_braced(len(levels) + 1, spec.column_fly_brace_every)
+        points: list[tuple[float, int, bool]] = [(0.0, base, True)]
+        girt_chain = [base]
+        chord_node: int | None = None
+        waiting = chord
+
+        def meet_chord() -> int:
+            assert waiting is not None
+            return waiting[1] if waiting[1] is not None else add_node(x, y, waiting[0])
+
+        for k, z in enumerate(levels, start=1):
+            if waiting is not None and waiting[0] < z - GRID_TOLERANCE:
+                chord_node = meet_chord()
+                points.append((waiting[0], chord_node, True))
+                waiting = None
+            if waiting is not None and abs(waiting[0] - z) <= GRID_TOLERANCE:
+                chord_node = node = meet_chord()
+                points.append((z, node, True))
+                waiting = None
+            else:
+                node = add_node(x, y, z)
+                points.append((z, node, fly[k]))
+            girt_chain.append(node)
+        if waiting is not None:
+            chord_node = meet_chord()
+            points.append((waiting[0], chord_node, True))
+        points.append((top[1], top[0], True))
+        girt_chain.append(top[0])
+        lengths = _unbraced_lengths([p[0] for p in points], [p[2] for p in points])
         ids: list[int] = []
-        for k, (a, b) in enumerate(itertools.pairwise(chain)):
-            releases = top_releases if k == len(chain) - 2 else None
-            element_id = add_element(group, a, b, section, releases=releases, angle=angle)
-            if levels:
+        for k, (a, b) in enumerate(itertools.pairwise(points)):
+            releases = top_releases if k == len(points) - 2 else None
+            element_id = add_element(group, a[1], b[1], section, releases=releases, angle=angle)
+            if levels or chord is not None:
                 warehouse.unbraced[element_id] = lengths[k]
             ids.append(element_id)
-        return ids
+        return ids, girt_chain, chord_node
 
+    post_stations = set(end_wall.posts.values())
     for frame in range(spec.n_frames):
         y = frame * spec.frame_spacing
         tops = [add_node(s.x, y, s.z) for s in stations]
         roof_nodes.append(tops)
         walls: dict[int, list[int]] = {}
+        under: dict[int, int] = {}  # station -> bottom chord node
         for line, x in enumerate(column_xs):
-            base = add_node(x, y, 0.0, _base_restraint(spec.support))
-            warehouse.base_node_ids.append(base)
             at = station_at(x)
             levels: Sequence[float] = ()
             if line in side_lines:
                 levels = girt_zs
             elif frame in end_frames:
                 levels = end_wall.levels[end_vertical[line]]
-            chain = [base, *[add_node(x, y, z) for z in levels], tops[at]]
-            ids = add_vertical("columns", "column", chain, levels, stations[at].z)
+            ids, chain, chord_node = add_vertical(
+                "columns",
+                "column",
+                (x, y),
+                levels,
+                (tops[at], stations[at].z),
+                _base_restraint(spec.support),
+                chord=(chord_zs[at], None) if truss else None,
+            )
+            if chord_node is not None:
+                under[at] = chord_node
             if line in side_lines:
                 walls[line] = chain
                 wall = "x0" if line == side_lines[0] else "x1"
@@ -661,12 +924,36 @@ def build_warehouse(
                 wall = "y0" if frame == 0 else "y1"
                 warehouse.wall_columns[wall] += [(i, end_vertical[line]) for i in ids]
         wall_nodes.append(walls)
-        rafters: list[int] = []
-        for k, (a, b) in enumerate(itertools.pairwise(tops)):
-            element_id = add_element("rafters", a, b, "rafter")
-            warehouse.unbraced[element_id] = rafter_lengths[k]
-            rafters.append(element_id)
-        warehouse.rafter_elements.append(rafters)
+        if not truss:
+            rafters: list[int] = []
+            for k, (a, b) in enumerate(itertools.pairwise(tops)):
+                element_id = add_element("rafters", a, b, "rafter")
+                warehouse.unbraced[element_id] = rafter_lengths[k]
+                rafters.append(element_id)
+            warehouse.rafter_elements.append(rafters)
+            continue
+        bottoms = [
+            under[k] if k in under else add_node(s.x, y, chord_zs[k])
+            for k, s in enumerate(stations)
+        ]
+        chord_nodes.append(bottoms)
+        warehouse.rafter_elements.append(
+            [add_element("top_chords", a, b, "top_chord") for a, b in itertools.pairwise(tops)]
+        )
+        warehouse.bottom_chord_elements.append(
+            [
+                add_element("bottom_chords", a, b, "bottom_chord")
+                for a, b in itertools.pairwise(bottoms)
+            ]
+        )
+        for k in range(len(stations)):
+            # A column is the vertical at its line, and so is an end wall column.
+            if k in under or (frame in end_frames and k in post_stations):
+                continue
+            add_element("truss_webs", bottoms[k], tops[k], "truss_web", releases=BRACE_RELEASES)
+        for k, rising in enumerate(_truss_diagonals(spec, stations)):
+            a, b = (bottoms[k], tops[k + 1]) if rising else (tops[k], bottoms[k + 1])
+            add_element("truss_webs", a, b, "truss_web", releases=BRACE_RELEASES)
 
     for bay in range(spec.n_bays):
         near, far = roof_nodes[bay], roof_nodes[bay + 1]
@@ -708,25 +995,74 @@ def build_warehouse(
                     "wall_bracing", near_wall[-1], far_wall[0], "brace", releases=BRACE_RELEASES
                 )
 
+    if truss:
+        tied = bottom_chord_ties(spec, stations)
+        along = _cumulative(list(zip([s.x for s in stations], chord_zs, strict=True)))
+        for frame_chord in warehouse.bottom_chord_elements:
+            for element_id, length in zip(frame_chord, _unbraced_lengths(along, tied), strict=True):
+                warehouse.unbraced[element_id] = length
+        tie_lines = [k for k, flag in enumerate(tied) if flag]
+        side_stations = {station_at(column_xs[line]) for line in side_lines}
+        # A girt line at the level of the bottom chord is the tie of that wall.
+        girt_ties = {
+            k for k in side_stations if any(abs(z - chord_zs[k]) <= GRID_TOLERANCE for z in girt_zs)
+        }
+        for bay in range(spec.n_bays):
+            for k in tie_lines:
+                if k in girt_ties:
+                    continue
+                add_element(
+                    "chord_ties",
+                    chord_nodes[bay][k],
+                    chord_nodes[bay + 1][k],
+                    "chord_tie",
+                    releases=SECONDARY_RELEASES,
+                )
+        # In the braced bays a vertical X takes each tie line up to the roof
+        # bracing; at the side walls the wall bracing does that.
+        for bay in spec.bracing_bays() if spec.roof_bracing else ():
+            for k in tie_lines:
+                if k in side_stations:
+                    continue
+                for a, b in (
+                    (chord_nodes[bay][k], roof_nodes[bay + 1][k]),
+                    (roof_nodes[bay][k], chord_nodes[bay + 1][k]),
+                ):
+                    add_element("sway_bracing", a, b, "brace", releases=BRACE_RELEASES)
+
     # End walls last, so a warehouse without them keeps the ids it always had.
     pinned_base: Restraint6 = (True, True, True, False, False, False)
     for frame in dict.fromkeys(end_frames):
         y = frame * spec.frame_spacing
         wall = "y0" if frame == 0 else "y1"
-        for vertical, under in end_wall.posts.items():
-            x, levels = end_wall.xs[vertical], end_wall.levels[vertical]
-            base = add_node(x, y, 0.0, pinned_base)
-            warehouse.base_node_ids.append(base)
-            chain = [base, *[add_node(x, y, z) for z in levels], roof_nodes[frame][under]]
-            # The web along Y, to span the wall against the wind.
-            ids = add_vertical(
-                "end_columns", "end_column", chain, levels, end_wall.tops[vertical],
-                angle=90.0, top_releases=POST_TOP_RELEASES,
-            )  # fmt: skip
+        for vertical, station_index in end_wall.posts.items():
+            # The web along Y, to span the wall against the wind. Under a truss
+            # the column passes through the bottom chord and is its vertical.
+            ids, chain, _chord = add_vertical(
+                "end_columns",
+                "end_column",
+                (end_wall.xs[vertical], y),
+                end_wall.levels[vertical],
+                (roof_nodes[frame][station_index], end_wall.tops[vertical]),
+                pinned_base,
+                chord=(chord_zs[station_index], chord_nodes[frame][station_index])
+                if truss
+                else None,
+                angle=90.0,
+                top_releases=POST_TOP_RELEASES,
+            )
             end_chains[(frame, vertical)] = chain
             warehouse.wall_columns[wall] += [(i, vertical) for i in ids]
         for vertical in range(len(end_wall.xs) - 1):
+            first, last = (station_at(end_wall.xs[v]) for v in (vertical, vertical + 1))
             for z in end_wall.panel_levels(vertical):
+                if truss and all(
+                    abs(chord_zs[k] - z) <= GRID_TOLERANCE for k in range(first, last + 1)
+                ):
+                    # The bottom chord lies on this girt line: it carries the cladding.
+                    for element_id in warehouse.bottom_chord_elements[frame][first:last]:
+                        warehouse.wall_girts[element_id] = (wall, vertical, z)
+                    continue
                 left = end_chains[(frame, vertical)][end_wall.levels[vertical].index(z) + 1]
                 right = end_chains[(frame, vertical + 1)][
                     end_wall.levels[vertical + 1].index(z) + 1
@@ -736,6 +1072,31 @@ def build_warehouse(
                 )
                 warehouse.wall_girts[element_id] = (wall, vertical, z)
     return warehouse
+
+
+def _truss_diagonals(spec: WarehouseSpec, stations: list[RoofStation]) -> list[bool]:
+    """Per truss panel (between consecutive stations): the diagonal rises to the right.
+
+    A Pratt diagonal runs down towards the middle of its nave, a Howe diagonal
+    up towards it; a Warren web alternates from each column line.
+    """
+    rising: list[bool] = []
+    count = 0
+    nave = -1
+    for a, b in itertools.pairwise(stations):
+        centre = (a.x + b.x) / 2.0
+        here = min(spec.n_naves - 1, int(centre // spec.span))
+        if here != nave:
+            nave, count = here, 0
+        left_half = centre <= (nave + 0.5) * spec.span + GRID_TOLERANCE
+        if spec.truss_type is TrussType.PRATT:
+            rising.append(not left_half)
+        elif spec.truss_type is TrussType.HOWE:
+            rising.append(left_half)
+        else:
+            rising.append(count % 2 == 1)
+        count += 1
+    return rising
 
 
 def _cumulative(points: list[tuple[float, float]]) -> list[float]:
@@ -813,8 +1174,10 @@ def roof_pressure_loads(warehouse: Warehouse, pressure: float, *, projected: boo
     for element_id, k in warehouse.purlin_station.items():
         station = warehouse.stations[k]
         width = station.tributary_plan if projected else station.tributary_slope
-        _wx, wy, wz = _gravity_components(nodes, purlins[element_id]) * pressure * width
-        loads.append(UniformElementLoad(element_id=element_id, wy=float(wy), wz=float(wz)))
+        _wx, wy, wz = _components(
+            _gravity_components(nodes, purlins[element_id]) * pressure * width
+        )
+        loads.append(UniformElementLoad(element_id=element_id, wy=wy, wz=wz))
     return loads
 
 
@@ -847,13 +1210,13 @@ def midspan_point_loads(warehouse: Warehouse, force: float) -> tuple[list[Any], 
                 continue
             k = max(i for i, s in enumerate(stations) if s.x < x)
             element = elements[rafters[k]]
-            px, py, pz = _gravity_components(nodes, element) * force
+            px, py, pz = _components(_gravity_components(nodes, element) * force)
             inside.append(
                 PointElementLoad(
                     element_id=element.id,
-                    px=float(px),
-                    py=float(py),
-                    pz=float(pz),
+                    px=px,
+                    py=py,
+                    pz=pz,
                     x=(x - stations[k].x) / (stations[k + 1].x - stations[k].x),
                 )
             )
@@ -865,6 +1228,7 @@ def midspan_point_loads(warehouse: Warehouse, force: float) -> tuple[list[Any], 
 WIND_METHODS: dict[str, str] = {
     "rnc07": "RNC-07 Título IV",
     "asce7": "ASCE 7-16 chapter 27",
+    "en1991": "EN 1991-1-4",
 }
 
 
@@ -874,13 +1238,15 @@ class WarehouseWind:
 
     method: str = "rnc07"
     speed: float = 45.0
-    """RNC-07: the regional velocity VR. ASCE 7: the basic wind speed V."""
+    """RNC-07: the regional velocity VR. ASCE 7: the basic wind speed V. EN 1991-1-4:
+    the basic wind velocity vb."""
     exposure: str = "R2"
-    """RNC-07: terrain roughness R1 to R4. ASCE 7: exposure category B, C or D."""
+    """RNC-07: terrain roughness R1 to R4. ASCE 7: exposure category B, C or D.
+    EN 1991-1-4: terrain category 0, I, II, III or IV."""
     topography: str = "T3"
     """RNC-07 only: T1 to T5."""
     topographic_factor: float = 1.0
-    """ASCE 7 only: Kzt."""
+    """Kzt of ASCE 7, or the orography factor co of EN 1991-1-4."""
     openings: str = "closed"
     """``closed``, ``uniform`` (spread over the four walls) or the wall with the openings."""
     directions: tuple[str, ...] = DIRECTIONS
@@ -924,6 +1290,15 @@ def warehouse_wind_cases(
                 speed=wind.speed,
                 exposure=wind.exposure,
                 kzt=wind.topographic_factor,
+                openings=wind.openings,
+                directions=directions,
+            )
+        if wind.method == "en1991":
+            return en1991_wind_cases(
+                shape,
+                speed=wind.speed,
+                terrain=wind.exposure,
+                orography=wind.topographic_factor,
                 openings=wind.openings,
                 directions=directions,
             )
@@ -979,6 +1354,13 @@ def wind_loads(warehouse: Warehouse, case: WindCase, units: UnitSystem) -> list[
     def mean(pressure: Any, a: float, b: float) -> float:
         return float(pressure.mean(a * metres, b * metres))
 
+    def on_wall(wall: str, a: float, b: float, lo: float, hi: float) -> float:
+        """Mean pressure on ``wall`` from ``a`` to ``b`` along it, ``lo`` to ``hi`` in height."""
+        zones = case.wall_zones.get(wall)
+        if zones is None:
+            return mean(case.walls[wall], lo, hi)
+        return float(zones.mean(a * metres, b * metres, lo * metres, hi * metres))
+
     # Roof: half strips either side of each purlin line.
     last = len(stations) - 1
     for element_id, k in warehouse.purlin_station.items():
@@ -992,11 +1374,14 @@ def wind_loads(warehouse: Warehouse, case: WindCase, units: UnitSystem) -> list[
             outward = np.array([-dz, 0.0, dx]) / run * (1.0 if dx > 0.0 else -1.0)
             middle = here.x + dx / 2.0
             load = case.roof_load_at((here.x + middle) / 2.0 * metres)
-            value = (
-                mean(load.profile, here.x, middle)
-                if load.axis == "x"
-                else mean(load.profile, ya, yb)
-            )
+            if load.zones is not None:
+                value = float(
+                    load.zones.mean(here.x * metres, middle * metres, ya * metres, yb * metres)
+                )
+            elif load.axis == "x":
+                value = mean(load.profile, here.x, middle)
+            else:
+                value = mean(load.profile, ya, yb)
             add(element_id, value, run / 2.0, outward)
 
     # Side walls.
@@ -1005,7 +1390,6 @@ def wind_loads(warehouse: Warehouse, case: WindCase, units: UnitSystem) -> list[
         ("x0", 0, np.array([-1.0, 0.0, 0.0])),
         ("x1", last, np.array([1.0, 0.0, 0.0])),
     ):
-        pressure = case.walls[wall]
         levels = [0.0, *girt_zs, stations[station].z]
         if girt_zs:
             for element_id, (girt_wall, _bay, z) in warehouse.wall_girts.items():
@@ -1013,16 +1397,20 @@ def wind_loads(warehouse: Warehouse, case: WindCase, units: UnitSystem) -> list[
                     continue
                 k = levels.index(z)
                 lo, hi = (levels[k - 1] + z) / 2.0, (z + levels[k + 1]) / 2.0
-                add(element_id, mean(pressure, lo, hi), hi - lo, outward)
+                ya, yb = (local(n)[1] for n in elements[element_id].nodes)
+                add(element_id, on_wall(wall, ya, yb, lo, hi), hi - lo, outward)
             lo, hi = (levels[-2] + levels[-1]) / 2.0, levels[-1]
             for element_id, k in warehouse.purlin_station.items():
                 if k == station:
-                    add(element_id, mean(pressure, lo, hi), hi - lo, outward)
+                    ya, yb = (local(n)[1] for n in elements[element_id].nodes)
+                    add(element_id, on_wall(wall, ya, yb, lo, hi), hi - lo, outward)
         else:
             for element_id, frame in warehouse.wall_columns[wall]:
-                width = spec.frame_spacing * (0.5 if frame in (0, spec.n_frames - 1) else 1.0)
+                y = frame * spec.frame_spacing
+                ya = max(0.0, y - spec.frame_spacing / 2.0)
+                yb = min(spec.length, y + spec.frame_spacing / 2.0)
                 za, zb = (local(n)[2] for n in elements[element_id].nodes)
-                add(element_id, mean(pressure, za, zb), width, outward)
+                add(element_id, on_wall(wall, ya, yb, za, zb), yb - ya, outward)
 
     # End walls.
     end_wall = end_wall_layout(spec, stations)
@@ -1031,7 +1419,6 @@ def wind_loads(warehouse: Warehouse, case: WindCase, units: UnitSystem) -> list[
         ("y0", 0, np.array([0.0, -1.0, 0.0])),
         ("y1", spec.n_frames - 1, np.array([0.0, 1.0, 0.0])),
     ):
-        pressure = case.walls[wall]
         if not framed:
             for element_id, vertical in warehouse.wall_columns[wall]:
                 x = end_wall.xs[vertical]
@@ -1042,7 +1429,7 @@ def wind_loads(warehouse: Warehouse, case: WindCase, units: UnitSystem) -> list[
                 # The wall up to the roof line, spread over the column's height.
                 width = end_wall.roof_area(left, right, profile) / end_wall.tops[vertical]
                 za, zb = (local(n)[2] for n in elements[element_id].nodes)
-                add(element_id, mean(pressure, za, zb), width, outward)
+                add(element_id, on_wall(wall, left, right, za, zb), width, outward)
             continue
         top_girt: dict[int, float] = {}
         for vertical in range(len(end_wall.xs) - 1):
@@ -1055,7 +1442,7 @@ def wind_loads(warehouse: Warehouse, case: WindCase, units: UnitSystem) -> list[
                     continue
                 k = levels.index(z)
                 lo, hi = (levels[k - 1] + z) / 2.0, (z + levels[k + 1]) / 2.0
-                add(element_id, mean(pressure, lo, hi), hi - lo, outward)
+                add(element_id, on_wall(wall, a, b, lo, hi), hi - lo, outward)
         # The strip under the roof line hangs from the rafter of the end frame.
         for k, element_id in enumerate(warehouse.rafter_elements[frame]):
             s0, s1 = stations[k], stations[k + 1]
@@ -1064,7 +1451,7 @@ def wind_loads(warehouse: Warehouse, case: WindCase, units: UnitSystem) -> list[
             roof = (s0.z + s1.z) / 2.0
             height = (roof - top_girt[vertical]) / 2.0
             width = height * abs(s1.x - s0.x) / math.hypot(s1.x - s0.x, s1.z - s0.z)
-            add(element_id, mean(pressure, roof - height, roof), width, outward)
+            add(element_id, on_wall(wall, s0.x, s1.x, roof - height, roof), width, outward)
 
     loads: list[Any] = []
     for element_id in sorted(forces):
@@ -1076,9 +1463,9 @@ def wind_loads(warehouse: Warehouse, case: WindCase, units: UnitSystem) -> list[
             element.local_axis_angle,
         )
         assert axes is not None  # a warehouse has no zero-length member
-        wx, wy, wz = (float(axis @ forces[element_id]) for axis in axes)
-        if max(abs(wx), abs(wy), abs(wz)) == 0.0:
+        if not forces[element_id].any():
             continue
+        wx, wy, wz = _components(axis @ forces[element_id] for axis in axes)
         loads.append(UniformElementLoad(element_id=element_id, wx=wx, wy=wy, wz=wz))
     return loads
 
@@ -1094,9 +1481,325 @@ def member_design_overrides(warehouse: Warehouse) -> list[Any]:
     from opensees_studio.core.design.settings import SteelMemberDesign
 
     return [
-        SteelMemberDesign(element_id=element_id, length_minor=length, length_ltb=length)
+        SteelMemberDesign(
+            element_id=element_id, length_minor=portable(length), length_ltb=portable(length)
+        )
         for element_id, length in sorted(warehouse.unbraced.items())
     ]
+
+
+# ───────────────────────────── earthquake ─────────────────────────────
+#: The static methods the wizard offers.
+SEISMIC_METHODS: dict[str, str] = {
+    "rnc07": "RNC-07 Art. 32",
+    "nscm": "NSCM Managua 8.2.1",
+    "asce7": "ASCE 7-16 12.8",
+    "en1998": "EN 1998-1 4.3.3.2",
+}
+
+#: The directions an earthquake case can act in.
+SEISMIC_DIRECTIONS: tuple[str, ...] = ("X", "Y")
+#: Design codes whose combinations take each earthquake direction with 30 % of
+#: the other: RNC-07 Art. 32 f (Efectos bidireccionales), NSCM and EN 1998-1
+#: 4.3.3.5.1 (3).
+ORTHOGONAL_RULE_CODES: tuple[str, ...] = ("rnc07", "nscm", "en1990")
+
+#: EN 1998-1 Table 3.2: soil factor S of the Type 1 spectrum per ground type.
+EN1998_SOIL_FACTORS: dict[str, float] = {"A": 1.0, "B": 1.2, "C": 1.15, "D": 1.35, "E": 1.4}
+#: EN 1998-1 4.2.5 (5), Note: recommended importance factor per importance class.
+EN1998_IMPORTANCE: dict[str, float] = {"I": 0.8, "II": 1.0, "III": 1.2, "IV": 1.4}
+
+
+@dataclass(frozen=True)
+class WarehouseSeismic:
+    """The earthquake on a warehouse by the static method of a code.
+
+    The coefficient is that of the plateau of the design spectrum: the period
+    of the building is not used, which is on the safe side and what a
+    single-storey building of this height takes anyway.
+    """
+
+    method: str = "rnc07"
+    """Key of :data:`SEISMIC_METHODS`."""
+    a0: float = 0.3
+    """RNC-07 and NSCM: peak ground acceleration, in g (RNC-07 zone C; NSCM Tabla 14.2).
+    EN 1998-1: the reference acceleration agR on type A ground, in g."""
+    soil: str = "II"
+    """RNC-07 soil type I to III, NSCM site class A to D or EN 1998-1 ground type A to E."""
+    importance_class: str = ""
+    """RNC-07 group A to C, NSCM risk category or EN 1998-1 importance class I to IV;
+    "" = Group B / category II / class II."""
+    reduction: float = 2.0
+    """Q of RNC-07, Ro of NSCM, R of ASCE 7 or the behaviour factor q of EN 1998-1."""
+    regularity: str = "regular"
+    """RNC-07 Art. 23 regularity, for Q'."""
+    sds: float = 1.0
+    """ASCE 7: design spectral acceleration at short periods, g."""
+    importance: float = 1.0
+    """ASCE 7: importance factor Ie."""
+    roof_live: float = 0.0
+    """Roof live load that counts as seismic weight, per area of horizontal
+    projection, in project units (the CVR of RNC-07)."""
+    directions: tuple[str, ...] = SEISMIC_DIRECTIONS
+
+    def __post_init__(self) -> None:
+        if self.method not in SEISMIC_METHODS:
+            raise WarehouseError(f"Unknown seismic method {self.method!r}.")
+        if self.reduction <= 0.0:
+            raise WarehouseError("The seismic reduction factor must be positive.")
+        if self.roof_live < 0.0:
+            raise WarehouseError("Loads are entered as positive, downward values.")
+        if not self.directions:
+            raise WarehouseError("Choose at least one earthquake direction.")
+        for direction in self.directions:
+            if direction not in SEISMIC_DIRECTIONS:
+                raise WarehouseError(f"Unknown earthquake direction {direction!r}.")
+
+
+def seismic_coefficient(seismic: WarehouseSeismic) -> tuple[float, str]:
+    """``c = V / W`` of the static method, and the clause it comes from.
+
+    Raises:
+        WarehouseError: when the code refuses the values (a soil that needs a
+            site study, an Ro below 1, ...).
+    """
+    from opensees_studio.core import nscm
+    from opensees_studio.core.equivalent_lateral import (
+        ElfError,
+        ElfParameters,
+        asce7_cs,
+        rnc07_coefficient,
+    )
+
+    try:
+        if seismic.method == "rnc07":
+            found = rnc07_coefficient(
+                ElfParameters(
+                    code="rnc07",
+                    period=0.0,
+                    sds=0.0,
+                    sd1=0.0,
+                    r=seismic.reduction,
+                    a0=seismic.a0,
+                    soil=seismic.soil,
+                    importance_class=seismic.importance_class,
+                    regularity=seismic.regularity,
+                )
+            )
+            return found.c, f"RNC-07 {found.why}"
+        if seismic.method == "nscm":
+            site = nscm.NscmSite(
+                a0=seismic.a0,
+                site_class=seismic.soil,
+                risk_category=seismic.importance_class or "II",
+                r0=seismic.reduction,
+            )
+            _tb, tc, _td = site.corner_periods()
+            cs, why = site.seismic_coefficient(tc)
+            return cs, f"NSCM {why}"
+        if seismic.method == "en1998":
+            # Expression (3.14), the plateau of the design spectrum, with λ = 1
+            # (4.3.3.2.2: a building of one storey) and ag = γI agR.
+            if seismic.soil not in EN1998_SOIL_FACTORS:
+                raise WarehouseError(
+                    f"EN 1998-1 has ground types A to E, not {seismic.soil!r}: S1 and S2 "
+                    "need a special study."
+                )
+            gamma = EN1998_IMPORTANCE[seismic.importance_class or "II"]
+            soil_factor = EN1998_SOIL_FACTORS[seismic.soil]
+            ag = gamma * seismic.a0
+            return 2.5 * ag * soil_factor / seismic.reduction, (
+                f"EN 1998-1 (3.14): Sd = 2.5 ag S / q, ag = {ag:.4g} g, S = {soil_factor:g}, "
+                f"q = {seismic.reduction:g}"
+            )
+        if seismic.sds <= 0.0:
+            raise WarehouseError("SDS must be positive.")
+        cs, why = asce7_cs(
+            ElfParameters(
+                code="asce7_16",
+                period=0.0,
+                sds=seismic.sds,
+                sd1=0.0,
+                r=seismic.reduction,
+                importance=seismic.importance,
+            )
+        )
+        return cs, f"ASCE 7-16 {why}"
+    except (ElfError, nscm.NscmError, KeyError) as exc:
+        raise WarehouseError(str(exc)) from exc
+
+
+def nscm_a0_fas(seismic: WarehouseSeismic) -> float:
+    """``a0 Fas`` of the NSCM site (Tabla 6.4.1), which sets the vertical component Ev.
+
+    Raises:
+        WarehouseError: when the site class needs a site response study.
+    """
+    from opensees_studio.core import nscm
+
+    try:
+        site = nscm.NscmSite(
+            a0=seismic.a0,
+            site_class=seismic.soil,
+            risk_category=seismic.importance_class or "II",
+            r0=seismic.reduction,
+        )
+        return float(site.a0 * site.fas)
+    except (nscm.NscmError, KeyError, ValueError) as exc:
+        raise WarehouseError(str(exc)) from exc
+
+
+def roof_weights(warehouse: Warehouse, pressure: float, *, projected: bool) -> dict[int, float]:
+    """Node id -> weight of a roof load per area, half of each purlin's strip per end."""
+    if pressure == 0.0:
+        return {}
+    nodes = {n.id: np.asarray(n.coords, dtype=float) for n in warehouse.nodes}
+    elements = {e.id: e for e in warehouse.elements}
+    out: dict[int, float] = {}
+    for element_id, k in warehouse.purlin_station.items():
+        station = warehouse.stations[k]
+        width = station.tributary_plan if projected else station.tributary_slope
+        i, j = elements[element_id].nodes
+        half = 0.5 * pressure * width * float(np.linalg.norm(nodes[j] - nodes[i]))
+        out[i] = out.get(i, 0.0) + half
+        out[j] = out.get(j, 0.0) + half
+    return out
+
+
+def seismic_loads(
+    warehouse: Warehouse, weights: Mapping[int, float], coefficient: float, direction: str
+) -> list[Any]:
+    """The static earthquake forces along ``direction`` ("X" or "Y"), one per node.
+
+    ``weights`` is the seismic weight lumped on each node of the warehouse. The
+    base shear ``coefficient × ΣW`` is shared in proportion to weight times
+    height above the base, ``Fi = c Wi hi ΣW / ΣWi hi`` (RNC-07 Art. 32, ASCE 7
+    Eq. 12.8-12 with k = 1), so the roof takes almost all of it and a joint
+    half way up a wall its smaller part.
+    """
+    from opensees_studio.core.loads import NodalLoad
+
+    axis = SEISMIC_DIRECTIONS.index(direction)
+    base = warehouse.spec.origin[2]
+    heights = {n.id: n.coords[2] - base for n in warehouse.nodes}
+    total = sum(weights.get(n, 0.0) for n in heights)
+    moment = sum(weights.get(n, 0.0) * h for n, h in heights.items())
+    if total <= 0.0 or moment <= 0.0:
+        return []
+    loads: list[Any] = []
+    for node_id in sorted(heights):
+        force = coefficient * weights.get(node_id, 0.0) * heights[node_id] * total / moment
+        if force == 0.0:
+            continue
+        fx, fy = (force, 0.0) if axis == 0 else (0.0, force)
+        loads.append(NodalLoad(node_id=node_id, forces=(fx, fy, 0.0, 0.0, 0.0, 0.0)))
+    return loads
+
+
+# ───────────────────────────── snow and ash ─────────────────────────────
+#: What can settle on the roof, by the rule that gives its load.
+SNOW_METHODS: dict[str, str] = {
+    "ash": "Volcanic ash (RNC-07 Art. 14, NSCM 7.3)",
+    "asce7": "ASCE 7-16 chapter 7",
+    "en1991": "EN 1991-1-3",
+}
+
+
+@dataclass(frozen=True)
+class WarehouseSnow:
+    """Snow or volcanic ash on the roof of a warehouse."""
+
+    method: str = "ash"
+    """Key of :data:`SNOW_METHODS`."""
+    ground: float = 0.0
+    """A load per area of plan, in project units: the ash itself, the ground
+    snow load ``pg`` of ASCE 7 or the characteristic ``sk`` of EN 1991-1-3."""
+    exposure: float = 1.0
+    """Exposure factor Ce (ASCE 7 Table 7.3-1, EN 1991-1-3 Table 5.1)."""
+    thermal: float = 1.0
+    """Thermal factor Ct."""
+    importance: float = 1.0
+    """ASCE 7: snow importance factor Is."""
+    slippery: bool = False
+    """ASCE 7: an unobstructed slippery roof, which sheds snow at a lower slope."""
+    unbalanced: bool = True
+    """Also the drifted arrangements the code asks for on this roof."""
+
+    def __post_init__(self) -> None:
+        if self.method not in SNOW_METHODS:
+            raise WarehouseError(f"Unknown snow method {self.method!r}.")
+        if self.ground < 0.0:
+            raise WarehouseError("Loads are entered as positive, downward values.")
+        if min(self.exposure, self.thermal, self.importance) <= 0.0:
+            raise WarehouseError("The snow factors Ce, Ct and Is must be positive.")
+
+
+def warehouse_snow_cases(
+    spec: WarehouseSpec, snow: WarehouseSnow, units: UnitSystem
+) -> list[SnowCase]:
+    """The snow or ash cases of ``snow`` on ``spec``, positions and pressures in project units."""
+    metres = length_scale(units, UnitSystem.SI_M_N)
+    unit = pressure_from_kpa(1.0, units)  # one kN/m² in project units
+    roof = {RoofType.MONO_PITCH: "mono", RoofType.GABLE: "gable"}.get(spec.roof, "flat")
+    ground = snow.ground / unit
+    try:
+        # Naves stand under one roof: a single ridge (or slope) over the whole width.
+        planes = roof_planes(spec.width * metres, 1, roof)
+        if snow.method == "ash":
+            cases = ash_cases(planes, ground)
+        elif snow.method == "asce7":
+            cases = asce7_snow_cases(
+                planes,
+                spec.slope,
+                ground,
+                ce=snow.exposure,
+                ct=snow.thermal,
+                importance=snow.importance,
+                slippery=snow.slippery,
+                unbalanced=snow.unbalanced,
+            )
+        else:
+            cases = en1991_snow_cases(
+                planes,
+                spec.slope,
+                ground,
+                ce=snow.exposure,
+                ct=snow.thermal,
+                drifted=snow.unbalanced,
+            )
+    except SnowError as exc:
+        raise WarehouseError(str(exc)) from exc
+    return [
+        SnowCase(case.name, tuple((x / metres, p * unit) for x, p in case.points)) for case in cases
+    ]
+
+
+def snow_loads(warehouse: Warehouse, case: SnowCase) -> list[Any]:
+    """A snow or ash case as uniform loads on the purlins.
+
+    Each purlin takes what falls on the half strip of plan to either
+    neighbour: the case's mean pressure over it times its width, downwards.
+    """
+    from opensees_studio.core.loads import UniformElementLoad
+
+    nodes = {n.id: n for n in warehouse.nodes}
+    purlins = {e.id: e for e in warehouse.elements if e.id in warehouse.purlin_station}
+    stations = warehouse.stations
+    last = len(stations) - 1
+    loads: list[Any] = []
+    for element_id, k in warehouse.purlin_station.items():
+        here = stations[k]
+        per_length = 0.0
+        for other in (k - 1, k + 1):
+            if not 0 <= other <= last:
+                continue
+            middle = 0.5 * (here.x + stations[other].x)
+            per_length += case.mean(here.x, middle) * abs(middle - here.x)
+        if per_length == 0.0:
+            continue
+        _wx, wy, wz = _components(_gravity_components(nodes, purlins[element_id]) * per_length)
+        loads.append(UniformElementLoad(element_id=element_id, wy=wy, wz=wz))
+    return loads
 
 
 # ───────────────────────── code presets and defaults ─────────────────────────
@@ -1120,6 +1823,14 @@ class CodePreset:
     """Key of :data:`WIND_METHODS`: the wind procedure that goes with the code."""
     wind_speed: float = 45.0
     """Default wind speed, m/s (see :class:`WarehouseWind`)."""
+    seismic_method: str = "rnc07"
+    """Key of :data:`SEISMIC_METHODS`: the static method that goes with the code."""
+    seismic_live_kpa: float = 0.0
+    """Roof live load that counts as seismic weight, kN/m² of horizontal projection."""
+    seismic_reduction: float = 2.0
+    """Default Q, Ro or R of a steel warehouse of limited ductility."""
+    snow_method: str = "ash"
+    """Key of :data:`SNOW_METHODS`: what settles on a roof under this code."""
 
 
 _KGF = 9.80665e-3  # one kilogram-force in kN
@@ -1130,26 +1841,45 @@ _KGF = 9.80665e-3  # one kilogram-force in kN
 #: Wind: NSCM 7.2 sends the wind loads to RNC-07 Título IV, whose regional
 #: velocity is a 50-year one (45 m/s in zone 2); the basic wind speed of ASCE
 #: 7-16 is an ultimate one, about sqrt(1.6) times that, hence 57 m/s.
+#: Earthquake: RNC-07 Art. 11 a counts 10 kg/m² of the roof live load as seismic
+#: weight (CVR); NSCM 9.6 b counts 0.3 CV in warehouses (W = CM + 0.3 CV), 3 kg/m²
+#: of that roof; ASCE 7-16 12.7.2 counts no roof live load.
+#: EN 1990: the roof is category H of EN 1991-1-1 (recommended qk = 0.4 kN/m²;
+#: the concentrated Qk = 1 kN does not act with it); ψ2 = 0 for it, so no roof
+#: load counts as seismic mass (EN 1998-1 3.2.4); q = 1.5 is the upper limit of
+#: low dissipative behaviour (EN 1998-1 Table 6.1). The basic wind velocity is
+#: the National Annex's: 26 m/s is only a starting value.
 CODE_PRESETS: dict[str, CodePreset] = {
     preset.key: preset
     for preset in (
         CodePreset(
             "rnc07", "L", "LIVE", 10 * _KGF, 200 * _KGF, "LRFD",
             "RNC-07 Art. 11 a: light roofs, 10 kg/m² plus 200 kg at mid-span of the main members.",
+            seismic_live_kpa=10 * _KGF,
         ),
         CodePreset(
             "nscm", "Lr", "ROOF LIVE", 10 * _KGF, 200 * _KGF, "LRFD",
             "RNC-07 Art. 11 a: light roofs, 10 kg/m² plus 200 kg at mid-span of the main members.",
+            seismic_method="nscm", seismic_live_kpa=0.3 * 10 * _KGF,
         ),
         CodePreset(
             "asce7_lrfd", "Lr", "ROOF LIVE", 0.9576, 0.0, "LRFD",
             "ASCE 7-16 Table 4.3-1: ordinary roofs, 20 psf (before any reduction).",
-            "asce7", 57.0,
+            "asce7", 57.0, seismic_method="asce7", seismic_reduction=3.0,
+            snow_method="asce7",
         ),
         CodePreset(
             "asce7_asd", "Lr", "ROOF LIVE", 0.9576, 0.0, "ASD",
             "ASCE 7-16 Table 4.3-1: ordinary roofs, 20 psf (before any reduction).",
-            "asce7", 57.0,
+            "asce7", 57.0, seismic_method="asce7", seismic_reduction=3.0,
+            snow_method="asce7",
+        ),
+        CodePreset(
+            "en1990", "Lr", "ROOF LIVE", 0.4, 0.0, "LRFD",
+            "EN 1991-1-1 Table 6.10: roofs of category H, 0.4 kN/m² (the 1 kN load Qk is a "
+            "separate, local check).",
+            "en1991", 26.0, seismic_method="en1998", seismic_reduction=1.5,
+            snow_method="en1991",
         ),
     )
 }  # fmt: skip
@@ -1191,6 +1921,10 @@ class WarehouseLoads:
     design_lengths: bool = True
     wind: WarehouseWind | None = None
     """Wind cases to create, one or two per direction; None for no wind."""
+    seismic: WarehouseSeismic | None = None
+    """Earthquake cases to create, one per direction; None for no earthquake."""
+    snow: WarehouseSnow | None = None
+    """Snow or ash cases to create; None for neither."""
 
     def __post_init__(self) -> None:
         if self.code not in CODE_PRESETS:
@@ -1230,15 +1964,18 @@ def default_section(key: str, project: Project, section_id: int) -> Any:
             t=size["t"] * mm,
             r=size["r"] * mm,
         )
-        return cold_formed_section(
-            shape,
-            section_id=section_id,
-            ndm=project.ndm,
-            name="C150X50X15X2.38",
-            material=default_cold_formed_material(project),
-            units=units,
-            elastic_modulus=e,
-            shear_modulus=g,
+        # Its properties come out of the arcs of the corners (sines, tangents).
+        return _portable_model(
+            cold_formed_section(
+                shape,
+                section_id=section_id,
+                ndm=project.ndm,
+                name="C150X50X15X2.38",
+                material=default_cold_formed_material(project),
+                units=units,
+                elastic_modulus=e,
+                shear_modulus=g,
+            )
         )
     section = shape_to_elastic_section(
         get_shape(DEFAULT_AISC_SHAPES[key]),
@@ -1338,9 +2075,7 @@ def plan_warehouse(
     section_ids: dict[str, int] = {}
     new_sections: list[Any] = []
     created: dict[str, int] = {}
-    for key in SECTION_KEYS:
-        if key == "end_column" and spec.end_wall_column_spacing <= 0.0:
-            continue
+    for key in spec.section_keys():
         section_id = chosen.get(key)
         if section_id is not None:
             if section_id not in existing:
@@ -1388,6 +2123,10 @@ def plan_warehouse(
 
     if loads is not None:
         _plan_loads(plan, project, scratch, loads)
+        plan.pattern_loads[:] = [
+            (pattern_id, list_name, [_portable_model(item) for item in items])
+            for pattern_id, list_name, items in plan.pattern_loads
+        ]
     return plan
 
 
@@ -1404,6 +2143,7 @@ def _plan_loads(
 ) -> None:
     """The load cases, the roof loads, the combinations and the design lengths."""
     from opensees_studio.core.code_combinations import (
+        ALTERNATIVE_ROLES,
         CODES,
         envelope_groups,
         generate_for_code,
@@ -1412,11 +2152,14 @@ def _plan_loads(
     from opensees_studio.core.defaults import make_dead_load_case, make_load_cases
     from opensees_studio.core.design.settings import DesignSettings
     from opensees_studio.core.loads import PlainLoadPattern
+    from opensees_studio.core.mass_source import self_weight_per_node
 
     preset = CODE_PRESETS[loads.code]
     warehouse = plan.warehouse
 
     def add_case(series: Any, pattern: Any, case: Any) -> None:
+        if getattr(case, "system", CASE_SYSTEM) == _DEFAULT_SYSTEM:
+            case = case.model_copy(update={"system": CASE_SYSTEM})
         for target, planned, item in (
             (scratch.time_series, plan.time_series, series),
             (scratch.load_patterns, plan.patterns, pattern),
@@ -1432,6 +2175,18 @@ def _plan_loads(
     if dead is None:
         add_case(*make_dead_load_case(scratch))
         dead = plan.patterns[-1]
+    slow = [
+        c.name or str(c.id)
+        for c in project.analyses
+        if c.id in _static_cases_of(project, dead.id)
+        and getattr(c, "system", "") == _DEFAULT_SYSTEM
+    ]
+    if slow and len(warehouse.nodes) >= SLOW_SOLVER_NODES:
+        plan.notes.append(
+            f"Case {', '.join(slow)} keeps its {_DEFAULT_SYSTEM} solver, which is slow on a "
+            f"model with this many pinned members: {CASE_SYSTEM} (Define > Load Cases) gives "
+            "the same result many times faster."
+        )
     live = next(
         (
             p
@@ -1488,17 +2243,130 @@ def _plan_loads(
             "pressures of the code."
         )
 
+    snow_case_ids: list[int] = []
+    # A code without a snow role (RNC-07) takes the ash with the live load,
+    # "adicional a la carga viva" (Art. 14).
+    snow_role = "S" if "S" in CODES[loads.code].roles else "L"
+    if loads.snow is not None:
+        snow_cases = warehouse_snow_cases(warehouse.spec, loads.snow, project.meta.units)
+        if snow_role != "S" and len(snow_cases) > 1:
+            plan.notes.append(
+                f"{CODES[loads.code].label} has no snow load in its combinations: only the "
+                f"balanced case {snow_cases[0].name} was created, as a live load."
+            )
+            snow_cases = snow_cases[:1]
+        taken = {p.name for p in scratch.load_patterns} | {c.name for c in scratch.analyses}
+        names = []
+        for snow_case in snow_cases:
+            name, n = snow_case.name, 2
+            while name in taken:
+                name, n = f"{snow_case.name} ({n})", n + 1
+            taken.add(name)
+            names.append(name)
+        series, patterns, cases = make_load_cases(scratch, names)
+        for snow_case, one_series, pattern, case in zip(
+            snow_cases, series, patterns, cases, strict=True
+        ):
+            add_case(one_series, pattern, case)
+            snow_case_ids.append(plan.cases[-1].id)
+            plan.pattern_loads.append(
+                (pattern.id, "element_loads", snow_loads(warehouse, snow_case))
+            )
+        if snow_cases:
+            peak = max(c.peak for c in snow_cases)
+            plan.notes.append(
+                f"{len(snow_cases)} case(s) by {SNOW_METHODS[loads.snow.method]}: "
+                f"{snow_cases[0].points[0][1]:.6g} per area of plan on the whole roof"
+                + (f", up to {peak:.6g} where it drifts" if len(snow_cases) > 1 else "")
+                + ". Build-up against parapets, taller walls and in gutters is not included."
+            )
+
+    seismic_case_ids: list[int] = []
+    if loads.seismic is not None:
+        seismic = loads.seismic
+        coefficient, clause = seismic_coefficient(seismic)
+        own = {n.id for n in warehouse.nodes}
+        weights = {
+            n: w for n, w in self_weight_per_node(scratch, dead.self_weight).items() if n in own
+        }
+        for extra in (
+            roof_weights(warehouse, loads.roof_dead, projected=False),
+            roof_weights(warehouse, seismic.roof_live, projected=True),
+        ):
+            for node_id, weight in extra.items():
+                weights[node_id] = weights.get(node_id, 0.0) + weight
+        taken = {p.name for p in scratch.load_patterns} | {c.name for c in scratch.analyses}
+        names = []
+        for direction in seismic.directions:
+            name, n = f"EQ {direction}", 2
+            while name in taken:
+                name, n = f"EQ {direction} ({n})", n + 1
+            taken.add(name)
+            names.append(name)
+        series, patterns, cases = make_load_cases(scratch, names)
+        for direction, one_series, pattern, case in zip(
+            seismic.directions, series, patterns, cases, strict=True
+        ):
+            add_case(one_series, pattern, case)
+            seismic_case_ids.append(plan.cases[-1].id)
+            plan.pattern_loads.append(
+                (
+                    pattern.id,
+                    "nodal_loads",
+                    seismic_loads(warehouse, weights, coefficient, direction),
+                )
+            )
+        total = sum(weights.values())
+        plan.notes.append(
+            f"{len(names)} earthquake case(s) by {SEISMIC_METHODS[seismic.method]}: "
+            f"c = {coefficient:.4g} ({clause}), seismic weight {total:.6g}, base shear "
+            f"{coefficient * total:.6g}. The period is not used, and the accidental torsion "
+            "is not included."
+        )
+
     if loads.combinations:
         roles: dict[str, list[int]] = {"D": _static_cases_of(scratch, dead.id)}
         if live is not None:
             roles[preset.roof_live_role] = _static_cases_of(scratch, live.id)
         if wind_case_ids:
             roles["W"] = wind_case_ids
+        if seismic_case_ids:
+            roles["E"] = seismic_case_ids
+        if snow_case_ids:
+            roles[snow_role] = [*roles.get(snow_role, []), *snow_case_ids]
         case_names = {c.id: c.name or str(c.id) for c in scratch.analyses}
         # A wind case has its direction and its suctions in it: reversing it is
         # not another wind, so each one enters the combinations with one sign.
+        # An earthquake acts both ways, and by RNC-07 Art. 32 f and by NSCM each
+        # direction goes with 30 % of the other. ASCE 7-16 12.5 asks for that
+        # only in some seismic design categories: its generator has the option.
+        # NSCM also folds the vertical component Ev = 0.2 a0 Fas CM (Ec. 7.8-4)
+        # into the dead load factor: with the site of the earthquake page.
+        options: dict[str, Any] = {}
+        if snow_role == "S" and len(snow_case_ids) > 1:
+            # The balanced and the drifted snow never lie on the roof together.
+            options[ALTERNATIVE_ROLES] = ("S",)
+        if loads.code in ORTHOGONAL_RULE_CODES and len(seismic_case_ids) > 1:
+            options["orthogonal"] = True
+        if loads.code == "en1990":
+            # EN 1991-1-1 3.3.2 (1): nobody maintains a roof under snow or in a storm.
+            options["roof_imposed_alone"] = True
+            if wind_case_ids:
+                # The wind lifts a light roof: the permanent action then relieves it.
+                options["favourable_permanent"] = True
+        if (
+            loads.code == "nscm"
+            and loads.seismic is not None
+            and loads.seismic.method == "nscm"
+            and seismic_case_ids
+        ):
+            options["a0_fas"] = round(nscm_a0_fas(loads.seismic), 4)
         generated = generate_for_code(
-            loads.code, roles, case_names=case_names, peak_cases=wind_case_ids
+            loads.code,
+            roles,
+            case_names=case_names,
+            peak_cases=wind_case_ids,
+            options=options or None,
         )
         used = {c.name for c in project.combinations}
         fresh = [g for g in generated if g.name not in used]
@@ -1537,13 +2405,26 @@ def _plan_loads(
 
 __all__ = [
     "BRACE_RELEASES",
+    "BRACING_GROUPS",
+    "CASE_SYSTEM",
     "CODE_PRESETS",
     "DEFAULT_AISC_SHAPES",
     "DEFAULT_ROOF_DEAD_KPA",
+    "EN1998_IMPORTANCE",
+    "EN1998_SOIL_FACTORS",
     "GROUPS",
     "GROUP_COLOURS",
+    "ORTHOGONAL_RULE_CODES",
+    "ROOF_STRUCTURES",
+    "ROOF_TRUSS_TYPES",
     "SECONDARY_RELEASES",
     "SECTION_KEYS",
+    "SEISMIC_DIRECTIONS",
+    "SEISMIC_METHODS",
+    "SNOW_METHODS",
+    "TRUSS_BOTTOMS",
+    "TRUSS_GROUPS",
+    "TRUSS_SECTION_KEYS",
     "WAREHOUSE_NDF",
     "WIND_METHODS",
     "CodePreset",
@@ -1553,8 +2434,11 @@ __all__ = [
     "WarehouseError",
     "WarehouseLoads",
     "WarehousePlan",
+    "WarehouseSeismic",
+    "WarehouseSnow",
     "WarehouseSpec",
     "WarehouseWind",
+    "bottom_chord_ties",
     "build_warehouse",
     "building_shape",
     "default_section",
@@ -1565,11 +2449,18 @@ __all__ = [
     "length_from_m",
     "member_design_overrides",
     "midspan_point_loads",
+    "nscm_a0_fas",
     "plan_warehouse",
+    "portable",
     "pressure_from_kpa",
     "roof_pressure_loads",
     "roof_stations",
+    "roof_weights",
+    "seismic_coefficient",
+    "seismic_loads",
+    "snow_loads",
     "warehouse_grid",
+    "warehouse_snow_cases",
     "warehouse_wind_cases",
     "wind_loads",
 ]

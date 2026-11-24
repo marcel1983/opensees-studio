@@ -117,13 +117,23 @@ script o un notebook de Jupyter: la interfaz es una forma de usarlo, no la únic
   `LayeredShell` ortotrópica con el EA y EI de la sección compuesta según los
   nervios y del topping en la otra dirección); el **asistente de bodegas**
   (Define → Create Warehouse, o File → New Model → Warehouse: nave de pórticos
-  3D a dos aguas, a una agua o plana, de una o varias naves, con correas y
+  3D a dos aguas, a una agua o plana, de una o varias naves, con vigas de techo
+  o con celosías (cerchas) Pratt, Howe o Warren de cordón inferior horizontal o
+  paralelo, con tirantes del cordón inferior entre pórticos, con correas y
   largueros a una separación máxima, arriostramiento en X de techo y paredes,
   grupos por tipo de miembro, cargas muerta y viva de techo sobre las correas y
-  las combinaciones de RNC-07, NSCM o ASCE 7-16; columnas y largueros de los
-  muros hastiales, y casos de viento por dirección según RNC-07 Título IV o
-  ASCE 7-16 capítulo 27, con las presiones de la estructura principal sobre
-  correas, largueros y columnas; las correas van
+  las combinaciones de RNC-07, NSCM, ASCE 7-16 o EN 1990; columnas y largueros
+  de los muros hastiales, y casos de viento por dirección según RNC-07 Título
+  IV, ASCE 7-16 capítulo 27 o EN 1991-1-4 con sus zonas de cubierta y de muro,
+  con las presiones de la estructura principal sobre
+  correas, largueros y columnas; casos de sismo estático `EQ X` y `EQ Y` según
+  RNC-07 Art. 32, NSCM 8.2.1, ASCE 7-16 12.8 o EN 1998-1 4.3.3.2, con el
+  coeficiente de la meseta
+  del espectro por el peso sísmico (acero, carga muerta de techo y carga viva
+  reducida) repartido entre los nudos según peso y altura; carga de ceniza
+  volcánica según RNC-07 Art. 14 y NSCM 7.3 (20 kg/m²) o de nieve según ASCE
+  7-16 capítulo 7 o EN 1991-1-3, balanceada y desbalanceada, sobre la
+  proyección horizontal del techo; las correas van
   articuladas y solo arriostran la viga de techo donde llevan angular de
   estabilización, y el asistente escribe esas longitudes no arriostradas para la
   verificación de acero); la losa **Slab 20cm** de concreto

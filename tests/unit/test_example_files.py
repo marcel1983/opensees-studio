@@ -41,6 +41,25 @@ def _text(path: Path) -> bytes:
     return path.read_bytes().replace(b"\r\n", b"\n")
 
 
+def _difference(ours: bytes, theirs: bytes) -> str:
+    """The first lines that differ, or "" (a megabyte of diff says nothing)."""
+    if ours == theirs:
+        return ""
+    a, b = ours.splitlines(), theirs.splitlines()
+    at = next(
+        (i for i, (x, y) in enumerate(zip(a, b, strict=False)) if x != y), min(len(a), len(b))
+    )
+    differ = sum(x != y for x, y in zip(a, b, strict=False)) + abs(len(a) - len(b))
+
+    def line(lines: list[bytes]) -> str:
+        return lines[at].decode().strip() if at < len(lines) else "<end of file>"
+
+    return (
+        f"{differ} line(s) differ ({len(a)} against {len(b)} lines), "
+        f"first at line {at + 1}: {line(a)!r} against {line(b)!r}"
+    )
+
+
 def test_every_example_has_a_committed_file() -> None:
     scripts = {p.stem for p in EXAMPLES_DIR.glob("*.py") if not p.stem.startswith("_")}
     assert {p.stem for p in EXAMPLE_FILES} == scripts
@@ -61,5 +80,7 @@ def test_regenerating_an_example_twice_gives_the_committed_bytes(
     first = save_project(build(), tmp_path / "first" / path.name)
     second = save_project(build(), tmp_path / "second" / path.name)
 
-    assert _text(first) == _text(second)
-    assert _text(first) == _text(path)
+    twice = _difference(_text(first), _text(second))
+    assert not twice, f"two builds in a row differ: {twice}"
+    committed = _difference(_text(first), _text(path))
+    assert not committed, f"the builder against the committed file: {committed}"

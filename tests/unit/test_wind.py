@@ -1,4 +1,4 @@
-"""Wind pressures on a closed building: RNC-07 Título IV and ASCE 7-16 chapters 26 and 27.
+"""Wind pressures on a closed building: RNC-07 Título IV, ASCE 7-16 and EN 1991-1-4.
 
 The table values are the regulation's, typed here a second time; the cases are
 checked against pressures worked out by hand.
@@ -16,6 +16,7 @@ from opensees_studio.core.wind import (
     KGF,
     BuildingShape,
     Profile,
+    Surface,
     WindError,
     asce7_area_reduction,
     asce7_kz,
@@ -26,6 +27,12 @@ from opensees_studio.core.wind import (
     asce7_wind_cases,
     asce7_windward_roof_cp,
     constant,
+    en1991_peak_pressure,
+    en1991_roof_cp,
+    en1991_roof_zone,
+    en1991_side_wall_zones,
+    en1991_wall_cp,
+    en1991_wind_cases,
     rnc07_design_speed,
     rnc07_height_factor,
     rnc07_internal_cp,
@@ -348,3 +355,201 @@ def test_asce7_steep_roof_and_a_dominant_opening() -> None:
     mono = BuildingShape(width=20.0, length=40.0, eave_height=5.0, roof="mono", slope=0.3)
     m, _n = asce7_wind_cases(mono, speed=50.0, directions=("-X",))
     assert "windward_roof" not in m.coefficients and m.coefficients["leeward_roof"] < 0.0
+
+
+# ───────────────────────────── EN 1991-1-4 ─────────────────────────────
+#: 20 x 40 m, eave 6 m, 1 in 5: the ridge at 8 m, 11.3 degrees.
+EN_GABLE = BuildingShape(width=20.0, length=40.0, eave_height=6.0, roof="gable", slope=0.2)
+
+
+def test_a_surface_averages_its_zones_exactly() -> None:
+    corner = Surface(lambda s, t: 3.0 if s < 1.0 and t < 2.0 else 1.0, (1.0,), (2.0,))
+    assert corner.at(0.5, 0.5) == 3.0 and corner.at(0.5, 2.5) == 1.0
+    assert corner.mean(0.0, 4.0, 0.0, 4.0) == pytest.approx((3.0 * 2.0 + 1.0 * 14.0) / 16.0)
+    smooth = Surface(lambda s, t: s * s * t)
+    assert smooth.mean(0.0, 3.0, 0.0, 2.0) == pytest.approx(3.0 * 1.0)
+
+
+def test_en1991_peak_pressure_of_expression_4_8() -> None:
+    basic = 0.5 * 1.25 * 27.0**2
+    # The exposure factor of Figure 4.2 at 10 m: 2.35 in terrain II, 1.18 in IV.
+    assert en1991_peak_pressure(10.0, 27.0, "II") / basic == pytest.approx(2.352, abs=1e-3)
+    assert en1991_peak_pressure(10.0, 27.0, "IV") / basic == pytest.approx(1.176, abs=1e-3)
+    by_hand = (1.0 + 7.0 / math.log(8.0 / 0.05)) * (0.19 * math.log(8.0 / 0.05)) ** 2
+    assert en1991_peak_pressure(8.0, 27.0) / basic == pytest.approx(by_hand)
+    # Constant below zmin (5 m in terrain III) and above 200 m.
+    assert en1991_peak_pressure(1.0, 27.0, "III") == en1991_peak_pressure(5.0, 27.0, "III")
+    assert en1991_peak_pressure(300.0, 27.0) == en1991_peak_pressure(200.0, 27.0)
+    assert en1991_peak_pressure(10.0, 27.0, "0") > en1991_peak_pressure(10.0, 27.0, "I")
+    # The orography factor raises the mean velocity, not the turbulence.
+    hill = en1991_peak_pressure(10.0, 27.0, orography=1.2) / basic
+    log = math.log(200.0)
+    assert hill == pytest.approx((1.0 + 7.0 / (1.2 * log)) * (0.19 * log * 1.2) ** 2)
+    with pytest.raises(WindError, match="terrain categories"):
+        en1991_peak_pressure(10.0, 27.0, "C")
+
+
+def test_en1991_walls_of_table_7_1() -> None:
+    assert en1991_wall_cp(5.0) == pytest.approx((0.8, -0.7))
+    assert en1991_wall_cp(1.0) == pytest.approx((0.8, -0.5))
+    assert en1991_wall_cp(0.25) == pytest.approx((0.7, -0.3))
+    assert en1991_wall_cp(0.1) == pytest.approx((0.7, -0.3))
+    assert en1991_wall_cp(8.0) == pytest.approx((0.8, -0.7))
+    assert en1991_wall_cp(3.0) == pytest.approx((0.8, -0.6))
+    zones = en1991_side_wall_zones(10.0)  # A to e/5, B to e, C beyond
+    assert [zones.at(d) for d in (1.0, 5.0, 12.0)] == [-1.2, -0.8, -0.5]
+    assert zones.mean(0.0, 20.0) == pytest.approx((-1.2 * 2 - 0.8 * 8 - 0.5 * 10) / 20.0)
+
+
+def test_en1991_roof_coefficients_of_tables_7_2_to_7_4() -> None:
+    flat = en1991_roof_cp("flat", 0, 0.0)
+    assert flat == [
+        {"F": -1.8, "G": -1.2, "H": -0.7, "I": -0.2},
+        {"F": -1.8, "G": -1.2, "H": -0.7, "I": 0.2},
+    ]
+    assert en1991_roof_cp("gable", 90, 3.0) == flat  # under 5 degrees every roof is flat
+    # Table 7.4a: the most negative and the most positive set.
+    low, high = en1991_roof_cp("gable", 0, 15.0)
+    assert low == {"F": -0.9, "G": -0.8, "H": -0.3, "I": -0.4, "J": -1.0}
+    assert high == {"F": 0.2, "G": 0.2, "H": 0.2, "I": 0.0, "J": 0.0}
+    low, high = en1991_roof_cp("gable", 0, 5.0)
+    assert low == {"F": -1.7, "G": -1.2, "H": -0.6, "I": -0.6, "J": -0.6}
+    assert high == {"F": 0.0, "G": 0.0, "H": 0.0, "I": -0.6, "J": 0.2}
+    low, high = en1991_roof_cp("gable", 0, 10.0)  # half way between 5 and 15 degrees
+    assert low == pytest.approx({"F": -1.3, "G": -1.0, "H": -0.45, "I": -0.5, "J": -0.8})
+    assert high["F"] == pytest.approx(0.1)
+    low, high = en1991_roof_cp("gable", 0, 30.0)
+    assert (low["F"], low["H"], low["J"]) == (-0.5, -0.2, -0.5)
+    assert (high["F"], high["H"], high["J"]) == (0.7, 0.4, 0.0)
+    assert en1991_roof_cp("gable", 0, 60.0) == [
+        {"F": 0.7, "G": 0.7, "H": 0.7, "I": -0.2, "J": -0.3}
+    ]
+    # Table 7.4b.
+    assert en1991_roof_cp("gable", 90, 15.0) == [{"F": -1.3, "G": -1.3, "H": -0.6, "I": -0.5}]
+    assert en1991_roof_cp("gable", 90, 30.0) == [{"F": -1.1, "G": -1.4, "H": -0.8, "I": -0.5}]
+    # Table 7.3a and 7.3b.
+    assert en1991_roof_cp("mono", 0, 15.0) == [
+        {"F": -0.9, "G": -0.8, "H": -0.3},
+        {"F": 0.2, "G": 0.2, "H": 0.2},
+    ]
+    assert en1991_roof_cp("mono", 180, 15.0) == [{"F": -2.5, "G": -1.3, "H": -0.9}]
+    assert en1991_roof_cp("mono", 180, 30.0) == [{"F": -1.1, "G": -0.8, "H": -0.8}]
+    assert en1991_roof_cp("mono", 90, 5.0) == [
+        {"Fup": -2.1, "Flow": -2.1, "G": -1.8, "H": -0.6, "I": -0.5}
+    ]
+    assert en1991_roof_cp("mono", 90, 15.0) == [
+        {"Fup": -2.4, "Flow": -1.6, "G": -1.9, "H": -0.8, "I": -0.7}
+    ]
+    with pytest.raises(WindError, match="180"):
+        en1991_roof_cp("gable", 180, 15.0)
+    with pytest.raises(WindError, match="0, 90 and 180"):
+        en1991_roof_cp("gable", 45, 15.0)
+    with pytest.raises(WindError, match="roof shape"):
+        en1991_roof_cp("dome", 0, 15.0)
+
+
+def test_en1991_roof_zones_of_figures_7_6_to_7_8() -> None:
+    # Across the ridge: e = min(40, 2 x 8) = 16, so F and G are 1.6 m deep and F 4 m wide.
+    zone = lambda d, x, y: en1991_roof_zone(EN_GABLE, d, x, y)  # noqa: E731
+    assert [zone("+X", 1.0, y) for y in (2.0, 20.0, 38.0)] == ["F", "G", "F"]
+    assert [zone("+X", x, 2.0) for x in (5.0, 10.5, 15.0)] == ["H", "J", "I"]
+    assert [zone("-X", x, 20.0) for x in (19.0, 15.0, 9.0, 5.0)] == ["G", "H", "J", "I"]
+    # Along the ridge: e = min(20, 16) = 16; H to e/2 = 8 m, I beyond.
+    assert [zone("+Y", x, 1.0) for x in (2.0, 10.0, 18.0)] == ["F", "G", "F"]
+    assert [zone("+Y", 2.0, y) for y in (5.0, 9.0, 39.0)] == ["H", "I", "I"]
+    assert zone("-Y", 2.0, 39.0) == "F"
+    mono = BuildingShape(width=20.0, length=40.0, eave_height=6.0, roof="mono", slope=0.2)
+    assert [en1991_roof_zone(mono, "+Y", x, 1.0) for x in (2.0, 10.0, 18.0)] == [
+        "Flow", "G", "Fup",
+    ]  # fmt: skip
+    assert [en1991_roof_zone(mono, "-X", x, 20.0) for x in (19.5, 10.0)] == ["G", "H"]
+    flat = BuildingShape(width=20.0, length=40.0, eave_height=6.0, roof="flat")
+    # e = min(40, 12) = 12: F and G to 1.2 m, H to 6 m, I beyond.
+    assert [en1991_roof_zone(flat, "+X", x, 20.0) for x in (1.0, 5.0, 7.0)] == ["G", "H", "I"]
+    assert en1991_roof_zone(flat, "+X", 1.0, 1.0) == "F"
+
+
+def test_en1991_cases_of_a_closed_duopitch_building() -> None:
+    cases = en1991_wind_cases(EN_GABLE, speed=26.0)
+    assert [c.name for c in cases] == [
+        *(f"WIND {d} {label}" for d in ("+X", "-X") for label in "ABCD"),
+        *(f"WIND {d} {label}" for d in ("+Y", "-Y") for label in "AB"),
+    ]
+    qp = en1991_peak_pressure(8.0, 26.0)
+    a, b, c, d = cases[:4]
+    low, high = en1991_roof_cp("gable", 0, EN_GABLE.roof_angle)
+    assert a.coefficients["internal"] == 0.2 and b.coefficients["internal"] == -0.3
+    assert a.coefficients["windward_wall"] == pytest.approx(0.72)  # h/d = 0.4
+    assert a.coefficients["leeward_wall"] == pytest.approx(-0.34)
+    assert a.walls["x0"].at(3.0) == pytest.approx(qp * (0.72 - 0.2))
+    assert b.walls["x0"].at(3.0) == pytest.approx(qp * (0.72 + 0.3))
+    assert a.walls["x1"].at(3.0) == pytest.approx(qp * (-0.34 - 0.2))
+    # The side walls: A up to e/5 = 3.2 m from the windward corner, B up to e = 16 m, then C.
+    side = a.wall_zones["y0"]
+    assert side.at(1.0, 3.0) == pytest.approx(qp * (-1.2 - 0.2))
+    assert side.at(10.0, 3.0) == pytest.approx(qp * (-0.8 - 0.2))
+    assert side.at(18.0, 3.0) == pytest.approx(qp * (-0.5 - 0.2))
+    mean = (-1.2 * 3.2 - 0.8 * 12.8 - 0.5 * 4.0) / 20.0
+    assert a.walls["y0"].at(3.0) == pytest.approx(qp * (mean - 0.2))
+    assert side.mean(0.0, 20.0, 0.0, 6.0) == pytest.approx(qp * (mean - 0.2))
+    assert set(a.wall_zones) == {"y0", "y1"}
+    # The roof: A all negative, B all positive, C and D one slope of each.
+    zones = a.roof[0].zones
+    assert zones is not None and a.roof[1].zones is zones
+    assert zones.at(1.0, 2.0) == pytest.approx(qp * (low["F"] - 0.2))
+    assert zones.at(1.0, 20.0) == pytest.approx(qp * (low["G"] - 0.2))
+    assert zones.at(15.0, 20.0) == pytest.approx(qp * (low["I"] - 0.2))
+    assert a.roof[0].profile.at(1.0) == pytest.approx(zones.at(1.0, 20.0))
+    for case, windward, leeward, inside in ((b, high, high, -0.3), (c, high, low, -0.3), (d, low, high, 0.2)):  # fmt: skip
+        field = case.roof[0].zones
+        assert field is not None
+        assert field.at(5.0, 20.0) == pytest.approx(qp * (windward["H"] - inside))
+        assert field.at(10.5, 20.0) == pytest.approx(qp * (leeward["J"] - inside))
+    # The other way the roof is the mirror image.
+    mirrored = cases[4].roof[0].zones
+    assert mirrored is not None
+    assert mirrored.at(19.0, 2.0) == pytest.approx(zones.at(1.0, 2.0))
+    assert cases[4].wall_zones["y0"].at(19.0, 3.0) == pytest.approx(side.at(1.0, 3.0))
+    # Along the ridge there is one set of values: A and B differ inside only.
+    ya, yb = cases[8], cases[9]
+    along = en1991_roof_cp("gable", 90, EN_GABLE.roof_angle)[0]
+    za, zb = ya.roof[0].zones, yb.roof[0].zones
+    assert za is not None and zb is not None
+    assert za.at(2.0, 1.0) == pytest.approx(qp * (along["F"] - 0.2))
+    assert zb.at(2.0, 30.0) == pytest.approx(qp * (along["I"] + 0.3))
+    assert ya.roof[0].axis == "y" and a.roof[0].axis == "x"
+    assert ya.coefficients["windward_wall"] == pytest.approx(0.7)  # h/d = 0.2
+    assert ya.wall_zones["x0"].at(30.0, 3.0) == pytest.approx(qp * (-0.5 - 0.2))  # zone C
+
+
+def test_en1991_dominant_opening_monopitch_and_flat_roofs() -> None:
+    mono = BuildingShape(width=20.0, length=40.0, eave_height=6.0, roof="mono", slope=0.2)
+    cases = en1991_wind_cases(mono, speed=26.0, openings="x0")
+    # One internal pressure: 0.9 of the coefficient at the open wall (7.2.9, Expression 7.2).
+    assert [c.name for c in cases] == ["WIND +X A", "WIND +X B", "WIND -X", "WIND +Y", "WIND -Y"]
+    windward, leeward = en1991_wall_cp(10.0 / 20.0)
+    assert cases[0].coefficients["internal"] == pytest.approx(0.9 * windward)
+    assert cases[2].coefficients["internal"] == pytest.approx(0.9 * leeward)
+    assert cases[3].coefficients["internal"] == pytest.approx(
+        0.9 * en1991_side_wall_zones(20.0).mean(0.0, 40.0)
+    )
+    # The wind on the high eave takes Table 7.3a at 180 degrees.
+    assert cases[2].coefficients["roof_F"] == pytest.approx(
+        en1991_roof_cp("mono", 180, mono.roof_angle)[0]["F"]
+    )
+    assert {"roof_Fup", "roof_Flow"} <= set(cases[3].coefficients)
+    closed = en1991_wind_cases(mono, speed=26.0, directions=("-X",))
+    assert [(c.name, c.coefficients["internal"]) for c in closed] == [
+        ("WIND -X A", 0.2), ("WIND -X B", -0.3),
+    ]  # fmt: skip
+    flat = BuildingShape(width=20.0, length=40.0, eave_height=6.0, roof="flat")
+    spread = en1991_wind_cases(flat, speed=26.0, openings="uniform", directions=("+Y",))
+    assert [(c.coefficients["roof_I"], c.coefficients["internal"]) for c in spread] == [
+        (-0.2, 0.2), (0.2, -0.3),
+    ]  # fmt: skip
+    with pytest.raises(WindError, match="velocity must be positive"):
+        en1991_wind_cases(flat, speed=0.0)
+    with pytest.raises(WindError, match="factors must be positive"):
+        en1991_wind_cases(flat, speed=26.0, orography=0.0)
+    with pytest.raises(WindError, match="terrain categories"):
+        en1991_wind_cases(flat, speed=26.0, terrain="R2")

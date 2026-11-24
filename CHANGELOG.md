@@ -47,6 +47,127 @@ refused instead of silently downgraded).
   pressures of purlins, girts and cladding (RNC-07 Art. 58, ASCE 7 chapter 30).
   `core.wind` has the pressures for scripts; `examples/warehouse_wind.py` builds
   a warehouse with them.
+- **Roof trusses in the warehouse.** On the first page of the Warehouse Wizard,
+  **Roof structure** chooses rafters or roof trusses. A truss has its top chord
+  on the roof line with a panel point under every purlin line, a bottom chord
+  that is horizontal or parallel to the roof at the **truss depth**, a vertical
+  under every purlin and Pratt, Howe or Warren diagonals. The chords are
+  continuous and run into the columns, which go on up to the top chord, so the
+  truss and its columns work as a frame; the web members are pinned. The bottom
+  chord is tied to the next frame at the column lines, at the ridge and at
+  every n-th panel point, with a vertical X between the chords in the braced
+  bays, and the wizard writes the distance between tie lines as the bottom
+  chord's unbraced length for the steel check (every purlin braces the top
+  chord). Default sections: HSS6X6X1/4 chords, HSS3X3X3/16 web members and
+  HSS4X4X3/16 ties. The loads and the wind cases are those of the same building
+  on rafters. `examples/warehouse_truss.py` builds one.
+- **Earthquake on the warehouse.** The Warehouse Wizard has a sixth page,
+  **Earthquake**: one static load case per direction, `EQ X` and `EQ Y`, by
+  **RNC-07 Art. 32** (a0, soil, group, Q and regularity), **NSCM Managua 8.2.1**
+  (a0, site class, risk category, Ro) or **ASCE 7-16 12.8** (SDS, R, Ie). The
+  base shear is the coefficient of the plateau of the spectrum (the period is
+  not used) times the seismic weight: the steel, the roof dead load and the
+  reduced roof live load (10 kg/m² by RNC-07 Art. 11 a, 0.3 CV by NSCM 9.6).
+  It is shared between
+  the joints by weight and height, as nodal loads. The combinations take the
+  earthquake both ways, and by RNC-07 (Art. 32 f) and NSCM each direction with
+  30 % of the other. Off
+  by default; accidental torsion is not included. `examples/warehouse_seismic.py`
+  builds a warehouse in Managua with it.
+- **Volcanic ash and snow on the warehouse.** The Warehouse Wizard has a
+  seventh page, **Ash and snow**: what settles on the roof, as a load per area
+  of horizontal projection on the purlins. **Volcanic ash** by RNC-07 Art. 14
+  and NSCM 7.3 is one case, `ASH`, of 20 kg/m² unless you have a local record;
+  NSCM combines it as its own load (CCV), RNC-07 with the live load. **Snow**
+  by **ASCE 7-16 chapter 7** (pf = 0.7 Ce Ct Is pg, the slope factor Cs, the
+  minimum of 7.3.4) or **EN 1991-1-3** (s = μ Ce Ct sk) is the balanced case
+  `SNOW` and the unbalanced ones the code asks for on that roof: `SNOW +X` and
+  `SNOW -X` on a gable (the drift of ASCE 7.6.1, or half the snow on one slope
+  by EN 5.3.3). A balanced and an unbalanced case never enter the same
+  combination. Off by default. Not included: build-up against parapets and
+  taller walls, sliding snow, ash gathered in gutters, and the snow ASCE 7
+  counts as seismic weight. `examples/warehouse_ash.py` builds a warehouse in
+  Masaya with the ash load.
+- **Eurocodes in the warehouse.** The Warehouse Wizard has a fifth design
+  code, **EN 1990**, with the recommended values of the Eurocodes (check them
+  against your National Annex). Roof imposed load of EN 1991-1-1, category H
+  (0.4 kN/m²). **Wind by EN 1991-1-4**: the peak velocity pressure of
+  Expression 4.8 from the basic wind velocity, the terrain category and the
+  orography factor, the walls of Table 7.1 with the zones A, B and C along the
+  walls parallel to the wind, and the roof zones F to J of Tables 7.2 to 7.4,
+  so the purlins and frames near the windward edge and its corners carry more.
+  Where the tables give a negative and a positive value, each is a case: four
+  per direction across the ridge of a duopitch roof (`WIND +X A` to `D`), two
+  along it, with +0.2 and -0.3 inside, or 0.90 of the coefficient at a
+  dominant wall. **Earthquake by EN 1998-1 4.3.3.2**: Sd = 2.5 ag S / q on the
+  plateau, ground types A to E (Type 1 spectrum), importance classes I to IV.
+  Snow by EN 1991-1-3 was already there. The **EN 1990 combinations** come
+  with the favourable permanent action (the uplift) and the 100 % + 30 % rule,
+  and the roof imposed load is not combined with the snow or the wind. Not
+  included: cpe,1 for cladding, cs cd other than 1, the 0.85 factor of
+  7.2.2 (3), friction, the Type 2 spectrum and a steel check by EN 1993 (the
+  check stays AISC 360). `examples/warehouse_eurocode.py` builds one.
+- **EN 1990 combinations: roof imposed load without snow or wind.** Define →
+  Load Combinations → Generate from a design code has a new option for
+  EN 1990, off by default: with it the roof imposed load (Lr), when it leads,
+  is not accompanied by the snow or the wind (EN 1991-1-1 3.3.2 (1)).
+- **Combination generators take alternative cases.** Called from a script with
+  the option `alternative_roles` (`("S",)`), the cases of that role never act
+  together: where a code adds "the snow" (ASCE 7 combination 5, NSCM), there is
+  one combination per snow case instead of their sum. Without the option
+  nothing changes.
+- **Parametric building, for scripts.** `core.building.plan_building` makes a
+  regular multi-storey building of a few numbers (bay widths along X and Y,
+  storey heights, steel or concrete frame, fixed or pinned bases): columns and
+  beams both ways in three groups, a grid, a storey per floor and a rigid
+  diaphragm tied to a node at the centre of the floor's mass. The slab is not
+  modelled: its weight and the live load are floor panels, two-way or one-way,
+  in `DEAD`, `LIVE` and `ROOF LIVE`, with the live loads of a use by RNC-07
+  Tabla 1, NSCM Tabla 7.1.1 or ASCE 7-16 Table 4.3-1. The mass source is the
+  dead case plus the live load the code counts (the CVR of RNC-07, 0.15 CV by
+  NSCM 9.6, none by ASCE 7), and the earthquake is the equivalent lateral force
+  of **RNC-07 Art. 32**, **NSCM 8.2.1** or **ASCE 7-16 12.8** on the storeys,
+  with the empirical period of the code (the plateau for RNC-07, which has
+  none) or the one you give. Each direction has two cases, `EQ X +e` and `EQ X
+  -e`: the storey forces at the centre of mass with the torque of the
+  accidental eccentricity (0.1 b by RNC-07 Art. 32 d, 5 % by NSCM 9.8 and ASCE
+  7) to either side. The combinations of the code follow, with the 100 % + 30 %
+  rule between one case of each direction for RNC-07 and NSCM. No dialog yet:
+  `examples/building_office.py` builds a three-storey concrete office building
+  in Managua with it. Not included: wind on the building, cracked stiffness,
+  secondary beams, and the 1.5 amplification of the static eccentricity of
+  RNC-07 Art. 32 d.
+- **Combination generators know which way an earthquake case acts.** Called
+  from a script with the option `earthquake_directions` (`{case id: "X"}`), the
+  100 % + 30 % rule takes the cases of one direction as alternatives: each one
+  at 100 % with one case of every other direction at 30 %, and never `EQ X +e`
+  together with `EQ X -e`. Without the option nothing changes.
+
+### Changed
+
+- **The mass source counts distributed loads and floor panels.** A load pattern
+  in Define → Mass Source gave mass for its nodal, uniform and point loads and
+  its self weight; a distributed (trapezoidal) load and a floor panel (Assign →
+  Area → Floor Load to Frames) weighed nothing, so a building whose slab was
+  entered as floor panels had no slab mass. Both count now, each member load by
+  its resultant on the member's two ends. A model whose mass source includes a
+  pattern with such loads gets more mass than before; none of the bundled
+  examples had one.
+- **The load cases the Warehouse Wizard creates use the sparse solver
+  UmfPack** instead of BandGeneral. On a warehouse (hundreds of pinned members,
+  each with its own released rotations) the band solver takes tens of seconds
+  per case, the sparse one a fraction of a second, for the same result. A case
+  the project already had keeps its solver, and the log says so on a large
+  model. `examples/warehouse_gable.osmodel` and `warehouse_wind.osmodel` were
+  regenerated with it; their pinned results did not move.
+- **A warehouse from the wizard is the same file on every machine.** The angle
+  of the purlins, the loads on the members, the unbraced lengths and the
+  properties of the default purlin are written with 12 significant digits, and a
+  load component that is only round-off of its projection is zero. They come out
+  of square roots, sines and dot products, whose last digit depends on the
+  processor and on the C library, so the same warehouse used to save different
+  bytes on two machines. The three warehouse examples were regenerated; their
+  pinned results did not move.
 
 ### Fixed
 

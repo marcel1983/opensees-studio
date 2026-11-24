@@ -8,10 +8,12 @@ joint, the mass is ``W / g`` of
 * chosen load patterns, each scaled by a factor (the usual ``D + 0.3 L``).
 
 A pattern contributes the *downward* (gravity) component of its nodal loads,
-its uniform and point element loads, and its own self-weight multiplier. An
-element load is lumped on the element's two end nodes (half each for a uniform
-load, by the lever rule for a point load); a shell's weight goes to its
-corners by tributary area. A node whose summed weight comes out upward gets no
+its uniform, point and distributed (trapezoidal) element loads, the loads its
+floor panels hand to the frames around them, and its own self-weight
+multiplier. An element load is lumped on the element's two end nodes (half
+each for a uniform load, by the lever rule for a point load and for the
+resultant of a distributed one); a shell's weight goes to its corners by
+tributary area. A node whose summed weight comes out upward gets no
 mass from it. Note that a pattern carrying self weight *and*
 ``element_self_mass`` counts the self weight twice, as in ETABS.
 
@@ -159,6 +161,28 @@ def pattern_weight_per_node(project: Project, pattern: PlainLoadPattern) -> dict
         p = float((np.array([point.px, point.py, point.pz]) @ axes) @ down)
         add(int(nodes[0]), (1.0 - point.x) * p)
         add(int(nodes[1]), point.x * p)
+    # A floor panel's load reaches the model as the trapezoidal loads of the
+    # frames around it: without them a slab would weigh nothing here.
+    from opensees_studio.core.area_loads import AreaLoadError, pattern_distributed_loads
+
+    try:
+        distributed = pattern_distributed_loads(project, pattern)
+    except AreaLoadError:
+        distributed = list(pattern.distributed_loads)
+    for varying in distributed:
+        element = elements.get(varying.element_id)
+        frame = _frame_end_shares(project, coords, element) if element is not None else None
+        if frame is None:
+            continue
+        axes, nodes, length = frame
+        qa = float((np.asarray(varying.start(), dtype=float) @ axes) @ down)
+        qb = float((np.asarray(varying.end(), dtype=float) @ axes) @ down)
+        span = varying.x_end - varying.x_start
+        total = 0.5 * (qa + qb) * span * length
+        # The resultant times its relative distance from end i: the share of end j.
+        at_j = span * length * (varying.x_start * (qa + qb) / 2.0 + span * (qa + 2.0 * qb) / 6.0)
+        add(int(nodes[0]), total - at_j)
+        add(int(nodes[1]), at_j)
     for nid, value in self_weight_per_node(project, pattern.self_weight).items():
         add(nid, value)
     return out
