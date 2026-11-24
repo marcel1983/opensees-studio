@@ -46,7 +46,7 @@ def window(qtbot):  # type: ignore[no-untyped-def]
     win._vm.apply_command(
         AddElementsCommand(win._vm, [ElasticBeamColumn(id=1, nodes=(1, 2), section_id=1)]),
     )
-    win._on_view_top()
+    win.viewport.top()
     return win
 
 

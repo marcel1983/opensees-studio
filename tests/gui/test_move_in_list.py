@@ -61,13 +61,13 @@ def test_the_arrows_step_through_the_levels_of_a_plan(qtbot) -> None:
 
         window._act_level_up.trigger()
         assert window._canvas.working_plane_offset() == 3.0
-        assert window._grid_view is not None and "Z2" in window._grid_view[0]
+        assert window.viewport.grid_view is not None and "Z2" in window.viewport.grid_view[0]
         assert window._act_show_all_objects.isEnabled()
 
         # Picking a level in the combo keeps showing one level at a time.
-        window._level_combo.setCurrentIndex(2)
+        window.viewport.level_combo.setCurrentIndex(2)
         assert window._canvas.working_plane_offset() == 6.0
-        assert "Z3" in window._grid_view[0]
+        assert "Z3" in window.viewport.grid_view[0]
 
         window._act_level_up.trigger()  # already at the top
         assert window._canvas.working_plane_offset() == 6.0
@@ -77,7 +77,7 @@ def test_the_arrows_step_through_the_levels_of_a_plan(qtbot) -> None:
         assert window._canvas.working_plane_offset() == 3.0
 
         window._act_show_all_objects.trigger()
-        assert window._grid_view is None
+        assert window.viewport.grid_view is None
     finally:
         window._help_controller.uninstall()
 
@@ -89,6 +89,6 @@ def test_an_elevation_steps_through_its_grid_lines(qtbot) -> None:
         assert window._canvas.working_plane_offset() == 0.0
         window._act_level_up.trigger()
         assert window._canvas.working_plane_offset() == 6.0
-        assert "X2" in window._grid_view[0]
+        assert "X2" in window.viewport.grid_view[0]
     finally:
         window._help_controller.uninstall()

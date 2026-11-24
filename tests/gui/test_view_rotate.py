@@ -24,7 +24,7 @@ def _window(qtbot):  # type: ignore[no-untyped-def]
     )
     vm.apply_command(AddSectionsCommand(vm, [make_default_section(1)]))
     vm.apply_command(AddElementsCommand(vm, [ElasticBeamColumn(id=1, nodes=(1, 2), section_id=1)]))
-    mw._on_view_iso()
+    mw.viewport.iso()
     return mw
 
 
