@@ -6,9 +6,9 @@ from opensees_studio.views.actions.spec import ActionSpec, Needs
 
 FILE_ACTIONS: tuple[ActionSpec, ...] = (
     # SAP2000's Ctrl+N: units and a template first.
-    ActionSpec("file.new_model", "&New Model…", "_on_new_model", shortcut="std:New"),
+    ActionSpec("file.new_model", "&New Model…", "generators.new_model", shortcut="std:New"),
     ActionSpec("file.new", "New &Blank 3D Model", "files.new_blank"),
-    ActionSpec("file.new_2d", "New &2D Frame…", "_on_new_2d"),
+    ActionSpec("file.new_2d", "New &2D Frame…", "generators.new_2d_frame"),
     ActionSpec("file.new_2d_truss", "New 2D &Truss", "files.new_2d_truss"),
     ActionSpec("file.open", "&Open…", "files.open_file", shortcut="std:Open"),
     ActionSpec("file.save", "&Save", "files.save", shortcut="std:Save", needs=Needs.PROJECT),
