@@ -12,8 +12,6 @@ the cases and combinations that use it stay as they are.
 
 from __future__ import annotations
 
-from typing import Any
-
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -37,10 +35,6 @@ from opensees_studio.commands import (
 )
 from opensees_studio.core import NodalLoad, PlainLoadPattern, Project, make_load_cases
 from opensees_studio.core.equivalent_lateral import (
-    ASCE_PERIOD_SYSTEMS,
-    CODE_LABELS,
-    NICARAGUA_CODES,
-    TBDY_PERIOD_SYSTEMS,
     ElfError,
     ElfParameters,
     ElfResult,
@@ -50,8 +44,8 @@ from opensees_studio.core.equivalent_lateral import (
     length_in_metres,
     nodal_forces,
 )
-from opensees_studio.core.nscm import NSCM_IMPORTANCE
 from opensees_studio.core.rnc07 import RNC07_REGULARITY_LABELS, RNC07_ZONE_A0
+from opensees_studio.core.seismic_codes import SEISMIC_CODES, SeismicCode
 from opensees_studio.core.target_spectrum import TBDY_TL
 from opensees_studio.viewmodels import ProjectViewModel
 from opensees_studio.views.float_field import FloatField
@@ -98,8 +92,8 @@ class SeismicLoadsDialog(FittedDialog):
 
         form = QFormLayout()
         self.code = QComboBox()
-        for key, label in CODE_LABELS.items():
-            self.code.addItem(tr(label), key)
+        for key, code in SEISMIC_CODES.items():
+            self.code.addItem(tr(code.label), key)
         form.addRow("Code:", self.code)
         self.sds = _field(1.0)
         self.sd1 = _field(0.6)
@@ -221,31 +215,32 @@ class SeismicLoadsDialog(FittedDialog):
         form.addRow(self._ta_label, self.ta)
         self._nicaragua_code = ""
 
-    def _fill_nicaragua_choices(self, code: str) -> None:
-        if self._nicaragua_code == code:
+    def _fill_nicaragua_choices(self, code: SeismicCode) -> None:
+        """The soils and the importance classes of a code that starts from a0."""
+        if self._nicaragua_code == code.key:
             return
-        self._nicaragua_code = code
-        rnc = code == "rnc07"
-        soils = ("I", "II", "III") if rnc else ("A", "B", "C", "D")
-        classes = ("A", "B", "C") if rnc else tuple(NSCM_IMPORTANCE)
+        self._nicaragua_code = code.key
         for combo, items, default in (
-            (self.soil, soils, 1 if rnc else 3),
-            (self.importance_class, classes, 1),
+            (self.soil, code.soils, code.default_soil),
+            (self.importance_class, code.importance_classes, code.default_importance_class),
         ):
             combo.blockSignals(True)
             combo.clear()
             for item in items:
                 combo.addItem(item, item)
-            combo.setCurrentIndex(default)
+            combo.setCurrentIndex(items.index(default))
             combo.blockSignals(False)
 
     # ── inputs ───────────────────────────────────────────────────────
     def _prefill(self, project: Project) -> None:
         """SDS, SD1, S1 and TL of the project's design spectrum, when it has one."""
         for target in project.target_spectra:
-            if target.kind in ("rnc07", "nscm2021") and target.a0 and target.soil:
+            code = SEISMIC_CODES.get(target.kind)
+            if code is None:
+                continue
+            if code.hazard == "a0" and target.a0 and target.soil:
                 self.code.setCurrentIndex(self.code.findData(target.kind))
-                self._fill_nicaragua_choices(target.kind)
+                self._fill_nicaragua_choices(code)
                 self.a0.setValue(float(target.a0))
                 self.soil.setCurrentIndex(max(0, self.soil.findData(target.soil)))
                 if target.importance_class:
@@ -256,7 +251,7 @@ class SeismicLoadsDialog(FittedDialog):
                 if target.reduction:
                     self.r.setValue(float(target.reduction))
                 break
-            if target.kind in ("asce7_16", "tbdy2018") and target.sds and target.sd1:
+            if code.hazard == "spectral" and target.sds and target.sd1:
                 self.code.setCurrentIndex(self.code.findData(target.kind))
                 self.sds.setValue(float(target.sds))
                 self.sd1.setValue(float(target.sd1))
@@ -270,42 +265,43 @@ class SeismicLoadsDialog(FittedDialog):
         return str(self.code.currentData())
 
     def _on_code_changed(self) -> None:
-        code = self.code_key()
-        asce = code == "asce7_16"
-        tbdy = code == "tbdy2018"
-        nicaragua = code in NICARAGUA_CODES
-        self._importance_label.setText("Ie:" if asce else "I:")
-        self.s1.setEnabled(asce)
-        self._s1_label.setEnabled(asce)
-        self.overstrength.setEnabled(tbdy)
-        self._d_label.setEnabled(tbdy)
-        for widget in (self.sds, self.sd1, self.tl, self.importance):
-            widget.setEnabled(not nicaragua)
-        self._importance_label.setEnabled(not nicaragua)
-        if nicaragua:
+        """Ask for what the chosen code reads, with the names it gives them."""
+        code = SEISMIC_CODES[self.code_key()]
+        reads = code.inputs
+        self._importance_label.setText(f"{code.importance_label}:")
+        self.s1.setEnabled("s1" in reads)
+        self._s1_label.setEnabled("s1" in reads)
+        self.overstrength.setEnabled("overstrength_d" in reads)
+        self._d_label.setEnabled("overstrength_d" in reads)
+        self.sds.setEnabled("sds" in reads)
+        self.sd1.setEnabled("sd1" in reads)
+        self.tl.setEnabled("tl" in reads)
+        self.importance.setEnabled("importance" in reads)
+        self._importance_label.setEnabled("importance" in reads)
+        if code.hazard == "a0":
             self._fill_nicaragua_choices(code)
-        nicaragua_widgets: tuple[QWidget, ...] = (
-            self.a0, self._a0_label, self.soil, self._soil_label, self.importance_class,
-            self._class_label, self.regularity, self._regularity_label,
-        )  # fmt: skip
-        for item in nicaragua_widgets:
-            item.setEnabled(nicaragua)
-        rnc_widgets: tuple[QWidget, ...] = (self.zone, self._zone_label, self.use_period)
-        for item in rnc_widgets:
-            item.setEnabled(code == "rnc07")
-        self.ta.setEnabled(code == "nscm2021")
-        self._ta_label.setEnabled(code == "nscm2021")
-        self.approximate.setEnabled(code != "rnc07")
-        self._r_label.setText(
-            {"rnc07": "Q (Art. 21):", "nscm2021": "Ro = R ΦP ΦE:"}.get(code, "R:")
+        rows: tuple[tuple[str, tuple[QWidget, ...]], ...] = (
+            ("a0", (self.a0, self._a0_label)),
+            ("soil", (self.soil, self._soil_label)),
+            ("importance_class", (self.importance_class, self._class_label)),
+            ("regularity", (self.regularity, self._regularity_label)),
+            ("zone", (self.zone, self._zone_label)),
+            ("use_period", (self.use_period,)),
+            ("approximate_period", (self.ta, self._ta_label)),
         )
-        self.ratio.setValue(0.10 if code == "rnc07" else 0.05)
-        if tbdy:
-            self.tl.setValue(TBDY_TL)
+        for name, widgets in rows:
+            for widget in widgets:
+                widget.setEnabled(name in reads)
+        self.approximate.setEnabled(bool(code.period_systems))
+        self._r_label.setText(f"{code.r_label}:")
+        self.ratio.setValue(code.eccentricity_ratio)
+        if code.tl is not None:
+            self.tl.setValue(code.tl)
         self.system.clear()
-        systems: dict[str, Any] = TBDY_PERIOD_SYSTEMS if tbdy else ASCE_PERIOD_SYSTEMS
-        for key, entry in systems.items():
-            self.system.addItem(tr(entry[0]), key)
+        # A code with no empirical period keeps the list of ASCE 7, as it always has.
+        systems = code.period_systems or SEISMIC_CODES["asce7_16"].period_systems
+        for key, label in systems.items():
+            self.system.addItem(tr(label), key)
         self.refresh()
 
     def fill_approximate_period(self) -> None:
@@ -314,7 +310,7 @@ class SeismicLoadsDialog(FittedDialog):
             return
         try:
             period = approximate_period(
-                self.code_key(),  # type: ignore[arg-type]
+                self.code_key(),
                 str(self.system.currentData()),
                 building_height(project),
                 length_in_metres(project),
@@ -323,12 +319,12 @@ class SeismicLoadsDialog(FittedDialog):
             self.message.show_message(str(exc), "error")
             return
         self.period.setValue(round(period, 4))
-        if self.code_key() == "nscm2021":
+        if "approximate_period" in SEISMIC_CODES[self.code_key()].inputs:
             self.ta.setValue(round(period, 4))
 
     def parameters(self) -> ElfParameters:
         return ElfParameters(
-            code=self.code_key(),  # type: ignore[arg-type]
+            code=self.code_key(),
             period=self.period.value(),
             sds=self.sds.value(),
             sd1=self.sd1.value(),

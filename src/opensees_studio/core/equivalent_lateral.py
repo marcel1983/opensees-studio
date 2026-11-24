@@ -1,16 +1,9 @@
 """Equivalent lateral force (ELF) seismic loads: base shear and its storey distribution.
 
-Two codes, the ones whose spectra the application already builds:
-
-- **ASCE/SEI 7-16 §12.8**: ``Cs = SDS / (R / Ie)``, capped by ``SD1 / (T (R/Ie))``
-  (``T <= TL``) or ``SD1 TL / (T² (R/Ie))`` (``T > TL``), and at least
-  ``max(0.044 SDS Ie, 0.01)`` and, when ``S1 >= 0.6 g``, ``0.5 S1 / (R/Ie)``.
-  ``V = Cs W``. Storey forces ``Fx = Cvx V`` with ``Cvx = wx hx^k / Σ wi hi^k``,
-  ``k = 1`` for ``T <= 0.5 s``, ``2`` for ``T >= 2.5 s``, linear between (§12.8.3).
-- **TBDY 2018 §4.7**: ``Vt = m_t SaR(T) g >= 0.04 m_t I SDS g``, with
-  ``SaR = Sae(T) / Ra(T)``, ``Ra = R/I`` for ``T > TB`` and
-  ``D + (R/I - D) T / TB`` below. An extra ``ΔFN = 0.0075 N Vt`` acts at the
-  top storey; the rest is shared as ``Fi = (Vt - ΔFN) mi Hi / Σ mj Hj``.
+The codes are the ones of :mod:`opensees_studio.core.seismic_codes`, one module
+each (ASCE/SEI 7-16 §12.8, TBDY 2018 §4.7, RNC-07 Art. 32, NSCM Managua 8.2.1):
+a code gives the base shear, shares it between the storeys, and says which
+period and height it accepts. This module does what no code changes.
 
 The storey weights are the masses the solver gets (``effective_nodal_masses``:
 typed masses, the mass source and diaphragm lumping) times g, gathered at the
@@ -24,13 +17,6 @@ proportion to their mass. **Accidental eccentricity** (3D) moves it by
 direction: a torque ``F e`` at the retained node, or the mass-proportional
 shares tilted so their resultant acts ``e`` off the centre of mass.
 
-- **RNC-07 Art. 32** (Nicaragua): ``Fi = c W0 Wi hi / Σ Wi hi`` with the seismic
-  coefficient of :func:`core.rnc07.static_coefficient` (Ec. 3, or Ec. 13 with the
-  period), Group A times 1.5. Accidental eccentricity is 0.1 b (Ec. 15).
-- **NSCM Managua 8.2.1**: ``Vb = Cs W`` with Cs of Ec. 8.2-2 and its minimum
-  (Ec. 8.2-3), T capped at Cu Ta, and the ASCE-style ``Cvx`` distribution with
-  ``k`` from 1 to 2. Accidental eccentricity 5 % (Sec. 9.8).
-
 The code coefficients (R, Ie / I, D, Ct, the period) are the engineer's: the
 generator applies the formulas, it does not pick the structural system.
 
@@ -41,86 +27,38 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
 import numpy as np
 
-from opensees_studio.core import nscm, rnc07
 from opensees_studio.core.mass_source import effective_nodal_masses
 from opensees_studio.core.plane import VERTICAL_AXIS
-from opensees_studio.core.response_spectrum import four_branch_spectrum
+from opensees_studio.core.seismic_codes import (
+    SEISMIC_CODES,
+    ElfError,
+    ElfParameters,
+    seismic_code,
+)
+from opensees_studio.core.seismic_codes.asce7_16 import ASCE_PERIOD_SYSTEMS, asce7_cs, asce7_k
+from opensees_studio.core.seismic_codes.nscm2021 import nscm_cs
+from opensees_studio.core.seismic_codes.rnc07 import rnc07_coefficient
+from opensees_studio.core.seismic_codes.tbdy2018 import TBDY_PERIOD_SYSTEMS, tbdy_sar
 from opensees_studio.core.storeys import (
     base_elevation,
     elevation_tolerance,
     nodes_at_elevation,
     storey_levels,
 )
-from opensees_studio.core.target_spectrum import TBDY_TL, tbdy2018_corner_periods
 from opensees_studio.core.units import UnitSystem, gravity, length_scale
 
 if TYPE_CHECKING:
     from opensees_studio.core.project import Project
 
-Code = Literal["asce7_16", "tbdy2018", "rnc07", "nscm2021"]
-CODE_LABELS: dict[str, str] = {
-    "asce7_16": "ASCE/SEI 7-16 §12.8",
-    "tbdy2018": "TBDY 2018 §4.7",
-    "rnc07": "RNC-07 Nicaragua Art. 32",
-    "nscm2021": "NSCM Managua 8.2.1",
-}
+CODE_LABELS: dict[str, str] = {key: code.label for key, code in SEISMIC_CODES.items()}
 #: Codes whose hazard is a0 and a soil class rather than SDS and SD1.
-NICARAGUA_CODES: frozenset[str] = frozenset({"rnc07", "nscm2021"})
-
-#: ASCE 7-16 Table 12.8-2: (label, Ct for h in metres, x).
-ASCE_PERIOD_SYSTEMS: dict[str, tuple[str, float, float]] = {
-    "steel_mrf": ("Steel moment-resisting frame", 0.0724, 0.8),
-    "concrete_mrf": ("Concrete moment-resisting frame", 0.0466, 0.9),
-    "braced_ebf": ("Eccentrically braced / BRB frame", 0.0731, 0.75),
-    "other": ("All other structural systems", 0.0488, 0.75),
-}
-#: TBDY 2018 §4.7.3.4: (label, Ct for H in metres); T = Ct H^(3/4).
-TBDY_PERIOD_SYSTEMS: dict[str, tuple[str, float]] = {
-    "concrete_frame": ("Reinforced concrete frame", 0.1),
-    "steel_frame": ("Steel frame", 0.08),
-    "braced_ebf": ("Eccentrically braced steel frame", 0.07),
-    "other": ("All other systems", 0.05),
-}
-
-
-@dataclass(frozen=True)
-class ElfParameters:
-    """What the engineer gives the generator."""
-
-    code: Code
-    period: float
-    """Fundamental period T in the direction, seconds."""
-    sds: float
-    sd1: float
-    r: float
-    """Response modification (ASCE R) or load reduction (TBDY R) coefficient."""
-    importance: float = 1.0
-    """ASCE Ie or TBDY I."""
-    tl: float = TBDY_TL
-    s1: float = 0.0
-    """ASCE mapped S1 (g), for the §12.8-6 minimum; 0 leaves it out."""
-    overstrength_d: float = 2.0
-    """TBDY D (overstrength), for Ra(T) below TB."""
-    eccentricity_ratio: float = 0.05
-    """Accidental eccentricity as a fraction of the floor extent (3D)."""
-    a0: float = 0.0
-    """RNC-07 / NSCM peak ground acceleration a0 (g)."""
-    soil: str = ""
-    """RNC-07 soil type I-III or NSCM site class A-D."""
-    importance_class: str = ""
-    """RNC-07 group A-C or NSCM risk category I-IV ("" = B / II)."""
-    zone: str = ""
-    """RNC-07 Fig. 2 zone for Tabla 2 ("" = from a0)."""
-    regularity: str = "regular"
-    """RNC-07 Art. 23 regularity, for Q'."""
-    use_period: bool = False
-    """RNC-07: reduce the forces with the period (Art. 32 b, Ec. 13)."""
-    approximate_period: float = 0.0
-    """NSCM Ta (s): when positive, T is capped at Cu Ta (Sec. 8.2.1.5)."""
+NICARAGUA_CODES: frozenset[str] = frozenset(
+    key for key, code in SEISMIC_CODES.items() if code.hazard == "a0"
+)
 
 
 @dataclass(frozen=True)
@@ -140,7 +78,7 @@ class ElfLevel:
 class ElfResult:
     """Base shear, its distribution, and what the code formulas gave."""
 
-    code: Code
+    code: str
     direction: int
     """Global axis of the loads: 0 = X, 1 = Y."""
     period: float
@@ -157,100 +95,13 @@ class ElfResult:
         return [(lv.name, lv.height, lv.weight, lv.force) for lv in reversed(self.levels)]
 
 
-class ElfError(ValueError):
-    """The model or the parameters cannot give an ELF distribution."""
-
-
 # ─────────────────────────── periods ───────────────────────────
-def approximate_period(code: Code, system: str, height: float, length_to_m: float) -> float:
+def approximate_period(code: str, system: str, height: float, length_to_m: float) -> float:
     """The code's empirical period for a building ``height`` tall (model length units)."""
     h_m = height * length_to_m
     if h_m <= 0.0:
         raise ElfError("The building has no height above its base.")
-    if code in ("asce7_16", "nscm2021"):
-        _label, ct, x = ASCE_PERIOD_SYSTEMS[system]
-        return float(ct * h_m**x)
-    if code == "rnc07":
-        raise ElfError(
-            "RNC-07 gives no empirical period: use the modal period or Rayleigh's "
-            "formula (Art. 32 b, Ec. 12)."
-        )
-    _label, ct_tbdy = TBDY_PERIOD_SYSTEMS[system]
-    return float(ct_tbdy * h_m**0.75)
-
-
-# ─────────────────────────── base shear ───────────────────────────
-def asce7_cs(p: ElfParameters) -> tuple[float, str]:
-    """ASCE 7-16 seismic response coefficient Cs and the clause that governs it."""
-    ri = p.r / p.importance
-    if p.r <= 0.0 or p.importance <= 0.0:
-        raise ElfError("R and Ie must be positive.")
-    cs = p.sds / ri
-    why = "Eq. 12.8-2 (SDS / (R/Ie))"
-    if p.period > 0.0:
-        cap = p.sd1 / (p.period * ri) if p.period <= p.tl else p.sd1 * p.tl / (p.period**2 * ri)
-        if cap < cs:
-            cs, why = cap, ("Eq. 12.8-3 (T <= TL)" if p.period <= p.tl else "Eq. 12.8-4 (T > TL)")
-    floor = max(0.044 * p.sds * p.importance, 0.01)
-    if cs < floor:
-        cs, why = floor, "Eq. 12.8-5 minimum (0.044 SDS Ie, at least 0.01)"
-    if p.s1 >= 0.6:
-        floor6 = 0.5 * p.s1 / ri
-        if cs < floor6:
-            cs, why = floor6, "Eq. 12.8-6 minimum (0.5 S1 / (R/Ie), S1 >= 0.6 g)"
-    return cs, why
-
-
-def rnc07_coefficient(p: ElfParameters) -> rnc07.Rnc07Coefficient:
-    """RNC-07 seismic coefficient of Art. 24 / 32 (Group factor included)."""
-    try:
-        zone = p.zone or rnc07.zone_for_a0(p.a0)
-        s = rnc07.soil_factor(zone, p.soil)
-        return rnc07.static_coefficient(
-            p.a0,
-            s,
-            p.r,
-            group=p.importance_class or "B",
-            regularity=p.regularity,
-            period=p.period if p.use_period else None,
-        )
-    except rnc07.Rnc07Error as exc:
-        raise ElfError(str(exc)) from exc
-
-
-def nscm_cs(p: ElfParameters) -> tuple[float, str, float]:
-    """NSCM Cs (Ec. 8.2-2 / 8.2-3), which clause governs, and the period used."""
-    try:
-        site = nscm.NscmSite(
-            a0=p.a0, site_class=p.soil, risk_category=p.importance_class or "II", r0=p.r
-        )
-        period = p.period
-        if p.approximate_period > 0.0:
-            period = min(period, site.cu * p.approximate_period)
-        cs, why = site.seismic_coefficient(period)
-    except nscm.NscmError as exc:
-        raise ElfError(str(exc)) from exc
-    return cs, why, period
-
-
-def asce7_k(period: float) -> float:
-    """ASCE 7-16 §12.8.3 distribution exponent."""
-    if period <= 0.5:
-        return 1.0
-    if period >= 2.5:
-        return 2.0
-    return 1.0 + (period - 0.5) / 2.0
-
-
-def tbdy_sar(p: ElfParameters) -> tuple[float, float]:
-    """TBDY 2018 reduced spectral acceleration SaR(T) (g) and Ra(T)."""
-    if p.r <= 0.0 or p.importance <= 0.0 or p.overstrength_d <= 0.0:
-        raise ElfError("R, I and D must be positive.")
-    _ta, tb = tbdy2018_corner_periods(p.sds, p.sd1)
-    sae = float(np.ravel(four_branch_spectrum(p.period, p.sds, p.sd1, p.tl))[0])
-    ri = p.r / p.importance
-    ra = ri if p.period > tb else p.overstrength_d + (ri - p.overstrength_d) * p.period / tb
-    return sae / ra, ra
+    return seismic_code(code).approximate_period(system, h_m)
 
 
 # ─────────────────────────── the levels ───────────────────────────
@@ -300,11 +151,8 @@ def equivalent_lateral_forces(
         raise ElfError("A 2D model takes lateral loads along X only (it lives in the X-Z plane).")
     if p.period <= 0.0:
         raise ElfError("The period T must be positive.")
-    if p.code in NICARAGUA_CODES:
-        if p.a0 <= 0.0 or not p.soil:
-            raise ElfError("a0 and the soil type must be given.")
-    elif p.sds <= 0.0 or p.sd1 <= 0.0:
-        raise ElfError("SDS and SD1 must be positive.")
+    code = seismic_code(p.code)
+    code.check_hazard(p)
     units = project.meta.units
     g = gravity(units)
     if masses is None:
@@ -337,43 +185,9 @@ def equivalent_lateral_forces(
             "levels and is not in W."
         )
 
-    if p.code == "asce7_16":
-        cs, why = asce7_cs(p)
-        shear = cs * total
-        k = asce7_k(p.period)
-        share = np.array([w * h**k for w, h in zip(weights, heights, strict=True)])
-        forces = shear * share / share.sum()
-        notes.insert(0, f"Cs = {cs:.4g} by {why}; k = {k:.3g}.")
-        coefficient = cs
-    elif p.code == "rnc07":
-        rnc = rnc07_coefficient(p)
-        shear = rnc.c * total
-        share = np.array([w * h for w, h in zip(weights, heights, strict=True)])
-        forces = shear * share / share.sum()
-        notes.insert(0, f"c = {rnc.c:.4g} by {rnc.why}.")
-        coefficient = rnc.c
-    elif p.code == "nscm2021":
-        cs, why, period = nscm_cs(p)
-        shear = cs * total
-        k = asce7_k(period)
-        share = np.array([w * h**k for w, h in zip(weights, heights, strict=True)])
-        forces = shear * share / share.sum()
-        capped = f" (T capped at Cu·Ta = {period:.4g} s)" if period < p.period else ""
-        notes.insert(0, f"Cs = {cs:.4g} by {why}{capped}; k = {k:.3g}.")
-        coefficient = cs
-    else:
-        sar, ra = tbdy_sar(p)
-        shear = sar * total
-        minimum = 0.04 * p.importance * p.sds * total
-        why = f"SaR(T) = {sar:.4g} g with Ra(T) = {ra:.4g}"
-        if shear < minimum:
-            shear, why = minimum, "the minimum 0.04 I SDS (Eq. 4.19)"
-        top = 0.0075 * len(levels) * shear
-        share = np.array([w * h for w, h in zip(weights, heights, strict=True)])
-        forces = (shear - top) * share / share.sum()
-        forces[-1] += top
-        notes.insert(0, f"Vt by {why}; ΔFN = {top:.4g} at the top storey (Eq. 4.20).")
-        coefficient = shear / total
+    found = code.base_shear(p, weights, heights)
+    shear, forces = found.shear, found.forces
+    notes.insert(0, found.note)
     limit = static_height_limit(p)
     if limit is not None:
         height_m = max(heights) * length_in_metres(project)
@@ -391,7 +205,7 @@ def equivalent_lateral_forces(
         direction=direction,
         period=p.period,
         total_weight=total,
-        coefficient=coefficient,
+        coefficient=found.coefficient,
         base_shear=float(shear),
         levels=result_levels,
         notes=notes,
@@ -400,15 +214,7 @@ def equivalent_lateral_forces(
 
 def static_height_limit(p: ElfParameters) -> tuple[float, str] | None:
     """Largest height (m) the code allows the static method for, and the clause."""
-    regular = p.regularity == "regular"
-    if p.code == "rnc07":
-        return (40.0, "RNC-07 Art. 30 b, regular") if regular else (30.0, "Art. 30 b, irregular")
-    if p.code == "nscm2021" and p.a0 > 0.0:
-        z1 = nscm.zone_for_a0(p.a0) == "Z1"
-        if regular:
-            return (24.0 if z1 else 12.0, "NSCM 8.2.1.1, regular")
-        return (12.0 if z1 else 6.0, "NSCM 8.2.1.1, irregular")
-    return None
+    return seismic_code(p.code).height_limit(p)
 
 
 def building_height(project: Project) -> float:
@@ -504,3 +310,26 @@ def nodal_forces(
         for nid, value in zip(floor, shares, strict=True):
             add(nid, d, float(value))
     return {nid: tuple(float(v) for v in vec) for nid, vec in out.items()}  # type: ignore[misc]
+
+
+__all__ = [
+    "ASCE_PERIOD_SYSTEMS",
+    "CODE_LABELS",
+    "NICARAGUA_CODES",
+    "TBDY_PERIOD_SYSTEMS",
+    "ElfError",
+    "ElfLevel",
+    "ElfParameters",
+    "ElfResult",
+    "approximate_period",
+    "asce7_cs",
+    "asce7_k",
+    "building_height",
+    "equivalent_lateral_forces",
+    "length_in_metres",
+    "nodal_forces",
+    "nscm_cs",
+    "rnc07_coefficient",
+    "static_height_limit",
+    "tbdy_sar",
+]

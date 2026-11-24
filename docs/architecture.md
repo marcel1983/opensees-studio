@@ -136,6 +136,30 @@ mass source and the design settings. One function inserts it,
 
 A script uses `GeneratedModel.apply(project)` instead, with no undo stack.
 
+## Seismic codes
+
+The equivalent lateral force method (Define → Seismic Loads, and the
+earthquake of the warehouse and building plans) asks a registry, never a code's
+key. Each code is a `SeismicCode` in a module of its own under
+`core/seismic_codes/` (`asce7_16`, `tbdy2018`, `rnc07`, `nscm2021`) and an entry
+in `SEISMIC_CODES`. A code gives:
+
+- `base_shear(p, weights, heights)`: the base shear, one force per storey, the
+  coefficient and the clause that governs, as a `BaseShear`;
+- `approximate_period(system, height_m)` and its `period_systems`, or an
+  `ElfError` when the code has no empirical period (RNC-07);
+- `height_limit(p)`: the tallest building the static method is allowed for;
+- what it asks for: `hazard` (`"spectral"`, SDS and SD1, or `"a0"`, a0 and a
+  soil class), `inputs` (the `ElfParameters` fields it reads), its labels, its
+  soils and importance classes, its accidental eccentricity.
+
+`core.equivalent_lateral` gathers the storeys, their weights and heights (what
+no code changes) and hands them over; the Seismic Loads dialog enables its
+fields from `inputs`. Adding a code is a new module, its entry in the registry
+and a test against a worked example of the code
+(`tests/unit/test_seismic_codes.py` shows an unknown code going through the
+generator untouched).
+
 ## Threading and the analysis process
 
 The Qt main thread owns all widgets. OpenSees never runs in it:
