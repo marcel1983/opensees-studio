@@ -15,7 +15,6 @@ from functools import partial
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
-import shiboken6
 from PySide6.QtCore import QEvent, QPoint, QPointF, QSettings, QSignalBlocker, Qt, QTimer
 from PySide6.QtGui import (
     QAction,
@@ -44,13 +43,11 @@ from PySide6.QtWidgets import (
     QToolButton,
     QTreeWidget,
     QTreeWidgetItem,
-    QWidget,
 )
 
 from opensees_studio import __version__
 from opensees_studio.commands import (
     AddNodesCommand,
-    MeshCommand,
     SetProjectMetaCommand,
     SetRestraintCommand,
 )
@@ -72,8 +69,6 @@ from opensees_studio.core.generated import GeneratedModel
 from opensees_studio.core.help import ACTION_TOPICS, TOPIC_PROPERTY
 from opensees_studio.core.i18n import LANGUAGES
 from opensees_studio.core.materials.library import is_uniaxial
-from opensees_studio.core.mesh import pre_run_auto_mesh
-from opensees_studio.core.model_check import check_model
 from opensees_studio.core.object_info import element_info, node_info
 from opensees_studio.core.view_settings import ViewSettings
 from opensees_studio.services import (
@@ -95,7 +90,6 @@ from opensees_studio.services.results import (
 )
 from opensees_studio.services.results_db import database_path, delete_all_results, record_results
 from opensees_studio.services.shell_fields import shell_elements
-from opensees_studio.services.stability import StabilityReport
 from opensees_studio.viewmodels import AnalysisRunner, ProjectViewModel
 from opensees_studio.viewmodels.results_session import ResultsSession, case_names
 from opensees_studio.viewmodels.stability_checker import StabilityChecker
@@ -107,6 +101,7 @@ from opensees_studio.views.canvas3d.diagram_renderer import DiagramRenderer
 from opensees_studio.views.canvas3d.model_renderer import RendererMode
 from opensees_studio.views.canvas3d.shell_contour_renderer import ShellContourRenderer
 from opensees_studio.views.controllers import Shell
+from opensees_studio.views.controllers.analysis import AnalysisController
 from opensees_studio.views.controllers.areas import AreasController
 from opensees_studio.views.controllers.building import BuildingController
 from opensees_studio.views.controllers.design import DesignController
@@ -130,22 +125,18 @@ from opensees_studio.views.controllers.transforms import TransformsController
 from opensees_studio.views.controllers.viewport import ViewportController
 from opensees_studio.views.dialogs import (
     AddNodeDialog,
-    AnalysisCaseManagerDialog,
     DisplayOptionsDialog,
     FrameWizard,
-    ModelCheckDialog,
     MoveDialog,
     PerformanceDialog,
     ProjectInfoDialog,
     ReplicateDialog,
-    RunAnalysisDialog,
 )
 from opensees_studio.views.dialogs.batch_run import BatchRunDialog
 from opensees_studio.views.dialogs.load_combinations import LoadCombinationsDialog
 from opensees_studio.views.dialogs.load_display import LoadDisplayDialog
 from opensees_studio.views.dialogs.object_info import ObjectInfoDialog
 from opensees_studio.views.dialogs.reactions import ReactionsDialog
-from opensees_studio.views.dialogs.run_cases import RunCasesDialog
 from opensees_studio.views.dialogs.solver_settings import SolverSettingsDialog
 from opensees_studio.views.dialogs.view_colors import ViewColorsDialog
 from opensees_studio.views.docks import (
@@ -278,9 +269,6 @@ class MainWindow(QMainWindow):
         #: The results in memory: the one on screen, every case's, the report's extras.
         self.results = ResultsSession()
         #: View → Grid Line View: (line label, window) while active, else None.
-        self._analysis_error_box: QMessageBox | None = None  # last failure report
-        self._stability_box: QMessageBox | None = None  # last stability check answer
-        self._run_dialog: RunAnalysisDialog | None = None  # open while a Run dialog is shown
         self._show_node_labels = False
         self._show_element_labels = False
         self._user_close_requested = False  # File → Quit sets this before close()
@@ -373,6 +361,18 @@ class MainWindow(QMainWindow):
             results=self.results,
             drop_results=lambda: self._drop_session_results(),
             action=lambda action_id: self.action(action_id),
+        )
+        #: The Analyze menu: cases, the checks, the run and its failure report.
+        self.analysis = AnalysisController(
+            shell,
+            runner=self._runner,
+            stability=self._stability,
+            results=self.results,
+            finished=lambda results: self._on_analysis_finished(results),
+            new_project=lambda: self._on_new(),
+            select_rows=lambda nodes, elements: self._select_report_row(nodes, elements),
+            show_mechanism=lambda finding: self.display.mechanism(finding),
+            console=lambda text: self._console.appendPlainText(text),
         )
         #: What the Properties dock changes in the model.
         self.property_edits = PropertyEditsController(shell)
@@ -666,13 +666,7 @@ class MainWindow(QMainWindow):
         )
 
         # Analyze
-        self._act_case_manager = QAction("&Cases…", self, shortcut="Ctrl+Shift+A")
-        self._act_check_model = QAction("Check &Model…", self)
-        self._act_check_model.setShortcut("F6")
-        self._act_run = QAction("&Run…", self, shortcut="F5")
         # Batch doors: the whole model in one child process, or a ticked subset.
-        self._act_run_all = QAction("Run &All Cases", self, shortcut=QKeySequence("Shift+F5"))
-        self._act_run_selected = QAction("Run Se&lected Cases…", self)
         self._act_clear_results = QAction("Delete &All Results…", self)
         self._act_auto_mesh_frames = QAction("Auto-mesh &Frames Before Run", self)
         self._act_auto_mesh_frames.setCheckable(True)
@@ -680,7 +674,6 @@ class MainWindow(QMainWindow):
         self._act_auto_mesh_frames.setStatusTip(
             "Run divides frames where another frame ends on them or crosses them."
         )
-        self._act_check_stability = QAction("Check Model &Stability…", self)
         self._act_cancel_stability = QAction("&Cancel Stability Check", self)
 
         # View
@@ -962,16 +955,16 @@ class MainWindow(QMainWindow):
         m_assign.addAction(self.action("assign.group"))
 
         m_analyze = mb.addMenu("&Analyze")
-        m_analyze.addAction(self._act_case_manager)
+        m_analyze.addAction(self.action("analyze.case_manager"))
         m_analyze.addSeparator()
-        m_analyze.addAction(self._act_check_model)
-        m_analyze.addAction(self._act_check_stability)
+        m_analyze.addAction(self.action("analyze.check_model"))
+        m_analyze.addAction(self.action("analyze.check_stability"))
         m_analyze.addAction(self._act_cancel_stability)
-        m_analyze.addAction(self._act_run)
+        m_analyze.addAction(self.action("analyze.run"))
         m_analyze.addAction(self._act_auto_mesh_frames)
         m_analyze.addSeparator()
-        m_analyze.addAction(self._act_run_all)
-        m_analyze.addAction(self._act_run_selected)
+        m_analyze.addAction(self.action("analyze.run_all"))
+        m_analyze.addAction(self.action("analyze.run_selected"))
         m_analyze.addSeparator()
         m_analyze.addAction(self._act_clear_results)
 
@@ -1709,20 +1702,14 @@ class MainWindow(QMainWindow):
         self._act_custom_commands.triggered.connect(self._on_custom_commands)
 
         # Analyze
-        self._act_case_manager.triggered.connect(self._on_case_manager)
-        self._act_check_model.triggered.connect(self._on_check_model)
-        self._act_run.triggered.connect(self._on_run_analysis)
-        self._act_run_all.triggered.connect(self._on_run_all_cases)
-        self._act_run_selected.triggered.connect(self._on_run_selected_cases)
         self._act_clear_results.triggered.connect(self._on_clear_results)
-        self._act_auto_mesh_frames.toggled.connect(self._on_toggle_auto_mesh_frames)
+        self._act_auto_mesh_frames.toggled.connect(self.analysis.toggle_auto_mesh_frames)
         self._act_dark_mode.toggled.connect(self._apply_dark_mode)
-        self._act_check_stability.triggered.connect(self._on_check_stability)
         self._act_cancel_stability.triggered.connect(self._stability.cancel)
         self._stability.log.connect(self._log)
-        self._stability.progress.connect(self._on_stability_progress)
-        self._stability.finished.connect(self._on_stability_report)
-        self._stability.failed.connect(self._on_stability_failed)
+        self._stability.progress.connect(self.analysis.on_stability_progress)
+        self._stability.finished.connect(self.analysis.on_stability_report)
+        self._stability.failed.connect(self.analysis.on_stability_failed)
         self._stability.runningChanged.connect(self._on_stability_running_changed)
         # The runner's own flag flips to False only after ``finished`` has been
         # handled (teardown emits it), so the batch actions would stay disabled
@@ -1742,7 +1729,7 @@ class MainWindow(QMainWindow):
         self._runner.log.connect(self._console.appendPlainText)
         self._runner.caseFinished.connect(self._on_case_finished)
         self._runner.finished.connect(self._on_analysis_finished)
-        self._runner.failed.connect(self._on_analysis_failed)
+        self._runner.failed.connect(self.analysis.on_failed)
         self._runner.cancelled.connect(lambda: self._log("Analysis cancelled."))
 
         # View
@@ -2888,256 +2875,6 @@ class MainWindow(QMainWindow):
     # ── slots: assign property ──────────────────────────────────────
     # ── area loads and imposed displacements ─────────────────────────
     # ── slots: analyze ──────────────────────────────────────────────
-    def _on_check_stability(self) -> None:
-        """Analyze → Check Model Stability: look for mechanisms before solving anything."""
-        project = self._vm.project
-        if project is None:
-            return
-        if not project.nodes:
-            QMessageBox.information(self, "Check Model Stability", "The model has no joints yet.")
-            return
-        self._stability.check(project, self._vm.path)
-
-    def _on_stability_progress(self, phase: str, message: str) -> None:
-        """Show the coarse stability phase in the status bar and console."""
-        self._log(f"Stability [{phase}]: {message}")
-
-    def _on_stability_report(self, report: StabilityReport) -> None:
-        summary = report.summary()
-        self._log(summary)
-        if report.nodes:
-            # Show where the mechanisms are: their joints become the selection.
-            self._canvas.selection.set_selection(set(report.nodes), set())
-            self._refresh_action_enablement()
-        box = QMessageBox(self)
-        box.setWindowTitle("Check Model Stability")
-        box.setIcon(QMessageBox.Icon.Information if report.stable else QMessageBox.Icon.Warning)
-        if report.completion != "complete":
-            headline = "The stability check is incomplete."
-        elif report.classification == "no_free_equations":
-            headline = "The model is fully restrained."
-        elif report.stable:
-            headline = "The model is statically stable."
-        else:
-            headline = "The model is not statically stable."
-        box.setText(headline)
-        box.setInformativeText(
-            summary + ("\n\nThe joints that move are selected." if report.nodes else "")
-        )
-        box.open()
-        self._stability_box = box
-
-    def _on_stability_failed(self, message: str) -> None:
-        self._log(message)
-        box = QMessageBox(self)
-        box.setWindowTitle("Check Model Stability")
-        box.setIcon(QMessageBox.Icon.Critical)
-        box.setText("The stability check could not finish.")
-        box.setInformativeText(message)
-        box.open()
-        self._stability_box = box
-
-    def _on_case_manager(self) -> None:
-        if self._vm.project is None:
-            self._on_new()
-        AnalysisCaseManagerDialog(self._vm, self).exec()
-
-    def _on_run_all_cases(self) -> None:
-        """Analyze → Run All Cases: every case, in one child process."""
-        project = self._vm.project
-        if project is None or self._runner.is_running:
-            return
-        if not project.analyses:
-            self._log("No analysis cases. Define one in Analyze → Cases…")
-            return
-        self._log(f"Running all {len(project.analyses)} case(s).")
-        self._start_batch(list(project.analyses))
-
-    def _on_run_selected_cases(self) -> None:
-        """Analyze → Run Selected Cases: tick the cases, then run them together."""
-        project = self._vm.project
-        if project is None or self._runner.is_running:
-            return
-        if not project.analyses:
-            self._log("No analysis cases. Define one in Analyze → Cases…")
-            return
-        dialog = RunCasesDialog(project, self)
-        try:
-            if dialog.exec() != QDialog.DialogCode.Accepted:
-                return
-            chosen = set(dialog.selected_case_ids())
-        finally:
-            dialog.deleteLater()
-        cases = [case for case in project.analyses if case.id in chosen]
-        if not cases:
-            self._log("No case selected.")
-            return
-        self._log(f"Running {len(cases)} selected case(s).")
-        self._start_batch(cases)
-
-    def _start_batch(self, cases: list[Any]) -> None:
-        """Hand a set of cases to the runner in one child process."""
-        project = self._vm.project
-        if project is None:
-            return
-        self._auto_mesh_before_run()
-        try:
-            self._runner.run_cases(project, cases, project_path=self._vm.path)
-        except Exception as exc:
-            self._log(f"Could not start: {exc}")
-
-    def _on_check_model(self) -> None:
-        """Analyze → Check Model: loose nodes, unconnected elements, mechanisms."""
-        project = self._vm.project
-        if project is None:
-            QMessageBox.information(self, "Check Model", "Open or create a project first.")
-            return
-        report = check_model(project)
-        dlg = ModelCheckDialog(
-            project, report=report, on_select=self._select_report_row, parent=self
-        )
-        try:
-            dlg.exec()
-            mechanism = dlg.mechanism_to_show()
-        finally:
-            dlg.deleteLater()
-        self._log(report.summary())
-        if mechanism is not None:
-            self.display.mechanism(mechanism)
-
-    def _auto_mesh_before_run(self) -> None:
-        """Divide the frames that another frame ends on or crosses, in one undo step.
-
-        So no member lying on another is left unconnected. Members with their own
-        Auto Mesh off, and every member while Analyze → Auto-mesh Frames Before
-        Run is off, are left as drawn.
-        """
-        project = self._vm.project
-        if project is None:
-            return
-        plan = pre_run_auto_mesh(project)
-        if plan.is_empty:
-            return
-        try:
-            self._vm.apply_command(MeshCommand(self._vm, plan, text="Auto-mesh frames"))
-        except Exception as exc:
-            self._log(f"Auto-mesh before run failed: {exc}")
-            return
-        self._log(f"Auto-mesh before run: {plan.summary()}")
-
-    def _on_toggle_auto_mesh_frames(self, checked: bool) -> None:
-        """Analyze → Auto-mesh Frames Before Run (saved with the project)."""
-        from opensees_studio.commands import SetAutoMeshFramesCommand
-
-        project = self._vm.project
-        if project is None or project.auto_mesh_frames == checked:
-            return
-        self._vm.apply_command(SetAutoMeshFramesCommand(self._vm, checked))
-
-    def _review_model_before_run(self) -> bool:
-        """Check the model on the way into Run; ``False`` means the run was called off.
-
-        Errors stop at a dialog that offers *Run anyway* (the check is a linear,
-        small-displacement test, so the person may know better). Warnings are
-        written to the console and do not interrupt: a modeller who has seen
-        "two separate parts" once does not want to click through it on every run.
-        """
-        project = self._vm.project
-        if project is None:
-            return True
-        report = check_model(project)
-        if report.has_errors:
-            dlg = ModelCheckDialog(
-                project,
-                report=report,
-                pre_run=True,
-                on_select=self._select_report_row,
-                parent=self,
-            )
-            try:
-                proceed = dlg.exec() == QDialog.DialogCode.Accepted
-                mechanism = dlg.mechanism_to_show()
-            finally:
-                dlg.deleteLater()
-            self._log(report.summary() + (" Running anyway." if proceed else " Run cancelled."))
-            if mechanism is not None:
-                self.display.mechanism(mechanism)
-            return proceed
-        for finding in report.warnings:
-            self._log(finding.summary())
-        if not report.is_complete:
-            # A partial check is not a pass: say what was left out.
-            for finding in report.infos:
-                self._log(finding.summary())
-            self._log(report.summary())
-        return True
-
-    def _on_run_analysis(self) -> None:
-        if self._vm.project is None:
-            QMessageBox.information(self, "Run Analysis", "Open or create a project first.")
-            return
-        if not self._vm.project.analyses:
-            QMessageBox.information(
-                self,
-                "Run Analysis",
-                "No analysis cases defined. Open Analyze → Cases…",
-            )
-            return
-        open_dialog = self._run_dialog
-        if open_dialog is not None and open_dialog.isVisible():
-            # One Run dialog at a time: F5 again brings it to the front.
-            open_dialog.raise_()
-            open_dialog.activateWindow()
-            return
-        self._auto_mesh_before_run()
-        if not self._review_model_before_run():
-            return
-        dlg = RunAnalysisDialog(self._vm, self._runner, self, case_results=self.results.cases)
-        combination_finished = getattr(dlg, "combinationFinished", None)
-        if combination_finished is not None:
-            combination_finished.connect(self._on_analysis_finished)
-        self._run_dialog = dlg
-        # Modeless: the model, the viewport and the results stay usable while
-        # the case runs and after, next to the log.
-        dlg.finished.connect(lambda _code, d=dlg: self._on_run_dialog_closed(d))
-        dlg.show()
-
-    def _on_run_dialog_closed(self, dlg: QWidget) -> None:
-        if self._run_dialog is dlg:
-            self._run_dialog = None
-        self._keep_failure_report_alive(dlg)
-        # The dialog connects seven signals of the long-lived runner and is
-        # parented to this window, so without this it stays alive after it
-        # closes and every later run keeps appending to its log widget.
-        dlg.deleteLater()
-
-    def _keep_failure_report_alive(self, dlg: QWidget) -> None:
-        """Reparent an unread failure report so it outlives the Run dialog.
-
-        The report is created with ``WA_DeleteOnClose``, so once the user has
-        closed it Qt has destroyed the C++ object while this window still holds
-        the Python wrapper. ``box.parent()`` then raises ``RuntimeError``, and
-        an exception raised here — inside the ``finally`` of a Qt slot — used to
-        take the whole application down with it. Hence the validity check, and
-        the reference being dropped when the box is gone.
-        """
-        box = self._analysis_error_box
-        if box is None:
-            return
-        if not shiboken6.isValid(box):
-            self._analysis_error_box = None
-            return
-        if box.parent() is dlg:
-            box.setParent(self, box.windowFlags())
-            box.show()
-
-    def _failure_parent(self) -> QWidget:
-        """The dialog that started the run while it is open, else the main window."""
-        dlg = self._run_dialog
-        if dlg is not None and dlg.isVisible():
-            return dlg
-        return self
-
     def _on_analysis_finished(self, results) -> None:  # type: ignore[no-untyped-def]
         self._display_results(results)
         self._log(f"Analysis complete: {self.results.caption_for(self._vm.project, results)}.")
@@ -3274,33 +3011,6 @@ class MainWindow(QMainWindow):
         if ok:
             self.show_results_of(dict(choices)[label])
 
-    def _on_analysis_failed(self, report: str) -> None:
-        """Show the failure report (exit code, last error, stderr tail) without blocking."""
-        self._console.appendPlainText(report)
-        code = self._runner.last_exit_code
-        headline = "Analysis failed."
-        if code is not None:
-            headline = f"Analysis process exited with code {code}."
-        # A child of the modal Run dialog, so it is not blocked and opens in front of it.
-        box = QMessageBox(self._failure_parent())
-        box.setIcon(QMessageBox.Icon.Critical)
-        box.setWindowTitle("Analysis failed")
-        box.setText(headline)
-        box.setInformativeText(
-            "The application and your model are unaffected. "
-            "The pre-run snapshot is kept for recovery. Details below and in the Console dock."
-        )
-        box.setDetailedText(report)
-        box.setStandardButtons(QMessageBox.StandardButton.Ok)
-        box.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
-        box.setModal(False)
-        box.finished.connect(self._forget_failure_report)
-        self._analysis_error_box = box
-        box.show()
-        box.raise_()
-        box.activateWindow()
-        self._log(headline)
-
     def report_unexpected_error(self, traceback_text: str) -> None:
         """Show an unhandled exception instead of letting the process die.
 
@@ -3325,10 +3035,6 @@ class MainWindow(QMainWindow):
         box.show()
         box.raise_()
         box.activateWindow()
-
-    def _forget_failure_report(self, _result: int = 0) -> None:
-        """The report is closed (and, with ``WA_DeleteOnClose``, about to be deleted)."""
-        self._analysis_error_box = None
 
     def _on_display_options(self) -> None:
         dlg = DisplayOptionsDialog(
@@ -3825,8 +3531,8 @@ class MainWindow(QMainWindow):
         # what calls OpenSees waits for one (Options → Solver).
         solver = self._solver.available
         opensees = self._opensees.available
-        self._act_run.setEnabled(solver)
-        self._act_run.setStatusTip("" if solver else self._solver.summary())
+        self.action("analyze.run").setEnabled(solver)
+        self.action("analyze.run").setStatusTip("" if solver else self._solver.summary())
         run_batch = self.action("file.run_batch")
         run_batch.setEnabled(solver)
         run_batch.setStatusTip("" if solver else self._solver.summary())
@@ -3837,8 +3543,8 @@ class MainWindow(QMainWindow):
             "" if opensees else self._opensees.summary()
         )
         batch_enabled = has_cases and solver and not self._runner.is_running
-        self._act_run_all.setEnabled(batch_enabled)
-        self._act_run_selected.setEnabled(batch_enabled)
+        self.action("analyze.run_all").setEnabled(batch_enabled)
+        self.action("analyze.run_selected").setEnabled(batch_enabled)
         project_now = self._vm.project
         stored = self.results.has_stored(project_now)
         db_there = has_project and database_path(self._vm.path).exists()
@@ -3848,7 +3554,7 @@ class MainWindow(QMainWindow):
             self._act_auto_mesh_frames.setChecked(
                 project_now is None or project_now.auto_mesh_frames
             )
-        self._act_check_stability.setEnabled(
+        self.action("analyze.check_stability").setEnabled(
             has_project
             and opensees
             and not self._stability.is_running
@@ -3857,7 +3563,6 @@ class MainWindow(QMainWindow):
         self._act_cancel_stability.setEnabled(self._stability.is_running)
         # Only there while a check runs, rather than a permanent grey entry.
         self._act_cancel_stability.setVisible(self._stability.is_running)
-        self._act_check_model.setEnabled(has_project)
         self.action("edit.join_frames").setEnabled(
             has_project and len(self._canvas.selection.elements) >= 2
         )

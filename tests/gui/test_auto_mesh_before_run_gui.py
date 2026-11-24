@@ -71,7 +71,7 @@ def _window(qtbot):  # type: ignore[no-untyped-def]
 def test_run_splits_the_beam_the_column_ends_on_in_one_undo_step(qtbot) -> None:  # type: ignore[no-untyped-def]
     mw = _window(qtbot)
     project = mw._vm.project
-    mw._auto_mesh_before_run()
+    mw.analysis.auto_mesh_before_run()
     beams = [e for e in project.elements if 4 in e.nodes and e.id != 2]
     assert sorted(e.nodes for e in beams) == [(1, 4), (4, 2)]
     pieces = {e.id for e in beams}
@@ -89,7 +89,7 @@ def test_a_member_with_auto_mesh_off_is_left_alone(qtbot) -> None:  # type: igno
     mw = _window(qtbot)
     mw._vm.apply_command(AssignElementFieldsCommand(mw._vm, {1}, {"auto_mesh": False}))
     count = mw._vm.undo_stack.count()
-    mw._auto_mesh_before_run()
+    mw.analysis.auto_mesh_before_run()
     assert sorted(e.id for e in mw._vm.project.elements) == [1, 2]
     assert mw._vm.undo_stack.count() == count
 
@@ -101,7 +101,7 @@ def test_the_analyze_switch_is_saved_with_the_project_and_undoable(qtbot) -> Non
     assert action.isChecked()
     action.setChecked(False)
     assert mw._vm.project.auto_mesh_frames is False
-    mw._auto_mesh_before_run()
+    mw.analysis.auto_mesh_before_run()
     assert sorted(e.id for e in mw._vm.project.elements) == [1, 2]
     mw._vm.undo_stack.undo()
     assert mw._vm.project.auto_mesh_frames is True

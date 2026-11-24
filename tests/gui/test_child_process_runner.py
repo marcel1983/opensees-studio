@@ -124,7 +124,7 @@ def test_hard_exit_in_the_child_leaves_the_window_alive_with_a_report(
     assert window._runner.last_exit_code == 255
     assert window.isVisible()
     assert not window._runner.is_running
-    box = window._analysis_error_box
+    box = window.analysis.error_box
     assert box is not None and box.isVisible()
     assert "255" in box.text()
     assert "stderr (last 40 lines)" in box.detailedText()
@@ -154,7 +154,7 @@ def test_hard_exit_without_stderr_output_shows_the_placeholder(
 
     assert window._runner.last_exit_code == 255
     assert blocker.args[0].rstrip().endswith(NO_STDERR_PLACEHOLDER)
-    box = window._analysis_error_box
+    box = window.analysis.error_box
     assert NO_STDERR_PLACEHOLDER in box.detailedText()
     box.close()
 
@@ -172,7 +172,7 @@ def test_failure_box_opens_in_front_of_the_run_dialog(qtbot, tmp_path, monkeypat
     seen: dict[str, object] = {}
 
     def drive_the_dialog() -> None:
-        dlg = window._run_dialog
+        dlg = window.analysis.run_dialog
         seen["dialog"] = dlg
         index = dlg._case_combo.findData(3)
         dlg._case_combo.setCurrentIndex(index)
@@ -180,7 +180,7 @@ def test_failure_box_opens_in_front_of_the_run_dialog(qtbot, tmp_path, monkeypat
         window._runner.failed.connect(failed.append)
         dlg._run_btn.click()
         qtbot.waitUntil(lambda: bool(failed), timeout=60000)
-        box = window._analysis_error_box
+        box = window.analysis.error_box
         qtbot.waitUntil(lambda: QApplication.activeWindow() is box, timeout=5000)
         seen["parent"] = box.parent()
         seen["active"] = QApplication.activeWindow()
@@ -188,7 +188,7 @@ def test_failure_box_opens_in_front_of_the_run_dialog(qtbot, tmp_path, monkeypat
         seen["visible"] = box.isVisible()
         dlg.reject()
 
-    window._on_run_analysis()  # modeless: it returns with the dialog open
+    window.analysis.run()  # modeless: it returns with the dialog open
     drive_the_dialog()
 
     box = seen["box"]
@@ -214,17 +214,17 @@ def test_real_opensees_crash_shows_its_own_message_in_front(qtbot, tmp_path, mon
     seen: dict[str, object] = {}
 
     def drive_the_dialog() -> None:
-        dlg = window._run_dialog
+        dlg = window.analysis.run_dialog
         dlg._case_combo.setCurrentIndex(dlg._case_combo.findData(1))
         failed: list[str] = []
         window._runner.failed.connect(failed.append)
         dlg._run_btn.click()
         qtbot.waitUntil(lambda: bool(failed), timeout=60000)
-        box = window._analysis_error_box
+        box = window.analysis.error_box
         seen.update(dialog=dlg, parent=box.parent(), details=box.detailedText(), report=failed[0])
         dlg.reject()
 
-    window._on_run_analysis()  # modeless: it returns with the dialog open
+    window.analysis.run()  # modeless: it returns with the dialog open
     drive_the_dialog()
 
     assert seen["parent"] is seen["dialog"]
@@ -232,7 +232,7 @@ def test_real_opensees_crash_shows_its_own_message_in_front(qtbot, tmp_path, mon
     assert "No error line was reported" in seen["report"]
     assert "orientation" in seen["details"]
     assert NO_STDERR_PLACEHOLDER not in seen["details"]
-    window._analysis_error_box.close()
+    window.analysis.error_box.close()
 
 
 @pytest.mark.gui
@@ -401,7 +401,7 @@ def test_missing_recorder_output_in_the_child_opens_the_error_dialog(
     assert window._runner.last_exit_code == 2
     assert "Last error:" in report
     assert "nodes_disp.out" in report
-    box = window._analysis_error_box
+    box = window.analysis.error_box
     assert box is not None and box.isVisible()
     assert "nodes_disp.out" in box.detailedText()
     assert window.results.latest is None
@@ -418,11 +418,11 @@ def test_the_run_dialog_is_modeless_single_and_offers_the_results(qtbot, tmp_pat
     window.show()
     assert window.open_project(path)
 
-    window._on_run_analysis()
-    dlg = window._run_dialog
+    window.analysis.run()
+    dlg = window.analysis.run_dialog
     assert dlg is not None and dlg.isVisible() and not dlg.isModal()
-    window._on_run_analysis()
-    assert window._run_dialog is dlg, "a second F5 must not open a second dialog"
+    window.analysis.run()
+    assert window.analysis.run_dialog is dlg, "a second F5 must not open a second dialog"
 
     dlg._case_combo.setCurrentIndex(dlg._case_combo.findData(1))
     with qtbot.waitSignal(window._runner.finished, timeout=60000):
@@ -431,5 +431,5 @@ def test_the_run_dialog_is_modeless_single_and_offers_the_results(qtbot, tmp_pat
     assert "--- Done: Tip-Load · Static ---" in dlg._log.toPlainText()
 
     dlg._show_results_btn.click()
-    assert window._run_dialog is None
+    assert window.analysis.run_dialog is None
     assert isinstance(window.results.latest, StaticResults)

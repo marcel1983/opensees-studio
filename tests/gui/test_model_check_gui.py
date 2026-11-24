@@ -202,7 +202,9 @@ class _FakeRunDialog:
 @pytest.fixture
 def fake_run(monkeypatch):  # type: ignore[no-untyped-def]
     _FakeRunDialog.created = 0
-    monkeypatch.setattr("opensees_studio.views.main_window.RunAnalysisDialog", _FakeRunDialog)
+    monkeypatch.setattr(
+        "opensees_studio.views.controllers.analysis.RunAnalysisDialog", _FakeRunDialog
+    )
     return _FakeRunDialog
 
 

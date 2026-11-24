@@ -57,7 +57,7 @@ def test_run_all_hands_every_case_to_the_runner(qtbot) -> None:  # type: ignore[
 
     window._runner.run_cases = _fake_run_cases  # type: ignore[method-assign]
 
-    window._on_run_all_cases()
+    window.analysis.run_all()
 
     assert seen == [[1, 2]]
 
