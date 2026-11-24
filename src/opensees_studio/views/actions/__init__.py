@@ -12,6 +12,7 @@ from opensees_studio.views.actions.design import DESIGN_ACTIONS
 from opensees_studio.views.actions.display import DISPLAY_ACTIONS
 from opensees_studio.views.actions.edit import EDIT_ACTIONS
 from opensees_studio.views.actions.file import FILE_ACTIONS
+from opensees_studio.views.actions.options import OPTIONS_ACTIONS
 from opensees_studio.views.actions.select import SELECT_ACTIONS
 from opensees_studio.views.actions.spec import ActionSpec, ActionState, Needs
 from opensees_studio.views.actions.view import VIEW_ACTIONS
@@ -26,6 +27,7 @@ ALL_ACTIONS: tuple[ActionSpec, ...] = (
     *SELECT_ACTIONS,
     *VIEW_ACTIONS,
     *DISPLAY_ACTIONS,
+    *OPTIONS_ACTIONS,
 )
 
 __all__ = ["ALL_ACTIONS", "ActionSpec", "ActionState", "Needs"]

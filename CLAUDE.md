@@ -144,8 +144,8 @@ These are non-obvious things that are easy to break if you don't know:
   `_on_save_as` return `True` when the file was written, and
   `_confirm_discard_changes(action)` is the one prompt shared by close, New
   and Open so the three cannot drift apart.
-- Model lock. Results lock the model (`MainWindow._lock_for_results`); the one
-  place that enforces it is `_on_undo_index_changed`, which compares
+- Model lock. Results lock the model (`ModelLockController.lock_for_results`,
+  `window.model_lock`); the one place that enforces it is its `on_undo_index_changed`, which compares
   `model_fingerprint` with the locked one after every push, undo and redo and
   takes the change back when the user refuses to unlock. So a model change must
   go through the undo stack, and what the fingerprint leaves out
@@ -232,7 +232,8 @@ These are non-obvious things that are easy to break if you don't know:
   (`needs=None`). The results in memory are `window.results`, a
   `viewmodels.results_session.ResultsSession` (`latest` on screen, `cases` for
   the combinations, `extra` for the report only): ask it, do not add a
-  `_latest_results` to the window. A controller's attribute must not be the name of a `QMainWindow`
+  `_latest_results` to the window. `ModelLockController` (Options → Lock Model)
+  owns the padlock of the status bar and gets `drop_results`. A controller's attribute must not be the name of a `QMainWindow`
   method (`window.geometry` would replace `QWidget.geometry()`):
   `tests/gui/test_action_registry.py` checks it, hence `model_tools`.
   The rest of the window is being moved out the same way.

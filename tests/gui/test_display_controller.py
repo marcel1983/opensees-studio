@@ -139,7 +139,7 @@ def test_the_window_owns_one_controller_and_the_commands_point_at_it(qtbot) -> N
     # A static result enables its views, and a view enables Back to Model View.
     mw._vm.project.nodes.extend([Node(id=1, coords=(0, 0, 0)), Node(id=2, coords=(4, 0, 0))])
     mw._vm.project.elements.append(ElasticBeamColumn(id=10, nodes=(1, 2), section_id=1))
-    mw.lock_after_analysis = False
+    mw.model_lock.after_analysis = False
     mw._display_results(_results())
     assert mw.action("display.show_deformed").isEnabled()
     assert mw.action("display.show_force_diagram").isEnabled()

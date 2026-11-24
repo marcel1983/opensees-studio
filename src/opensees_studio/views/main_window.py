@@ -68,7 +68,6 @@ from opensees_studio.core import (
     make_default_truss_material,
     shortcut_profiles,
 )
-from opensees_studio.core.combinations import model_fingerprint
 from opensees_studio.core.generated import GeneratedModel
 from opensees_studio.core.help import ACTION_TOPICS, TOPIC_PROPERTY
 from opensees_studio.core.i18n import LANGUAGES
@@ -128,6 +127,7 @@ from opensees_studio.views.controllers.joints import JointsController
 from opensees_studio.views.controllers.library import LibraryController
 from opensees_studio.views.controllers.loads import LoadsController
 from opensees_studio.views.controllers.members import MembersController
+from opensees_studio.views.controllers.model_lock import ModelLockController
 from opensees_studio.views.controllers.model_tools import ModelToolsController
 from opensees_studio.views.controllers.patterns import PatternsController
 from opensees_studio.views.controllers.property_edits import PropertyEditsController
@@ -288,13 +288,6 @@ class MainWindow(QMainWindow):
         self._analysis_error_box: QMessageBox | None = None  # last failure report
         self._stability_box: QMessageBox | None = None  # last stability check answer
         self._run_dialog: RunAnalysisDialog | None = None  # open while a Run dialog is shown
-        # The model lock (Options → Lock Model): set when results arrive, so an
-        # edit asks before it makes them stale. The fingerprint is the model the
-        # lock protects; the index is the undo position it was last seen at.
-        self._model_locked = False
-        self._lock_fingerprint: str | None = None
-        self._lock_index = 0
-        self._lock_reverting = False
         self._element_diagram_windows: list[ElementDiagramWindow] = []
         self._show_node_labels = False
         self._show_element_labels = False
@@ -378,6 +371,13 @@ class MainWindow(QMainWindow):
             busy=lambda message: self._busy(message),
             select_rows=lambda nodes, elements: self._select_report_row(nodes, elements),
             close_member_windows=lambda: self._close_element_diagram_windows(),
+        )
+        #: Options → Lock Model: results make an edit of the model ask first.
+        self.model_lock = ModelLockController(
+            shell,
+            results=self.results,
+            drop_results=lambda: self._drop_session_results(),
+            action=lambda action_id: self.action(action_id),
         )
         #: What the Properties dock changes in the model.
         self.property_edits = PropertyEditsController(shell)
@@ -655,11 +655,6 @@ class MainWindow(QMainWindow):
         self._act_reactions_table = QAction("Reactions &Table", self)
         self._act_reactions_dialog = QAction("R&eactions…", self)
         self._act_display_options = QAction("Display &Options…", self)
-        self._act_lock_model = QAction("&Lock Model", self, checkable=True)
-        self._act_lock_model.setToolTip(
-            "Locked: the model cannot be changed without asking. It locks itself when "
-            "an analysis has results; unlocking discards them."
-        )
         self._act_use_ribbon = QAction("Use &Ribbon", self, checkable=True)
         self._act_use_ribbon.setToolTip(
             "Show the ribbon: the menu commands regrouped by the modelling workflow. "
@@ -1153,7 +1148,7 @@ class MainWindow(QMainWindow):
         m_options = mb.addMenu("&Options")
         m_options.addAction(self._act_set_units)
         m_options.addAction(self._act_solver_settings)
-        m_options.addAction(self._act_lock_model)
+        m_options.addAction(self.action("options.lock_model"))
         m_options.addAction(self._act_use_ribbon)
         m_options.addAction(self._act_dark_mode)
         m_language = m_options.addMenu("&Language")
@@ -1420,13 +1415,9 @@ class MainWindow(QMainWindow):
         self._status_label = QLabel("No project")
         self.statusBar().addPermanentWidget(self._status_label)
         # The model lock, where SAP2000 users look for the padlock.
-        self._lock_button = QToolButton()
-        self._lock_button.setCheckable(True)
-        self._lock_button.setAutoRaise(True)
-        self._lock_button.setText(tr("Unlocked"))
-        self._lock_button.setToolTip(self._act_lock_model.toolTip())
-        self._lock_button.clicked.connect(self._act_lock_model.trigger)
-        self.statusBar().addPermanentWidget(self._lock_button)
+        self.model_lock.button.setToolTip(self.action("options.lock_model").toolTip())
+        self.model_lock.button.clicked.connect(self.action("options.lock_model").trigger)
+        self.statusBar().addPermanentWidget(self.model_lock.button)
 
         # SAP2000-style bottom-right unit picker. Drives the same state
         # as Options → Set Display Units — changes here are instantly
@@ -1751,8 +1742,7 @@ class MainWindow(QMainWindow):
         self._act_reactions_dialog.triggered.connect(self._on_reactions_dialog)
         self._act_display_options.triggered.connect(self._on_display_options)
         self._act_show_load_assigns.triggered.connect(self._on_show_load_assigns)
-        self._act_lock_model.triggered.connect(self._on_lock_model_triggered)
-        self._vm.undo_stack.indexChanged.connect(self._on_undo_index_changed)
+        self._vm.undo_stack.indexChanged.connect(self.model_lock.on_undo_index_changed)
 
         # AnalysisRunner: stream log to console + show results in panel
         self._runner.log.connect(self._console.appendPlainText)
@@ -3298,7 +3288,7 @@ class MainWindow(QMainWindow):
 
     def _keep_case_results(self, results: object) -> None:
         self.results.keep(self._vm.project, results)
-        self._lock_for_results()
+        self.model_lock.lock_for_results()
 
     # ── what the viewport is showing ────────────────────────────────
     def _on_clear_results(self) -> None:
@@ -3318,7 +3308,7 @@ class MainWindow(QMainWindow):
         if answer != QMessageBox.StandardButton.Yes:
             return
         self._drop_session_results()
-        self._set_model_locked(False)
+        self.model_lock.set_locked(False)
         removed = delete_all_results(db_path)
         self._log(
             "All results deleted."
@@ -3334,98 +3324,6 @@ class MainWindow(QMainWindow):
         self._refresh_case_combo()
         self.display.back_to_model()
         self._results_panel.show_results(None, self._vm.project)
-
-    # ── the model lock ───────────────────────────────────────────────
-    #: Lock the model when results arrive. Tests of other features switch it off.
-    lock_after_analysis = True
-
-    def _set_model_locked(self, locked: bool) -> None:
-        """Lock or unlock, remembering the model the lock protects."""
-        project = self._vm.project
-        self._model_locked = bool(locked and project is not None)
-        self._lock_fingerprint = (
-            model_fingerprint(project) if self._model_locked and project is not None else None
-        )
-        self._lock_index = self._vm.undo_stack.index()
-        self._act_lock_model.setChecked(self._model_locked)
-        self._lock_button.setChecked(self._model_locked)
-        self._lock_button.setText(tr("Locked") if self._model_locked else tr("Unlocked"))
-
-    def _lock_for_results(self) -> None:
-        """Results arrived: from here on an edit would make them stale."""
-        if self.lock_after_analysis and not self._model_locked:
-            self._set_model_locked(True)
-            self._log("Model locked: it has analysis results (Options → Lock Model unlocks it).")
-
-    def _confirm_unlock(self) -> bool:
-        """Ask before the lock goes; with results, say that they go with it."""
-        if self.results.has_any(self._vm.project):
-            text = (
-                "The model is locked because it has analysis results.\n\n"
-                "Unlock it and discard the results of this session? The results "
-                "database is kept."
-            )
-        else:
-            text = "The model is locked. Unlock it to change it?"
-        answer = QMessageBox.question(
-            self,
-            "Unlock Model",
-            text,
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        return answer == QMessageBox.StandardButton.Yes
-
-    def _unlock_model(self) -> None:
-        """Unlock; results in memory belonged to the locked model and go with it."""
-        had_results = self.results.has_any(self._vm.project)
-        self._set_model_locked(False)
-        if had_results:
-            self._drop_session_results()
-            self._log("Model unlocked: the results of this session were discarded.")
-        else:
-            self._log("Model unlocked.")
-        self._refresh_action_enablement()
-
-    def _on_lock_model_triggered(self, checked: bool) -> None:
-        """Options → Lock Model, and the padlock in the status bar."""
-        if checked:
-            self._set_model_locked(True)
-            self._log("Model locked.")
-        elif self._confirm_unlock():
-            self._unlock_model()
-        else:
-            self._act_lock_model.setChecked(True)
-            self._lock_button.setChecked(True)
-
-    def _on_undo_index_changed(self, index: int) -> None:
-        """An edit, an undo or a redo happened: a locked model asks first.
-
-        Only a change of the model the results depend on counts (its
-        fingerprint): combinations, design settings and display choices are
-        free. Refused, the change is taken back.
-        """
-        project = self._vm.project
-        if not self._model_locked or self._lock_reverting or project is None:
-            self._lock_index = index
-            return
-        if model_fingerprint(project) == self._lock_fingerprint:
-            self._lock_index = index
-            return
-        if self._confirm_unlock():
-            self._unlock_model()
-            return
-        stack = self._vm.undo_stack
-        self._lock_reverting = True
-        try:
-            if index < self._lock_index:
-                stack.redo()
-            else:
-                stack.undo()
-        finally:
-            self._lock_reverting = False
-        self._lock_index = stack.index()
-        self.statusBar().showMessage(tr("The model is locked: the change was not made."), 6000)
 
     def _record_case_results(self, results: object) -> None:
         """Append this case's results to the project's queryable database.
@@ -3660,7 +3558,7 @@ class MainWindow(QMainWindow):
     def _display_results(self, results: object) -> None:
         """Point the whole window at one results case."""
         self.results.latest = results
-        self._lock_for_results()
+        self.model_lock.lock_for_results()
         self._results_panel.show_results(results, self._vm.project)
         self._refresh_reactions()
         self._refresh_case_combo()
@@ -3789,7 +3687,7 @@ class MainWindow(QMainWindow):
         # overlay (deformed shape, diagrams, contours, ratios). The new
         # project's stored results are offered afterwards.
         self.results.clear()
-        self._set_model_locked(False)
+        self.model_lock.set_locked(False)
         self.display.back_to_model()
         self._results_panel.show_results(None, project)
         self._refresh_reactions()
@@ -4136,8 +4034,7 @@ class MainWindow(QMainWindow):
         self.action("display.show_response_spectrum").setEnabled(has_rs)
         self._act_display_options.setEnabled(has_project)
         self._act_show_load_assigns.setEnabled(has_project)
-        self._act_lock_model.setEnabled(has_project)
-        self._lock_button.setEnabled(has_project)
+        self.model_lock.button.setEnabled(has_project)
         self._act_show_local_axes.setEnabled(has_project)
         self.action("display.back_to_model").setEnabled(self.display.dock is not None)
         # Startup gate: with no project open only File and Help stay usable. The

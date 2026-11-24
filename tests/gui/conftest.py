@@ -44,9 +44,9 @@ def _unlock_without_asking(monkeypatch: pytest.MonkeyPatch) -> None:
     in a modal box that would wedge a test of something else. The tests of the
     lock (test_model_lock.py) put their own answer in its place.
     """
-    from opensees_studio.views.main_window import MainWindow
+    from opensees_studio.views.controllers.model_lock import ModelLockController
 
-    monkeypatch.setattr(MainWindow, "_confirm_unlock", lambda self: True)
+    monkeypatch.setattr(ModelLockController, "confirm_unlock", lambda self: True)
 
 
 @pytest.fixture(scope="session", autouse=True)

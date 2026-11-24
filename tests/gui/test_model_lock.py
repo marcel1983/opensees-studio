@@ -20,6 +20,7 @@ from opensees_studio.core import (
 )
 from opensees_studio.core.design.settings import DesignSettings
 from opensees_studio.services.opensees_runner import OpenSeesRunner
+from opensees_studio.views.controllers.model_lock import ModelLockController
 from opensees_studio.views.main_window import MainWindow
 
 pytestmark = pytest.mark.gui
@@ -57,11 +58,11 @@ def window(qtbot, monkeypatch):  # type: ignore[no-untyped-def]
     win.answers = []  # type: ignore[attr-defined]
     win.asked = 0  # type: ignore[attr-defined]
 
-    def _answer(self: MainWindow) -> bool:
-        self.asked += 1  # type: ignore[attr-defined]
-        return self.answers.pop(0)  # type: ignore[attr-defined]
+    def _answer(_lock: ModelLockController) -> bool:
+        win.asked += 1  # type: ignore[attr-defined]
+        return win.answers.pop(0)  # type: ignore[attr-defined]
 
-    monkeypatch.setattr(MainWindow, "_confirm_unlock", _answer)
+    monkeypatch.setattr(ModelLockController, "confirm_unlock", _answer)
     return win
 
 
@@ -79,14 +80,14 @@ def _add_node(win: MainWindow) -> None:
 
 
 def test_results_lock_the_model(window: MainWindow) -> None:
-    assert not window._model_locked
-    assert window._lock_button.text() == "Unlocked"
+    assert not window.model_lock.locked
+    assert window.model_lock.button.text() == "Unlocked"
 
     _solve(window)
 
-    assert window._model_locked
+    assert window.model_lock.locked
     assert window._act_lock_model.isChecked()
-    assert window._lock_button.text() == "Locked"
+    assert window.model_lock.button.text() == "Locked"
 
 
 def test_a_refused_edit_is_taken_back_and_the_results_stay(window: MainWindow) -> None:
@@ -97,7 +98,7 @@ def test_a_refused_edit_is_taken_back_and_the_results_stay(window: MainWindow) -
 
     assert window.asked == 1  # type: ignore[attr-defined]
     assert [n.id for n in window._vm.project.nodes] == [1, 2]
-    assert window._model_locked
+    assert window.model_lock.locked
     assert window.results.latest is not None
 
 
@@ -108,9 +109,9 @@ def test_an_accepted_edit_unlocks_and_discards_the_results(window: MainWindow) -
     _add_node(window)
 
     assert [n.id for n in window._vm.project.nodes] == [1, 2, 9]
-    assert not window._model_locked
+    assert not window.model_lock.locked
     assert window.results.latest is None
-    assert window._lock_button.text() == "Unlocked"
+    assert window.model_lock.button.text() == "Unlocked"
     _add_node_again = AddNodesCommand(window._vm, [Node(id=10, coords=(1.0, 0.0, 1.0))])
     window._vm.apply_command(_add_node_again)  # unlocked: nobody is asked
     assert window.asked == 1  # type: ignore[attr-defined]
@@ -121,7 +122,7 @@ def test_what_no_result_depends_on_is_not_asked_about(window: MainWindow) -> Non
     window._vm.apply_command(SetDesignSettingsCommand(window._vm, DesignSettings(method="ASD")))
 
     assert window.asked == 0  # type: ignore[attr-defined]
-    assert window._model_locked
+    assert window.model_lock.locked
     assert window.results.latest is not None
 
 
@@ -134,7 +135,7 @@ def test_renaming_a_case_does_not_ask_to_unlock(window: MainWindow) -> None:
     window._vm.apply_command(RenameAnalysisCaseCommand(window._vm, 1, "GRAVITY"))
 
     assert window.asked == 0  # type: ignore[attr-defined]
-    assert window._model_locked
+    assert window.model_lock.locked
     assert window.results.latest is not None
     assert window._vm.project.analyses[0].name == "GRAVITY"
 
@@ -148,19 +149,19 @@ def test_an_undo_of_the_locked_model_asks_too(window: MainWindow) -> None:
 
     assert window.asked == 1  # type: ignore[attr-defined]
     assert [n.id for n in window._vm.project.nodes] == [1, 2, 9]  # redone
-    assert window._model_locked
+    assert window.model_lock.locked
 
 
 def test_locking_by_hand_protects_a_model_without_results(window: MainWindow) -> None:
     window._act_lock_model.trigger()
-    assert window._model_locked
+    assert window.model_lock.locked
     window.answers = [False, True]  # type: ignore[attr-defined]
 
     _add_node(window)
     assert [n.id for n in window._vm.project.nodes] == [1, 2]
 
     window._act_lock_model.trigger()  # unlock by hand
-    assert not window._model_locked
+    assert not window.model_lock.locked
     _add_node(window)
     assert [n.id for n in window._vm.project.nodes] == [1, 2, 9]
 
@@ -168,7 +169,7 @@ def test_locking_by_hand_protects_a_model_without_results(window: MainWindow) ->
 def test_another_project_starts_unlocked(window: MainWindow) -> None:
     _solve(window)
     window._vm.adopt(_project())
-    assert not window._model_locked
+    assert not window.model_lock.locked
 
 
 def test_saving_a_changed_viewport_keeps_the_results_and_the_lock(
@@ -187,5 +188,5 @@ def test_saving_a_changed_viewport_keeps_the_results_and_the_lock(
 
     window._vm.apply_command(SetDesignSettingsCommand(window._vm, DesignSettings(method="ASD")))
     assert window.asked == 0  # type: ignore[attr-defined]
-    assert window._model_locked
+    assert window.model_lock.locked
     assert window.results.latest is not None
