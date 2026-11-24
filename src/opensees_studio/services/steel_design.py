@@ -1,6 +1,7 @@
-"""Steel frame check (AISC 360-16) and storey drift check over analysis results.
+"""Steel frame check (AISC 360-16, AISI S100-16) and storey drift check over analysis results.
 
-The equations are in :mod:`core.design.aisc360`; this module finds the demands.
+The equations are in :mod:`core.design.aisc360` and, for cold-formed members,
+:mod:`core.design.aisi_s100`; this module finds the demands.
 
 Demands. Every static case contributes its internal force diagrams (axial,
 shears, moments) sampled at :data:`STATIONS` points along each member, span
@@ -24,6 +25,12 @@ tabulated properties (scaled to the project's units) give the capacity; the
 analysis keeps using the section's own values, and a difference in area of
 more than 2 % is reported.
 
+Cold-formed members. A member whose section carries a cold-formed profile
+(Section Library → Add Cold-Formed) is checked by AISI S100-16 with the Direct
+Strength Method instead (ADR-0005): same demands, load sets, unbraced lengths
+and ``Cb``; ``Fy`` and ``Fu`` come from the section's material. The AISC 341
+seismic provisions are not applied to it.
+
 No Qt. OpenSees is not needed: the results come in.
 """
 
@@ -42,6 +49,7 @@ import numpy as np
 from opensees_studio.core.aisc import SOURCE_UNITS, get_shape, load_shapes
 from opensees_studio.core.analysis import ResponseSpectrumCase, StaticCase
 from opensees_studio.core.combinations import guess_load_role
+from opensees_studio.core.design import aisi_s100
 from opensees_studio.core.design.aisc341 import (
     JointBeam,
     JointColumn,
@@ -80,6 +88,7 @@ from opensees_studio.core.design.aisc360_shapes import (
     RoundHSS,
     Tee,
 )
+from opensees_studio.core.design.aisi_s100 import ColdFormedMember, cold_formed_member
 from opensees_studio.core.design.brace_connections import (
     brace_connection_demands,
     critical_plastic_modulus,
@@ -136,6 +145,7 @@ from opensees_studio.core.design.settings import (
 from opensees_studio.core.design.steel_grades import STEEL_GRADES, grade_stresses
 from opensees_studio.core.geometry.elements import FRAME_ELEMENT_CLASSES
 from opensees_studio.core.sections import ElasticSection
+from opensees_studio.core.sections.cold_formed import ColdFormedShape
 from opensees_studio.core.units import UnitSystem, labels_for, length_scale, stress_scale
 from opensees_studio.services.element_forces import ForceComponent, extract_diagram_data
 from opensees_studio.services.results import ResponseSpectrumResults, StaticResults
@@ -491,6 +501,34 @@ def member_steel(
     fy = settings.fy if settings.fy is not None else default_fy(units)
     fu = settings.fu if settings.fu is not None else default_fu(units)
     return fy, fu, ""
+
+
+def cold_formed_steel(
+    project: Any,
+    section: Any,
+    settings: DesignSettings,
+    member: SteelMemberDesign,
+    units: Any,
+) -> tuple[float, float, str, str]:
+    """``(Fy, Fu, grade label, note)`` of a cold-formed member.
+
+    The member's own grade when the user set one; else the ``Fy`` and ``Fu`` of
+    the section's material (ADR-0005: sheet steels are materials, not AISC
+    grades); else the project's, with a note saying so.
+    """
+    if member.grade in STEEL_GRADES:
+        fy, fu = grade_stresses(member.grade, "", units)
+        return fy, fu, STEEL_GRADES[member.grade].label, ""
+    material_id = getattr(section, "material_id", None)
+    material = next((m for m in project.materials if m.id == material_id), None)
+    project_fu = settings.fu if settings.fu is not None else default_fu(units)
+    material_fy = float(getattr(material, "Fy", None) or 0.0)
+    if material_fy > 0.0:
+        material_fu = float(getattr(material, "Fu", None) or 0.0) or project_fu
+        return material_fy, material_fu, str(getattr(material, "name", "")), ""
+    project_fy = settings.fy if settings.fy is not None else default_fy(units)
+    note = "The section's material has no Fy: the project's Fy and Fu were used."
+    return project_fy, project_fu, "", note
 
 
 def project_steel(settings: DesignSettings, units: Any) -> tuple[float, float]:
@@ -1278,6 +1316,8 @@ def steel_frame_check(
 ) -> DesignReport:
     """Check every frame member against AISC 360-16 over the chosen load sets.
 
+    A member with a cold-formed section is checked against AISI S100-16.
+
     ``results`` maps case id to the static or response spectrum results of the
     project as it is now (the window's case results cache).
     """
@@ -1386,6 +1426,7 @@ def steel_frame_check(
     elements_by_id = {e.id: e for e in project.elements}
 
     sections = {s.id: s for s in project.sections}
+    cold_formed_checked = False
     for element in project.elements:
         if not isinstance(element, FRAME_ELEMENT_CLASSES):
             continue
@@ -1394,16 +1435,38 @@ def steel_frame_check(
         overrides = settings.member(element.id)
         section = sections.get(getattr(element, "section_id", -1))
         name = overrides.shape or (getattr(section, "name", "") or "")
-        try:
-            shape = shape_in_units(name, units, settings.built_up_by_name())
-        except (KeyError, ValueError) as exc:
-            reason = exc.args[0] if exc.args else str(exc)
-            result.notes.append(f"No AISC shape to check with: {reason}")
-            continue
+        e = float(getattr(section, "E", 0.0) or 0.0) or 29000.0 * stress_scale(SOURCE_UNITS, units)
+        g = float(getattr(section, "G", 0.0) or 0.0) or e / 2.6
+        profile = None if overrides.shape else getattr(section, "shape", None)
+        cold: ColdFormedMember | None = None
+        shape: Any
+        if isinstance(profile, ColdFormedShape):
+            try:
+                cold = cold_formed_member(profile, e, name=name)
+            except ValueError as exc:
+                result.notes.append(f"Not checked by {aisi_s100.SPECIFICATION}: {exc}.")
+                continue
+            shape = cold
+            member_fy, member_fu, result.grade, steel_note = cold_formed_steel(
+                project, section, settings, overrides, units
+            )
+            if steel_note:
+                result.notes.append(steel_note)
+            cold_formed_checked = True
+        else:
+            try:
+                shape = shape_in_units(name, units, settings.built_up_by_name())
+            except (KeyError, ValueError) as exc:
+                reason = exc.args[0] if exc.args else str(exc)
+                result.notes.append(f"No AISC shape to check with: {reason}")
+                continue
+            member_fy, member_fu, result.grade = member_steel(
+                settings, shape_family(shape), overrides, units
+            )
         result.shape = shape.name
-        member_fy, member_fu, result.grade = member_steel(
-            settings, shape_family(shape), overrides, units
-        )
+        # AISC 341 is for hot-rolled members: a cold-formed one takes none of it.
+        system = "none" if cold is not None else settings.seismic_system
+        member_seismic = "none" if cold is not None else seismic_check
         k_major, k_minor = overrides.k_major, overrides.k_minor
         if direct and (k_major != 1.0 or k_minor != 1.0):
             result.notes.append(
@@ -1415,8 +1478,6 @@ def steel_frame_check(
                 f"The analysis section's area differs from {shape.name}'s by "
                 f"{abs(section.A - shape.A) / shape.A:.0%}."
             )
-        e = float(getattr(section, "E", 0.0) or 0.0) or 29000.0 * stress_scale(SOURCE_UNITS, units)
-        g = float(getattr(section, "G", 0.0) or 0.0) or e / 2.6
         steel = Steel(Fy=member_fy, E=e, G=g, Fu=member_fu)
         role = _member_role(project, element, settings)
         m_major, v_major, m_minor, v_minor, about_major = _axes(project, section, shape)
@@ -1490,7 +1551,7 @@ def steel_frame_check(
                         shear_major=0.0,
                         shear_minor=float(values["V2"][k]),
                     )
-                check = check_member(
+                check = (check_member if cold is None else aisi_s100.check_member)(
                     shape,
                     steel,
                     settings.method,
@@ -1504,7 +1565,7 @@ def steel_frame_check(
                     shear_lag=overrides.shear_lag,
                     p_delta=settings.p_delta or direct,
                 )
-                if seismic_check != "none":
+                if member_seismic != "none":
                     ca_value = ca(
                         max(0.0, -demand.axial),
                         settings.ry,
@@ -1515,7 +1576,7 @@ def steel_frame_check(
                     for item in member_limits(
                         shape,
                         role=role,
-                        system=seismic_check,
+                        system=member_seismic,
                         e=steel.E,
                         ry=settings.ry,
                         fy=steel.Fy,
@@ -1547,7 +1608,7 @@ def steel_frame_check(
                                 ),
                             )
                         )
-                if settings.seismic_system == "SCBF" and role == "brace":
+                if system == "SCBF" and role == "brace":
                     radius = min(
                         float(getattr(shape, "rx", math.inf)),
                         float(getattr(shape, "ry", math.inf)),
@@ -1621,7 +1682,7 @@ def steel_frame_check(
                     )
                     if note not in check.notes:
                         check.notes.append(note)
-                elif settings.seismic_system == "OCBF" and role == "brace":
+                elif system == "OCBF" and role == "brace":
                     radius = min(
                         float(getattr(shape, "rx", math.inf)),
                         float(getattr(shape, "ry", math.inf)),
@@ -1670,7 +1731,7 @@ def steel_frame_check(
                     )
                     if note not in check.notes:
                         check.notes.append(note)
-                elif settings.seismic_system == "OCBF" and role == "beam":
+                elif system == "OCBF" and role == "beam":
                     note = (
                         "OCBF F1.5c: beams and their connections shall be designed "
                         "with the overstrength seismic load. "
@@ -1729,6 +1790,14 @@ def steel_frame_check(
         result.checks = list(check.checks)
         result.notes.extend(dict.fromkeys(check.notes))
         result.status = "NG" if ratio > settings.ratio_limit else "OK"
+    if cold_formed_checked:
+        report.notes.append(
+            f"Cold-formed members are checked by {aisi_s100.SPECIFICATION} with the Direct Strength "
+            "Method: the local and distortional buckling loads come from the finite strip "
+            "signature curve of each section. Web crippling, the bracing a roof or wall "
+            "sheeting gives a purlin or girt, and the R factor of a purlin under uplift "
+            "(I6.2.1) are not counted: set the unbraced lengths of the members."
+        )
     if settings.seismic_system == "SMF":
         report.joints = _strong_column_weak_beam(
             project,

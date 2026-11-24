@@ -2246,6 +2246,44 @@ connection checks live in their own dialogs.
 The clear web height is taken as `d - 2 tf` (the table has no `k`), which is
 slightly conservative.
 
+# Cold-formed members (AISI S100-16)
+A member whose section comes from Section Library → Add Cold-Formed (AISI) is
+checked by **AISI S100-16** with the **Direct Strength Method**, LRFD or ASD, in
+place of AISC 360: a **lipped channel**, a **plain channel** or a **lipped zee**.
+Hats, angles and the box and back-to-back pairs are reported as not checked. Fy
+and Fu are those of the **section's material** (the A653 sheet steels of the
+default materials carry them), unless the member has a grade of its own; a
+material without Fy takes the dialog's values, and the member note says so.
+
+- **Elastic buckling.** The local and distortional buckling loads (Pcrl, Pcrd,
+  Mcrl, Mcrd) come from the finite strip signature curve of the section
+  (Appendix 2 allows a rational analysis). When the curve has no distortional
+  minimum, its value at the half-wavelength Lcrd of the closed-form flange
+  model is taken, and the member note says so.
+- **Tension** D2 yielding and, with a net area, D3 rupture.
+- **Compression** E2 global buckling (flexural, torsional or flexural-torsional,
+  with the section's own xo, ro, J and Cw), E3.2 local buckling interacting with
+  it and E4 distortional buckling. Twisting takes the minor-axis unbraced length.
+- **Flexure** F2 lateral-torsional buckling with Cb (a zee as held to bend about
+  the axis perpendicular to its web), F3.2 local and F4 distortional buckling,
+  about both axes. The sign of a minor-axis moment is not tracked: the strength
+  is the lower of the flange tips and the web in compression.
+- **Shear** G2.1 of a web without stiffeners (kv = 5.34).
+- **Interaction** H1.2 `P/Pa + Mx/Max + My/May`, H1.1 with tension, and H2
+  bending with shear, `sqrt((M/Malo)² + (V/Va)²)`.
+- **P-δ (B1)** follows C1.2.1.1, with `Pe1` on `0.90 τb EI`.
+
+The factors are φ = 0.90 / Ω = 1.67 in tension and flexure, 0.85 / 1.80 in
+compression, 0.95 / 1.60 in shear and 0.75 / 2.00 in rupture.
+
+**Not checked**: web crippling (G5, H3), holes, the inelastic reserve, and the
+seismic provisions (the Seismic system field does not act on a cold-formed
+member). **A roof or wall sheeting is not counted as a brace**: a purlin is
+checked with the unbraced lengths of the model, its whole span unless you enter
+Lb for it, and the R factor of a purlin under uplift (I6.2.1) is not applied.
+The Warehouse Wizard gives its purlins and girts their own span as the
+major-axis buckling length.
+
 # Where the demands come from
 The dialog uses the results of the cases already **run in this session**; it runs
 nothing. Tick the load sets to envelope (by default every combination, or every
@@ -2358,7 +2396,7 @@ Export → Calculation Memory print the check when they are.
         "design.steel_ratios": _t(
             "Design → Display Steel Ratios on Model",
             "Design",
-            "Paint every frame member by its governing AISC 360-16 ratio.",
+            "Paint every frame member by its governing AISC 360-16 or AISI S100-16 ratio.",
             """
 Runs the steel frame check with the settings saved in the project (or the
 defaults: LRFD, 50 ksi, every combination) over the results of this session, and
@@ -2369,8 +2407,8 @@ and the calculation memory print it:
 - blue up to 0.5, teal up to 0.7, green up to 0.9 and orange up to the ratio limit
   (the steps are those fractions of the limit, so a limit of 0.95 keeps the reading);
 - **red above the limit**;
-- grey for a member the check does not cover (no AISC shape, or a section name
-  that is not one).
+- grey for a member the check does not cover (no AISC shape, a section name
+  that is not one, or a cold-formed profile outside the AISI check).
 
 The panel on the right shows the legend, the summary and the notes (load sets
 skipped because a case has no result yet). **Select failing members** selects

@@ -74,6 +74,67 @@ def test_gravity_does_not_rack_the_building_along_its_length(solved) -> None:  #
         assert np.abs(disp[:, 1]).max() < 1e-3
 
 
+def test_the_purlins_and_girts_are_checked_by_aisi_s100(solved) -> None:  # type: ignore[no-untyped-def]
+    """A cold-formed section goes to the Direct Strength Method, the rest stays AISC 360."""
+    project, results = solved
+    report = steel_frame_check(project, results, project.design)
+    secondary = {
+        eid for g in project.groups if g.name in ("Purlins", "Girts") for eid in g.element_ids
+    }
+    rows = [m for m in report.members if m.element_id in secondary]
+    assert len(rows) == 105
+    assert {m.status for m in rows} <= {"OK", "NG"}
+    assert all(m.equation.startswith("AISI S100-16") for m in rows)
+    assert {m.shape for m in rows} == {"C150X50X15X2.38"}
+    # Fy and Fu of the section's material, the sheet steel of the default library.
+    assert {m.grade for m in rows} == {"A653SSGr50"}
+    # Held at every frame; the sheeting is not a brace.
+    assert {tuple(round(x, 9) for x in m.unbraced) for m in rows} == {(6.0, 6.0, 6.0)}
+    assert all("Web crippling (G5, H3) is not checked." in m.notes for m in rows)
+    assert any("AISI S100-16" in note for note in report.notes)
+    others = [m for m in report.members if m.element_id not in secondary]
+    assert others and not any(m.equation.startswith("AISI") for m in others)
+    assert not any("AISC 341" in name for m in rows for name in m.ratios)
+
+
+def test_a_purlin_braced_along_its_span_carries_the_roof(solved) -> None:  # type: ignore[no-untyped-def]
+    """Unbraced over 6 m the channel buckles sideways; held every 0.5 m it does not."""
+    project, results = solved
+    purlins = next(g for g in project.groups if g.name == "Purlins").element_ids
+    as_modelled = steel_frame_check(project, results, project.design)
+    worst = max(
+        (m for m in as_modelled.members if m.element_id in set(purlins)), key=lambda m: m.ratio
+    )
+    assert worst.status == "NG"
+    assert worst.ratios["Major flexure"] > 1.0
+    braced = project.design.model_copy(
+        update={
+            "members": [
+                m.model_copy(update={"length_minor": 0.5, "length_ltb": 0.5})
+                if m.element_id == worst.element_id
+                else m
+                for m in project.design.members
+            ]
+        }
+    )
+    again = steel_frame_check(project, results, braced)
+    row = next(m for m in again.members if m.element_id == worst.element_id)
+    assert row.status == "OK"
+    assert row.ratio < 0.5 * worst.ratio
+    assert row.unbraced == (6.0, 0.5, 0.5)
+
+
+def test_the_calculation_memory_prints_the_aisi_steps(solved) -> None:  # type: ignore[no-untyped-def]
+    from opensees_studio.services.calc_memory import build_member_memory
+
+    project, results = solved
+    report = steel_frame_check(project, results, project.design)
+    memory = build_member_memory(project, report, fmt="markdown")
+    assert "AISI S100-16 H1.2" in memory
+    assert "Local buckling moment (finite strips)" in memory
+    assert "F4.1 distortional slenderness" in memory
+
+
 def test_the_steel_check_takes_the_stabilised_purlins_not_every_purlin(solved) -> None:  # type: ignore[no-untyped-def]
     project, results = solved
     rafters = set(next(g for g in project.groups if g.name == "Rafters").element_ids)

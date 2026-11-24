@@ -260,6 +260,16 @@ These are non-obvious things that are easy to break if you don't know:
   or the 100 % + 30 % rule pairs `EQ X +e` with `EQ X -e`. The plan keeps a
   scratch copy of the project for ids and masses; what goes into it is a copy,
   never the object the plan returns.
+- Cold-formed members go to AISI S100-16, not AISC 360. `steel_frame_check`
+  dispatches on `section.shape` being a `ColdFormedShape`
+  (`core/design/aisi_s100.py`, Direct Strength Method, ADR-0005): the elastic
+  local and distortional loads are the finite strip signature curve
+  (`core/design/fsm.py`, cached per shape), Fy and Fu come from the section's
+  material, and the AISC 341 system does not act on them. Sheeting is not a
+  brace: the check uses the model's unbraced lengths. The equations were typed
+  without a copy of S100-16 at hand and are pinned by the DSM Design Guide
+  example and by closed forms against the finite strips; check a clause against
+  the specification before changing it.
 - `Entity.id` is `PositiveInt` (>0). The sentinel `999999` is reserved
   for in-flight / temporary objects that haven't been assigned a real id.
 - Eigen determinism rule. ARPACK keeps its random start vector across

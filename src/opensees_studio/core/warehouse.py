@@ -215,6 +215,8 @@ _PINNED_FREE_TORSION = EndRelease(released=("T", "M2", "M3"))
 BRACE_RELEASES = FrameReleases(i=_PINNED, j=_PINNED)
 #: A purlin or girt: simply supported, torsion held at one end only.
 SECONDARY_RELEASES = FrameReleases(i=_PINNED, j=_PINNED_FREE_TORSION)
+#: The groups of secondary members: each one spans from frame to frame.
+SECONDARY_MEMBERS: tuple[str, ...] = ("purlins", "girts")
 #: The top of an end wall column: it leans on the rafter, it does not frame into it.
 POST_TOP_RELEASES = FrameReleases(j=_PINNED)
 
@@ -1472,20 +1474,33 @@ def wind_loads(warehouse: Warehouse, case: WindCase, units: UnitSystem) -> list[
 
 # ─────────────────────────── design lengths ───────────────────────────
 def member_design_overrides(warehouse: Warehouse) -> list[Any]:
-    """Unbraced lengths of the rafters and side columns for the steel check.
+    """Unbraced lengths of the rafters, side columns, purlins and girts for the steel check.
 
-    Minor-axis buckling and lateral-torsional buckling take the distance
-    between bracing points: a purlin (or a girt) counts only where it has a
-    stabilising angle. Major-axis buckling stays as modelled.
+    Minor-axis buckling and lateral-torsional buckling of a rafter or column
+    take the distance between bracing points: a purlin (or a girt) counts only
+    where it has a stabilising angle. Their major-axis buckling stays as
+    modelled.
+
+    A purlin or girt is held at every frame it rests on, so its major-axis
+    buckling length is its own span: as modelled, the line over all the bays
+    would count as one member. Its minor-axis and lateral-torsional lengths
+    stay as modelled (the span): the sheeting is not counted as a brace.
     """
     from opensees_studio.core.design.settings import SteelMemberDesign
 
-    return [
+    overrides = [
         SteelMemberDesign(
             element_id=element_id, length_minor=portable(length), length_ltb=portable(length)
         )
         for element_id, length in sorted(warehouse.unbraced.items())
     ]
+    coords = {node.id: np.asarray(node.coords, dtype=float) for node in warehouse.nodes}
+    secondary = {eid for key in SECONDARY_MEMBERS for eid in warehouse.members.get(key, ())}
+    for element in warehouse.elements:
+        if element.id in secondary and element.id not in warehouse.unbraced:
+            span = float(np.linalg.norm(coords[element.nodes[1]] - coords[element.nodes[0]]))
+            overrides.append(SteelMemberDesign(element_id=element.id, length_major=portable(span)))
+    return overrides
 
 
 # ───────────────────────────── earthquake ─────────────────────────────

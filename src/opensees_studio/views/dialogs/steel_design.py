@@ -108,6 +108,13 @@ class SteelDesignDialog(FittedDialog):
                 "the H1 interaction, over the results of the load sets ticked here."
             )
         )
+        layout.addWidget(
+            QLabel(
+                "A member with a <b>cold-formed</b> section (lipped or plain channel, lipped "
+                "zee) is checked by AISI S100-16 with the Direct Strength Method; Fy and Fu "
+                "are those of the section's material."
+            )
+        )
         top = QHBoxLayout()
         form = QFormLayout()
         self._method = QComboBox()
