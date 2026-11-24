@@ -355,7 +355,7 @@ def test_the_new_model_template_opens_the_wizard(qtbot, monkeypatch) -> None:  #
 
     mw = _window(qtbot)
     _accept(monkeypatch, _small)
-    mw._start_template("building", UnitSystem.SI_MM_N, None)
+    mw.generators.start_template("building", UnitSystem.SI_MM_N, None)
     project = mw._vm.project
     assert project.meta.units is UnitSystem.SI_MM_N
     assert max(n.coords[0] for n in project.nodes) == pytest.approx(12_000.0)
@@ -425,7 +425,10 @@ def test_the_controller_runs_on_a_bare_window(qtbot, monkeypatch) -> None:  # ty
             canvas=lambda: canvas,
             log=log.append,
             refresh_actions=lambda: None,
-        )
+        ),
+        confirm_discard=lambda _action: True,
+        grid_wizard=lambda: None,
+        front_view=lambda: None,
     )
     _accept(monkeypatch, _small)
     controller.create_building()

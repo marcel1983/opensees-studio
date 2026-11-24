@@ -19,7 +19,7 @@ core/help.py                                 exempt
 core/catalog/generated/fiber.py              exempt
 services/sap2000_text.py                     3550
 services/opensees_runner.py                  3050
-views/main_window.py                         2950
+views/main_window.py                         2650
 services/steel_design.py                     2750
 views/canvas3d/model_renderer.py             2750
 core/warehouse.py                            2600

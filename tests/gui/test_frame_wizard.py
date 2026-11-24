@@ -273,7 +273,7 @@ def test_a_project_without_sections_gets_the_default_one_inside_the_same_macro(
 def test_a_frame_that_cannot_be_built_leaves_nothing_behind(qtbot, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     # The default section used to stay in the project, inside a half-made
     # "Create portal frame" undo step, when the frame itself failed.
-    from opensees_studio.views import main_window
+    from opensees_studio.views.controllers import generators
 
     mw = _window(qtbot, sections=False)
     _accept_wizard(monkeypatch)
@@ -283,7 +283,7 @@ def test_a_frame_that_cannot_be_built_leaves_nothing_behind(qtbot, monkeypatch) 
     def _fail(*_args: object, **_kwargs: object) -> None:
         raise ValueError("no frame today")
 
-    monkeypatch.setattr(main_window, "build_portal_frame", _fail)
+    monkeypatch.setattr(generators, "build_portal_frame", _fail)
     mw._act_frame_wizard.trigger()
 
     project = mw._vm.project

@@ -246,8 +246,11 @@ These are non-obvious things that are easy to break if you don't know:
   window only places them. `FilesController` (New Blank, New 2D Truss, Open,
   Open Recent, Save, Save As, Project Information, Run Batch, the autosaved
   recovery copy) gets the recent-files list the start page shares and
-  `store_view`/`restore_view` for the viewport a project carries; New Model,
-  New 2D Frame and Quit stay in the window (wizards, `closeEvent`).
+  `store_view`/`restore_view` for the viewport a project carries; only Quit
+  stays in the window (`closeEvent`). `GeneratorsController` (File → New Model
+  and New 2D Frame; Define → Create Portal Frame, Create Truss, Create
+  Warehouse, Create Building) gets `confirm_discard`, `grid_wizard` and
+  `front_view`.
   `VisibilityController` (View → Visibility, Color By, Colors; Display →
   Display Options, Show Load Assigns; the viewport a project carries) does not
   build its ticks: they listen to `toggled`, so the window builds them and hands
@@ -284,7 +287,7 @@ These are non-obvious things that are easy to break if you don't know:
   portal frame, the truss, the New Model templates and the warehouse
   (`core.warehouse.plan_warehouse` → `WarehousePlan` →
   `commands.warehouse.insert_warehouse_plan`) all go through it: a new wizard
-  does not open its own `beginMacro` in `MainWindow`. In a
+  does not open its own `beginMacro`; it is a method of `GeneratorsController`. In a
   generated warehouse a purlin or girt is pinned and is **not** a bracing point
   of the rafter or column unless it has a stabilising angle: the plan writes
   `SteelMemberDesign.length_minor`/`length_ltb`, because `core.design.members`

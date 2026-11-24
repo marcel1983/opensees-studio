@@ -42,24 +42,14 @@ from opensees_studio.commands import (
     AddNodesCommand,
     SetRestraintCommand,
 )
-from opensees_studio.commands.generated import insert_generated
 from opensees_studio.core import (
-    SUPPORTED_NDF,
-    ElasticSection,
     Project,
     UnitConverter,
-    UnitSystem,
-    build_portal_frame,
-    frame_grid,
     labels_for,
-    make_default_section,
-    make_default_truss_material,
     shortcut_profiles,
 )
-from opensees_studio.core.generated import GeneratedModel
 from opensees_studio.core.help import ACTION_TOPICS, TOPIC_PROPERTY
 from opensees_studio.core.i18n import LANGUAGES
-from opensees_studio.core.materials.library import is_uniaxial
 from opensees_studio.core.object_info import element_info, node_info
 from opensees_studio.core.view_settings import ViewSettings
 from opensees_studio.services import (
@@ -114,7 +104,6 @@ from opensees_studio.views.controllers.viewport import ViewportController
 from opensees_studio.views.controllers.visibility import VisibilityController
 from opensees_studio.views.dialogs import (
     AddNodeDialog,
-    FrameWizard,
     MoveDialog,
     PerformanceDialog,
     ReplicateDialog,
@@ -145,9 +134,6 @@ from opensees_studio.views.view_window import ViewWindow
 AUTOSAVE_CHOICES = (0, 2, 5, 10)
 AUTOSAVE_DEFAULT = 5
 AUTOSAVE_KEY = "autosave/minutes"
-
-#: File → New Model: the units chosen last, offered again.
-NEW_MODEL_UNITS_KEY = "new_model/units"
 
 
 def _portable_keys(action: QAction) -> tuple[str, ...]:
@@ -291,8 +277,13 @@ class MainWindow(QMainWindow):
         #: Storeys, mass source, seismic loads, diaphragms, rigid links.
         self.areas = AreasController(shell)
         self.building = BuildingController(shell)
-        #: Define → Create Building.
-        self.generators = GeneratorsController(shell)
+        #: The wizards of Define, File → New Model and New 2D Frame.
+        self.generators = GeneratorsController(
+            shell,
+            confirm_discard=lambda action: self.files.confirm_discard(action),
+            grid_wizard=lambda: self.grids.wizard(),
+            front_view=lambda: self.viewport.front(),
+        )
         #: Assign → Frame: section, material, formulation, frame member options.
         self.joints = JointsController(shell)
         self.model_tools = ModelToolsController(
@@ -438,9 +429,9 @@ class MainWindow(QMainWindow):
         self._recent = RecentFiles()
         self._start_page = StartPage(
             {
-                "new_model": self._on_new_model,
+                "new_model": lambda: self.generators.new_model(),
                 "new_3d": lambda: self.files.new_blank(),
-                "new_2d": self._on_new_2d,
+                "new_2d": lambda: self.generators.new_2d_frame(),
                 "new_truss": lambda: self.files.new_2d_truss(),
                 "open": lambda: self.files.open_file(),
             },
@@ -604,13 +595,6 @@ class MainWindow(QMainWindow):
         # No shortcut: Ctrl+N is File → New, and F4 draws nodes.
         self._act_add_node = QAction("Add &Node…", self)
         self._act_custom_commands = QAction("Custom OpenSees Co&mmands…", self)
-        self._act_frame_wizard = QAction("Create Portal &Frame…", self)
-        self._act_truss_wizard = QAction("Create &Truss…", self)
-        self._act_warehouse_wizard = QAction("Create &Warehouse…", self)
-        self._act_warehouse_wizard.setToolTip(
-            "A 3D steel warehouse from a few numbers: portal frames, purlins, girts, "
-            "bracing, roof loads and the combinations of a design code."
-        )
         self._act_load_combinations = QAction("Load &Combinations…", self)
 
         # Assign
@@ -833,9 +817,9 @@ class MainWindow(QMainWindow):
         m_define.addAction(self.action("define.seismic_loads"))
         m_define.addAction(self._act_add_node)
         m_define.addAction(self.action("define.create_shell"))
-        m_define.addAction(self._act_frame_wizard)
-        m_define.addAction(self._act_truss_wizard)
-        m_define.addAction(self._act_warehouse_wizard)
+        m_define.addAction(self.action("define.frame_wizard"))
+        m_define.addAction(self.action("define.truss_wizard"))
+        m_define.addAction(self.action("define.warehouse_wizard"))
         m_define.addAction(self.action("define.building_wizard"))
         m_define.addSeparator()
         m_define.addActions(
@@ -1562,9 +1546,6 @@ class MainWindow(QMainWindow):
         self._canvas.lineSelectFinished.connect(lambda: self._act_select_line.setChecked(False))
         self._act_select_line.toggled.connect(self._on_select_line)
         self._act_add_node.triggered.connect(self._on_add_node)
-        self._act_frame_wizard.triggered.connect(self._on_frame_wizard)
-        self._act_truss_wizard.triggered.connect(self._on_truss_wizard)
-        self._act_warehouse_wizard.triggered.connect(self._on_warehouse_wizard)
         self._act_load_combinations.triggered.connect(self._on_load_combinations)
 
         # Assign
@@ -1653,96 +1634,6 @@ class MainWindow(QMainWindow):
         self._help_controller.install()
 
     # ── slots: file ──────────────────────────────────────────────────
-    def _on_new_model(self) -> None:
-        """File → New Model: units and a template, as SAP2000 starts a model."""
-        from opensees_studio.views.dialogs.new_model import NewModelDialog
-
-        stored = QSettings().value(NEW_MODEL_UNITS_KEY, UnitSystem.SI_M_N.value)
-        try:
-            units = UnitSystem(stored)
-        except ValueError:
-            units = UnitSystem.SI_M_N
-        dlg = NewModelDialog(units, parent=self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        if not self.files.confirm_discard("Creating a new model"):
-            return
-        units = dlg.units()
-        QSettings().setValue(NEW_MODEL_UNITS_KEY, units.value)
-        self._start_template(dlg.template(), units, dlg)
-
-    def _start_template(self, key: str, units: UnitSystem, dlg: Any) -> None:
-        """Create the model a New Model template asks for, then its wizard or members."""
-        from opensees_studio.core.templates import (
-            TEMPLATE_NDF,
-            TEMPLATES,
-            build_beam,
-            build_space_frame,
-        )
-
-        ndm, ndf = TEMPLATE_NDF[key]
-        self._vm.new_project(ndm, ndf, dead_case=True, units=units, default_materials=True)
-        self._log(f"New model: {TEMPLATES[key]} ({units.value}).")
-        if key == "grid":
-            self.grids.wizard()
-        elif key == "truss2d":
-            self._on_truss_wizard()
-        elif key == "frame2d":
-            self._create_portal_frame(with_grid=True)
-        elif key == "warehouse":
-            self._on_warehouse_wizard()
-        elif key == "building":
-            self.generators.create_building()
-        elif key in ("beam", "frame3d"):
-            project = self._vm.project
-            assert project is not None
-            try:
-                section = make_default_section(project.next_section_id(), project)
-                if key == "beam":
-                    spans, span = dlg.beam_numbers()
-                    model = build_beam(spans, span, section_id=section.id)
-                else:
-                    model = build_space_frame(
-                        *dlg.frame_numbers(),
-                        column_section_id=section.id,
-                        beam_section_id=section.id,
-                    )
-                insert_generated(
-                    self._vm,
-                    GeneratedModel(
-                        sections=[section],
-                        nodes=model.nodes,
-                        elements=model.elements,
-                        grid=model.grid,
-                        replace_grids=True,
-                    ),
-                    text=f"New model: {TEMPLATES[key]}",
-                )
-            except Exception as exc:
-                QMessageBox.critical(self, "Cannot create the model", str(exc))
-                return
-            self._log(f"{TEMPLATES[key]}: {model.summary()}")
-            if key == "beam":
-                self.viewport.front()
-            self._canvas.reframe()
-
-    def _on_new_2d(self) -> None:
-        """Planar frame model — (ndm=2, ndf=3): Ux, Uz, Ry per joint, then the wizard.
-
-        Right choice when beam-columns are in the mix; for a pure truss use
-        'New 2D Truss' so the solver doesn't face unrestrained rotational DOFs.
-
-        An empty 2D frame project is just an empty canvas, and the only plane it
-        can build in is the wizard's XZ (Z up), so the wizard opens here: it is what
-        turns "new 2D frame" into a frame. Cancelling leaves the empty project,
-        which is still the right start for drawing by hand.
-        """
-        if not self.files.confirm_discard("Creating a new 2D frame"):
-            return
-        self._vm.new_project(ndm=2, ndf=3, dead_case=True, default_materials=True)
-        self._log("New 2D frame project (ndm = 2, ndf = 3).")
-        self._create_portal_frame(with_grid=True)
-
     def closeEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         """Close: confirm unsaved work for a user-initiated close only.
 
@@ -1876,205 +1767,6 @@ class MainWindow(QMainWindow):
         self._ribbon.retranslate()
         self._project_dock.set_project(self._vm.project)
         self._log(f"Interface language: {LANGUAGES[code]}.")
-
-    def _on_frame_wizard(self) -> None:
-        """Define → Create Portal Frame: a parametric 2D frame, one undo step.
-
-        This builds a frame into whatever project is open and touches nothing
-        else. ``File → New 2D Frame`` (:meth:`_on_new_2d`) asks for the matching
-        grid as well, because there the wizard is the whole point of the menu
-        entry rather than one of the ways to draw a member.
-        """
-        self._create_portal_frame(with_grid=False)
-
-    def _create_portal_frame(self, *, with_grid: bool) -> None:
-        """Collect the wizard's answers and insert the frame (and, if asked, its grid).
-
-        The geometry comes from ``core.frames``; this only collects it, resolves
-        the two section choices (creating the canonical default one *inside* the
-        macro when the project has none) and inserts the result.
-        """
-        project = self._vm.project
-        if project is None:
-            QMessageBox.information(self, "Portal frame", "Open or create a project first.")
-            return
-        if (project.ndm, project.ndf) not in SUPPORTED_NDF:
-            QMessageBox.information(
-                self,
-                "Portal frame",
-                "A plane frame needs a 2D frame model (ndm = 2, ndf = 3) or a 3D frame "
-                f"model (ndm = 3, ndf = 6); this project is ndm = {project.ndm}, "
-                f"ndf = {project.ndf}.",
-            )
-            return
-
-        # The wizard builds ElasticBeamColumns directly; a nonprismatic template
-        # is assigned afterwards, when it can subdivide the member and its loads.
-        sections = [s for s in project.sections if isinstance(s, ElasticSection)]
-        wizard = FrameWizard(
-            sections,
-            ndm=project.ndm,
-            ndf=project.ndf,
-            length_unit=labels_for(project.meta.units).length,
-            parent=self,
-        )
-        if wizard.exec() != QDialog.DialogCode.Accepted:
-            return
-        column_id, rafter_id = wizard.section_choice()
-
-        try:
-            new_sections = []
-            if column_id is None or rafter_id is None:
-                section = make_default_section(project.next_section_id(), project)
-                new_sections.append(section)
-                column_id = rafter_id = section.id
-            spec = wizard.spec(column_section_id=column_id, rafter_section_id=rafter_id)
-            frame = build_portal_frame(
-                spec,
-                ndm=project.ndm,
-                ndf=project.ndf,
-                first_node_id=project.next_node_id(),
-                first_element_id=project.next_element_id(),
-            )
-            # The same undo step as the frame: one Ctrl+Z takes both back.
-            grid = frame_grid(spec) if with_grid else None
-            insert_generated(
-                self._vm,
-                GeneratedModel(
-                    sections=new_sections, nodes=frame.nodes, elements=frame.elements, grid=grid
-                ),
-                text="Create portal frame",
-            )
-        except Exception as exc:
-            QMessageBox.critical(self, "Cannot create the frame", str(exc))
-            return
-
-        # Leave the frame selected: the next thing most users do is copy it.
-        self._canvas.selection.clear()
-        for node in frame.nodes:
-            self._canvas.selection.select_node(node.id, additive=True)
-        self._log(f"{frame.summary()} Left selected for Edit → Replicate.")
-        if grid is not None:
-            lines = (
-                len(grid.grid.x_grid_lines)
-                + len(grid.grid.y_grid_lines)
-                + len(grid.grid.z_grid_lines)
-            )
-            self._log(f"Grid '{grid.name}' created with {lines} line(s) from the same numbers.")
-            if project.ndm == 2:
-                # A 2D model has one plane, X-Z: show it face on.
-                self.viewport.front()
-
-    def _on_warehouse_wizard(self) -> None:
-        """Define → Create Warehouse: a parametric 3D warehouse, one undo step.
-
-        Everything comes from ``core.warehouse`` (the plan) and
-        ``commands.warehouse`` (its insertion as one macro, checked before
-        anything is pushed); this only asks and reports.
-        """
-        from opensees_studio.commands.warehouse import insert_warehouse_plan
-        from opensees_studio.core.warehouse import GROUPS, WAREHOUSE_NDF, plan_warehouse
-        from opensees_studio.views.dialogs.warehouse_wizard import WarehouseWizard
-
-        project = self._vm.project
-        if project is None:
-            QMessageBox.information(self, "Warehouse", "Open or create a project first.")
-            return
-        if (project.ndm, project.ndf) != WAREHOUSE_NDF:
-            QMessageBox.information(
-                self,
-                "Warehouse",
-                tr(
-                    "A warehouse needs a 3D frame model (ndm = 3, ndf = 6); this project "
-                    "is ndm = {ndm}, ndf = {ndf}."
-                ).format(ndm=project.ndm, ndf=project.ndf),
-            )
-            return
-        sections = [s for s in project.sections if isinstance(s, ElasticSection)]
-        wizard = WarehouseWizard(sections, units=project.meta.units, parent=self)
-        if wizard.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            plan = plan_warehouse(
-                project,
-                wizard.spec(),
-                sections=wizard.section_choice(),
-                loads=wizard.loads(),
-                group_names={key: tr(name) for key, name in GROUPS.items()},
-            )
-            insert_warehouse_plan(self._vm, plan)
-        except Exception as exc:
-            QMessageBox.critical(self, "Cannot create the warehouse", str(exc))
-            return
-        self._log(plan.warehouse.summary())
-        if plan.sections:
-            self._log("Sections created: " + ", ".join(s.name for s in plan.sections) + ".")
-        if plan.combinations:
-            self._log(f"{len(plan.combinations)} load combination(s) generated.")
-        for note in plan.notes:
-            self._log(note)
-        self._canvas.reframe()
-
-    def _on_truss_wizard(self) -> None:
-        """Define → Create Truss: a parametric plane truss, one undo step.
-
-        The geometry comes from ``core.trusses``; this collects it, resolves the
-        material (creating the default truss steel *inside* the macro when the
-        project has no uniaxial material) and inserts the result.
-        """
-        from opensees_studio.core import TRUSS_NDF, build_truss
-        from opensees_studio.views.dialogs.truss_wizard import TrussWizard
-
-        project = self._vm.project
-        if project is None:
-            QMessageBox.information(self, "Truss", "Open or create a project first.")
-            return
-        if (project.ndm, project.ndf) not in TRUSS_NDF:
-            QMessageBox.information(
-                self,
-                "Truss",
-                "A plane truss needs ndm = 2 (ndf 2 or 3) or ndm = 3 (ndf 3 or 6); "
-                f"this project is ndm = {project.ndm}, ndf = {project.ndf}.",
-            )
-            return
-        materials = [m for m in project.materials if is_uniaxial(m)]
-        wizard = TrussWizard(
-            materials,
-            ndm=project.ndm,
-            ndf=project.ndf,
-            length_unit=labels_for(project.meta.units).length,
-            parent=self,
-        )
-        if wizard.exec() != QDialog.DialogCode.Accepted:
-            return
-        material_id = wizard.material_choice()
-
-        try:
-            new_materials = []
-            if material_id is None:
-                material = make_default_truss_material(project.next_material_id())
-                new_materials.append(material)
-                material_id = material.id
-            truss = build_truss(
-                wizard.spec(material_id=material_id),
-                ndm=project.ndm,
-                ndf=project.ndf,
-                first_node_id=project.next_node_id(),
-                first_element_id=project.next_element_id(),
-            )
-            insert_generated(
-                self._vm,
-                GeneratedModel(materials=new_materials, nodes=truss.nodes, elements=truss.elements),
-                text="Create truss",
-            )
-        except Exception as exc:
-            QMessageBox.critical(self, "Cannot create the truss", str(exc))
-            return
-
-        self._canvas.selection.set_selection(
-            {node.id for node in truss.nodes}, {element.id for element in truss.elements}
-        )
-        self._log(f"{truss.summary()} Left selected.")
 
     def _sync_grid_actions(self) -> None:
         """Tick View → Show Grids / Labels from the project (checked when any shows)."""
@@ -2652,9 +2344,6 @@ class MainWindow(QMainWindow):
         )
         self._act_select_line.setEnabled(has_project)
         self._act_add_node.setEnabled(True)
-        self._act_frame_wizard.setEnabled(has_project)
-        self._act_truss_wizard.setEnabled(has_project)
-        self._act_warehouse_wizard.setEnabled(has_project)
         self.action("define.create_shell").setEnabled(has_project and n_sel in (3, 4))
         has_cases = has_project and bool(self._vm.project and self._vm.project.analyses)
         # Without a solver the model is still built, exported and reported; only

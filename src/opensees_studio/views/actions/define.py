@@ -105,6 +105,26 @@ DEFINE_ACTIONS: tuple[ActionSpec, ...] = (
         "building.define_seismic_loads",
         needs=Needs.PROJECT,
     ),
+    # The wizards: a structure from a few numbers, one undo step (GeneratorsController).
+    ActionSpec(
+        "define.frame_wizard",
+        "Create Portal &Frame…",
+        "generators.portal_frame",
+        needs=Needs.PROJECT,
+    ),
+    ActionSpec(
+        "define.truss_wizard", "Create &Truss…", "generators.create_truss", needs=Needs.PROJECT
+    ),
+    ActionSpec(
+        "define.warehouse_wizard",
+        "Create &Warehouse…",
+        "generators.create_warehouse",
+        needs=Needs.PROJECT,
+        tooltip=(
+            "A 3D steel warehouse from a few numbers: portal frames, purlins, girts, "
+            "bracing, roof loads and the combinations of a design code."
+        ),
+    ),
     ActionSpec(
         "define.building_wizard",
         "Create &Building…",

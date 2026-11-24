@@ -258,7 +258,7 @@ def test_the_new_model_template_opens_the_wizard(qtbot, monkeypatch) -> None:  #
     assert TEMPLATES["warehouse"] == "Warehouse" and TEMPLATE_NDF["warehouse"] == (3, 6)
     mw = _window(qtbot)
     _accept(monkeypatch, lambda w: w._n_frames.setValue(2))
-    mw._start_template("warehouse", UnitSystem.SI_MM_N, None)
+    mw.generators.start_template("warehouse", UnitSystem.SI_MM_N, None)
     project = mw._vm.project
     assert project.meta.units is UnitSystem.SI_MM_N
     assert max(n.coords[0] for n in project.nodes) == pytest.approx(20_000.0)
