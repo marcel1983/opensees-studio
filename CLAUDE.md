@@ -239,7 +239,11 @@ These are non-obvious things that are easy to break if you don't know:
   `AnalysisController` (the Analyze menu: cases, Check Model, the stability
   check, Run and the batch doors) gets the window's `AnalysisRunner` and
   `StabilityChecker` as `runner` and `stability`; the window connects their
-  signals to it and still receives the results of a run. A controller's attribute must not be the name of a `QMainWindow`
+  signals to it. The results of a run go to `ResultsViewController`
+  (`window.results_view`: the case on screen, the Results and Reactions
+  panels, the Case list and step arrows of the View toolbar, Show Results Of,
+  the reactions commands, Delete All Results), which owns those widgets; the
+  window only places them. A controller's attribute must not be the name of a `QMainWindow`
   method (`window.geometry` would replace `QWidget.geometry()`):
   `tests/gui/test_action_registry.py` checks it, hence `model_tools`.
   The rest of the window is being moved out the same way.

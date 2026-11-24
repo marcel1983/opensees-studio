@@ -69,8 +69,8 @@ def window(qtbot, monkeypatch):  # type: ignore[no-untyped-def]
 def _solve(win: MainWindow) -> None:
     project = win._vm.project
     results = OpenSeesRunner(project).run(project.analyses[0])
-    win._on_case_finished(results)
-    win._on_analysis_finished(results)
+    win.results_view.on_case_finished(results)
+    win.results_view.on_finished(results)
 
 
 def _add_node(win: MainWindow) -> None:

@@ -77,7 +77,7 @@ def test_the_report_keeps_modal_results_until_the_model_changes(qtbot) -> None: 
 
     mw = _window(qtbot)
     modal = ModalResults(case_id=7, case_name="Modal", eigenvalues=[4.0])
-    mw._on_case_finished(modal)
+    mw.results_view.on_case_finished(modal)
     assert mw.report_results() == [modal]
     project = mw._vm.project
     project.nodes[0].coords = (1.0, 2.0, 3.0)

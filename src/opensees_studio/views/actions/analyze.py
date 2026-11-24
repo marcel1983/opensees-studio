@@ -1,4 +1,4 @@
-"""Analyze menu commands (``AnalysisController``)."""
+"""Analyze menu commands (``AnalysisController``; Delete All Results is ``ResultsViewController``'s)."""
 
 from __future__ import annotations
 
@@ -28,4 +28,8 @@ ANALYZE_ACTIONS: tuple[ActionSpec, ...] = (
         "analyze.run_all", "Run &All Cases", "analysis.run_all", shortcut="Shift+F5", needs=None
     ),
     ActionSpec("analyze.run_selected", "Run Se&lected Cases…", "analysis.run_selected", needs=None),
+    # Enabled by the window: results in memory, or a results database on disk.
+    ActionSpec(
+        "analyze.clear_results", "Delete &All Results…", "results_view.delete_all", needs=None
+    ),
 )

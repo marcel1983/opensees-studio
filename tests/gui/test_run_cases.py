@@ -96,7 +96,7 @@ def test_a_finished_case_writes_the_results_database(qtbot, tmp_path) -> None:  
         element_forces={9: np.zeros((1, 12))},
     )
 
-    window._on_case_finished(results)
+    window.results_view.on_case_finished(results)
 
     db = tmp_path / "model_results.sqlite"
     assert db.exists()

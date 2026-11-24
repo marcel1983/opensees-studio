@@ -151,7 +151,7 @@ def test_opening_a_batch_solved_project_offers_its_results(qtbot, tmp_path, monk
 
     assert asked == ["Stored results"]
     n_cases = len(load_project(path).analyses)
-    assert window._case_combo.count() + len(window.results.extra) == n_cases
+    assert window.results_view.case_combo.count() + len(window.results.extra) == n_cases
     assert window.results.latest is not None
 
     # An edited model no longer matches: nothing is offered.

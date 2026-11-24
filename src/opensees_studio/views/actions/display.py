@@ -1,8 +1,12 @@
-"""Display menu commands: the post-processing views (``DisplayController``)."""
+"""Display menu commands: which results are shown and the views of them.
+
+The post-processing views are ``DisplayController``'s; the case on screen and
+its reactions are ``ResultsViewController``'s.
+"""
 
 from __future__ import annotations
 
-from opensees_studio.views.actions.spec import ActionSpec
+from opensees_studio.views.actions.spec import ActionSpec, Needs
 
 
 def _view(name: str, text: str, *, shortcut: str | None = None) -> ActionSpec:
@@ -27,4 +31,25 @@ DISPLAY_ACTIONS: tuple[ActionSpec, ...] = (
     _view("show_response_spectrum", "Show &Response Spectrum…"),
     # Enabled while a view's dock is open.
     _view("back_to_model", "Back to &Model View", shortcut="Ctrl+Shift+B"),
+    # A combination can be shown before anything ran: picking it says what to run.
+    ActionSpec(
+        "display.select_results",
+        "Show Results &Of…",
+        "results_view.pick",
+        needs=Needs.PROJECT,
+    ),
+    # The next three need reactions on screen: ResultsViewController enables them.
+    ActionSpec(
+        "display.show_reactions",
+        "Show &Reactions",
+        "results_view.show_reactions",
+        needs=None,
+        checkable=True,
+    ),
+    ActionSpec(
+        "display.reactions_table", "Reactions &Table", "results_view.reactions_table", needs=None
+    ),
+    ActionSpec(
+        "display.reactions_dialog", "R&eactions…", "results_view.reactions_dialog", needs=None
+    ),
 )

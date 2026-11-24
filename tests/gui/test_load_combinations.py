@@ -371,7 +371,7 @@ def test_run_dialog_runs_missing_cases_once_then_combines_from_stored_results(
     project = window._vm.project
     dlg = RunAnalysisDialog(window._vm, window._runner, window, case_results=window.results.cases)
     qtbot.addWidget(dlg)
-    dlg.combinationFinished.connect(window._on_analysis_finished)
+    dlg.combinationFinished.connect(window.results_view.on_finished)
     labels = [dlg._case_combo.itemText(i) for i in range(dlg._case_combo.count())]
     assert "Combination: ULS  [Linear Add]" in labels
 
@@ -384,7 +384,7 @@ def test_run_dialog_runs_missing_cases_once_then_combines_from_stored_results(
     assert isinstance(combo, CombinationResults) and combo.single_valued
     assert sorted(r.case_id for r in finished_cases) == [1, 2]  # type: ignore[attr-defined]
     assert window.results.latest is combo
-    assert "Combination 'ULS'" in window._results_panel._title.text()
+    assert "Combination 'ULS'" in window.results_view.panel._title.text()
 
     # The envelope needs the same cases: no second run.
     window._runner.caseFinished.disconnect(finished_cases.append)
@@ -412,16 +412,16 @@ def test_run_dialog_runs_missing_cases_once_then_combines_from_stored_results(
     assert len(data.element_ids) == 2 * n_frames
 
     # Show Results Of switches back to a stored case without running.
-    assert window.show_results_of("case:1")
+    assert window.results_view.show_results_of("case:1")
     assert isinstance(window.results.latest, StaticResults)
-    assert window.show_results_of("combination:1")
+    assert window.results_view.show_results_of("combination:1")
     assert isinstance(window.results.latest, CombinationResults)
 
     # A model edit makes the stored results stale.
     project.nodes[-1] = project.nodes[-1].model_copy(update={"coords": (6.0, 0.0, 0.0)})
     assert window.results.cases.current(project) == {}
     monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: None)
-    assert not window.show_results_of("combination:1")
+    assert not window.results_view.show_results_of("combination:1")
 
 
 @pytest.mark.gui
@@ -471,7 +471,7 @@ def test_envelope_with_a_spectrum_case_draws_both_force_diagrams(qtbot, tmp_path
     )
     window.results.cases.put(project, dead)
     window.results.cases.put(project, spectrum)
-    assert window.show_results_of("combination:3")
+    assert window.results_view.show_results_of("combination:3")
     combo = window.results.latest
     assert isinstance(combo, CombinationResults) and not combo.single_valued
     assert combo.missing_fields == []

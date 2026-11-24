@@ -89,10 +89,10 @@ def test_the_display_action_follows_the_results(qtbot, monkeypatch) -> None:  # 
     project, results = _girder()
     mw._vm.adopt(project)
     assert not mw._act_influence_line.isEnabled()
-    mw._display_results(results)
+    mw.results_view.show(results)
     assert mw._act_influence_line.isEnabled()
     opened: list[object] = []
     monkeypatch.setattr(InfluenceLineDialog, "exec", lambda self: opened.append(self) or 0)
     mw._act_influence_line.trigger()
     assert opened
-    assert "Influence line" in mw._results_panel._title.text()
+    assert "Influence line" in mw.results_view.panel._title.text()

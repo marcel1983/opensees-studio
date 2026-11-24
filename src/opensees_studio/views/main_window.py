@@ -13,7 +13,7 @@ import contextlib
 from collections.abc import Iterator, Sequence
 from functools import partial
 from pathlib import Path
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar
 
 from PySide6.QtCore import QEvent, QPoint, QPointF, QSettings, QSignalBlocker, Qt, QTimer
 from PySide6.QtGui import (
@@ -28,11 +28,9 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QApplication,
-    QComboBox,
     QDialog,
     QDockWidget,
     QFileDialog,
-    QInputDialog,
     QLabel,
     QMainWindow,
     QMenu,
@@ -40,7 +38,6 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QStackedWidget,
     QToolBar,
-    QToolButton,
     QTreeWidget,
     QTreeWidgetItem,
 )
@@ -77,21 +74,17 @@ from opensees_studio.services import (
     load_project,
     run_snapshot_path,
 )
-from opensees_studio.services.batch import StoredResults, stored_results
-from opensees_studio.services.combination import MissingCaseResultsError
-from opensees_studio.services.result_store import load_results
 from opensees_studio.services.results import (
-    CombinationResults,
     InfluenceLineResults,
     ModalResults,
     PushoverResults,
     ResponseSpectrumResults,
     TransientResults,
 )
-from opensees_studio.services.results_db import database_path, delete_all_results, record_results
+from opensees_studio.services.results_db import database_path
 from opensees_studio.services.shell_fields import shell_elements
 from opensees_studio.viewmodels import AnalysisRunner, ProjectViewModel
-from opensees_studio.viewmodels.results_session import ResultsSession, case_names
+from opensees_studio.viewmodels.results_session import ResultsSession
 from opensees_studio.viewmodels.stability_checker import StabilityChecker
 from opensees_studio.views.actions import ALL_ACTIONS, ActionState
 from opensees_studio.views.actions.registry import ActionRegistry
@@ -120,6 +113,7 @@ from opensees_studio.views.controllers.model_lock import ModelLockController
 from opensees_studio.views.controllers.model_tools import ModelToolsController
 from opensees_studio.views.controllers.patterns import PatternsController
 from opensees_studio.views.controllers.property_edits import PropertyEditsController
+from opensees_studio.views.controllers.results_view import ResultsViewController
 from opensees_studio.views.controllers.select import SelectController
 from opensees_studio.views.controllers.transforms import TransformsController
 from opensees_studio.views.controllers.units import UnitsController
@@ -137,13 +131,10 @@ from opensees_studio.views.dialogs.batch_run import BatchRunDialog
 from opensees_studio.views.dialogs.load_combinations import LoadCombinationsDialog
 from opensees_studio.views.dialogs.load_display import LoadDisplayDialog
 from opensees_studio.views.dialogs.object_info import ObjectInfoDialog
-from opensees_studio.views.dialogs.reactions import ReactionsDialog
 from opensees_studio.views.dialogs.solver_settings import SolverSettingsDialog
 from opensees_studio.views.dialogs.view_colors import ViewColorsDialog
 from opensees_studio.views.docks import (
     PropertyEditorDock,
-    ReactionsPanel,
-    ResultsPanel,
 )
 from opensees_studio.views.help_window import HelpController
 from opensees_studio.views.i18n import stored_language, tr
@@ -341,6 +332,17 @@ class MainWindow(QMainWindow):
         self.patterns = PatternsController(shell, new_project=self._on_new)
         #: The camera, the working plane and its level, a grid line view, what is hidden.
         self.viewport = ViewportController(shell, action=lambda action_id: self.action(action_id))
+        #: The results on screen: the case shown, its panels, its reactions.
+        self.results_view = ResultsViewController(
+            shell,
+            results=self.results,
+            lock=lambda: self.model_lock.lock_for_results(),
+            unlock=lambda: self.model_lock.set_locked(False),
+            set_caption=lambda text: self.display.set_caption(text),
+            back_to_model=lambda: self.display.back_to_model(),
+            show_reactions_dock=lambda: self._show_reactions_dock(),
+            action=lambda action_id: self.action(action_id),
+        )
         #: The display units: Options → Set Display Units and the status bar's picker.
         self.units = UnitsController(
             shell, refresh=lambda converter: self._refresh_displayed_units(converter)
@@ -355,8 +357,8 @@ class MainWindow(QMainWindow):
             canvases=lambda: [self._main_canvas, *(w.canvas for w in self._view_windows)],
             busy=lambda message: self._busy(message),
             select_rows=lambda nodes, elements: self._select_report_row(nodes, elements),
-            results_for_key=lambda key: self._results_for_key(key),
-            show_results=lambda results: self._display_results(results),
+            results_for_key=lambda key: self.results_view.for_key(key),
+            show_results=lambda results: self.results_view.show(results),
             display_units=lambda: self.units.current(),
             set_display_units=lambda units: self.units.set_display(units),
         )
@@ -364,7 +366,7 @@ class MainWindow(QMainWindow):
         self.model_lock = ModelLockController(
             shell,
             results=self.results,
-            drop_results=lambda: self._drop_session_results(),
+            drop_results=lambda: self.results_view.drop(),
             action=lambda action_id: self.action(action_id),
         )
         #: The Analyze menu: cases, the checks, the run and its failure report.
@@ -373,7 +375,7 @@ class MainWindow(QMainWindow):
             runner=self._runner,
             stability=self._stability,
             results=self.results,
-            finished=lambda results: self._on_analysis_finished(results),
+            finished=lambda results: self.results_view.on_finished(results),
             new_project=lambda: self._on_new(),
             select_rows=lambda nodes, elements: self._select_report_row(nodes, elements),
             show_mechanism=lambda finding: self.display.mechanism(finding),
@@ -517,15 +519,13 @@ class MainWindow(QMainWindow):
         console_dock.setWidget(self._console)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, console_dock)
 
-        self._results_panel = ResultsPanel()
         results_dock = QDockWidget("Results", self)
         results_dock.setObjectName("resultsDock")
-        results_dock.setWidget(self._results_panel)
+        results_dock.setWidget(self.results_view.panel)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, results_dock)
-        self._reactions_panel = ReactionsPanel()
         self._reactions_dock = QDockWidget("Reactions", self)
         self._reactions_dock.setObjectName("reactionsDock")
-        self._reactions_dock.setWidget(self._reactions_panel)
+        self._reactions_dock.setWidget(self.results_view.reactions_panel)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self._reactions_dock)
         self.tabifyDockWidget(console_dock, results_dock)
         self.tabifyDockWidget(results_dock, self._reactions_dock)
@@ -649,11 +649,6 @@ class MainWindow(QMainWindow):
             action.setData(preset)
 
         # Display (post-processing)
-        self._act_select_results = QAction("Show Results &Of…", self)
-        self._act_show_reactions = QAction("Show &Reactions", self)
-        self._act_show_reactions.setCheckable(True)
-        self._act_reactions_table = QAction("Reactions &Table", self)
-        self._act_reactions_dialog = QAction("R&eactions…", self)
         self._act_display_options = QAction("Display &Options…", self)
         self._act_use_ribbon = QAction("Use &Ribbon", self, checkable=True)
         self._act_use_ribbon.setToolTip(
@@ -672,7 +667,6 @@ class MainWindow(QMainWindow):
 
         # Analyze
         # Batch doors: the whole model in one child process, or a ticked subset.
-        self._act_clear_results = QAction("Delete &All Results…", self)
         self._act_auto_mesh_frames = QAction("Auto-mesh &Frames Before Run", self)
         self._act_auto_mesh_frames.setCheckable(True)
         self._act_auto_mesh_frames.setChecked(True)
@@ -970,19 +964,23 @@ class MainWindow(QMainWindow):
         m_analyze.addAction(self.action("analyze.run_all"))
         m_analyze.addAction(self.action("analyze.run_selected"))
         m_analyze.addSeparator()
-        m_analyze.addAction(self._act_clear_results)
+        m_analyze.addAction(self.action("analyze.clear_results"))
 
         m_display = mb.addMenu("&Display")
         m_display.addAction(self._act_show_load_assigns)
         m_display.addSeparator()
-        m_display.addAction(self._act_select_results)
+        m_display.addAction(self.action("display.select_results"))
         m_display.addSeparator()
         m_display.addActions(
             [self.action("display.show_deformed"), self.action("display.show_mode_shape")]
         )
         m_display.addAction(self.action("display.show_force_diagram"))
         m_display.addActions(
-            [self._act_show_reactions, self._act_reactions_table, self._act_reactions_dialog]
+            [
+                self.action("display.show_reactions"),
+                self.action("display.reactions_table"),
+                self.action("display.reactions_dialog"),
+            ]
         )
         m_display.addAction(self.action("display.shell_contours"))
         m_display.addSeparator()
@@ -1236,28 +1234,10 @@ class MainWindow(QMainWindow):
         # Which results case the viewport represents: the layers (deformed
         # shape, diagrams, reactions) follow it.
         tb.addWidget(QLabel("Case: "))
-        self._case_combo = QComboBox()
-        self._case_combo.setMinimumWidth(190)
-        self._case_combo.setToolTip(
-            "Results case shown in the viewport. Deformed shape, force diagram, "
-            "contours and reactions all read this case."
-        )
-        self._case_combo.currentIndexChanged.connect(self._on_case_changed)
-        tb.addWidget(self._case_combo)
-        self._step_back = QToolButton()
-        self._step_back.setText("\u25c0")
-        self._step_back.setToolTip("Previous step of this case")
-        self._step_back.setEnabled(False)
-        self._step_back.clicked.connect(lambda: self._shift_step(-1))
-        tb.addWidget(self._step_back)
-        self._step_forward = QToolButton()
-        self._step_forward.setText("\u25b6")
-        self._step_forward.setToolTip("Next step of this case")
-        self._step_forward.setEnabled(False)
-        self._step_forward.clicked.connect(lambda: self._shift_step(1))
-        tb.addWidget(self._step_forward)
-        self._step_label = QLabel("")
-        tb.addWidget(self._step_label)
+        tb.addWidget(self.results_view.case_combo)
+        tb.addWidget(self.results_view.step_back)
+        tb.addWidget(self.results_view.step_forward)
+        tb.addWidget(self.results_view.step_label)
         tb.addSeparator()
         tb.addAction(self._act_toggle_parallel)
         tb.addAction(self._act_show_extruded)
@@ -1613,7 +1593,6 @@ class MainWindow(QMainWindow):
         self._act_custom_commands.triggered.connect(self._on_custom_commands)
 
         # Analyze
-        self._act_clear_results.triggered.connect(self._on_clear_results)
         self._act_auto_mesh_frames.toggled.connect(self.analysis.toggle_auto_mesh_frames)
         self._act_dark_mode.toggled.connect(self._apply_dark_mode)
         self._act_cancel_stability.triggered.connect(self._stability.cancel)
@@ -1628,18 +1607,14 @@ class MainWindow(QMainWindow):
         self._runner.runningChanged.connect(self._on_runner_running_changed)
 
         # Display
-        self._act_select_results.triggered.connect(self._on_select_results)
-        self._act_show_reactions.toggled.connect(self._on_show_reactions)
-        self._act_reactions_table.triggered.connect(self._on_reactions_table)
-        self._act_reactions_dialog.triggered.connect(self._on_reactions_dialog)
         self._act_display_options.triggered.connect(self._on_display_options)
         self._act_show_load_assigns.triggered.connect(self._on_show_load_assigns)
         self._vm.undo_stack.indexChanged.connect(self.model_lock.on_undo_index_changed)
 
         # AnalysisRunner: stream log to console + show results in panel
         self._runner.log.connect(self._console.appendPlainText)
-        self._runner.caseFinished.connect(self._on_case_finished)
-        self._runner.finished.connect(self._on_analysis_finished)
+        self._runner.caseFinished.connect(self.results_view.on_case_finished)
+        self._runner.finished.connect(self.results_view.on_finished)
         self._runner.failed.connect(self.analysis.on_failed)
         self._runner.cancelled.connect(lambda: self._log("Analysis cancelled."))
 
@@ -1867,7 +1842,7 @@ class MainWindow(QMainWindow):
         if snapshot is None:
             self._apply_project_view_settings()
             self._confirm_custom_commands()
-            self._offer_stored_results()
+            self.results_view.offer_stored()
             return True
         if self._ask_restore_snapshot(snapshot):
             try:
@@ -1880,48 +1855,8 @@ class MainWindow(QMainWindow):
             self._log(f"Discarded {snapshot.name}.")
         self._apply_project_view_settings()
         self._confirm_custom_commands()
-        self._offer_stored_results()
+        self.results_view.offer_stored()
         return True
-
-    def _offer_stored_results(self) -> None:
-        """Offer the results a batch stored for this model, so nothing has to run again."""
-        stored = stored_results(self._vm.path, self._vm.project)
-        if stored is None:
-            return
-        answer = QMessageBox.question(
-            self,
-            "Stored results",
-            f"Results of {len(stored.entries)} case(s) from a batch run "
-            f"({stored.finished_at or 'time unknown'}) are stored for this model, and the "
-            "model has not changed since.\n\nLoad them to view without running again?\n\n"
-            f"Folder: {stored.out_dir}",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.Yes,
-        )
-        if answer == QMessageBox.StandardButton.Yes:
-            self.load_stored_results(stored)
-
-    def load_stored_results(self, stored: StoredResults) -> int:
-        """Load every case of ``stored`` as if it had just run; show the last one.
-
-        They are already in the results database, so nothing is recorded again.
-        Returns how many cases loaded.
-        """
-        loaded = []
-        for entry in stored.entries:
-            try:
-                results = load_results(entry, stored.out_dir)
-            except Exception as exc:
-                self._log(
-                    f"Warning: stored results of case {entry.get('case_id')} unreadable: {exc}"
-                )
-                continue
-            self._keep_case_results(results)
-            loaded.append(results)
-        if loaded:
-            self._display_results(loaded[-1])
-            self._log(f"Loaded {len(loaded)} stored case result(s) from {stored.out_dir}.")
-        return len(loaded)
 
     def _on_run_batch(self) -> None:
         """File → Run Batch…"""
@@ -2786,75 +2721,7 @@ class MainWindow(QMainWindow):
     # ── slots: assign property ──────────────────────────────────────
     # ── area loads and imposed displacements ─────────────────────────
     # ── slots: analyze ──────────────────────────────────────────────
-    def _on_analysis_finished(self, results) -> None:  # type: ignore[no-untyped-def]
-        self._display_results(results)
-        self._log(f"Analysis complete: {self.results.caption_for(self._vm.project, results)}.")
-        if isinstance(results, TransientResults) and results.early_stop:
-            self._log(f"Warning: transient run did not converge ({results.steps_summary()}).")
-        if isinstance(results, ResponseSpectrumResults | CombinationResults):
-            for warning in results.warnings:
-                self._log(f"Warning: {warning}")
-        self.display.set_caption(self.results.caption_for(self._vm.project, results))
-        self._refresh_action_enablement()
-
-    def _on_case_finished(self, results: object) -> None:
-        """Keep each case result of a run for the load combinations."""
-        self._keep_case_results(results)
-        self._record_case_results(results)
-
-    def _keep_case_results(self, results: object) -> None:
-        self.results.keep(self._vm.project, results)
-        self.model_lock.lock_for_results()
-
     # ── what the viewport is showing ────────────────────────────────
-    def _on_clear_results(self) -> None:
-        """Analyze → Delete All Results: forget every stored result."""
-        db_path = database_path(self._vm.path)
-        answer = QMessageBox.question(
-            self,
-            "Delete All Results",
-            "Delete every stored result?\n\n"
-            "  • the results of this session\n"
-            f"  • {db_path}\n\n"
-            "The model, its analysis cases and any other project's database are "
-            "not touched.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        if answer != QMessageBox.StandardButton.Yes:
-            return
-        self._drop_session_results()
-        self.model_lock.set_locked(False)
-        removed = delete_all_results(db_path)
-        self._log(
-            "All results deleted."
-            if removed
-            else "All results deleted (the database was already empty)."
-        )
-        self._refresh_action_enablement()
-
-    def _drop_session_results(self) -> None:
-        """Forget the results held in memory and return to the model view."""
-        self.results.clear()
-        self._refresh_reactions()
-        self._refresh_case_combo()
-        self.display.back_to_model()
-        self._results_panel.show_results(None, self._vm.project)
-
-    def _record_case_results(self, results: object) -> None:
-        """Append this case's results to the project's queryable database.
-
-        A failure here must never fail the analysis: the run already happened,
-        so the database is reported as a warning and the results stay in memory.
-        """
-        try:
-            run_id = record_results(results, project_path=self._vm.path, project=self._vm.project)
-        except Exception as exc:
-            self._log(f"Warning: the results database was not written: {exc}")
-            return
-        if run_id is not None:
-            self._log(f"Results recorded in {database_path(self._vm.path)} (run {run_id}).")
-
     # ── slots: load combinations ────────────────────────────────────
     def _on_load_combinations(self) -> None:
         """Define → Load Combinations…"""
@@ -2865,62 +2732,6 @@ class MainWindow(QMainWindow):
             dlg.exec()
         finally:
             dlg.deleteLater()
-
-    def show_results_of(self, key: str) -> bool:
-        """Make ``case:<id>`` or ``combination:<id>`` the results Display shows.
-
-        A combination is combined from the current case results; when some of its
-        cases have none, the message says to run it from Analyze → Run.
-        """
-        results = self._results_for_key(key)
-        if results is None:
-            return False
-        self.display.back_to_model()
-        self._on_analysis_finished(results)
-        return True
-
-    def _results_for_key(self, key: str) -> object | None:
-        """Resolve a ``case:<id>`` / ``combination:<id>`` key, or explain why not."""
-        project = self._vm.project
-        if project is None:
-            return None
-        kind, _, raw_id = key.partition(":")
-        try:
-            ref_id = int(raw_id)
-        except ValueError:
-            return None
-        if kind == "case":
-            results = self.results.cases.current(project).get(ref_id)
-            if results is None:
-                self._log(f"Case {ref_id} has no current results: run it first.")
-                return None
-            return cast(object, results)
-        try:
-            return cast(object, self.results.cases.combine(project, ref_id))
-        except (MissingCaseResultsError, ValueError, KeyError) as exc:
-            QMessageBox.information(
-                self,
-                "Show Results Of",
-                f"{exc}\n\nAnalyze → Run, then pick the combination: it runs only the "
-                "cases without current results.",
-            )
-            return None
-
-    def _on_select_results(self) -> None:
-        """Display → Show Results Of…: switch between stored case and combination results."""
-        choices = self.results.choices(self._vm.project)
-        if not choices:
-            QMessageBox.information(
-                self,
-                "Show Results Of",
-                "No results yet: run a case (Analyze → Run) or define a load combination.",
-            )
-            return
-        label, ok = QInputDialog.getItem(
-            self, "Show Results Of", "Results:", [c[0] for c in choices], 0, False
-        )
-        if ok:
-            self.show_results_of(dict(choices)[label])
 
     def report_unexpected_error(self, traceback_text: str) -> None:
         """Show an unhandled exception instead of letting the process die.
@@ -2987,101 +2798,6 @@ class MainWindow(QMainWindow):
     # ── slots: display (post-processing) ────────────────────────────
     # Animator emits an initial frame in its constructor; nothing to do.
 
-    def _refresh_reactions(self) -> None:
-        """Keep the table and the overlay on the same case, and enable the actions."""
-        rows = self.results.reaction_rows(self._vm.project)
-        self._reactions_panel.set_rows(rows)
-        self._canvas.set_reactions(rows, show=self._act_show_reactions.isChecked())
-        enabled = bool(rows)
-        self._act_show_reactions.setEnabled(enabled)
-        self._act_reactions_table.setEnabled(enabled)
-        self._act_reactions_dialog.setEnabled(enabled)
-        if not enabled and self._act_show_reactions.isChecked():
-            self._act_show_reactions.setChecked(False)
-
-    def _on_show_reactions(self, checked: bool) -> None:
-        self._canvas.set_reactions(self.results.reaction_rows(self._vm.project), show=checked)
-
-    def _on_reactions_dialog(self) -> None:
-        dialog = ReactionsDialog(self.results.reaction_rows(self._vm.project), self)
-        dialog.exec()
-
-    def _on_reactions_table(self) -> None:
-        self._reactions_dock.show()
-        self._reactions_dock.raise_()
-
-    def _refresh_case_combo(self) -> None:
-        """List the cases that still hold results for this model, newest order."""
-        project = self._vm.project
-        entries = self.results.cases.current(project) if project is not None else {}
-        current = getattr(self.results.latest, "case_id", None)
-        names = case_names(self._vm.project)
-        self._case_combo.blockSignals(True)
-        self._case_combo.clear()
-        for case_id, results in sorted(entries.items()):
-            kind = type(results).__name__.removesuffix("Results")
-            name = names.get(case_id) or getattr(results, "case_name", None) or f"Case {case_id}"
-            self._case_combo.addItem(f"{name} · {kind}", case_id)
-        if current is not None:
-            index = self._case_combo.findData(current)
-            if index >= 0:
-                self._case_combo.setCurrentIndex(index)
-        self._case_combo.blockSignals(False)
-        self._case_combo.setEnabled(bool(entries))
-        self._refresh_step_buttons()
-
-    def _on_case_changed(self, index: int) -> None:
-        """Show the chosen case; the layers read it from `results.latest`."""
-        case_id = self._case_combo.itemData(index)
-        project = self._vm.project
-        if case_id is None or project is None:
-            return
-        results = self.results.cases.current(project).get(case_id)
-        if results is not None and results is not self.results.latest:
-            self._display_results(results)
-
-    def _display_results(self, results: object) -> None:
-        """Point the whole window at one results case."""
-        self.results.latest = results
-        self.model_lock.lock_for_results()
-        self._results_panel.show_results(results, self._vm.project)
-        self._refresh_reactions()
-        self._refresh_case_combo()
-        self.display.set_caption(self.results.caption_for(self._vm.project, results))
-        self._refresh_action_enablement()
-        self._refresh_step_buttons()
-
-    def _refresh_step_buttons(self) -> None:
-        """Enable the step arrows only when the shown case has more than one."""
-        steps = self.results.steps()
-        # Only a layer that knows how to redraw itself at another step registers
-        # an applier; until one does, the arrows must not pretend to work.
-        steppable = steps > 1 and getattr(self, "_step_apply", None) is not None
-        self._step_index = min(getattr(self, "_step_index", 0), max(steps - 1, 0))
-        self._step_back.setEnabled(steppable)
-        self._step_forward.setEnabled(steppable)
-        if steps > 1:
-            self._step_label.setText(f"Step {self._step_index + 1}/{steps}")
-        else:
-            self._step_label.setText("")
-
-    def _shift_step(self, delta: int) -> None:
-        steps = self.results.steps()
-        if steps <= 1:
-            return
-        target = min(max(self._step_index + delta, 0), steps - 1)
-        if target == self._step_index:
-            return
-        self._step_index = target
-        self._refresh_step_buttons()
-        self._apply_step()
-
-    def _apply_step(self) -> None:
-        """Re-draw the step-based layer at the current step, if one is showing."""
-        apply = getattr(self, "_step_apply", None)
-        if apply is not None:
-            apply(self._step_index)
-
     # ── SAP2000-style view switching + working level ───────────────
     # ── autosave ────────────────────────────────────────────────────
     @staticmethod
@@ -3145,10 +2861,15 @@ class MainWindow(QMainWindow):
         self._vm.adopt(project)
         self._log(f"Recovered the unsaved project from {snapshot} (not yet saved).")
 
+    def _show_reactions_dock(self) -> None:
+        """Bring the Reactions panel to the front."""
+        self._reactions_dock.show()
+        self._reactions_dock.raise_()
+
     def _refresh_displayed_units(self, converter: UnitConverter) -> None:
         """Re-draw what shows a number, after the display units changed."""
         # Results panel: displacements, reactions, element forces, curves.
-        self._results_panel.refresh(self._vm.project)
+        self.results_view.panel.refresh(self._vm.project)
         # Active post-processing dock (diagram, deformed shape, plots).
         if not self.display.refresh_units() and self.results.latest is not None:
             self._canvas.render()
@@ -3177,8 +2898,8 @@ class MainWindow(QMainWindow):
         self.results.clear()
         self.model_lock.set_locked(False)
         self.display.back_to_model()
-        self._results_panel.show_results(None, project)
-        self._refresh_reactions()
+        self.results_view.panel.show_results(None, project)
+        self.results_view.refresh_reactions()
         self._main_canvas.show_project(project)
         self._refresh_view_windows(project)
         if project is not None:
@@ -3223,7 +2944,7 @@ class MainWindow(QMainWindow):
         # A case renamed elsewhere (or here) must read the same in the results
         # picker and, when results are on screen, in the viewport caption: the
         # numbers did not move, only the label.
-        self._refresh_case_combo()
+        self.results_view.refresh_case_combo()
         if (
             self.results.latest is not None
             and self._canvas._renderer.mode is not RendererMode.MODEL
@@ -3433,7 +3154,7 @@ class MainWindow(QMainWindow):
         project_now = self._vm.project
         stored = self.results.has_stored(project_now)
         db_there = has_project and database_path(self._vm.path).exists()
-        self._act_clear_results.setEnabled(bool(has_project and (stored or db_there)))
+        self.action("analyze.clear_results").setEnabled(bool(has_project and (stored or db_there)))
         self._act_auto_mesh_frames.setEnabled(has_project)
         with QSignalBlocker(self._act_auto_mesh_frames):
             self._act_auto_mesh_frames.setChecked(
@@ -3468,7 +3189,6 @@ class MainWindow(QMainWindow):
         self._act_tool_quick_shell.setEnabled(has_project)
         self._act_tool_draw_shell.setEnabled(has_project)
         self._act_tool_measure.setEnabled(has_project)
-        self._act_select_results.setEnabled(has_project)
         self._act_load_combinations.setEnabled(True)
         self.action("display.show_deformed").setEnabled(has_static)
         self.action("display.show_mode_shape").setEnabled(has_modal)

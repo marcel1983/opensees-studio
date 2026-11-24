@@ -27,7 +27,7 @@ def _child_process_mode(monkeypatch) -> None:  # type: ignore[no-untyped-def]
 def _warning_labels(window: MainWindow) -> list[str]:
     return [
         label.text()
-        for label in window._results_panel.findChildren(QLabel)
+        for label in window.results_view.panel.findChildren(QLabel)
         if label.objectName() == "resultWarning"
     ]
 
@@ -56,7 +56,7 @@ def test_switching_to_srss_on_space_frame_3d_shows_the_warning_after_a_run(qtbot
     cqc = _run(window, qtbot, saved.model_copy(update={"combination": "CQC"}), path)
     assert cqc.warnings == []
     assert _warning_labels(window) == []
-    assert "CQC" in window._results_panel._title.text()
+    assert "CQC" in window.results_view.panel._title.text()
     assert any(line.startswith("Eigen solver: fullGenLapack") for line in logs)
 
     logs.clear()
@@ -66,4 +66,4 @@ def test_switching_to_srss_on_space_frame_3d_shows_the_warning_after_a_run(qtbot
     assert labels and all("closely spaced modes" in text for text in labels)
     assert "modes 1 and 2 (ratio 1.000)" in labels[0]
     assert any("Warning: SRSS with closely spaced modes" in line for line in logs)
-    assert "SRSS" in window._results_panel._title.text()
+    assert "SRSS" in window.results_view.panel._title.text()
