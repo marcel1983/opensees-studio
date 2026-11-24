@@ -92,6 +92,7 @@ from opensees_studio.commands.buildings import (
     SetMassSourceCommand,
     SetStoreysCommand,
 )
+from opensees_studio.commands.generated import insert_generated
 from opensees_studio.commands.groups import (
     EditGroupMembersCommand,
     SetGroupsCommand,
@@ -130,6 +131,7 @@ from opensees_studio.core.default_materials import missing_default_materials
 from opensees_studio.core.design.settings import DesignSettings
 from opensees_studio.core.design.stability import notional_pattern
 from opensees_studio.core.duplicates import default_tolerance
+from opensees_studio.core.generated import GeneratedModel
 from opensees_studio.core.geometry.ordering import QuadOrderError, order_quad_nodes
 from opensees_studio.core.groups import Group, colour_for, group_members
 from opensees_studio.core.help import ACTION_TOPICS, TOPIC_PROPERTY
@@ -191,6 +193,8 @@ from opensees_studio.services.steel_design import DesignReport, steel_frame_chec
 from opensees_studio.viewmodels import AnalysisRunner, ProjectViewModel
 from opensees_studio.viewmodels.case_results import CaseResultsCache
 from opensees_studio.viewmodels.stability_checker import StabilityChecker
+from opensees_studio.views.actions import ALL_ACTIONS, ActionState
+from opensees_studio.views.actions.registry import ActionRegistry
 from opensees_studio.views.canvas3d import ModelCanvas, SnapMode
 from opensees_studio.views.canvas3d.design_ratio_renderer import DesignRatioRenderer
 from opensees_studio.views.canvas3d.diagram_renderer import DiagramRenderer
@@ -559,6 +563,10 @@ class MainWindow(QMainWindow):
         """The focused viewport: where View-menu actions and picking land."""
         return self._active_canvas
 
+    def action(self, action_id: str) -> QAction:
+        """The command declared as ``action_id`` in ``views/actions`` (``"file.save"``)."""
+        return self._actions.action(action_id)
+
     def _build_docks(self) -> None:
         # Model tree (left)
         self._tree = QTreeWidget()
@@ -638,30 +646,10 @@ class MainWindow(QMainWindow):
         ]
 
     def _build_actions(self) -> None:
-        # File
-        # SAP2000's Ctrl+N: units and a template first.
-        self._act_new_model = QAction(
-            "&New Model…", self, shortcut=QKeySequence(QKeySequence.StandardKey.New)
-        )
-        self._act_new = QAction("New &Blank 3D Model", self)
-        self._act_new_2d = QAction("New &2D Frame…", self)
-        self._act_new_2d_truss = QAction("New 2D &Truss", self)
-        self._act_open = QAction("&Open…", self, shortcut=QKeySequence.StandardKey.Open)
-        self._act_save = QAction("&Save", self, shortcut=QKeySequence.StandardKey.Save)
-        self._act_save_as = QAction("Save &As…", self, shortcut=QKeySequence.StandardKey.SaveAs)
-        self._act_project_info = QAction("Project &Information…", self)
-        self._act_import_dxf = QAction("&DXF Drawing…", self)
-        self._act_import_s3d = QAction("&PORTICO Model (.s3d)…", self)
-        self._act_import_s2k = QAction("SAP2000 &Text (.s2k / .$2k)…", self)
-        self._act_import_ifc = QAction("&IFC (.ifc)…", self)
-        self._act_import_tcl = QAction("OpenSees &Tcl Script (.tcl)…", self)
-        self._act_export_script = QAction("OpenSees &script (.py)…", self)
-        self._act_export_ifc = QAction("&IFC (.ifc)…", self)
-        self._act_export_s2k = QAction("SAP2000 &Text (.s2k)…", self)
-        self._act_export_report = QAction("&Report (PDF / Word / HTML)…", self)
-        self._act_calc_memory = QAction("Calculation &Memory…", self)
-        self._act_run_batch = QAction("Run &Batch…", self)
-        self._act_quit = QAction("&Quit", self, shortcut=QKeySequence.StandardKey.Quit)
+        # File: declared in views/actions/file.py. The registry builds each
+        # action and stores it as ``_act_<name>`` too.
+        self._actions = ActionRegistry(ALL_ACTIONS)
+        self._actions.create(self)
 
         # Edit (created from QUndoStack so text auto-tracks "Undo Add 4 nodes" etc.)
         self._act_undo = self._vm.undo_stack.createUndoAction(self, "Undo")
@@ -1098,38 +1086,39 @@ class MainWindow(QMainWindow):
         mb = self.menuBar()
 
         m_file = mb.addMenu("&File")
+        act = self.action
         m_file.addActions(
             [
-                self._act_new_model,
-                self._act_new,
-                self._act_new_2d,
-                self._act_new_2d_truss,
-                self._act_open,
+                act("file.new_model"),
+                act("file.new"),
+                act("file.new_2d"),
+                act("file.new_2d_truss"),
+                act("file.open"),
             ]
         )
         self._menu_recent = m_file.addMenu("Open &Recent")
         self._menu_recent.aboutToShow.connect(self._fill_recent_menu)
         self._menu_recent.menuAction().setProperty(TOPIC_PROPERTY, "file.recent")
         m_file.addSeparator()
-        m_file.addActions([self._act_save, self._act_save_as])
-        m_file.addAction(self._act_project_info)
+        m_file.addActions([act("file.save"), act("file.save_as")])
+        m_file.addAction(act("file.project_info"))
         m_file.addSeparator()
         m_import = m_file.addMenu("&Import")
-        m_import.addAction(self._act_import_dxf)
-        m_import.addAction(self._act_import_s3d)
-        m_import.addAction(self._act_import_s2k)
-        m_import.addAction(self._act_import_ifc)
-        m_import.addAction(self._act_import_tcl)
+        m_import.addAction(act("file.import_dxf"))
+        m_import.addAction(act("file.import_s3d"))
+        m_import.addAction(act("file.import_s2k"))
+        m_import.addAction(act("file.import_ifc"))
+        m_import.addAction(act("file.import_tcl"))
         m_export = m_file.addMenu("&Export")
-        m_export.addAction(self._act_export_script)
-        m_export.addAction(self._act_export_ifc)
-        m_export.addAction(self._act_export_s2k)
-        m_export.addAction(self._act_export_report)
-        m_export.addAction(self._act_calc_memory)
+        m_export.addAction(act("file.export_script"))
+        m_export.addAction(act("file.export_ifc"))
+        m_export.addAction(act("file.export_s2k"))
+        m_export.addAction(act("file.export_report"))
+        m_export.addAction(act("file.calc_memory"))
         m_file.addSeparator()
-        m_file.addAction(self._act_run_batch)
+        m_file.addAction(act("file.run_batch"))
         m_file.addSeparator()
-        m_file.addAction(self._act_quit)
+        m_file.addAction(act("file.quit"))
 
         m_edit = mb.addMenu("&Edit")
         m_edit.addActions([self._act_undo, self._act_redo])
@@ -1988,27 +1977,8 @@ class MainWindow(QMainWindow):
         self._units_combo.setToolTip(tooltip)
 
     def _wire(self) -> None:
-        # File
-        self._act_new_model.triggered.connect(self._on_new_model)
-        self._act_new.triggered.connect(self._on_new)
-        self._act_new_2d.triggered.connect(self._on_new_2d)
-        self._act_new_2d_truss.triggered.connect(self._on_new_2d_truss)
-        self._act_open.triggered.connect(self._on_open)
-        self._act_save.triggered.connect(self._on_save)
-        self._act_save_as.triggered.connect(self._on_save_as)
-        self._act_project_info.triggered.connect(self._on_project_info)
-        self._act_import_dxf.triggered.connect(self._on_import_dxf)
-        self._act_import_s3d.triggered.connect(self._on_import_s3d)
-        self._act_import_s2k.triggered.connect(self._on_import_s2k)
-        self._act_import_ifc.triggered.connect(self._on_import_ifc)
-        self._act_import_tcl.triggered.connect(self._on_import_tcl)
-        self._act_export_script.triggered.connect(self._on_export_script)
-        self._act_export_ifc.triggered.connect(self._on_export_ifc)
-        self._act_export_s2k.triggered.connect(self._on_export_s2k)
-        self._act_export_report.triggered.connect(self._on_export_report)
-        self._act_calc_memory.triggered.connect(self._on_calc_memory)
-        self._act_run_batch.triggered.connect(self._on_run_batch)
-        self._act_quit.triggered.connect(self._on_quit)
+        # File and every other declared command (views/actions).
+        self._actions.wire(self)
         self._act_about.triggered.connect(self._on_about)
         self._act_help_contents.triggered.connect(self._on_help_contents)
         self._act_shortcuts.triggered.connect(self._on_shortcuts)
@@ -2361,10 +2331,8 @@ class MainWindow(QMainWindow):
         elif key in ("beam", "frame3d"):
             project = self._vm.project
             assert project is not None
-            self._vm.undo_stack.beginMacro(f"New model: {TEMPLATES[key]}")
             try:
                 section = make_default_section(project.next_section_id(), project)
-                self._vm.apply_command(AddSectionsCommand(self._vm, [section]))
                 if key == "beam":
                     spans, span = dlg.beam_numbers()
                     model = build_beam(spans, span, section_id=section.id)
@@ -2374,14 +2342,20 @@ class MainWindow(QMainWindow):
                         column_section_id=section.id,
                         beam_section_id=section.id,
                     )
-                self._vm.apply_command(AddNodesCommand(self._vm, model.nodes))
-                self._vm.apply_command(AddElementsCommand(self._vm, model.elements))
-                self._vm.apply_command(SetCoordSystemsCommand(self._vm, [model.grid]))
+                insert_generated(
+                    self._vm,
+                    GeneratedModel(
+                        sections=[section],
+                        nodes=model.nodes,
+                        elements=model.elements,
+                        grid=model.grid,
+                        replace_grids=True,
+                    ),
+                    text=f"New model: {TEMPLATES[key]}",
+                )
             except Exception as exc:
                 QMessageBox.critical(self, "Cannot create the model", str(exc))
                 return
-            finally:
-                self._vm.undo_stack.endMacro()
             self._log(f"{TEMPLATES[key]}: {model.summary()}")
             if key == "beam":
                 self._on_view_front()
@@ -4686,12 +4660,11 @@ class MainWindow(QMainWindow):
             return
         column_id, rafter_id = wizard.section_choice()
 
-        self._vm.undo_stack.beginMacro("Create portal frame")
-        grid = None
         try:
+            new_sections = []
             if column_id is None or rafter_id is None:
                 section = make_default_section(project.next_section_id(), project)
-                self._vm.apply_command(AddSectionsCommand(self._vm, [section]))
+                new_sections.append(section)
                 column_id = rafter_id = section.id
             spec = wizard.spec(column_section_id=column_id, rafter_section_id=rafter_id)
             frame = build_portal_frame(
@@ -4701,19 +4674,18 @@ class MainWindow(QMainWindow):
                 first_node_id=project.next_node_id(),
                 first_element_id=project.next_element_id(),
             )
-            self._vm.apply_command(AddNodesCommand(self._vm, frame.nodes))
-            self._vm.apply_command(AddElementsCommand(self._vm, frame.elements))
-            if with_grid:
-                # The same undo step as the frame: one Ctrl+Z takes both back.
-                grid = frame_grid(spec)
-                self._vm.apply_command(
-                    SetCoordSystemsCommand(self._vm, [*project.coord_systems, grid])
-                )
+            # The same undo step as the frame: one Ctrl+Z takes both back.
+            grid = frame_grid(spec) if with_grid else None
+            insert_generated(
+                self._vm,
+                GeneratedModel(
+                    sections=new_sections, nodes=frame.nodes, elements=frame.elements, grid=grid
+                ),
+                text="Create portal frame",
+            )
         except Exception as exc:
             QMessageBox.critical(self, "Cannot create the frame", str(exc))
             return
-        finally:
-            self._vm.undo_stack.endMacro()
 
         # Leave the frame selected: the next thing most users do is copy it.
         self._canvas.selection.clear()
@@ -4815,11 +4787,11 @@ class MainWindow(QMainWindow):
             return
         material_id = wizard.material_choice()
 
-        self._vm.undo_stack.beginMacro("Create truss")
         try:
+            new_materials = []
             if material_id is None:
                 material = make_default_truss_material(project.next_material_id())
-                self._vm.apply_command(AddMaterialsCommand(self._vm, [material]))
+                new_materials.append(material)
                 material_id = material.id
             truss = build_truss(
                 wizard.spec(material_id=material_id),
@@ -4828,13 +4800,14 @@ class MainWindow(QMainWindow):
                 first_node_id=project.next_node_id(),
                 first_element_id=project.next_element_id(),
             )
-            self._vm.apply_command(AddNodesCommand(self._vm, truss.nodes))
-            self._vm.apply_command(AddElementsCommand(self._vm, truss.elements))
+            insert_generated(
+                self._vm,
+                GeneratedModel(materials=new_materials, nodes=truss.nodes, elements=truss.elements),
+                text="Create truss",
+            )
         except Exception as exc:
             QMessageBox.critical(self, "Cannot create the truss", str(exc))
             return
-        finally:
-            self._vm.undo_stack.endMacro()
 
         self._canvas.selection.set_selection(
             {node.id for node in truss.nodes}, {element.id for element in truss.elements}
@@ -9176,20 +9149,19 @@ class MainWindow(QMainWindow):
         has_pushover = isinstance(self._latest_results, PushoverResults)
         has_rs = isinstance(self._latest_results, ResponseSpectrumResults)
         n_sel = len(self._canvas.selection.nodes)
-        self._act_save.setEnabled(has_project)
+        self._actions.refresh(
+            ActionState(
+                has_project=has_project,
+                has_selection=has_selection,
+                has_selected_nodes=has_selected_nodes,
+                has_selected_elements=has_selected_elements,
+            )
+        )
         # The side "ps" button shows it, so it cannot wait for the Select menu.
         self._act_previous_selection.setEnabled(
             has_project and any(self._canvas.selection.previous)
         )
         self._act_select_line.setEnabled(has_project)
-        self._act_save_as.setEnabled(has_project)
-        self._act_project_info.setEnabled(has_project)
-        self._act_import_dxf.setEnabled(has_project)
-        self._act_export_script.setEnabled(has_project)
-        self._act_export_ifc.setEnabled(has_project)
-        self._act_export_s2k.setEnabled(has_project)
-        self._act_export_report.setEnabled(has_project)
-        self._act_calc_memory.setEnabled(has_project)
         self._act_grid.setEnabled(True)
         self._act_add_node.setEnabled(True)
         self._act_frame_wizard.setEnabled(has_project)
@@ -9208,8 +9180,9 @@ class MainWindow(QMainWindow):
         opensees = self._opensees.available
         self._act_run.setEnabled(solver)
         self._act_run.setStatusTip("" if solver else self._solver.summary())
-        self._act_run_batch.setEnabled(solver)
-        self._act_run_batch.setStatusTip("" if solver else self._solver.summary())
+        run_batch = self.action("file.run_batch")
+        run_batch.setEnabled(solver)
+        run_batch.setStatusTip("" if solver else self._solver.summary())
         # The Material Tester and the stability check call OpenSees itself,
         # whatever engine runs the cases.
         self._act_material_tester.setEnabled(opensees)

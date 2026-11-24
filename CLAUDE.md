@@ -176,6 +176,16 @@ These are non-obvious things that are easy to break if you don't know:
   value is `tr("Apply to <b>{n}</b> …").format(n=...)`, never an f-string. A
   combo box item is not translated unless wrapped in `tr()`, and only where the
   code reads the choice by index or data, never by `currentText()`.
+- Menu commands are declared, not hand-built. A command is an `ActionSpec`
+  in `views/actions/<area>.py` (id `"file.save"`, text, handler, shortcut, and
+  the `Needs` that enable it); `ActionRegistry` builds the `QAction`, connects
+  it and enables it, and also stores it as `_act_<name>`, which is how the
+  ribbon layout, `ACTION_TOPICS`, the icon file and older tests find it. Ask
+  for it with `window.action("file.save")`. Only the File menu is migrated so
+  far: when you add a command, add a spec instead of new lines in
+  `_build_actions`, `_wire` and `_refresh_action_enablement` (use `needs=None`
+  when the condition is not a `Needs` flag and set it in the window). The spec
+  tables import no Qt; `registry.py` is the only module there that does.
 - An unregistered material type is not a crash: `material_forms.form_for`
   returns a read-only placeholder, the same contract `section_forms` has.
 - Never hardcode how the analysis child is spawned. Every spawn site
@@ -194,12 +204,18 @@ These are non-obvious things that are easy to break if you don't know:
   2D never writes the rotation rows, so `OpenSeesRunner.build` clears them
   (`_clear_truss_scratch`) before a 2D ndf 3 model with trusses. Suspect the
   same when a result depends on what ran earlier in the process.
-- Parametric generators plan, then insert. `core.warehouse.plan_warehouse`
-  returns a `WarehousePlan` (sections, nodes, elements, groups, grid, cases,
-  loads, combinations, design overrides) without touching the project;
-  `commands.warehouse.insert_warehouse_plan` checks it against the project
-  first and only then pushes one macro (an error inside `redo` is lost by
-  `QUndoStack.push`, and a macro that fails half way stays half applied). In a
+- Parametric generators plan, then insert. A wizard computes what the project
+  gains without touching it and hands it over as a `core.generated.GeneratedModel`
+  (materials, sections, nodes, elements, groups, grid, cases, loads,
+  combinations, design settings); `commands.generated.insert_generated` checks
+  it against the project first (`model_problems`: ids taken, references to
+  something that is not there) and only then pushes one macro, which it takes
+  back whole if a command still refuses (an error inside `redo` is lost by
+  `QUndoStack.push`, and a macro that fails half way stays half applied). The
+  portal frame, the truss, the New Model templates and the warehouse
+  (`core.warehouse.plan_warehouse` → `WarehousePlan` →
+  `commands.warehouse.insert_warehouse_plan`) all go through it: a new wizard
+  does not open its own `beginMacro` in `MainWindow`. In a
   generated warehouse a purlin or girt is pinned and is **not** a bracing point
   of the rafter or column unless it has a stabilising angle: the plan writes
   `SteelMemberDesign.length_minor`/`length_ltb`, because `core.design.members`
@@ -352,8 +368,10 @@ that touches the GUI: no PR check will.
   It runs without any `QT_QPA_PLATFORM` setting; a test that needs `qtbot`
   (and with it a QApplication) belongs in `tests/gui/`. The CI `headless` job
   runs it with `.[opensees]` and pytest only (no PySide6, PyVista or pytest-qt):
-  a test that imports `viewmodels`, `commands` or `views` goes to `tests/gui/`,
-  and a renderer test skips itself with `pytest.importorskip("pyvista")`.
+  a test that imports `viewmodels`, `commands` or `views` goes to `tests/gui/`
+  (the one exception is the Qt-free spec tables of `views/actions`, see
+  `tests/unit/test_action_specs.py`), and a renderer test skips itself with
+  `pytest.importorskip("pyvista")`.
 - `tests/gui/` — `qtbot` fixture, `@pytest.mark.gui`.
   Run it in one pytest process: `pytest tests/gui` (255 tests in 45 files
   as of 2026-09-28, about 50 s on Windows). CI does the same in its `gui`
