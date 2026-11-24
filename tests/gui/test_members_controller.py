@@ -42,6 +42,9 @@ DECLARED = {
     "assign.insertion": "_act_assign_insertion",
     "assign.modifiers": "_act_assign_modifiers",
     "assign.auto_mesh": "_act_assign_auto_mesh",
+    "assign.hinge": "_act_assign_hinge",
+    "assign.wall": "_act_assign_wall",
+    "assign.pile": "_act_assign_pile",
 }
 
 
@@ -190,3 +193,54 @@ def test_nothing_that_fits_says_so_and_is_not_an_undo_step(qtbot, monkeypatch) -
         ),
     ]
     assert vm.undo_stack.count() == 0
+
+
+def test_a_hinge_needs_a_selection_and_a_section(qtbot, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    controller, vm, _log = _controller(qtbot, set())
+    told: list[str] = []
+    monkeypatch.setattr(
+        QMessageBox, "information", lambda _parent, _title, text, *a, **k: told.append(text)
+    )
+    monkeypatch.setattr(
+        QMessageBox, "warning", lambda _parent, _title, text, *a, **k: told.append(text)
+    )
+    controller.assign_hinge()
+    controller.assign_wall()
+    controller.assign_pile()
+    assert told == [
+        "Select one or more elements first.",
+        "Select the vertical members of the wall first.",
+        "Select the pile's members first.",
+    ]
+    controller, vm, _log = _controller(qtbot, {1})
+    vm.project.sections.clear()
+    controller.assign_hinge()
+    assert told[-1] == "No sections defined. Add a section before assigning hinges."
+    assert vm.undo_stack.count() == 0
+
+
+def test_a_hinge_turns_the_member_into_a_beam_with_hinges(qtbot, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from opensees_studio.views.dialogs import AssignHingeDialog
+
+    controller, vm, log = _controller(qtbot, {1})
+    values = {
+        "section_i_id": 1,
+        "section_j_id": 2,
+        "lp_i": 0.3,
+        "lp_j": 0.4,
+        "E": 200e9,
+        "A": 0.01,
+        "Iz": 1e-5,
+        "Iy": 1e-5,
+        "G": 80e9,
+        "J": 1e-6,
+    }
+    _accept(monkeypatch, AssignHingeDialog, values=values)
+    controller.assign_hinge()
+    hinged = vm.project.element(1)
+    assert hinged.type == "BeamWithHinges"
+    assert (hinged.nodes, hinged.section_i_id, hinged.section_j_id) == ((1, 2), 1, 2)
+    assert (hinged.lp_i, hinged.lp_j) == (0.3, 0.4)
+    assert log == ["Converted 1 element(s) to BeamWithHinges."]
+    vm.undo_stack.undo()
+    assert vm.project.element(1).type == "ElasticBeamColumn"

@@ -6,6 +6,7 @@ from opensees_studio.views.actions.spec import ActionSpec, Needs
 
 _JOINTS = Needs.PROJECT | Needs.SELECTED_NODES
 _ELEMENTS = Needs.PROJECT | Needs.SELECTED_ELEMENTS
+_TWO_JOINTS = Needs.PROJECT | Needs.TWO_NODES
 
 
 def _load(name: str, text: str, needs: Needs | None, shortcut: str | None = None) -> ActionSpec:
@@ -14,6 +15,18 @@ def _load(name: str, text: str, needs: Needs | None, shortcut: str | None = None
         f"assign.{name}",
         text,
         f"loads.assign_{name}",
+        shortcut=shortcut,
+        needs=needs,
+        legacy_attribute=f"_act_assign_{name}",
+    )
+
+
+def _joint(name: str, text: str, needs: Needs = _JOINTS, shortcut: str | None = None) -> ActionSpec:
+    """A joint command: ``assign.<name>`` runs ``window.joints.assign_<name>``."""
+    return ActionSpec(
+        f"assign.{name}",
+        text,
+        f"joints.assign_{name}",
         shortcut=shortcut,
         needs=needs,
         legacy_attribute=f"_act_assign_{name}",
@@ -32,6 +45,15 @@ def _member(name: str, text: str) -> ActionSpec:
 
 
 ASSIGN_ACTIONS: tuple[ActionSpec, ...] = (
+    # What holds a joint, what it weighs and what joins it to another one.
+    _joint("support", "&Restraints…", shortcut="Ctrl+R"),
+    _joint("masses", "&Masses…"),
+    _joint("springs", "S&prings…"),
+    _joint("equal_dof", "&EqualDOF…", _TWO_JOINTS),
+    _joint("zero_length", "Zero-&Length Element…", _TWO_JOINTS),
+    _joint("zls", "&Zero-Length Section…", _TWO_JOINTS),
+    _joint("bearing", "&Bearing…", _TWO_JOINTS),
+    _joint("link", "&Link (twoNodeLink / TFP)…", _TWO_JOINTS),
     # What a member is made of and how it is modelled.
     _member("section", "S&ection…"),
     _member("material", "&Material…"),
@@ -43,6 +65,10 @@ ASSIGN_ACTIONS: tuple[ActionSpec, ...] = (
     _member("insertion", "I&nsertion Point…"),
     _member("modifiers", "Property M&odifiers…"),
     _member("auto_mesh", "&Auto Mesh…"),
+    # What turns a member into something else.
+    _member("hinge", "Plastic &Hinge…"),
+    _member("wall", "RC &Wall (MVLEM)…"),
+    _member("pile", "&Pile Soil Springs (p-y, t-z, q-z)…"),
     ActionSpec(
         "assign.diaphragm",
         "&Diaphragm…",
@@ -50,12 +76,11 @@ ASSIGN_ACTIONS: tuple[ActionSpec, ...] = (
         needs=Needs.PROJECT,
         legacy_attribute="_act_assign_diaphragm",
     ),
-    # Enabled with exactly two joints selected: the window sets it.
     ActionSpec(
         "assign.rigid_link",
         "Rigid &Link…",
         "building.assign_rigid_link",
-        needs=None,
+        needs=_TWO_JOINTS,
         legacy_attribute="_act_assign_rigid_link",
     ),
     ActionSpec(

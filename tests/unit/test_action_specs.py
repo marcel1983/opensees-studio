@@ -124,3 +124,15 @@ def test_needs_are_all_required() -> None:
     assert not state.allows(Needs.PROJECT | Needs.SELECTED_ELEMENTS)
     assert not ActionState().allows(Needs.PROJECT)
     assert ActionState().allows(Needs.NOTHING)
+
+
+def test_two_joints_is_its_own_need() -> None:
+    # A link joins exactly two joints: one, or three, is not enough.
+    two = Needs.PROJECT | Needs.TWO_NODES
+    some = ActionState(has_project=True, has_selected_nodes=True, has_selection=True)
+    assert not some.allows(two)
+    exactly = ActionState(
+        has_project=True, has_selected_nodes=True, has_selection=True, has_two_selected_nodes=True
+    )
+    assert exactly.allows(two)
+    assert not ActionState(has_two_selected_nodes=True).allows(two)

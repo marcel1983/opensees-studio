@@ -52,7 +52,6 @@ from PySide6.QtWidgets import (
 from opensees_studio import __version__
 from opensees_studio.commands import (
     AddElementsCommand,
-    AddEqualDOFConstraintCommand,
     AddMaterialsCommand,
     AddNodesCommand,
     AddSectionsCommand,
@@ -68,7 +67,6 @@ from opensees_studio.commands import (
     SetMassCommand,
     SetProjectMetaCommand,
     SetRestraintCommand,
-    SetSpringCommand,
 )
 from opensees_studio.commands.generated import insert_generated
 from opensees_studio.commands.groups import (
@@ -117,7 +115,6 @@ from opensees_studio.core.model_check import Finding, check_model
 from opensees_studio.core.object_info import element_info, node_info
 from opensees_studio.core.reactions import ReactionRow, reaction_rows
 from opensees_studio.core.sections import SHELL_SECTION_CLASSES
-from opensees_studio.core.self_weight import section_weight_per_length
 from opensees_studio.core.view_settings import ViewSettings
 from opensees_studio.diagnostics.performance import perf
 from opensees_studio.services import (
@@ -178,19 +175,13 @@ from opensees_studio.views.canvas3d.shell_contour_renderer import ShellContourRe
 from opensees_studio.views.controllers import Shell
 from opensees_studio.views.controllers.building import BuildingController
 from opensees_studio.views.controllers.design import DesignController
+from opensees_studio.views.controllers.joints import JointsController
 from opensees_studio.views.controllers.loads import LoadsController
 from opensees_studio.views.controllers.members import MembersController
 from opensees_studio.views.controllers.transforms import TransformsController
 from opensees_studio.views.dialogs import (
     AddNodeDialog,
     AnalysisCaseManagerDialog,
-    AssignElastomericBearingDialog,
-    AssignEqualDOFDialog,
-    AssignHingeDialog,
-    AssignMassesDialog,
-    AssignSupportDialog,
-    AssignZeroLengthDialog,
-    AssignZeroLengthSectionDialog,
     CalculationMemoryDialog,
     CoordinateGridSystemsDialog,
     DisplayOptionsDialog,
@@ -219,7 +210,6 @@ from opensees_studio.views.dialogs import (
     UniformExcitationDialog,
     member_sections,
 )
-from opensees_studio.views.dialogs.assign_springs import AssignSpringsDialog
 from opensees_studio.views.dialogs.batch_run import BatchRunDialog
 from opensees_studio.views.dialogs.connect_joints import DivideFramesDialog, MergeJointsDialog
 from opensees_studio.views.dialogs.grid_line_view import GridLineViewDialog
@@ -456,6 +446,7 @@ class MainWindow(QMainWindow):
         #: Storeys, mass source, seismic loads, diaphragms, rigid links.
         self.building = BuildingController(shell)
         #: Assign → Frame: section, material, formulation, frame member options.
+        self.joints = JointsController(shell)
         self.members = MembersController(shell)
         #: Loads on joints, frames and areas, joint patterns, Edit → Delete Loads.
         self.loads = LoadsController(shell)
@@ -762,7 +753,6 @@ class MainWindow(QMainWindow):
 
         # Assign
         # Assign — organized as Joint (nodes) / Frame (elements) for SAP2000 parity.
-        self._act_assign_support = QAction("&Restraints…", self, shortcut="Ctrl+R")
         # One click on the Restraints bar: the common supports, no dialog.
         self._act_restraint_fixed = QAction("&Fixed", self)
         self._act_restraint_pinned = QAction("&Pinned", self)
@@ -780,19 +770,9 @@ class MainWindow(QMainWindow):
             action.setStatusTip(text)
             action.setProperty("ownTip", text)
             action.setData(preset)
-        self._act_assign_masses = QAction("&Masses…", self)
-        self._act_assign_springs = QAction("S&prings…", self)
-        self._act_assign_equal_dof = QAction("&EqualDOF…", self)
         self._act_assign_area_springs = QAction("&Area Springs…", self)
         self._act_assign_edge_springs = QAction("&Edge Springs…", self)
         self._act_assign_line_springs = QAction("&Line Springs…", self)
-        self._act_assign_zero_length = QAction("Zero-&Length Element…", self)
-        self._act_assign_zls = QAction("&Zero-Length Section…", self)
-        self._act_assign_bearing = QAction("&Bearing…", self)
-        self._act_assign_link = QAction("&Link (twoNodeLink / TFP)…", self)
-        self._act_assign_hinge = QAction("Plastic &Hinge…", self)
-        self._act_assign_wall = QAction("RC &Wall (MVLEM)…", self)
-        self._act_assign_pile = QAction("&Pile Soil Springs (p-y, t-z, q-z)…", self)
 
         # Display (post-processing)
         self._act_select_results = QAction("Show Results &Of…", self)
@@ -1097,20 +1077,20 @@ class MainWindow(QMainWindow):
         # Joint submenu — operates on selected nodes.
         # The same lists feed the right-click menu of a selection (None = separator).
         self._joint_actions: list[QAction | None] = [
-            self._act_assign_support,
-            self._act_assign_masses,
-            self._act_assign_springs,
-            self._act_assign_equal_dof,
+            self.action("assign.support"),
+            self.action("assign.masses"),
+            self.action("assign.springs"),
+            self.action("assign.equal_dof"),
             self.action("assign.diaphragm"),
             self.action("assign.rigid_link"),
             self.action("assign.remove_constraints"),
             self.action("assign.load"),
             self.action("assign.imposed_displacement"),
-            self._act_assign_zero_length,
+            self.action("assign.zero_length"),
             self.action("assign.joint_pattern"),
-            self._act_assign_zls,
-            self._act_assign_bearing,
-            self._act_assign_link,
+            self.action("assign.zls"),
+            self.action("assign.bearing"),
+            self.action("assign.link"),
         ]
         self._frame_actions: list[QAction | None] = [
             self.action("assign.section"),
@@ -1130,11 +1110,11 @@ class MainWindow(QMainWindow):
             self.action("assign.frame_point_load"),
             self.action("assign.temperature_load"),
             self.action("assign.tendon"),
-            self._act_assign_hinge,
-            self._act_assign_wall,
+            self.action("assign.hinge"),
+            self.action("assign.wall"),
             None,
             self._act_assign_line_springs,
-            self._act_assign_pile,
+            self.action("assign.pile"),
         ]
         self._area_actions: list[QAction | None] = [
             self._act_shell_formulation,
@@ -2001,26 +1981,15 @@ class MainWindow(QMainWindow):
         self._act_load_combinations.triggered.connect(self._on_load_combinations)
 
         # Assign
-        self._act_assign_support.triggered.connect(self._on_assign_support)
         for action in self._restraint_actions():
             action.triggered.connect(self._on_quick_restraint)
-        self._act_assign_masses.triggered.connect(self._on_assign_masses)
-        self._act_assign_springs.triggered.connect(self._on_assign_springs)
-        self._act_assign_equal_dof.triggered.connect(self._on_assign_equal_dof)
         self._act_groups.triggered.connect(self._on_define_groups)
         self._act_section_cuts.triggered.connect(self._on_define_section_cuts)
         self._act_custom_commands.triggered.connect(self._on_custom_commands)
         self._act_assign_group.triggered.connect(self._on_assign_group)
-        self._act_assign_pile.triggered.connect(self._on_assign_pile_springs)
         self._act_assign_area_springs.triggered.connect(lambda: self._on_assign_springs_of("area"))
         self._act_assign_edge_springs.triggered.connect(lambda: self._on_assign_springs_of("edge"))
         self._act_assign_line_springs.triggered.connect(lambda: self._on_assign_springs_of("line"))
-        self._act_assign_zero_length.triggered.connect(self._on_assign_zero_length)
-        self._act_assign_zls.triggered.connect(self._on_assign_zls)
-        self._act_assign_bearing.triggered.connect(self._on_assign_bearing)
-        self._act_assign_link.triggered.connect(self._on_assign_link)
-        self._act_assign_hinge.triggered.connect(self._on_assign_hinge)
-        self._act_assign_wall.triggered.connect(self._on_assign_wall)
 
         # Analyze
         self._act_case_manager.triggered.connect(self._on_case_manager)
@@ -4925,41 +4894,6 @@ class MainWindow(QMainWindow):
                 str(exc),
             )
 
-    # ── slots: assign ────────────────────────────────────────────────
-    def _on_assign_support(self) -> None:
-        sel_nodes = set(self._canvas.selection.nodes)
-        if not sel_nodes:
-            QMessageBox.information(self, "Assign Support", "Select one or more nodes first.")
-            return
-        project = self._vm.project
-        dlg = AssignSupportDialog(len(sel_nodes), self, ndm=project.ndm if project else 3)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            self._vm.apply_command(SetRestraintCommand(self._vm, sel_nodes, dlg.restraint()))
-        except Exception as exc:
-            QMessageBox.critical(self, "Assign Support failed", str(exc))
-
-    def _on_assign_equal_dof(self) -> None:
-        sel = sorted(self._canvas.selection.nodes)
-        if len(sel) != 2 or self._vm.project is None:
-            QMessageBox.information(
-                self,
-                "Assign EqualDOF",
-                "Select exactly two nodes first.",
-            )
-            return
-        dlg = AssignEqualDOFDialog(
-            sel, ndf=self._vm.project.ndf, parent=self, ndm=self._vm.project.ndm
-        )
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            self._vm.apply_command(AddEqualDOFConstraintCommand(self._vm, dlg.constraint()))
-            self._log(f"Added equalDOF constraint between nodes {sel[0]} and {sel[1]}.")
-        except Exception as exc:
-            QMessageBox.critical(self, "Assign EqualDOF failed", str(exc))
-
     # ── define and assign: groups, section cuts, custom commands ────
     def _on_define_groups(self) -> None:
         """Define → Groups: add, rename, recolour or remove groups."""
@@ -5190,166 +5124,6 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, "Edit element failed", str(exc))
 
-    def _on_assign_zls(self) -> None:
-        """Assign → Joint → Zero-Length Section: wrap 2 coincident nodes."""
-        from opensees_studio.commands import AddElementsCommand
-        from opensees_studio.core import ZeroLengthSectionElement
-
-        sel = sorted(self._canvas.selection.nodes)
-        if len(sel) != 2 or self._vm.project is None:
-            QMessageBox.information(
-                self,
-                "Assign Zero-Length Section",
-                "Select exactly two coincident nodes first.",
-            )
-            return
-        # Verify coincidence — differ by more than 1e-6 in any axis is
-        # a modelling error; zeroLengthSection needs coincident nodes.
-        n1, n2 = (next(n for n in self._vm.project.nodes if n.id == sel[i]) for i in (0, 1))
-        if any(abs(n1.coords[k] - n2.coords[k]) > 1e-6 for k in range(3)):
-            QMessageBox.warning(
-                self,
-                "Assign Zero-Length Section",
-                f"Nodes {sel[0]} and {sel[1]} are not coincident. "
-                "Move one onto the other before creating the element.",
-            )
-            return
-        if not self._vm.project.sections:
-            QMessageBox.warning(
-                self,
-                "Assign Zero-Length Section",
-                "Define a section first (Define → Section Library).",
-            )
-            return
-        dlg = AssignZeroLengthSectionDialog(
-            self._vm.project,
-            (sel[0], sel[1]),
-            parent=self,
-        )
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        sec_id = dlg.section_id()
-        if sec_id is None:
-            return
-        try:
-            eid = self._vm.project.next_element_id()
-            elem = ZeroLengthSectionElement(
-                id=eid,
-                nodes=(sel[0], sel[1]),
-                section_id=int(sec_id),
-            )
-            self._vm.apply_command(AddElementsCommand(self._vm, [elem]))
-            self._log(
-                f"Created ZeroLengthSection {eid} "
-                f"between nodes {sel[0]}-{sel[1]} (section {sec_id})."
-            )
-        except Exception as exc:
-            QMessageBox.critical(self, "Assign Zero-Length Section failed", str(exc))
-
-    def _on_assign_zero_length(self) -> None:
-        """Assign > Joint > Zero-Length Element: one material per global DOF."""
-        from opensees_studio.commands import AddElementsCommand
-
-        sel = sorted(self._canvas.selection.nodes)
-        project = self._vm.project
-        if len(sel) != 2 or project is None:
-            QMessageBox.information(
-                self,
-                "Assign Zero-Length Element",
-                "Select exactly two coincident joints first.",
-            )
-            return
-        n1, n2 = (project.node(node_id) for node_id in sel)
-        if any(abs(n1.coords[k] - n2.coords[k]) > 1e-6 for k in range(3)):
-            QMessageBox.warning(
-                self,
-                "Assign Zero-Length Element",
-                f"Joints {sel[0]} and {sel[1]} are not coincident. "
-                "Move one onto the other before creating the element.",
-            )
-            return
-        if not any(is_uniaxial(material) for material in project.materials):
-            QMessageBox.warning(
-                self,
-                "Assign Zero-Length Element",
-                "Define a uniaxial material first (Material Library).",
-            )
-            return
-        dlg = AssignZeroLengthDialog(project, (sel[0], sel[1]), parent=self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            element = dlg.build_element(project.next_element_id())
-            self._vm.apply_command(AddElementsCommand(self._vm, [element]))
-            dofs = ", ".join(str(dof) for dof in element.dofs)
-            self._log(
-                f"Created {element.type} {element.id} between joints "
-                f"{element.nodes[0]}-{element.nodes[1]} (DOFs {dofs})."
-            )
-        except Exception as exc:
-            QMessageBox.critical(self, "Assign Zero-Length Element failed", str(exc))
-
-    def _on_assign_bearing(self) -> None:
-        """Assign > Joint > Bearing: elastomeric or sliding isolator between two joints."""
-
-        sel = sorted(self._canvas.selection.nodes)
-        if len(sel) != 2 or self._vm.project is None:
-            QMessageBox.information(
-                self,
-                "Assign Bearing",
-                "Select exactly two nodes first (bottom, then top).",
-            )
-            return
-        dlg = AssignElastomericBearingDialog(self._vm.project, (sel[0], sel[1]), parent=self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        self._create_bearing_from_dialog(dlg)
-
-    def _on_assign_link(self) -> None:
-        """Assign > Joint > Link: a twoNodeLink or a Triple Friction Pendulum between two joints."""
-        from opensees_studio.commands import AddElementsCommand
-        from opensees_studio.views.dialogs.assign_link import AssignLinkDialog
-
-        sel = sorted(self._canvas.selection.nodes)
-        project = self._vm.project
-        if len(sel) != 2 or project is None:
-            QMessageBox.information(self, "Assign Link", "Select exactly two joints first.")
-            return
-        dlg = AssignLinkDialog(project, (sel[0], sel[1]), parent=self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            element = dlg.build_element(project.next_element_id())
-            self._vm.apply_command(AddElementsCommand(self._vm, [element]))
-            self._log(f"Created {element.type} {element.id} between joints {sel[0]}-{sel[1]}.")
-        except Exception as exc:
-            QMessageBox.critical(self, "Assign Link failed", str(exc))
-
-    def _create_bearing_from_dialog(self, dlg: AssignElastomericBearingDialog) -> bool:
-        """Build the bearing the dialog describes and add it undoably."""
-        from opensees_studio.commands import AddElementsCommand
-        from opensees_studio.core import SLIDING_BEARING_CLASSES
-
-        if self._vm.project is None:
-            return False
-        try:
-            eid = self._vm.project.next_element_id()
-            elem = dlg.build_element(eid)
-            self._vm.apply_command(AddElementsCommand(self._vm, [elem]))
-        except Exception as exc:
-            QMessageBox.critical(self, "Assign Bearing failed", str(exc))
-            return False
-        if isinstance(elem, SLIDING_BEARING_CLASSES):
-            detail = f"Kinit {elem.k_init:g}, friction model {elem.friction_model_id}"
-            if elem.type == "SingleFPBearing":
-                detail += f", Reff {elem.r_eff:g}"
-        else:
-            detail = f"Kinit {elem.k_init:g}, Qd {elem.qd:g}, alpha1 {elem.alpha1:g}"
-        self._log(
-            f"Created {elem.type} {eid} between nodes {elem.nodes[0]}-{elem.nodes[1]} ({detail})."
-        )
-        return True
-
     def node_tooltip(self, node_id: int) -> str | None:
         """Hover text for a joint: where it is, its restraint, mass, members and loads."""
         from opensees_studio.core.hover import node_summary
@@ -5481,159 +5255,6 @@ class MainWindow(QMainWindow):
         if el.type == "ElastomericBearingBoucWen":
             lines.append(f"eta = {el.eta:g}, beta = {el.beta:g}, gamma = {el.gamma:g}")
         return "\n".join(lines)
-
-    def _on_assign_masses(self) -> None:
-        """Assign → Joint → Masses: bulk-set mass on every selected node."""
-        sel_nodes = set(self._canvas.selection.nodes)
-        if not sel_nodes or self._vm.project is None:
-            QMessageBox.information(
-                self,
-                "Assign Masses",
-                "Select one or more nodes first.",
-            )
-            return
-        dlg = AssignMassesDialog(
-            len(sel_nodes), ndf=self._vm.project.ndf, ndm=self._vm.project.ndm, parent=self
-        )
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            self._vm.apply_command(SetMassCommand(self._vm, sel_nodes, dlg.mass_vector()))
-            self._log(f"Assigned mass to {len(sel_nodes)} node(s).")
-        except Exception as exc:
-            QMessageBox.critical(self, "Assign Masses failed", str(exc))
-
-    def _on_assign_springs(self) -> None:
-        """Assign → Joint → Springs: elastic support springs on every selected joint."""
-        project = self._vm.project
-        sel_nodes = set(self._canvas.selection.nodes)
-        if not sel_nodes or project is None:
-            QMessageBox.information(self, "Assign Springs", "Select one or more joints first.")
-            return
-        first = next(n for n in project.nodes if n.id in sel_nodes)
-        labels = labels_for(project.meta.units)
-        dlg = AssignSpringsDialog(
-            len(sel_nodes),
-            project.ndm,
-            project.ndf,
-            current=first.spring,
-            units=(f"{labels.force}/{labels.length}", f"{labels.moment}/rad"),
-            parent=self,
-        )
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            self._vm.apply_command(SetSpringCommand(self._vm, sel_nodes, dlg.spring_vector()))
-            self._log(f"Assigned support springs to {len(sel_nodes)} joint(s).")
-        except Exception as exc:
-            QMessageBox.critical(self, "Assign Springs failed", str(exc))
-
-    def _on_assign_wall(self) -> None:
-        """Assign → Frame → RC Wall: selected vertical members to MVLEM, one undo step."""
-        from opensees_studio.commands import AddMaterialsCommand, ReplaceElementsCommand
-        from opensees_studio.views.dialogs.assign_wall import AssignWallDialog
-
-        project = self._vm.project
-        selected = set(self._canvas.selection.elements)
-        if project is None or not selected:
-            QMessageBox.information(
-                self, "RC Wall", "Select the vertical members of the wall first."
-            )
-            return
-        dialog = AssignWallDialog(project, selected, self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        conversion = dialog.conversion()
-        if conversion is None or not conversion.elements:
-            return
-        stack = self._vm.undo_stack
-        stack.beginMacro("Assign RC wall")
-        try:
-            if conversion.materials:
-                self._vm.apply_command(AddMaterialsCommand(self._vm, conversion.materials))
-            self._vm.apply_command(ReplaceElementsCommand(self._vm, conversion.elements))
-        finally:
-            stack.endMacro()
-        self._log(
-            f"RC wall: {len(conversion.elements)} member(s) became MVLEM segments"
-            + (f", {len(conversion.skipped)} left as they were." if conversion.skipped else ".")
-        )
-
-    def _on_assign_pile_springs(self) -> None:
-        """Assign → Frame → Pile Soil Springs: p-y, t-z and q-z springs along the pile."""
-        from opensees_studio.views.dialogs.pile_springs import PileSpringsDialog
-
-        project = self._vm.project
-        selected = set(self._canvas.selection.elements)
-        if project is None or not selected:
-            QMessageBox.information(self, "Pile Soil Springs", "Select the pile's members first.")
-            return
-        dialog = PileSpringsDialog(project, selected, self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        springs = dialog.springs()
-        if springs is None or not springs.elements:
-            return
-        stack = self._vm.undo_stack
-        stack.beginMacro("Assign pile soil springs")
-        try:
-            self._vm.apply_command(AddNodesCommand(self._vm, springs.nodes))
-            self._vm.apply_command(AddMaterialsCommand(self._vm, springs.materials))
-            self._vm.apply_command(AddElementsCommand(self._vm, springs.elements))
-        finally:
-            stack.endMacro()
-        self._log("Pile soil springs: " + " ".join(springs.notes))
-
-    def _on_assign_hinge(self) -> None:
-        from opensees_studio.core import BeamWithHingesElement
-
-        sel_elements = set(self._canvas.selection.elements)
-        if not sel_elements or self._vm.project is None:
-            QMessageBox.information(
-                self,
-                "Assign Hinge",
-                "Select one or more elements first.",
-            )
-            return
-        if not self._vm.project.sections:
-            QMessageBox.warning(
-                self,
-                "Assign Hinge",
-                "No sections defined. Add a section before assigning hinges.",
-            )
-            return
-        dlg = AssignHingeDialog(len(sel_elements), self._vm.project, self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        vals = dlg.values()
-        replacements = []
-        for el in self._vm.project.elements:
-            if el.id in sel_elements:
-                replacements.append(
-                    BeamWithHingesElement(
-                        id=el.id,
-                        name=el.name,
-                        nodes=el.nodes,
-                        section_i_id=vals["section_i_id"],
-                        section_j_id=vals["section_j_id"],
-                        lp_i=vals["lp_i"],
-                        lp_j=vals["lp_j"],
-                        E=vals["E"],
-                        A=vals["A"],
-                        Iz=vals["Iz"],
-                        Iy=vals["Iy"],
-                        G=vals["G"],
-                        J=vals["J"],
-                        geom_transf=getattr(el, "geom_transf", "Linear"),
-                        # Keep the member's weight per length: gamma on the new A.
-                        unit_weight=section_weight_per_length(
-                            self._vm.project, getattr(el, "section_id", 0)
-                        )
-                        / vals["A"],
-                    )
-                )
-        self._vm.apply_command(ReplaceElementsCommand(self._vm, replacements))
-        self._log(f"Converted {len(sel_elements)} element(s) to BeamWithHinges.")
 
     # ── slots: define ────────────────────────────────────────────────
     def _on_add_default_materials(self) -> None:
@@ -7679,6 +7300,7 @@ class MainWindow(QMainWindow):
                 has_project=has_project,
                 has_selection=has_selection,
                 has_selected_nodes=has_selected_nodes,
+                has_two_selected_nodes=n_sel == 2,
                 has_selected_elements=has_selected_elements,
             )
         )
@@ -7740,14 +7362,9 @@ class MainWindow(QMainWindow):
         self._act_merge_joints.setEnabled(has_project)
         self._act_divide_frames.setEnabled(has_project)
         self._act_join_frames.setEnabled(has_project and len(self._canvas.selection.elements) >= 2)
-        self._act_assign_support.setEnabled(has_project and has_selected_nodes)
         for action in self._restraint_actions():
             action.setEnabled(has_project and has_selected_nodes)
         self._act_add_multi_support.setEnabled(has_project and has_selected_nodes)
-        self._act_assign_masses.setEnabled(has_project and has_selected_nodes)
-        self._act_assign_springs.setEnabled(has_project and has_selected_nodes)
-        self._act_assign_equal_dof.setEnabled(has_project and n_sel == 2)
-        self.action("assign.rigid_link").setEnabled(has_project and n_sel == 2)
         self._act_groups.setEnabled(has_project)
         self._act_section_cuts.setEnabled(has_project)
         self._act_custom_commands.setEnabled(has_project)
@@ -7765,17 +7382,6 @@ class MainWindow(QMainWindow):
             and self._vm.project is not None
             and self._vm.project.ndm == 3
         )
-        # Zero-length elements and sections need exactly two selected joints.
-        self._act_assign_zero_length.setEnabled(has_project and n_sel == 2)
-        self._act_assign_zls.setEnabled(has_project and n_sel == 2)
-        self._act_assign_bearing.setEnabled(has_project and n_sel == 2)
-        self._act_assign_link.setEnabled(has_project and n_sel == 2)
-        self._act_assign_hinge.setEnabled(has_project and has_selected_elements)
-        for action in (
-            self._act_assign_wall,
-            self._act_assign_pile,
-        ):
-            action.setEnabled(has_project and has_selected_elements)
         self._act_delete.setEnabled(has_project and has_selection)
         self._act_hide_selected.setEnabled(has_project and has_selection)
         self._act_isolate_selected.setEnabled(has_project and has_selection)

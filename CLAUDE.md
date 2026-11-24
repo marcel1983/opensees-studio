@@ -201,9 +201,10 @@ These are non-obvious things that are easy to break if you don't know:
   at all, and `DesignController` (the whole Design menu) shows the hooks: it
   gets `results` (the current case results) and `show_ratios` (the overlay the
   window still owns) and runs in a test with no `MainWindow`; `LoadsController`
-  assigns and deletes loads, and `MembersController` assigns what a member is
-  made of and its frame options. The rest of the window is being moved out
-  the same way.
+  assigns and deletes loads, `MembersController` assigns what a member is
+  made of and its frame options, and `JointsController` what holds a joint
+  and what joins two (`Needs.TWO_NODES` is "exactly two joints selected").
+  The rest of the window is being moved out the same way.
 - An unregistered material type is not a crash: `material_forms.form_for`
   returns a read-only placeholder, the same contract `section_forms` has.
 - Never hardcode how the analysis child is spawned. Every spawn site

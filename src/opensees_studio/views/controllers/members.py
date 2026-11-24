@@ -8,16 +8,22 @@ from PySide6.QtCore import QObject
 from PySide6.QtWidgets import QDialog, QInputDialog, QMessageBox
 
 from opensees_studio.commands import (
+    AddElementsCommand,
+    AddMaterialsCommand,
+    AddNodesCommand,
     AssignElementFieldsCommand,
     AssignMaterialCommand,
     AssignSectionCommand,
+    ReplaceElementsCommand,
 )
-from opensees_studio.core import FrameMember
+from opensees_studio.core import BeamWithHingesElement, FrameMember
 from opensees_studio.core.frame_members import connectivity_offsets
+from opensees_studio.core.self_weight import section_weight_per_length
 from opensees_studio.views.controllers.shell import Shell
 from opensees_studio.views.dialogs import (
     AssignBeamIntegrationDialog,
     AssignGeomTransfDialog,
+    AssignHingeDialog,
     AssignLocalAxesDialog,
     AssignMaterialDialog,
     AssignSectionDialog,
@@ -244,6 +250,114 @@ class MembersController(QObject):
         if not ok:
             return
         self._assign_element_fields("Auto Mesh", ids, {"auto_mesh": choice == choices[0]})
+
+    # ── what turns a member into something else ───────────────────────
+    def assign_hinge(self) -> None:
+
+        sel_elements = set(self._shell.canvas().selection.elements)
+        if not sel_elements or self._vm.project is None:
+            QMessageBox.information(
+                self._window,
+                "Assign Hinge",
+                "Select one or more elements first.",
+            )
+            return
+        if not self._vm.project.sections:
+            QMessageBox.warning(
+                self._window,
+                "Assign Hinge",
+                "No sections defined. Add a section before assigning hinges.",
+            )
+            return
+        dlg = AssignHingeDialog(len(sel_elements), self._vm.project, self._window)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        vals = dlg.values()
+        replacements = []
+        for el in self._vm.project.elements:
+            if el.id in sel_elements:
+                replacements.append(
+                    BeamWithHingesElement(
+                        id=el.id,
+                        name=el.name,
+                        nodes=el.nodes,
+                        section_i_id=vals["section_i_id"],
+                        section_j_id=vals["section_j_id"],
+                        lp_i=vals["lp_i"],
+                        lp_j=vals["lp_j"],
+                        E=vals["E"],
+                        A=vals["A"],
+                        Iz=vals["Iz"],
+                        Iy=vals["Iy"],
+                        G=vals["G"],
+                        J=vals["J"],
+                        geom_transf=getattr(el, "geom_transf", "Linear"),
+                        # Keep the member's weight per length: gamma on the new A.
+                        unit_weight=section_weight_per_length(
+                            self._vm.project, getattr(el, "section_id", 0)
+                        )
+                        / vals["A"],
+                    )
+                )
+        self._vm.apply_command(ReplaceElementsCommand(self._vm, replacements))
+        self._shell.log(f"Converted {len(sel_elements)} element(s) to BeamWithHinges.")
+
+    def assign_wall(self) -> None:
+        """Assign → Frame → RC Wall: selected vertical members to MVLEM, one undo step."""
+        from opensees_studio.views.dialogs.assign_wall import AssignWallDialog
+
+        project = self._vm.project
+        selected = set(self._shell.canvas().selection.elements)
+        if project is None or not selected:
+            QMessageBox.information(
+                self._window, "RC Wall", "Select the vertical members of the wall first."
+            )
+            return
+        dialog = AssignWallDialog(project, selected, self._window)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        conversion = dialog.conversion()
+        if conversion is None or not conversion.elements:
+            return
+        stack = self._vm.undo_stack
+        stack.beginMacro("Assign RC wall")
+        try:
+            if conversion.materials:
+                self._vm.apply_command(AddMaterialsCommand(self._vm, conversion.materials))
+            self._vm.apply_command(ReplaceElementsCommand(self._vm, conversion.elements))
+        finally:
+            stack.endMacro()
+        self._shell.log(
+            f"RC wall: {len(conversion.elements)} member(s) became MVLEM segments"
+            + (f", {len(conversion.skipped)} left as they were." if conversion.skipped else ".")
+        )
+
+    def assign_pile(self) -> None:
+        """Assign → Frame → Pile Soil Springs: p-y, t-z and q-z springs along the pile."""
+        from opensees_studio.views.dialogs.pile_springs import PileSpringsDialog
+
+        project = self._vm.project
+        selected = set(self._shell.canvas().selection.elements)
+        if project is None or not selected:
+            QMessageBox.information(
+                self._window, "Pile Soil Springs", "Select the pile's members first."
+            )
+            return
+        dialog = PileSpringsDialog(project, selected, self._window)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        springs = dialog.springs()
+        if springs is None or not springs.elements:
+            return
+        stack = self._vm.undo_stack
+        stack.beginMacro("Assign pile soil springs")
+        try:
+            self._vm.apply_command(AddNodesCommand(self._vm, springs.nodes))
+            self._vm.apply_command(AddMaterialsCommand(self._vm, springs.materials))
+            self._vm.apply_command(AddElementsCommand(self._vm, springs.elements))
+        finally:
+            stack.endMacro()
+        self._shell.log("Pile soil springs: " + " ".join(springs.notes))
 
     # ── what is selected, and the one way a field is assigned ─────────
     def _selected_accepting(self, fields: dict[str, Any]) -> set[int]:
