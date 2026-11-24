@@ -49,4 +49,7 @@
 # the Linux budget goes 186 -> 183.
 # Measured again on 2026-11-19 with the dark-mode contrast fix: Windows 180, so the
 # Linux budget goes 183 -> 181.
-181
+# The File menu commands are built by `views/actions` from `ActionSpec` tables;
+# the four `QAction(..., shortcut=StandardKey...)` lines that matched no overload
+# went with them: Linux 181 -> 177.
+177

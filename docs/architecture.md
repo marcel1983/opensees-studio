@@ -40,6 +40,21 @@ the reverse.
 | `views` | Pure UI; no business logic | PySide6, pyvistaqt, viewmodels |
 | `commands` | `QUndoCommand` subclasses; mutate model via services | services, viewmodels |
 
+## Menu commands
+
+A command of the window is declared once, as an `ActionSpec` in
+`views/actions/<area>.py`: its id (`"file.save"`), its text, the method that
+runs it, its shortcut and what it needs to be enabled (`Needs.PROJECT`,
+`Needs.SELECTED_NODES`, …). `ActionRegistry` builds the `QAction` objects from
+those tables, connects them and enables them; `MainWindow.action("file.save")`
+returns one. The spec tables are plain data with no Qt import, so a unit test
+checks that every command has a handler and a help page.
+
+The migration is by menu: File is declared this way, the other menus are still
+built by hand in `MainWindow._build_actions`. A declared action is also stored
+as `_act_<name>`, the name the ribbon layout, `core.help.ACTION_TOPICS` and the
+icon files use.
+
 ## Threading and the analysis process
 
 The Qt main thread owns all widgets. OpenSees never runs in it:

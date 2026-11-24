@@ -176,6 +176,16 @@ These are non-obvious things that are easy to break if you don't know:
   value is `tr("Apply to <b>{n}</b> …").format(n=...)`, never an f-string. A
   combo box item is not translated unless wrapped in `tr()`, and only where the
   code reads the choice by index or data, never by `currentText()`.
+- Menu commands are declared, not hand-built. A command is an `ActionSpec`
+  in `views/actions/<area>.py` (id `"file.save"`, text, handler, shortcut, and
+  the `Needs` that enable it); `ActionRegistry` builds the `QAction`, connects
+  it and enables it, and also stores it as `_act_<name>`, which is how the
+  ribbon layout, `ACTION_TOPICS`, the icon file and older tests find it. Ask
+  for it with `window.action("file.save")`. Only the File menu is migrated so
+  far: when you add a command, add a spec instead of new lines in
+  `_build_actions`, `_wire` and `_refresh_action_enablement` (use `needs=None`
+  when the condition is not a `Needs` flag and set it in the window). The spec
+  tables import no Qt; `registry.py` is the only module there that does.
 - An unregistered material type is not a crash: `material_forms.form_for`
   returns a read-only placeholder, the same contract `section_forms` has.
 - Never hardcode how the analysis child is spawned. Every spawn site
@@ -302,8 +312,10 @@ that touches the GUI: no PR check will.
   It runs without any `QT_QPA_PLATFORM` setting; a test that needs `qtbot`
   (and with it a QApplication) belongs in `tests/gui/`. The CI `headless` job
   runs it with `.[opensees]` and pytest only (no PySide6, PyVista or pytest-qt):
-  a test that imports `viewmodels`, `commands` or `views` goes to `tests/gui/`,
-  and a renderer test skips itself with `pytest.importorskip("pyvista")`.
+  a test that imports `viewmodels`, `commands` or `views` goes to `tests/gui/`
+  (the one exception is the Qt-free spec tables of `views/actions`, see
+  `tests/unit/test_action_specs.py`), and a renderer test skips itself with
+  `pytest.importorskip("pyvista")`.
 - `tests/gui/` — `qtbot` fixture, `@pytest.mark.gui`.
   Run it in one pytest process: `pytest tests/gui` (255 tests in 45 files
   as of 2026-09-28, about 50 s on Windows). CI does the same in its `gui`
