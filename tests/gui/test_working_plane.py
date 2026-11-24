@@ -186,22 +186,22 @@ def test_top_button_populates_level_combo_with_z_ordinates(qtbot) -> None:  # ty
     ]
 
     # Default (iso): combo empty / disabled.
-    mw._on_view_iso()
-    assert not mw._level_combo.isEnabled()
+    mw.viewport.iso()
+    assert not mw.viewport.level_combo.isEnabled()
 
     # Top view: combo fills with Z ordinates, first one active.
-    mw._on_view_top()
-    assert mw._level_combo.isEnabled()
-    assert mw._level_combo.count() == 3
-    assert mw._level_combo.itemText(0).startswith("Z = 0")
+    mw.viewport.top()
+    assert mw.viewport.level_combo.isEnabled()
+    assert mw.viewport.level_combo.count() == 3
+    assert mw.viewport.level_combo.itemText(0).startswith("Z = 0")
     assert mw._canvas.working_plane_type() == "XY"
     assert mw._canvas.working_plane_offset() == pytest.approx(0.0)
 
     # Pick Z=3.
-    mw._level_combo.setCurrentIndex(1)
+    mw.viewport.level_combo.setCurrentIndex(1)
     assert mw._canvas.working_plane_offset() == pytest.approx(3.0)
 
     # Front view resets combo to Y ordinates.
-    mw._on_view_front()
-    assert mw._level_combo.itemText(0).startswith("Y = 0")
+    mw.viewport.front()
+    assert mw.viewport.level_combo.itemText(0).startswith("Y = 0")
     assert mw._canvas.working_plane_type() == "XZ"

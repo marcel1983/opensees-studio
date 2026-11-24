@@ -219,7 +219,7 @@ def test_grid_line_view_shows_only_one_frame_line(qtbot, monkeypatch) -> None:  
         return 1
 
     monkeypatch.setattr(GridLineViewDialog, "exec", pick)
-    mw._on_grid_line_view()
+    mw.viewport.grid_line_view()
     shown = mw._canvas._renderer._project
     assert shown is not None and shown is not project
     assert shown.nodes and all(abs(n.coords[0] - 6.0) <= 0.05 for n in shown.nodes)
@@ -245,15 +245,15 @@ def test_grid_line_view_level_and_window(qtbot, monkeypatch) -> None:  # type: i
         return 1
 
     monkeypatch.setattr(GridLineViewDialog, "exec", pick)
-    mw._on_grid_line_view()
+    mw.viewport.grid_line_view()
     shown = mw._canvas._renderer._project
     assert {round(n.coords[2], 6) for n in shown.nodes} == {3.5}
     assert mw._canvas.working_plane_type() == "XY"
-    assert mw._grid_view == ("Global: Z Z2 (3.5)", 0.2)
+    assert mw.viewport.grid_view == ("Global: Z Z2 (3.5)", 0.2)
     # The window is remembered for the next time.
     seen: list[float] = []
     monkeypatch.setattr(GridLineViewDialog, "exec", lambda self: seen.append(self.tolerance()) or 0)
-    mw._on_grid_line_view()
+    mw.viewport.grid_line_view()
     assert seen == [0.2]
 
 

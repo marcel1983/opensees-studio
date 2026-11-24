@@ -58,4 +58,6 @@
 # Restraints is declared too (`shortcut="Ctrl+R"` matched no overload): Linux 174 -> 173.
 # Material Library and Material Tester are declared too (two more `shortcut=` strings): Linux 173 -> 171.
 # The Select menu is declared too (three `shortcut=` strings went with it): Linux 171 -> 168.
-168
+# The camera, level and hide commands of the View menu are declared too (`shortcut=QKeySequence(...)`
+# matched no overload either): Linux 168 -> 164.
+164

@@ -116,7 +116,7 @@ def test_arming_a_tool_does_not_move_the_camera(  # type: ignore[no-untyped-def]
 ) -> None:
     """The report: the view jumped as soon as a draw tool was armed."""
     canvas = window._canvas
-    window._on_view_iso()
+    window.viewport.iso()
     before = (
         np.asarray(canvas.camera.position, dtype=float).copy(),
         np.asarray(canvas.camera.focal_point, dtype=float).copy(),
