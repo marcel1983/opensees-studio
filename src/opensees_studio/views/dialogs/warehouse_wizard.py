@@ -43,6 +43,8 @@ from opensees_studio.core.units import UnitSystem, labels_for
 from opensees_studio.core.warehouse import (
     CODE_PRESETS,
     DEFAULT_ROOF_DEAD_KPA,
+    EN1998_IMPORTANCE,
+    EN1998_SOIL_FACTORS,
     GROUP_COLOURS,
     GROUPS,
     ROOF_STRUCTURES,
@@ -111,9 +113,18 @@ WIND_EXPOSURES: dict[str, tuple[tuple[str, str], ...]] = {
         ("C", "C: open terrain with scattered obstructions"),
         ("D", "D: flat, unobstructed terrain facing open water"),
     ),
+    "en1991": (
+        ("0", "0: sea, coast exposed to the open sea"),
+        ("I", "I: lakes, flat country without obstacles"),
+        ("II", "II: low vegetation, isolated obstacles"),
+        ("III", "III: villages, suburbs, permanent forest"),
+        ("IV", "IV: at least 15 % covered with buildings over 15 m"),
+    ),
 }
 #: The exposure each procedure starts with.
-DEFAULT_EXPOSURE: dict[str, str] = {"rnc07": "R2", "asce7": "C"}
+DEFAULT_EXPOSURE: dict[str, str] = {"rnc07": "R2", "asce7": "C", "en1991": "II"}
+#: The wind speed a procedure starts with when the design code brings another one, m/s.
+DEFAULT_WIND_SPEED: dict[str, float] = {"asce7": 57.0, "en1991": 26.0}
 
 #: RNC-07 Tabla 7: (key, label).
 WIND_TOPOGRAPHIES: tuple[tuple[str, str], ...] = (
@@ -129,20 +140,28 @@ SEISMIC_SOILS: dict[str, tuple[str, ...]] = {
     "rnc07": RNC07_SOILS,
     "nscm": ("A", "B", "C", "D"),
     "asce7": (),
+    "en1998": tuple(EN1998_SOIL_FACTORS),
 }
 #: The soil each method starts with.
-DEFAULT_SOIL: dict[str, str] = {"rnc07": "II", "nscm": "C"}
+DEFAULT_SOIL: dict[str, str] = {"rnc07": "II", "nscm": "C", "en1998": "C"}
 
 #: Importance choices per seismic method: RNC-07 groups, NSCM risk categories.
 SEISMIC_CLASSES: dict[str, tuple[str, ...]] = {
     "rnc07": ("A", "B", "C"),
     "nscm": tuple(NSCM_IMPORTANCE),
     "asce7": (),
+    "en1998": tuple(EN1998_IMPORTANCE),
 }
-DEFAULT_CLASS: dict[str, str] = {"rnc07": "B", "nscm": "II"}
+DEFAULT_CLASS: dict[str, str] = {"rnc07": "B", "nscm": "II", "en1998": "II"}
 
-#: a0 each method starts with, g: RNC-07 zone C; NSCM Tabla 14.2, Managua.
-DEFAULT_A0: dict[str, float] = {"rnc07": RNC07_ZONE_A0["C"], "nscm": 0.36667, "asce7": 0.0}
+#: a0 each method starts with, g: RNC-07 zone C; NSCM Tabla 14.2, Managua; an
+#: agR of moderate seismicity for EN 1998-1 (the National Annex has the map).
+DEFAULT_A0: dict[str, float] = {
+    "rnc07": RNC07_ZONE_A0["C"],
+    "nscm": 0.36667,
+    "asce7": 0.0,
+    "en1998": 0.15,
+}
 
 #: Load each rule of the ash and snow page starts with, kN/m²: 20 kg/m² of wet
 #: ash (RNC-07 Art. 14); 20 psf of ground snow; a characteristic sk of 1 kN/m².
@@ -550,7 +569,7 @@ class WarehouseWizard(QWizard):
         page = _CompletablePage()
         page.complete_check = lambda: not self._wind_error
         page.setTitle("Wind")
-        page.setSubTitle("The wind cases on the walls and the roof, one or two per direction.")
+        page.setSubTitle("The wind cases on the walls and the roof, one to four per direction.")
         form = QFormLayout(page)
         self._wind_error = ""
 
@@ -580,7 +599,10 @@ class WarehouseWizard(QWizard):
             self._wind_topography.addItem(tr(label), userData=key)
         self._wind_topography.setCurrentIndex(2)
         self._wind_kzt = _field(1.0, minimum=0.0, maximum=10.0, step=0.1)
-        self._wind_kzt.setToolTip("ASCE 7-16 26.8: 1 on flat terrain.")
+        self._wind_kzt.setToolTip(
+            "Kzt of ASCE 7-16 26.8 or the orography factor co of EN 1991-1-4 4.3.3: 1 on "
+            "flat terrain."
+        )
         self._wind_openings = QComboBox()
         for label in WIND_OPENINGS:
             self._wind_openings.addItem(tr(label))
@@ -617,7 +639,7 @@ class WarehouseWizard(QWizard):
         form.addRow("Wind speed:", self._wind_speed)
         form.addRow("Exposure:", self._wind_exposure)
         form.addRow("Topography:", self._wind_topography)
-        form.addRow("Topographic factor Kzt:", self._wind_kzt)
+        form.addRow("Topographic factor (Kzt, co):", self._wind_kzt)
         form.addRow("Openings:", self._wind_openings)
         form.addRow("Wind towards:", directions)
         self._wind_summary = QLabel()
@@ -656,22 +678,27 @@ class WarehouseWizard(QWizard):
         self._seismic_a0 = _field(0.3, minimum=0.0, maximum=2.0, step=0.05, suffix="g")
         self._seismic_a0.setToolTip(
             "Peak ground acceleration a0. RNC-07 Art. 24: zone A 0.1, B 0.2, C 0.3 g, or the "
-            "value of the map of Anexo C. NSCM Tabla 14.2 per municipality: Managua 0.36667 g."
+            "value of the map of Anexo C. NSCM Tabla 14.2 per municipality: Managua 0.36667 g. "
+            "EN 1998-1 3.2.1: the reference acceleration agR on type A ground, from the "
+            "National Annex."
         )
         self._seismic_soil = QComboBox()
         self._seismic_soil.setToolTip(
             "RNC-07 Art. 25: soil type I (rock) to III (soft). NSCM Tabla 6.4.1: site class "
-            "A to D. A softer soil needs a site study."
+            "A to D. EN 1998-1 Table 3.1: ground type A to E, with the soil factor S of the "
+            "Type 1 spectrum. A softer soil needs a site study."
         )
         self._seismic_class = QComboBox()
         self._seismic_class.setToolTip(
             "RNC-07 Art. 20: group A (essential, forces times 1.5), B or C. NSCM Tabla 5.2.1: "
-            "risk category I to IV."
+            "risk category I to IV. EN 1998-1 Table 4.3: importance class I to IV (0.8, 1.0, "
+            "1.2, 1.4)."
         )
         self._seismic_reduction = _field(2.0, minimum=0.01, maximum=20.0, step=0.5)
         self._seismic_reduction.setToolTip(
-            "Q of RNC-07 Art. 21, Ro of NSCM (Ec. 6.6-1) or R of ASCE 7-16 Table 12.2-1, "
-            "for the lateral system of the warehouse in the direction that has the least."
+            "Q of RNC-07 Art. 21, Ro of NSCM (Ec. 6.6-1), R of ASCE 7-16 Table 12.2-1 or the "
+            "behaviour factor q of EN 1998-1 6.3.2, for the lateral system of the warehouse "
+            "in the direction that has the least."
         )
         self._seismic_regularity = QComboBox()
         for key, label in RNC07_REGULARITY_LABELS.items():
@@ -689,7 +716,8 @@ class WarehouseWizard(QWizard):
         self._seismic_live.setToolTip(
             "Roof live load that counts as seismic weight, per area of horizontal "
             "projection. RNC-07 Art. 11 a: 10 kg/m² on light roofs (CVR). NSCM 9.6: 0.3 CV "
-            "in warehouses and storage, 0.15 CV elsewhere. ASCE 7-16 12.7.2 counts none."
+            "in warehouses and storage, 0.15 CV elsewhere. ASCE 7-16 12.7.2 and EN 1998-1 "
+            "3.2.4 (ψ2 = 0 on a roof) count none."
         )
         self._seismic_directions: dict[str, QCheckBox] = {}
         directions = QHBoxLayout()
@@ -711,7 +739,7 @@ class WarehouseWizard(QWizard):
         form.addRow("Ground acceleration a0:", self._seismic_a0)
         form.addRow("Soil:", self._seismic_soil)
         form.addRow("Group or risk category:", self._seismic_class)
-        form.addRow("Reduction factor (Q, Ro or R):", self._seismic_reduction)
+        form.addRow("Reduction factor (Q, Ro, R or q):", self._seismic_reduction)
         form.addRow("Regularity:", self._seismic_regularity)
         form.addRow("SDS:", self._seismic_sds)
         form.addRow("Importance factor Ie:", self._seismic_ie)
@@ -1026,11 +1054,17 @@ class WarehouseWizard(QWizard):
             self._on_wind_zone_changed()
         else:
             self._wind_speed.setToolTip(
-                "ASCE 7-16 26.5: the basic wind speed V of the building's risk category. It "
-                "is an ultimate speed: a 50 year velocity, such as RNC-07's, is multiplied by "
-                "1.26 (the square root of 1.6) before it is entered here."
+                "EN 1991-1-4 4.2: the basic wind velocity vb, a 10 minute mean at 10 m over "
+                "open country with 50 years of return period, from the National Annex. A 3 "
+                "second gust, such as RNC-07's, is about 1.5 times larger."
+                if method == "en1991"
+                else "ASCE 7-16 26.5: the basic wind speed V of the building's risk category. "
+                "It is an ultimate speed: a 50 year velocity, such as RNC-07's, is multiplied "
+                "by 1.26 (the square root of 1.6) before it is entered here."
             )
-            self._wind_speed.setValue(preset.wind_speed if preset.wind_method == "asce7" else 57.0)
+            self._wind_speed.setValue(
+                preset.wind_speed if preset.wind_method == method else DEFAULT_WIND_SPEED[method]
+            )
         self._refresh_wind()
 
     def _on_wind_zone_changed(self, _index: int = 0) -> None:

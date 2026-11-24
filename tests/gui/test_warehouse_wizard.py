@@ -315,6 +315,44 @@ def test_the_wind_page_follows_the_code_and_reaches_the_loads(qtbot) -> None:  #
 
 
 @pytest.mark.gui
+def test_the_eurocode_brings_its_wind_snow_and_earthquake(qtbot) -> None:  # type: ignore[no-untyped-def]
+    wizard = WarehouseWizard([])
+    qtbot.addWidget(wizard)
+    wizard._code.setCurrentIndex(wizard._code.findData("en1990"))
+    loads = wizard.loads()
+    assert loads.code == "en1990"
+    # EN 1991-1-1 Table 6.10, category H: 0.4 kN/m² and no point load with it.
+    assert loads.roof_live == pytest.approx(400.0) and loads.midspan_point == 0.0
+    assert loads.wind == WarehouseWind(method="en1991", speed=26.0, exposure="II")
+    assert [wizard._wind_exposure.itemData(i) for i in range(5)] == ["0", "I", "II", "III", "IV"]
+    assert wizard._wind_kzt.isEnabled() and not wizard._wind_zone.isEnabled()
+    assert not wizard._wind_topography.isEnabled()
+    # The default roof is a gable at 10 %: four cases across the ridge, two along it.
+    assert "12</b>" in wizard._wind_summary.text()
+    wizard._wind_kzt.setValue(1.1)  # the orography factor
+    wind = wizard.loads().wind
+    assert wind is not None and wind.topographic_factor == 1.1
+
+    wizard._seismic_on.setChecked(True)
+    seismic = wizard.loads().seismic
+    assert seismic == WarehouseSeismic(
+        method="en1998", a0=0.15, soil="C", importance_class="II", reduction=1.5
+    )
+    assert [wizard._seismic_soil.itemData(i) for i in range(5)] == ["A", "B", "C", "D", "E"]
+    assert "c = 0.2875" in wizard._seismic_summary.text()  # 2.5 x 0.15 x 1.15 / 1.5
+    assert not wizard._seismic_sds.isEnabled() and not wizard._seismic_regularity.isEnabled()
+
+    wizard._snow_on.setChecked(True)
+    snow = wizard.loads().snow
+    assert snow is not None and snow.method == "en1991"
+    assert snow.ground == pytest.approx(1000.0)  # sk = 1 kN/m² to start with
+    # Back to RNC-07: its own procedures again.
+    wizard._code.setCurrentIndex(wizard._code.findData("rnc07"))
+    assert wizard._wind_method.currentData() == "rnc07" and wizard._wind_speed.value() == 45.0
+    assert wizard._seismic_method.currentData() == "rnc07"
+
+
+@pytest.mark.gui
 def test_the_menu_builds_a_trussed_warehouse_in_one_undo_step(qtbot, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     mw = _window(qtbot)
     monkeypatch.setattr(QMessageBox, "critical", lambda *a, **k: pytest.fail(str(a[2])))

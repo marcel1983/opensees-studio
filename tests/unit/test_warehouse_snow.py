@@ -65,7 +65,8 @@ def _snow_ids(plan) -> set[int]:  # type: ignore[no-untyped-def]
 def test_the_methods_and_what_each_code_starts_with() -> None:
     assert list(SNOW_METHODS) == ["ash", "asce7", "en1991"]
     assert {key: preset.snow_method for key, preset in CODE_PRESETS.items()} == {
-        "rnc07": "ash", "nscm": "ash", "asce7_lrfd": "asce7", "asce7_asd": "asce7"
+        "rnc07": "ash", "nscm": "ash", "asce7_lrfd": "asce7", "asce7_asd": "asce7",
+        "en1990": "en1991",
     }  # fmt: skip
     assert pytest.approx(ASH / 1e3) == ASH_LOAD_KPA
 

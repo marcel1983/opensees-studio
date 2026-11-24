@@ -450,7 +450,8 @@ def generate_en1990(
     - **SLS quasi-permanent**: ``G + Σ ψ2,i Qi``.
 
     Wind acts in both signs; the other variable actions are one combination
-    per case (live cases together).
+    per case (live cases together). With ``roof_imposed_alone`` the roof
+    imposed load is not combined with snow or wind (EN 1991-1-1 3.3.2 (1)).
     """
     opts = options or {}
     b = _Builder(
@@ -471,6 +472,10 @@ def generate_en1990(
         for role in ("L", "Lr", "S", "W")
     }
     variable = [r for r in ("L", "Lr", "S", "W") if b.by_role[r]]
+    roof_alone = bool(opts.get("roof_imposed_alone", False))
+
+    def accompanies(role: str, leading: str) -> bool:
+        return role == leading or not (roof_alone and leading == "Lr" and role in ("S", "W"))
 
     def load(role: str, factor: float, *, optional: bool = False) -> _Slot:
         if role == "L":
@@ -486,6 +491,8 @@ def generate_en1990(
         """Permanent at ``g``, the leading action at ``q``, the others at ``q ψ0``."""
         slots = [b.all_of("D", g, required=True)]
         for role in variable:
+            if not accompanies(role, leading):
+                continue
             slots.append(
                 load(
                     role,
@@ -532,6 +539,8 @@ def generate_en1990(
     for lead in variable:
         slots = [b.all_of("D", 1.0, required=True)]
         for role in variable:
+            if not accompanies(role, lead):
+                continue
             slots.append(
                 load(
                     role,
@@ -842,6 +851,14 @@ CODES: dict[str, CodeSpec] = {
                 "bool",
                 False,
                 tip="Repeats the ultimate combinations with γG = 1.0, for uplift and overturning.",
+            ),
+            GeneratorOption(
+                "roof_imposed_alone",
+                "Roof imposed load without snow or wind",
+                "bool",
+                False,
+                tip="EN 1991-1-1 3.3.2 (1): on a roof the imposed load need not be combined "
+                "with the snow or the wind.",
             ),
             ORTHOGONAL,
         ),

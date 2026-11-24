@@ -88,6 +88,29 @@ refused instead of silently downgraded).
   taller walls, sliding snow, ash gathered in gutters, and the snow ASCE 7
   counts as seismic weight. `examples/warehouse_ash.py` builds a warehouse in
   Masaya with the ash load.
+- **Eurocodes in the warehouse.** The Warehouse Wizard has a fifth design
+  code, **EN 1990**, with the recommended values of the Eurocodes (check them
+  against your National Annex). Roof imposed load of EN 1991-1-1, category H
+  (0.4 kN/m²). **Wind by EN 1991-1-4**: the peak velocity pressure of
+  Expression 4.8 from the basic wind velocity, the terrain category and the
+  orography factor, the walls of Table 7.1 with the zones A, B and C along the
+  walls parallel to the wind, and the roof zones F to J of Tables 7.2 to 7.4,
+  so the purlins and frames near the windward edge and its corners carry more.
+  Where the tables give a negative and a positive value, each is a case: four
+  per direction across the ridge of a duopitch roof (`WIND +X A` to `D`), two
+  along it, with +0.2 and -0.3 inside, or 0.90 of the coefficient at a
+  dominant wall. **Earthquake by EN 1998-1 4.3.3.2**: Sd = 2.5 ag S / q on the
+  plateau, ground types A to E (Type 1 spectrum), importance classes I to IV.
+  Snow by EN 1991-1-3 was already there. The **EN 1990 combinations** come
+  with the favourable permanent action (the uplift) and the 100 % + 30 % rule,
+  and the roof imposed load is not combined with the snow or the wind. Not
+  included: cpe,1 for cladding, cs cd other than 1, the 0.85 factor of
+  7.2.2 (3), friction, the Type 2 spectrum and a steel check by EN 1993 (the
+  check stays AISC 360). `examples/warehouse_eurocode.py` builds one.
+- **EN 1990 combinations: roof imposed load without snow or wind.** Define →
+  Load Combinations → Generate from a design code has a new option for
+  EN 1990, off by default: with it the roof imposed load (Lr), when it leads,
+  is not accompanied by the snow or the wind (EN 1991-1-1 3.3.2 (1)).
 - **Combination generators take alternative cases.** Called from a script with
   the option `alternative_roles` (`("S",)`), the cases of that role never act
   together: where a code adds "the snow" (ASCE 7 combination 5, NSCM), there is

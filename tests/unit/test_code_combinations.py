@@ -84,6 +84,22 @@ def test_en1990_roof_category_has_zero_psi() -> None:
     assert not any("Q+" in name and name.startswith("ULS 1.35G+1.5Q+") for name in got)
 
 
+def test_en1990_roof_imposed_load_can_stand_without_snow_or_wind() -> None:
+    roles = {"D": [D], "L": [L], "Lr": [LR], "S": [S], "W": [W]}
+    both = _by_name("en1990", roles)
+    alone = _by_name("en1990", roles, options={"roof_imposed_alone": True})
+    # EN 1991-1-1 3.3.2 (1): with the roof load leading, no snow and no wind.
+    assert [n for n in both if "1.5Qr" in n and ("S" in n.split("Qr")[1] or "W" in n)]
+    leading = [n for n in alone if "1.5Qr" in n]
+    assert leading and not [n for n in leading if "S" in n.split("Qr")[1] or "W" in n]
+    assert alone["ULS 1.35G+1.05Q+1.5Qr"] == {D: 1.35, L: 1.05, LR: 1.5}
+    # Every other combination is the same.
+    assert {n: t for n, t in both.items() if "Qr" not in n} == {
+        n: t for n, t in alone.items() if "Qr" not in n
+    }
+    assert set(alone) <= set(both)
+
+
 def test_en1990_serviceability_combinations() -> None:
     roles = {"D": [D], "L": [L], "W": [W]}
     out = generate_for_code("en1990", roles)
