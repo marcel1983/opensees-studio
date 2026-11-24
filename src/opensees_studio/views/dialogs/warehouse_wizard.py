@@ -82,11 +82,16 @@ from opensees_studio.views.dialogs.frame_wizard import (
     _field,
 )
 from opensees_studio.views.dialogs.wireframe_preview import WireframePreview
+from opensees_studio.views.dialogs.wizard_sections import (
+    CREATE_DEFAULT,
+    DefineSections,
+    chosen_section,
+    define_sections_button,
+    fill_section_combo,
+    new_section_combo,
+)
 from opensees_studio.views.i18n import tr
 from opensees_studio.views.screen_fit import fit_to_available_screen
-
-#: What a section combo reports for "create the default section".
-CREATE_DEFAULT = -1
 
 #: Labels of :data:`opensees_studio.core.warehouse.ROOF_STRUCTURES`, in its order.
 ROOF_STRUCTURE_LABELS: tuple[str, ...] = ("Rafters", "Roof trusses")
@@ -200,10 +205,12 @@ class WarehouseWizard(QWizard):
         sections: list[Any],
         *,
         units: UnitSystem = UnitSystem.SI_M_N,
+        define_sections: DefineSections | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._sections = sections
+        self._define_sections = define_sections
         self._units = units
         labels = labels_for(units)
         self._unit = labels.length
@@ -470,21 +477,13 @@ class WarehouseWizard(QWizard):
         form = QFormLayout(page)
         self._section_combos: dict[str, QComboBox] = {}
         for key, label in SECTION_KEYS.items():
-            combo = QComboBox()
-            combo.addItem(
-                tr("{name} (will be created)").format(name=default_section_name(key)),
-                userData=CREATE_DEFAULT,
-            )
-            for section in self._sections:
-                combo.addItem(f"#{section.id}  {section.name or '(unnamed)'}", userData=section.id)
-            # A long section name must not push the page wider than the wizard.
-            combo.setSizeAdjustPolicy(
-                QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
-            )
-            combo.setMinimumContentsLength(24)
+            combo = new_section_combo(self._default_section_text(key), self._sections)
             self._section_combos[key] = combo
             form.addRow(tr(label) + ":", combo)
         self._sections_form = form
+        button = define_sections_button(self, self._define_sections, self.set_sections)
+        if button is not None:
+            form.addRow(button)
         note = QLabel(
             "<i>The sections that do not exist yet are created with the warehouse, as the "
             "same undoable step: columns, rafters, truss members and braces from the AISC "
@@ -494,6 +493,16 @@ class WarehouseWizard(QWizard):
         note.setWordWrap(True)
         form.addRow(note)
         self._page_sections = page
+
+    @staticmethod
+    def _default_section_text(key: str) -> str:
+        return tr("{name} (will be created)").format(name=default_section_name(key))
+
+    def set_sections(self, sections: list[Any]) -> None:
+        """Offer ``sections`` (after Section Library…), keeping each choice still there."""
+        self._sections = sections
+        for key, combo in self._section_combos.items():
+            fill_section_combo(combo, self._default_section_text(key), sections)
 
     def _build_loads_page(self) -> None:
         page = QWizardPage()
@@ -1257,8 +1266,7 @@ class WarehouseWizard(QWizard):
         for key, combo in self._section_combos.items():
             if not self._uses_section(key):
                 continue
-            data = combo.currentData()
-            out[key] = None if data in (None, CREATE_DEFAULT) else int(data)
+            out[key] = chosen_section(combo)
         return out
 
     def loads(self) -> WarehouseLoads:

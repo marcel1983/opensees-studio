@@ -516,3 +516,38 @@ def test_the_default_sections_follow_the_project_units() -> None:
         "column", "rafter", "purlin", "girt", "brace", "end_column", *TRUSS_SECTION_KEYS
     }  # fmt: skip
     assert "W8X31" not in a  # the end wall column section only with end wall columns
+
+
+@pytest.mark.parametrize("roof_structure", ["rafter", "truss"])
+def test_run_s_auto_mesh_leaves_purlins_girts_and_braces_whole(roof_structure: str) -> None:
+    """A purlin spans from rafter to rafter, a diagonal from corner to corner.
+
+    Run auto-meshes the model first: with the diagonals of an X crossing each
+    other and passing over purlins and girts, it would cut all of them and join
+    members that are not joined. Those members keep their ``auto_mesh`` off.
+    """
+    from opensees_studio.core.mesh import pre_run_auto_mesh
+    from opensees_studio.core.warehouse import WHOLE_MEMBERS
+
+    project = _project()
+    spec = WarehouseSpec(
+        span=20.0,
+        eave_height=6.0,
+        frame_spacing=6.0,
+        n_frames=4,
+        roof_structure=roof_structure,
+        **({"truss_depth": 1.2, "bottom_chord_tie_every": 2} if roof_structure == "truss" else {}),
+    )
+    plan = plan_warehouse(project, spec)
+    plan.apply(project)
+    whole = {eid for key in WHOLE_MEMBERS for eid in plan.warehouse.members[key]}
+    assert plan.warehouse.members["roof_bracing"] and plan.warehouse.members["purlins"]
+    assert {e.id for e in project.elements if not e.auto_mesh} == whole
+
+    mesh = pre_run_auto_mesh(project)
+
+    assert mesh.is_empty, mesh.summary()
+    # With the switch on (as before), the X's would be cut where they cross.
+    for element in project.elements:
+        element.auto_mesh = True
+    assert not pre_run_auto_mesh(project).is_empty

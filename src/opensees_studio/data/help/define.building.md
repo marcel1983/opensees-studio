@@ -2,7 +2,7 @@
 title: Define → Create Building
 group: Define
 summary: A multi-storey frame building from a few numbers: floors, loads, earthquake.
-see_also: define.warehouse, define.storeys, define.mass_source, define.seismic_loads, assign.diaphragm, design.drift_check, file.new_model
+see_also: define.section_library, define.warehouse, define.storeys, define.mass_source, define.seismic_loads, assign.diaphragm, design.drift_check, file.new_model
 order: 940
 ---
 
@@ -39,6 +39,11 @@ created in the same undo step: W14X90 columns and W18X50 beams of the AISC
 library for a steel frame, 500 x 500 mm columns and 300 x 600 mm beams with
 their gross (uncracked) stiffness for a concrete one. They are a starting
 point, not a design.
+
+**Section Library…** opens Define → Section Library over the wizard: add shapes of
+the AISC library, a concrete or cold-formed section or one of your own, close
+it, and the lists offer them. Each section is added as its own undoable step,
+so it stays in the project even if you cancel the wizard.
 
 # Floor loads and design code
 The slab is **not modelled**. Its weight and the live load are floor panels,

@@ -298,8 +298,10 @@ These are non-obvious things that are easy to break if you don't know:
   generated warehouse a purlin or girt is pinned and is **not** a bracing point
   of the rafter or column unless it has a stabilising angle: the plan writes
   `SteelMemberDesign.length_minor`/`length_ltb`, because `core.design.members`
-  would take every member framing in as a brace. Wind (`core.wind`, SI whatever
-  the project's units) is a net pressure per surface, positive pushing inwards;
+  would take every member framing in as a brace. Purlins, girts, braces and
+  chord ties are built with `auto_mesh` off (`core.warehouse.WHOLE_MEMBERS`), or
+  Run's auto-mesh cuts each X where its diagonals cross and the purlins under
+  them. Wind (`core.wind`, SI whatever the project's units) is a net pressure per surface, positive pushing inwards;
   `core.warehouse.wind_loads` puts it on the purlins, girts or columns. A
   pressure that depends on two coordinates (the roof zones F to J and the side
   wall zones A to C of EN 1991-1-4) is a `wind.Surface` in `RoofLoad.zones` or

@@ -25030,6 +25030,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         1,
@@ -25061,6 +25062,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         2,
@@ -25092,6 +25094,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         3,
@@ -25123,6 +25126,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         4,
@@ -25154,6 +25158,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         5,
@@ -25185,6 +25190,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         6,
@@ -25216,6 +25222,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         7,
@@ -25247,6 +25254,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         8,
@@ -25278,6 +25286,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         9,
@@ -25309,6 +25318,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         10,
@@ -25340,6 +25350,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         11,
@@ -25370,6 +25381,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         12,
@@ -25401,6 +25413,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         13,
@@ -25432,6 +25445,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         14,
@@ -25463,6 +25477,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         15,
@@ -25494,6 +25509,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         16,
@@ -25525,6 +25541,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         17,
@@ -25556,6 +25573,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         18,
@@ -25587,6 +25605,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         19,
@@ -25618,6 +25637,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         20,
@@ -25649,6 +25669,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         21,
@@ -25680,6 +25701,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         22,
@@ -25711,6 +25733,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         23,
@@ -25742,6 +25765,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         25,
@@ -25773,6 +25797,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         26,
@@ -25804,6 +25829,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         27,
@@ -25835,6 +25861,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         28,
@@ -25866,6 +25893,7 @@
         }
       },
       "local_axis_angle": -90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         31,
@@ -25897,6 +25925,7 @@
         }
       },
       "local_axis_angle": -90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         32,
@@ -25928,6 +25957,7 @@
         }
       },
       "local_axis_angle": -90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         33,
@@ -25959,6 +25989,7 @@
         }
       },
       "local_axis_angle": -90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         34,
@@ -25990,6 +26021,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         57,
@@ -26021,6 +26053,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         58,
@@ -26052,6 +26085,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         59,
@@ -26083,6 +26117,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         60,
@@ -26114,6 +26149,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         61,
@@ -26145,6 +26181,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         62,
@@ -26176,6 +26213,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         63,
@@ -26207,6 +26245,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         64,
@@ -26238,6 +26277,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         65,
@@ -26269,6 +26309,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         66,
@@ -26300,6 +26341,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         67,
@@ -26330,6 +26372,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         68,
@@ -26361,6 +26404,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         69,
@@ -26392,6 +26436,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         70,
@@ -26423,6 +26468,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         71,
@@ -26454,6 +26500,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         72,
@@ -26485,6 +26532,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         73,
@@ -26516,6 +26564,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         74,
@@ -26547,6 +26596,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         75,
@@ -26578,6 +26628,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         76,
@@ -26609,6 +26660,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         77,
@@ -26640,6 +26692,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         78,
@@ -26671,6 +26724,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         79,
@@ -26702,6 +26756,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         81,
@@ -26733,6 +26788,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         82,
@@ -26764,6 +26820,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         83,
@@ -26795,6 +26852,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         84,
@@ -26826,6 +26884,7 @@
         }
       },
       "local_axis_angle": -90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         87,
@@ -26857,6 +26916,7 @@
         }
       },
       "local_axis_angle": -90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         88,
@@ -26888,6 +26948,7 @@
         }
       },
       "local_axis_angle": -90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         89,
@@ -26919,6 +26980,7 @@
         }
       },
       "local_axis_angle": -90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         90,
@@ -26950,6 +27012,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         113,
@@ -26981,6 +27044,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         114,
@@ -27012,6 +27076,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         115,
@@ -27043,6 +27108,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         116,
@@ -27074,6 +27140,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         117,
@@ -27105,6 +27172,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         118,
@@ -27136,6 +27204,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         119,
@@ -27167,6 +27236,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         120,
@@ -27198,6 +27268,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         121,
@@ -27229,6 +27300,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         122,
@@ -27260,6 +27332,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         123,
@@ -27290,6 +27363,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         124,
@@ -27321,6 +27395,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         125,
@@ -27352,6 +27427,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         126,
@@ -27383,6 +27459,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         127,
@@ -27414,6 +27491,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         128,
@@ -27445,6 +27523,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         129,
@@ -27476,6 +27555,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         130,
@@ -27507,6 +27587,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         131,
@@ -27538,6 +27619,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         132,
@@ -27569,6 +27651,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         133,
@@ -27600,6 +27683,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         134,
@@ -27631,6 +27715,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         135,
@@ -27662,6 +27747,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         137,
@@ -27693,6 +27779,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         138,
@@ -27724,6 +27811,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         139,
@@ -27755,6 +27843,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         140,
@@ -27786,6 +27875,7 @@
         }
       },
       "local_axis_angle": -90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         143,
@@ -27817,6 +27907,7 @@
         }
       },
       "local_axis_angle": -90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         144,
@@ -27848,6 +27939,7 @@
         }
       },
       "local_axis_angle": -90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         145,
@@ -27879,6 +27971,7 @@
         }
       },
       "local_axis_angle": -90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         146,
@@ -27910,6 +28003,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         169,
@@ -27941,6 +28035,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         170,
@@ -27972,6 +28067,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         171,
@@ -28003,6 +28099,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         172,
@@ -28034,6 +28131,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         173,
@@ -28065,6 +28163,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         174,
@@ -28096,6 +28195,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         175,
@@ -28127,6 +28227,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         176,
@@ -28158,6 +28259,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         177,
@@ -28189,6 +28291,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         178,
@@ -28220,6 +28323,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         179,
@@ -28250,6 +28354,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         180,
@@ -28281,6 +28386,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         181,
@@ -28312,6 +28418,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         182,
@@ -28343,6 +28450,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         183,
@@ -28374,6 +28482,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         184,
@@ -28405,6 +28514,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         185,
@@ -28436,6 +28546,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         186,
@@ -28467,6 +28578,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         187,
@@ -28498,6 +28610,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         188,
@@ -28529,6 +28642,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         189,
@@ -28560,6 +28674,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         190,
@@ -28591,6 +28706,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         191,
@@ -28622,6 +28738,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         193,
@@ -28653,6 +28770,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         194,
@@ -28684,6 +28802,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         195,
@@ -28715,6 +28834,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         196,
@@ -28746,6 +28866,7 @@
         }
       },
       "local_axis_angle": -90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         199,
@@ -28777,6 +28898,7 @@
         }
       },
       "local_axis_angle": -90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         200,
@@ -28808,6 +28930,7 @@
         }
       },
       "local_axis_angle": -90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         201,
@@ -28839,6 +28962,7 @@
         }
       },
       "local_axis_angle": -90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         202,
@@ -28870,6 +28994,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         225,
@@ -28901,6 +29026,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         226,
@@ -28932,6 +29058,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         227,
@@ -28963,6 +29090,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         228,
@@ -28994,6 +29122,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         229,
@@ -29025,6 +29154,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         230,
@@ -29056,6 +29186,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         231,
@@ -29087,6 +29218,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         232,
@@ -29118,6 +29250,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         233,
@@ -29149,6 +29282,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         234,
@@ -29180,6 +29314,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         235,
@@ -29210,6 +29345,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         236,
@@ -29241,6 +29377,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         237,
@@ -29272,6 +29409,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         238,
@@ -29303,6 +29441,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         239,
@@ -29334,6 +29473,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         240,
@@ -29365,6 +29505,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         241,
@@ -29396,6 +29537,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         242,
@@ -29427,6 +29569,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         243,
@@ -29458,6 +29601,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         244,
@@ -29489,6 +29633,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         245,
@@ -29520,6 +29665,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         246,
@@ -29551,6 +29697,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         247,
@@ -29582,6 +29729,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         249,
@@ -29613,6 +29761,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         250,
@@ -29644,6 +29793,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         251,
@@ -29675,6 +29825,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         252,
@@ -29706,6 +29857,7 @@
         }
       },
       "local_axis_angle": -90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         255,
@@ -29737,6 +29889,7 @@
         }
       },
       "local_axis_angle": -90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         256,
@@ -29768,6 +29921,7 @@
         }
       },
       "local_axis_angle": -90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         257,
@@ -29799,6 +29953,7 @@
         }
       },
       "local_axis_angle": -90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         258,
@@ -29830,6 +29985,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         281,
@@ -29861,6 +30017,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         282,
@@ -29892,6 +30049,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         283,
@@ -29923,6 +30081,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         284,
@@ -29954,6 +30113,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         285,
@@ -29985,6 +30145,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         286,
@@ -30016,6 +30177,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         287,
@@ -30047,6 +30209,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         288,
@@ -30078,6 +30241,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         289,
@@ -30109,6 +30273,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         290,
@@ -30140,6 +30305,7 @@
         }
       },
       "local_axis_angle": -8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         291,
@@ -30170,6 +30336,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         292,
@@ -30201,6 +30368,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         293,
@@ -30232,6 +30400,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         294,
@@ -30263,6 +30432,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         295,
@@ -30294,6 +30464,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         296,
@@ -30325,6 +30496,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         297,
@@ -30356,6 +30528,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         298,
@@ -30387,6 +30560,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         299,
@@ -30418,6 +30592,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         300,
@@ -30449,6 +30624,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         301,
@@ -30480,6 +30656,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         302,
@@ -30511,6 +30688,7 @@
         }
       },
       "local_axis_angle": 8.53076560995,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         303,
@@ -30542,6 +30720,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         305,
@@ -30573,6 +30752,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         306,
@@ -30604,6 +30784,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         307,
@@ -30635,6 +30816,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         308,
@@ -30666,6 +30848,7 @@
         }
       },
       "local_axis_angle": -90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         311,
@@ -30697,6 +30880,7 @@
         }
       },
       "local_axis_angle": -90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         312,
@@ -30728,6 +30912,7 @@
         }
       },
       "local_axis_angle": -90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         313,
@@ -30759,6 +30944,7 @@
         }
       },
       "local_axis_angle": -90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         314,
@@ -30788,6 +30974,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         1,
@@ -30817,6 +31004,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         5,
@@ -30846,6 +31034,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         5,
@@ -30875,6 +31064,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         8,
@@ -30904,6 +31094,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         8,
@@ -30933,6 +31124,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         12,
@@ -30962,6 +31154,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         12,
@@ -30991,6 +31184,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         16,
@@ -31020,6 +31214,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         16,
@@ -31049,6 +31244,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         19,
@@ -31078,6 +31274,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         19,
@@ -31107,6 +31304,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         23,
@@ -31136,6 +31334,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         24,
@@ -31165,6 +31364,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         1,
@@ -31194,6 +31394,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         30,
@@ -31223,6 +31424,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         23,
@@ -31252,6 +31454,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         281,
@@ -31281,6 +31484,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         285,
@@ -31310,6 +31514,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         285,
@@ -31339,6 +31544,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         288,
@@ -31368,6 +31574,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         288,
@@ -31397,6 +31604,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         292,
@@ -31426,6 +31634,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         292,
@@ -31455,6 +31664,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         296,
@@ -31484,6 +31694,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         296,
@@ -31513,6 +31724,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         299,
@@ -31542,6 +31754,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         299,
@@ -31571,6 +31784,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         303,
@@ -31600,6 +31814,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         304,
@@ -31629,6 +31844,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         281,
@@ -31658,6 +31874,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         310,
@@ -31687,6 +31904,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         303,
@@ -31717,6 +31935,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         29,
@@ -31747,6 +31966,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         39,
@@ -31777,6 +31997,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         43,
@@ -31807,6 +32028,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         46,
@@ -31837,6 +32059,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         50,
@@ -31867,6 +32090,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         54,
@@ -31897,6 +32121,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         35,
@@ -31927,6 +32152,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         85,
@@ -31957,6 +32183,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         95,
@@ -31987,6 +32214,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         99,
@@ -32017,6 +32245,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         102,
@@ -32047,6 +32276,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         106,
@@ -32077,6 +32307,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         110,
@@ -32107,6 +32338,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         91,
@@ -32137,6 +32369,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         141,
@@ -32167,6 +32400,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         151,
@@ -32197,6 +32431,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         155,
@@ -32227,6 +32462,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         158,
@@ -32257,6 +32493,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         162,
@@ -32287,6 +32524,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         166,
@@ -32317,6 +32555,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         147,
@@ -32347,6 +32586,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         197,
@@ -32377,6 +32617,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         207,
@@ -32407,6 +32648,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         211,
@@ -32437,6 +32679,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         214,
@@ -32467,6 +32710,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         218,
@@ -32497,6 +32741,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         222,
@@ -32527,6 +32772,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         203,
@@ -32557,6 +32803,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         253,
@@ -32587,6 +32834,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         263,
@@ -32617,6 +32865,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         267,
@@ -32647,6 +32896,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         270,
@@ -32677,6 +32927,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         274,
@@ -32707,6 +32958,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         278,
@@ -32737,6 +32989,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         259,
@@ -32767,6 +33020,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         309,
@@ -32797,6 +33051,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         319,
@@ -32827,6 +33082,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         323,
@@ -32857,6 +33113,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         326,
@@ -32887,6 +33144,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         330,
@@ -32917,6 +33175,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         334,
@@ -32947,6 +33206,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         315,
@@ -32976,6 +33236,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         39,
@@ -33005,6 +33266,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         5,
@@ -33034,6 +33296,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         43,
@@ -33063,6 +33326,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         9,
@@ -33092,6 +33356,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         46,
@@ -33121,6 +33386,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         12,
@@ -33150,6 +33416,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         50,
@@ -33179,6 +33446,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         16,
@@ -33208,6 +33476,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         54,
@@ -33237,6 +33506,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         20,
@@ -33266,6 +33536,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         319,
@@ -33295,6 +33566,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         285,
@@ -33324,6 +33596,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         323,
@@ -33353,6 +33626,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         289,
@@ -33382,6 +33656,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         326,
@@ -33411,6 +33686,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         292,
@@ -33440,6 +33716,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         330,
@@ -33469,6 +33746,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         296,
@@ -33498,6 +33776,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         334,
@@ -33527,6 +33806,7 @@
           "springs": {}
         }
       },
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         300,
@@ -34002,6 +34282,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         25,
@@ -34033,6 +34314,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         26,
@@ -34064,6 +34346,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         27,
@@ -34095,6 +34378,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         28,
@@ -34126,6 +34410,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         394,
@@ -34157,6 +34442,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         395,
@@ -34188,6 +34474,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         396,
@@ -34219,6 +34506,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         397,
@@ -34250,6 +34538,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         398,
@@ -34281,6 +34570,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         400,
@@ -34312,6 +34602,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         401,
@@ -34343,6 +34634,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         402,
@@ -34374,6 +34666,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         403,
@@ -34405,6 +34698,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         404,
@@ -34436,6 +34730,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         406,
@@ -34467,6 +34762,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         407,
@@ -34498,6 +34794,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         408,
@@ -34529,6 +34826,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         409,
@@ -34560,6 +34858,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         410,
@@ -34591,6 +34890,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         412,
@@ -34622,6 +34922,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         413,
@@ -34653,6 +34954,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         414,
@@ -34684,6 +34986,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         415,
@@ -35159,6 +35462,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         361,
@@ -35190,6 +35494,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         362,
@@ -35221,6 +35526,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         363,
@@ -35252,6 +35558,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         364,
@@ -35283,6 +35590,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         418,
@@ -35314,6 +35622,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         419,
@@ -35345,6 +35654,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         420,
@@ -35376,6 +35686,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         421,
@@ -35407,6 +35718,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         422,
@@ -35438,6 +35750,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         424,
@@ -35469,6 +35782,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         425,
@@ -35500,6 +35814,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         426,
@@ -35531,6 +35846,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         427,
@@ -35562,6 +35878,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         428,
@@ -35593,6 +35910,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         430,
@@ -35624,6 +35942,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         431,
@@ -35655,6 +35974,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         432,
@@ -35686,6 +36006,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         433,
@@ -35717,6 +36038,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         434,
@@ -35748,6 +36070,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         436,
@@ -35779,6 +36102,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         437,
@@ -35810,6 +36134,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         438,
@@ -35841,6 +36166,7 @@
         }
       },
       "local_axis_angle": 90.0,
+      "auto_mesh": false,
       "type": "ElasticBeamColumn",
       "nodes": [
         439,
