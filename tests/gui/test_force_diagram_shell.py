@@ -69,7 +69,7 @@ def _results() -> StaticResults:
 @pytest.mark.gui
 def test_force_diagram_over_a_shell_model_does_not_crash(qtbot) -> None:  # type: ignore[no-untyped-def]
     mw = _window(qtbot)
-    mw._latest_results = _results()
+    mw.results.latest = _results()
 
     mw._on_show_force_diagram()  # would raise ValueError before the fix
 
@@ -81,7 +81,7 @@ def test_force_diagram_over_a_shell_model_does_not_crash(qtbot) -> None:  # type
 @pytest.mark.gui
 def test_a_model_of_faces_only_says_so_instead_of_failing(qtbot) -> None:  # type: ignore[no-untyped-def]
     mw = _window(qtbot, with_beam=False)
-    mw._latest_results = _results()
+    mw.results.latest = _results()
 
     mw._on_show_force_diagram()
 

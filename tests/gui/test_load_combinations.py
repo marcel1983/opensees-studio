@@ -369,7 +369,7 @@ def test_run_dialog_runs_missing_cases_once_then_combines_from_stored_results(
     monkeypatch.delenv(IN_PROCESS_ENV, raising=False)
     window = _cantilever_window(qtbot, tmp_path)
     project = window._vm.project
-    dlg = RunAnalysisDialog(window._vm, window._runner, window, case_results=window._case_results)
+    dlg = RunAnalysisDialog(window._vm, window._runner, window, case_results=window.results.cases)
     qtbot.addWidget(dlg)
     dlg.combinationFinished.connect(window._on_analysis_finished)
     labels = [dlg._case_combo.itemText(i) for i in range(dlg._case_combo.count())]
@@ -383,7 +383,7 @@ def test_run_dialog_runs_missing_cases_once_then_combines_from_stored_results(
     combo = blocker.args[0]
     assert isinstance(combo, CombinationResults) and combo.single_valued
     assert sorted(r.case_id for r in finished_cases) == [1, 2]  # type: ignore[attr-defined]
-    assert window._latest_results is combo
+    assert window.results.latest is combo
     assert "Combination 'ULS'" in window._results_panel._title.text()
 
     # The envelope needs the same cases: no second run.
@@ -405,19 +405,21 @@ def test_run_dialog_runs_missing_cases_once_then_combines_from_stored_results(
     view._bound.setCurrentIndex(1)
     assert view.current_bound() == "min"
     window._on_show_force_diagram()
-    data = window._diagram_data(window._post_dock.widget().current_component())
+    data = window.results.diagram_data(
+        window._vm.project, window._post_dock.widget().current_component()
+    )
     n_frames = len(project.elements)
     assert len(data.element_ids) == 2 * n_frames
 
     # Show Results Of switches back to a stored case without running.
     assert window.show_results_of("case:1")
-    assert isinstance(window._latest_results, StaticResults)
+    assert isinstance(window.results.latest, StaticResults)
     assert window.show_results_of("combination:1")
-    assert isinstance(window._latest_results, CombinationResults)
+    assert isinstance(window.results.latest, CombinationResults)
 
     # A model edit makes the stored results stale.
     project.nodes[-1] = project.nodes[-1].model_copy(update={"coords": (6.0, 0.0, 0.0)})
-    assert window._case_results.current(project) == {}
+    assert window.results.cases.current(project) == {}
     monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: None)
     assert not window.show_results_of("combination:1")
 
@@ -467,14 +469,14 @@ def test_envelope_with_a_spectrum_case_draws_both_force_diagrams(qtbot, tmp_path
         node_reaction={n.id: np.ones(ndf) for n in project.nodes},
         element_forces={el.id: np.full(12, 5.0) for el in project.elements},
     )
-    window._case_results.put(project, dead)
-    window._case_results.put(project, spectrum)
+    window.results.cases.put(project, dead)
+    window.results.cases.put(project, spectrum)
     assert window.show_results_of("combination:3")
-    combo = window._latest_results
+    combo = window.results.latest
     assert isinstance(combo, CombinationResults) and not combo.single_valued
     assert combo.missing_fields == []
     window._on_show_force_diagram()
-    data = window._diagram_data(ForceComponent.M3)
+    data = window.results.diagram_data(window._vm.project, ForceComponent.M3)
     assert len(data.element_ids) == 2 * len(project.elements)
     # The upper diagram is dead + peak, the lower dead - peak.
     assert data.abs_max == pytest.approx(7.0)

@@ -28,14 +28,14 @@ def test_opening_another_project_clears_the_previous_results(qtbot) -> None:  # 
     project = window._vm.project
     assert project is not None
     results = StaticResults(case_id=1, case_name="old", n_steps=1)
-    window._latest_results = results
+    window.results.latest = results
     window._results_panel.show_results(results, project)
     window._set_result_caption("Old results")
     assert window._results_panel._tabs.count() > 0
 
     assert window.open_project(EXAMPLES / "space_frame_3d.osmodel")
 
-    assert window._latest_results is None
+    assert window.results.latest is None
     assert window._results_panel.tables() == []
     assert window._results_panel._tabs.count() == 0
     assert window._results_panel._title.text() == ""

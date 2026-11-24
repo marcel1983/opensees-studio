@@ -67,7 +67,7 @@ def test_delete_all_results_clears_memory_and_the_file(qtbot, tmp_path, monkeypa
     window._on_clear_results()
 
     assert not db.exists()
-    assert window._latest_results is None
+    assert window.results.latest is None
     assert not window._main_canvas._result_label.isVisibleTo(window._main_canvas)
     assert not window._act_clear_results.isEnabled()
 

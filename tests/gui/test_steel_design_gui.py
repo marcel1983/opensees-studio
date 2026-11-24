@@ -253,7 +253,7 @@ def test_display_steel_ratios_paints_the_members(qtbot) -> None:  # type: ignore
     project = _beam_project()
     mw._vm.adopt(project)
     for results in _results(project).values():
-        mw._case_results.put(project, results)
+        mw.results.cases.put(project, results)
     assert mw._act_steel_ratios.isEnabled()
     mw._act_steel_ratios.trigger()
     assert mw._ratio_renderer.is_drawn
@@ -292,7 +292,7 @@ def test_the_dialog_button_shows_the_ratios(qtbot, monkeypatch) -> None:  # type
     project = _beam_project()
     mw._vm.adopt(project)
     for results in _results(project).values():
-        mw._case_results.put(project, results)
+        mw.results.cases.put(project, results)
 
     def _show(self) -> int:  # type: ignore[no-untyped-def]
         self.run_check()

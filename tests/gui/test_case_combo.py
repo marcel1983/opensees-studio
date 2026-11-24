@@ -27,7 +27,7 @@ def _case(case_id: int, name: str) -> StaticResults:
 def test_showing_a_case_fills_the_combo(window) -> None:  # type: ignore[no-untyped-def]
     """The first bug here was `_display_results` never refreshing the list."""
     results = _case(1, "DEAD")
-    window._case_results.put(window._vm.project, results)
+    window.results.cases.put(window._vm.project, results)
 
     window._display_results(results)
 
@@ -39,15 +39,15 @@ def test_showing_a_case_fills_the_combo(window) -> None:  # type: ignore[no-unty
 @pytest.mark.gui
 def test_choosing_another_case_repoints_the_window(window) -> None:  # type: ignore[no-untyped-def]
     first, second = _case(1, "DEAD"), _case(2, "EQX")
-    window._case_results.put(window._vm.project, first)
-    window._case_results.put(window._vm.project, second)
+    window.results.cases.put(window._vm.project, first)
+    window.results.cases.put(window._vm.project, second)
     window._display_results(first)
-    assert window._latest_results is first
+    assert window.results.latest is first
 
     index = window._case_combo.findData(2)
     window._case_combo.setCurrentIndex(index)
 
-    assert window._latest_results is second
+    assert window.results.latest is second
 
 
 @pytest.mark.gui
@@ -68,12 +68,12 @@ def test_renaming_a_case_relabels_the_results(window) -> None:  # type: ignore[n
         AddAnalysisCasesCommand(window._vm, [StaticCase(id=1, name="DEAD", pattern_ids=[1])])
     )
     results = _case(1, "DEAD")
-    window._case_results.put(window._vm.project, results)
+    window.results.cases.put(window._vm.project, results)
     window._display_results(results)
     assert window._case_combo.itemText(0) == "DEAD · Static"
 
     window._vm.apply_command(RenameAnalysisCaseCommand(window._vm, 1, "GRAVITY"))
 
     assert window._case_combo.itemText(0) == "GRAVITY · Static"
-    assert window._latest_results is results
-    assert window._caption_for(results).startswith("GRAVITY")
+    assert window.results.latest is results
+    assert window.results.caption_for(window._vm.project, results).startswith("GRAVITY")
