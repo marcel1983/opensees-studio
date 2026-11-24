@@ -69,6 +69,13 @@ DEFINE_ACTIONS: tuple[ActionSpec, ...] = (
         "Add &Multi-Support Excitation…",
         Needs.PROJECT | Needs.SELECTED_NODES,
     ),
+    ActionSpec("define.groups", "&Groups…", "groups.define_groups", needs=Needs.PROJECT),
+    ActionSpec(
+        "define.section_cuts",
+        "Section &Cuts…",
+        "groups.define_section_cuts",
+        needs=Needs.PROJECT,
+    ),
     ActionSpec("define.storeys", "Store&ys…", "building.define_storeys", needs=Needs.PROJECT),
     ActionSpec(
         "define.joint_patterns",

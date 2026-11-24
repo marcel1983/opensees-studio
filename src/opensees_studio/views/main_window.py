@@ -68,11 +68,6 @@ from opensees_studio.commands import (
     SetRestraintCommand,
 )
 from opensees_studio.commands.generated import insert_generated
-from opensees_studio.commands.groups import (
-    EditGroupMembersCommand,
-    SetGroupsCommand,
-    SetSectionCutsCommand,
-)
 from opensees_studio.commands.support_springs import SetSupportSpringsCommand
 from opensees_studio.commands.tables import ApplyModelTablesCommand
 from opensees_studio.core import (
@@ -104,7 +99,7 @@ from opensees_studio.core.design.settings import DesignSettings
 from opensees_studio.core.duplicates import default_tolerance
 from opensees_studio.core.generated import GeneratedModel
 from opensees_studio.core.geometry.ordering import QuadOrderError, order_quad_nodes
-from opensees_studio.core.groups import Group, colour_for, group_members
+from opensees_studio.core.groups import group_members
 from opensees_studio.core.help import ACTION_TOPICS, TOPIC_PROPERTY
 from opensees_studio.core.i18n import LANGUAGES
 from opensees_studio.core.materials.library import is_uniaxial
@@ -172,6 +167,7 @@ from opensees_studio.views.canvas3d.shell_contour_renderer import ShellContourRe
 from opensees_studio.views.controllers import Shell
 from opensees_studio.views.controllers.building import BuildingController
 from opensees_studio.views.controllers.design import DesignController
+from opensees_studio.views.controllers.groups import GroupsController
 from opensees_studio.views.controllers.imports import ImportsController
 from opensees_studio.views.controllers.joints import JointsController
 from opensees_studio.views.controllers.library import LibraryController
@@ -201,12 +197,6 @@ from opensees_studio.views.dialogs.batch_run import BatchRunDialog
 from opensees_studio.views.dialogs.connect_joints import DivideFramesDialog, MergeJointsDialog
 from opensees_studio.views.dialogs.grid_line_view import GridLineViewDialog
 from opensees_studio.views.dialogs.grid_wizard import GridWizardDialog
-from opensees_studio.views.dialogs.groups import (
-    NEW_GROUP,
-    AssignGroupDialog,
-    GroupsDialog,
-    SectionCutsDialog,
-)
 from opensees_studio.views.dialogs.load_combinations import LoadCombinationsDialog
 from opensees_studio.views.dialogs.load_display import LoadDisplayDialog
 from opensees_studio.views.dialogs.model_tables import ModelTablesDialog
@@ -432,6 +422,7 @@ class MainWindow(QMainWindow):
         self.building = BuildingController(shell)
         #: Assign → Frame: section, material, formulation, frame member options.
         self.joints = JointsController(shell)
+        self.groups = GroupsController(shell)
         self.imports = ImportsController(
             shell,
             confirm_discard=lambda action: self._confirm_discard_changes(action),
@@ -698,12 +689,7 @@ class MainWindow(QMainWindow):
         self._act_grid_wizard = QAction("Grid &Wizard…", self)
         # No shortcut: Ctrl+N is File → New, and F4 draws nodes.
         self._act_add_node = QAction("Add &Node…", self)
-        self._act_groups = QAction("&Groups…", self)
-        self._act_section_cuts = QAction("Section &Cuts…", self)
         self._act_custom_commands = QAction("Custom OpenSees Co&mmands…", self)
-        self._act_assign_group = QAction("Assign to &Group…", self)
-        # Ctrl+G is Coordinate System/Grids: a shared shortcut fires neither.
-        self._act_assign_group.setShortcut("Ctrl+Shift+G")
         self._act_create_shell = QAction("Create S&hell from 3 or 4 Nodes…", self)
         self._act_shell_formulation = QAction("Shell &Formulation…", self)
         self._act_frame_wizard = QAction("Create Portal &Frame…", self)
@@ -996,9 +982,9 @@ class MainWindow(QMainWindow):
         m_define.addAction(self._act_grid)
         m_define.addAction(self._act_grid_wizard)
         m_define.addAction(self.action("define.storeys"))
-        m_define.addAction(self._act_groups)
+        m_define.addAction(self.action("define.groups"))
         m_define.addAction(self.action("define.joint_patterns"))
-        m_define.addAction(self._act_section_cuts)
+        m_define.addAction(self.action("define.section_cuts"))
         m_define.addAction(self.action("define.mass_source"))
         m_define.addAction(self.action("define.seismic_loads"))
         m_define.addAction(self._act_add_node)
@@ -1099,7 +1085,7 @@ class MainWindow(QMainWindow):
         _add_actions(m_assign.addMenu("&Frame"), self._frame_actions)
         _add_actions(m_assign.addMenu("A&rea"), self._area_actions)
         m_assign.addSeparator()
-        m_assign.addAction(self._act_assign_group)
+        m_assign.addAction(self.action("assign.group"))
 
         m_analyze = mb.addMenu("&Analyze")
         m_analyze.addAction(self._act_case_manager)
@@ -1927,10 +1913,7 @@ class MainWindow(QMainWindow):
         # Assign
         for action in self._restraint_actions():
             action.triggered.connect(self._on_quick_restraint)
-        self._act_groups.triggered.connect(self._on_define_groups)
-        self._act_section_cuts.triggered.connect(self._on_define_section_cuts)
         self._act_custom_commands.triggered.connect(self._on_custom_commands)
-        self._act_assign_group.triggered.connect(self._on_assign_group)
         self._act_assign_area_springs.triggered.connect(lambda: self._on_assign_springs_of("area"))
         self._act_assign_edge_springs.triggered.connect(lambda: self._on_assign_springs_of("edge"))
         self._act_assign_line_springs.triggered.connect(lambda: self._on_assign_springs_of("line"))
@@ -4312,7 +4295,7 @@ class MainWindow(QMainWindow):
             _add_actions(menu if len(wanted) == 1 else menu.addMenu(title), actions)
         if wanted:
             menu.addSeparator()
-        menu.addAction(self._act_assign_group)
+        menu.addAction(self.action("assign.group"))
         menu.addSeparator()
         menu.addActions(
             [self.action("edit.move"), self.action("edit.replicate"), self.action("edit.mirror")]
@@ -4444,34 +4427,6 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Add Node failed", str(exc))
 
     # ── define and assign: groups, section cuts, custom commands ────
-    def _on_define_groups(self) -> None:
-        """Define → Groups: add, rename, recolour or remove groups."""
-        project = self._vm.project
-        if project is None:
-            return
-        dlg = GroupsDialog(project, self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            self._vm.apply_command(SetGroupsCommand(self._vm, dlg.groups()))
-            self._log(f"Groups set: {len(project.groups)}.")
-        except Exception as exc:
-            QMessageBox.critical(self, "Define Groups failed", str(exc))
-
-    def _on_define_section_cuts(self) -> None:
-        """Define → Section Cuts: resultant forces through a group."""
-        project = self._vm.project
-        if project is None:
-            return
-        dlg = SectionCutsDialog(project, self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            self._vm.apply_command(SetSectionCutsCommand(self._vm, dlg.section_cuts()))
-            self._log(f"Section cuts set: {len(project.section_cuts)}. Re-run static cases.")
-        except Exception as exc:
-            QMessageBox.critical(self, "Define Section Cuts failed", str(exc))
-
     def _on_custom_commands(self) -> None:
         """Define → Custom OpenSees Commands: Python blocks run while the model is built."""
         from opensees_studio.commands import SetCustomCommandsCommand
@@ -4489,44 +4444,6 @@ class MainWindow(QMainWindow):
             self._log(f"Custom command blocks: {len(project.custom_commands)} ({enabled} enabled).")
         except Exception as exc:
             QMessageBox.critical(self, "Custom OpenSees Commands failed", str(exc))
-
-    def _on_assign_group(self) -> None:
-        """Assign → Assign to Group: add the selection to a group, remove it, or replace."""
-        project = self._vm.project
-        if project is None:
-            return
-        sel = self._canvas.selection
-        nodes, elements = sorted(sel.nodes), sorted(sel.elements)
-        if not nodes and not elements:
-            QMessageBox.information(self, "Assign to Group", "Select joints or elements first.")
-            return
-        dlg = AssignGroupDialog(project, len(nodes), len(elements), self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        group_id, mode = dlg.group_id, dlg.mode
-        try:
-            self._vm.undo_stack.beginMacro("Assign to group")
-            try:
-                if group_id == NEW_GROUP:
-                    group_id = project.next_group_id()
-                    group = Group(
-                        id=group_id,
-                        name=dlg.new_name.text().strip(),
-                        colour=colour_for(len(project.groups)),
-                    )
-                    self._vm.apply_command(SetGroupsCommand(self._vm, [*project.groups, group]))
-                self._vm.apply_command(
-                    EditGroupMembersCommand(self._vm, group_id, nodes, elements, mode=mode)
-                )
-            finally:
-                self._vm.undo_stack.endMacro()
-            group = next(g for g in project.groups if g.id == group_id)
-            self._log(
-                f"Group {group.name}: {len(group.node_ids)} joint(s), "
-                f"{len(group.element_ids)} element(s)."
-            )
-        except Exception as exc:
-            QMessageBox.critical(self, "Assign to Group failed", str(exc))
 
     def _on_apply_mass(self, node_id: int, mass) -> None:  # type: ignore[no-untyped-def]
         """Callback from the property editor — dispatch as an undoable command."""
@@ -6796,10 +6713,7 @@ class MainWindow(QMainWindow):
         self._act_join_frames.setEnabled(has_project and len(self._canvas.selection.elements) >= 2)
         for action in self._restraint_actions():
             action.setEnabled(has_project and has_selected_nodes)
-        self._act_groups.setEnabled(has_project)
-        self._act_section_cuts.setEnabled(has_project)
         self._act_custom_commands.setEnabled(has_project)
-        self._act_assign_group.setEnabled(has_project and has_selection)
         self._act_shell_formulation.setEnabled(has_project and has_selected_elements)
         for action in (
             self._act_assign_area_springs,

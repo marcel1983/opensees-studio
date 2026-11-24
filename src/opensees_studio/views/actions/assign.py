@@ -45,6 +45,15 @@ def _member(name: str, text: str) -> ActionSpec:
 
 
 ASSIGN_ACTIONS: tuple[ActionSpec, ...] = (
+    # Ctrl+G is Coordinate System/Grids: a shared shortcut fires neither.
+    ActionSpec(
+        "assign.group",
+        "Assign to &Group…",
+        "groups.assign_group",
+        shortcut="Ctrl+Shift+G",
+        needs=Needs.PROJECT | Needs.SELECTION,
+        legacy_attribute="_act_assign_group",
+    ),
     # What holds a joint, what it weighs and what joins it to another one.
     _joint("support", "&Restraints…", shortcut="Ctrl+R"),
     _joint("masses", "&Masses…"),
