@@ -11,11 +11,9 @@
 # make a change fit: split the file instead (a controller in
 # views/controllers, a widget of its own, a module per case type or per code).
 #
-# `exempt` is for files that are not logic: generated code, and the help pages
-# until they become data files (phase 4 of the maintainability plan).
+# `exempt` is for files that are not logic: generated code.
 #
 # path (from src/opensees_studio)            max lines
-core/help.py                                 exempt
 core/catalog/generated/fiber.py              exempt
 services/sap2000_text.py                     3550
 services/opensees_runner.py                  2700

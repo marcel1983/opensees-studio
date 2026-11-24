@@ -517,7 +517,7 @@ already longer (`views/main_window.py`, the runner, the importers…).
 when a listed file is 150 lines under its ceiling, so the ceiling follows the
 file down. Do not raise a ceiling or add a file to make a change fit: split
 the file (a controller, a widget of its own, a module per case type or code).
-`core/help.py` and generated code are exempt.
+Generated code is exempt.
 
 ## Examples
 
@@ -546,9 +546,10 @@ A PR is not ready until the documentation that the change invalidates is
 fixed **in the same PR**. This applies to every PR, not only to
 user-visible features:
 
-1. **Help pages.** Every menu action and dialog has a page in
-   `core/help.py`. Add the new ones to `TOPICS` **and** to
-   `ACTION_TOPICS`; `tests/gui/test_help_window.py::test_every_menu_action_declares_a_page_that_exists`
+1. **Help pages.** Every menu action and dialog has a page: a file
+   `data/help/<topic id>.md` (front matter `title`, `group`, `summary`,
+   `see_also`, `order`; the format is in `core/help.py`'s docstring). Add the
+   new page **and** its line in `ACTION_TOPICS` (`core/help.py`); `tests/gui/test_help_window.py::test_every_menu_action_declares_a_page_that_exists`
    fails on an action that does not declare one. Write the body for
    somebody who has the dialog open, and link related pages through
    `see_also`.

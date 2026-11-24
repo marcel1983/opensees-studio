@@ -124,3 +124,10 @@ def test_the_frozen_bundle_ships_the_aisc_shape_table() -> None:
     for name in AISC_DATA:
         assert (DATA_DIR / name).is_file(), f"{name} is missing from the package data"
         assert name in spec, f"{name} is not listed in the PyInstaller datas"
+
+
+def test_the_frozen_bundle_ships_the_help_pages() -> None:
+    """The help is data (``data/help/*.md``): a bundle without it opens empty pages."""
+    spec = SPEC.read_text(encoding="utf-8")
+    assert any((DATA_DIR / "help").glob("*.md"))
+    assert '"help" / "*.md"' in spec

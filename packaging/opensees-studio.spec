@@ -70,6 +70,8 @@ datas += [
 ]
 # The interface translations (Options → Language).
 datas += [(str(SRC / "opensees_studio" / "data" / "i18n" / "es.json"), "opensees_studio/data/i18n")]
+# The help pages (F1, Help → Contents): one Markdown file per topic.
+datas += [(str(SRC / "opensees_studio" / "data" / "help" / "*.md"), "opensees_studio/data/help")]
 # One SVG per command (the ribbon, the menus and the toolbars).
 datas += [(str(SRC / "opensees_studio" / "data" / "icons" / "*.svg"), "opensees_studio/data/icons")]
 

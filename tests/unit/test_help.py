@@ -12,10 +12,14 @@ import pytest
 from opensees_studio.core.help import (
     ACTION_TOPICS,
     DEFAULT_TOPIC,
+    GLOSSARY_ORDER,
     GROUP_ORDER,
+    HELP_DIR,
     TOPICS,
     body_to_html,
     groups_present,
+    load_topics,
+    parse_page,
     resolve_topic,
     topic,
     topics_in_group,
@@ -142,3 +146,54 @@ def test_an_unknown_topic_is_ignored_rather_than_shown_blank() -> None:
         DEFAULT_TOPIC
     )
     assert resolve_topic() == DEFAULT_TOPIC
+
+
+# ──────────────────────────── the page files ────────────────────────────
+def test_a_page_is_its_front_matter_and_its_body() -> None:
+    page, order = parse_page(
+        "---\ntitle: A → B\ngroup: Define\nsummary: What: it is.\n"
+        "see_also: x.y, z\norder: 30\n---\n\n# Heading\nText.\n",
+        "a.b",
+    )
+    assert (page.title, page.group, page.summary, page.see_also) == (
+        "A → B",
+        "Define",
+        "What: it is.",
+        ("x.y", "z"),
+    )
+    assert page.body == "# Heading\nText." and order == 30
+    bare, _ = parse_page("---\ntitle: T\ngroup: Help\norder: 1\n---\n", "t")
+    assert bare.summary == "" and bare.see_also == () and bare.body == ""
+
+
+@pytest.mark.parametrize(
+    ("text", "message"),
+    [
+        ("title: T\n", "no front matter"),
+        ("---\ntitle: T\n", "not closed"),
+        ("---\ntitle: T\ngroup: Help\nauthor: me\norder: 1\n---\n", "unknown front matter"),
+        ("---\ntitle: T\norder: 1\n---\n", "no group"),
+    ],
+)
+def test_a_broken_page_is_refused_by_name(text: str, message: str) -> None:
+    with pytest.raises(ValueError, match=f"'p'.*{message}"):
+        parse_page(text, "p")
+
+
+def test_every_page_file_names_a_known_group_and_its_own_place() -> None:
+    orders: dict[int, str] = {}
+    for path in sorted(HELP_DIR.glob("*.md")):
+        page, order = parse_page(path.read_text(encoding="utf-8"), path.stem)
+        assert page.group in GROUP_ORDER, f"{path.name}: unknown group {page.group!r}"
+        assert order not in orders and order != GLOSSARY_ORDER, (
+            f"{path.name} and {orders.get(order)} share order {order}"
+        )
+        orders[order] = path.name
+
+
+def test_the_pages_load_in_their_order(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    (tmp_path / "late.md").write_text("---\ntitle: L\ngroup: Help\norder: 99999\n---\n")
+    (tmp_path / "early.md").write_text("---\ntitle: E\ngroup: Help\norder: 1\n---\n")
+    loaded = list(load_topics(tmp_path))
+    assert loaded[0] == "early" and loaded[-1] == "late"
+    assert len(loaded) > 2  # the glossary sits between them
