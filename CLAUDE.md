@@ -329,7 +329,9 @@ These are non-obvious things that are easy to break if you don't know:
   hands it, so what cannot be built is said before Finish.
   The slab is never modelled: it is `FloorLoad` panels, the mass is the mass
   source (`DEAD` plus the live load the code counts), and the earthquake is
-  `core.equivalent_lateral` on the project's storeys, applied at each
+  `core.equivalent_lateral` on the project's storeys (each code a
+  `SeismicCode` of `core/seismic_codes/`, found in `SEISMIC_CODES`; the
+  generator and the Seismic Loads dialog never branch on a code's key), applied at each
   diaphragm's retained node, which the plan puts at the centre of the floor's
   mass and exactly at the storey's elevation. The `±e` cases of one direction
   are alternatives: pass `EARTHQUAKE_DIRECTIONS` to the combination generator,

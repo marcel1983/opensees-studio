@@ -575,7 +575,7 @@ def elf_parameters(
     else:
         try:
             approximate = approximate_period(
-                code,  # type: ignore[arg-type]
+                code,
                 system,
                 spec.height,
                 length_scale(units, UnitSystem.SI_M_N),
@@ -589,7 +589,7 @@ def elf_parameters(
             else f"the empirical period Ta = {approximate:.3g} s ({ASCE_PERIOD_SYSTEMS[system][0]})"
         )
     parameters = ElfParameters(
-        code=code,  # type: ignore[arg-type]
+        code=code,
         period=period,
         sds=seismic.sds,
         sd1=seismic.sd1,
