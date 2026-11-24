@@ -46,6 +46,16 @@ from opensees_studio.core.combinations import (
 # ─────────────────────────── descriptions ───────────────────────────
 GeneratorOptions = Mapping[str, Any]
 
+EARTHQUAKE_DIRECTIONS = "earthquake_directions"
+"""Key of the generator options: ``{case id: direction}`` of the earthquake cases.
+Not a dialog setting: a generator of load cases that knows the direction of
+each one passes it, so that the 100% + 30% rule never adds two cases of the same
+direction (see :func:`opensees_studio.core.combinations.lateral_variants`)."""
+#: Programmatic generator option: the roles whose cases never act together (the
+#: balanced and the drifted snow, ``{"S"}``). Where a code adds "the snow", it
+#: gets one combination per case of such a role instead of their sum.
+ALTERNATIVE_ROLES = "alternative_roles"
+
 
 @dataclass(frozen=True)
 class GeneratorOption:
@@ -157,12 +167,16 @@ class _Builder:
         case_names: Mapping[int, str],
         symbols: Mapping[str, str],
         orthogonal: bool = False,
+        directions: Mapping[int, str] | None = None,
+        alternatives: Iterable[str] = (),
     ) -> None:
         self.by_role = {role: list(dict.fromkeys(roles.get(role, ()))) for role in LOAD_ROLES}
         self.peaks = list(peak_cases)
         self.names = dict(case_names)
         self.symbols = dict(symbols)
         self.orthogonal = orthogonal
+        self.directions = dict(directions or {})
+        self.alternatives = set(alternatives or ())
 
     def symbol(self, role: str) -> str:
         return self.symbols.get(role, role)
@@ -178,6 +192,8 @@ class _Builder:
         cases = self.by_role[role]
         if not cases or factor == 0.0:
             return _Slot([], required)
+        if role in self.alternatives and len(cases) > 1:
+            return self.one_of((role,), factor, required=required)
         return _Slot([_Choice(f"{_num(factor)}{self.symbol(role)}", [(factor, cases)])], required)
 
     def one_of(self, roles: Sequence[str], factor: float, *, required: bool = False) -> _Slot:
@@ -205,6 +221,7 @@ class _Builder:
             self.by_role[role],
             self.peaks,
             orthogonal=self.orthogonal and role == "E",
+            directions=self.directions if role == "E" else None,
         )
         return _Slot(
             [
@@ -283,6 +300,8 @@ def generate_asce7_lrfd(
             roles,
             peak_cases=peak_cases,
             orthogonal=bool(opts.get("orthogonal", False)),
+            directions=opts.get(EARTHQUAKE_DIRECTIONS),
+            alternatives=opts.get(ALTERNATIVE_ROLES, ()),
             omega0=float(opts.get("omega0", 2.5)) if opts.get("overstrength", False) else None,
             sds=float(opts.get("sds", 1.0)),
         )
@@ -317,6 +336,8 @@ def generate_asce7_asd(
         case_names=case_names or {},
         symbols={},
         orthogonal=bool((options or {}).get("orthogonal", False)),
+        directions=(options or {}).get(EARTHQUAKE_DIRECTIONS),
+        alternatives=(options or {}).get(ALTERNATIVE_ROLES, ()),
     )
     if not b.by_role["D"]:
         return []
@@ -429,7 +450,8 @@ def generate_en1990(
     - **SLS quasi-permanent**: ``G + Σ ψ2,i Qi``.
 
     Wind acts in both signs; the other variable actions are one combination
-    per case (live cases together).
+    per case (live cases together). With ``roof_imposed_alone`` the roof
+    imposed load is not combined with snow or wind (EN 1991-1-1 3.3.2 (1)).
     """
     opts = options or {}
     b = _Builder(
@@ -438,6 +460,8 @@ def generate_en1990(
         case_names=case_names or {},
         symbols=EN_SYMBOLS,
         orthogonal=bool(opts.get("orthogonal", False)),
+        directions=opts.get(EARTHQUAKE_DIRECTIONS),
+        alternatives=opts.get(ALTERNATIVE_ROLES, ()),
     )
     if not b.by_role["D"]:
         return []
@@ -448,6 +472,10 @@ def generate_en1990(
         for role in ("L", "Lr", "S", "W")
     }
     variable = [r for r in ("L", "Lr", "S", "W") if b.by_role[r]]
+    roof_alone = bool(opts.get("roof_imposed_alone", False))
+
+    def accompanies(role: str, leading: str) -> bool:
+        return role == leading or not (roof_alone and leading == "Lr" and role in ("S", "W"))
 
     def load(role: str, factor: float, *, optional: bool = False) -> _Slot:
         if role == "L":
@@ -463,6 +491,8 @@ def generate_en1990(
         """Permanent at ``g``, the leading action at ``q``, the others at ``q ψ0``."""
         slots = [b.all_of("D", g, required=True)]
         for role in variable:
+            if not accompanies(role, leading):
+                continue
             slots.append(
                 load(
                     role,
@@ -509,6 +539,8 @@ def generate_en1990(
     for lead in variable:
         slots = [b.all_of("D", 1.0, required=True)]
         for role in variable:
+            if not accompanies(role, lead):
+                continue
             slots.append(
                 load(
                     role,
@@ -561,6 +593,8 @@ def generate_tbdy(
         case_names=case_names or {},
         symbols=TBDY_SYMBOLS,
         orthogonal=bool(opts.get("orthogonal", False)),
+        directions=opts.get(EARTHQUAKE_DIRECTIONS),
+        alternatives=opts.get(ALTERNATIVE_ROLES, ()),
     )
     if not b.by_role["D"]:
         return []
@@ -606,6 +640,8 @@ def generate_rnc07(
         case_names=case_names or {},
         symbols=RNC07_SYMBOLS,
         orthogonal=bool(opts.get("orthogonal", False)),
+        directions=opts.get(EARTHQUAKE_DIRECTIONS),
+        alternatives=opts.get(ALTERNATIVE_ROLES, ()),
     )
     if not b.by_role["D"]:
         return []
@@ -670,6 +706,8 @@ def generate_nscm(
         case_names=case_names or {},
         symbols=NSCM_SYMBOLS,
         orthogonal=bool(opts.get("orthogonal", False)),
+        directions=opts.get(EARTHQUAKE_DIRECTIONS),
+        alternatives=opts.get(ALTERNATIVE_ROLES, ()),
     )
     if not b.by_role["D"]:
         return []
@@ -813,6 +851,14 @@ CODES: dict[str, CodeSpec] = {
                 "bool",
                 False,
                 tip="Repeats the ultimate combinations with γG = 1.0, for uplift and overturning.",
+            ),
+            GeneratorOption(
+                "roof_imposed_alone",
+                "Roof imposed load without snow or wind",
+                "bool",
+                False,
+                tip="EN 1991-1-1 3.3.2 (1): on a roof the imposed load need not be combined "
+                "with the snow or the wind.",
             ),
             ORTHOGONAL,
         ),

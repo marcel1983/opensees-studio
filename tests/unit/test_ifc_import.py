@@ -47,7 +47,7 @@ EXAMPLES = Path(__file__).resolve().parents[2] / "examples"
 #: Examples with nothing IFC has a member for (plane quads, a zero-length section).
 NOTHING_TO_EXPORT = {"beam_quad_2d", "moment_curvature"}
 #: Loads on a node no member touches (a diaphragm's retained node) are not exported.
-LOADS_LEFT_OUT = {"building_3storey_diaphragm"}
+LOADS_LEFT_OUT = {"building_3storey_diaphragm", "building_office"}
 
 ROUND_TRIP = sorted(p.stem for p in EXAMPLES.glob("*.osmodel") if p.stem not in NOTHING_TO_EXPORT)
 EXPORTED_TYPES = {

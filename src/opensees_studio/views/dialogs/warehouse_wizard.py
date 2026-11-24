@@ -35,17 +35,32 @@ from PySide6.QtWidgets import (
 
 from opensees_studio.core.code_combinations import CODES
 from opensees_studio.core.help import TOPIC_PROPERTY
+from opensees_studio.core.nscm import NSCM_IMPORTANCE
+from opensees_studio.core.rnc07 import RNC07_REGULARITY_LABELS, RNC07_SOILS, RNC07_ZONE_A0
+from opensees_studio.core.snow import ASH_LOAD_KPA
+from opensees_studio.core.trusses import TRUSS_TYPE_LABELS
 from opensees_studio.core.units import UnitSystem, labels_for
 from opensees_studio.core.warehouse import (
     CODE_PRESETS,
     DEFAULT_ROOF_DEAD_KPA,
+    EN1998_IMPORTANCE,
+    EN1998_SOIL_FACTORS,
     GROUP_COLOURS,
     GROUPS,
+    ROOF_STRUCTURES,
+    ROOF_TRUSS_TYPES,
     SECTION_KEYS,
+    SEISMIC_DIRECTIONS,
+    SEISMIC_METHODS,
+    SNOW_METHODS,
+    TRUSS_BOTTOMS,
+    TRUSS_SECTION_KEYS,
     WIND_METHODS,
     Warehouse,
     WarehouseError,
     WarehouseLoads,
+    WarehouseSeismic,
+    WarehouseSnow,
     WarehouseSpec,
     WarehouseWind,
     build_warehouse,
@@ -53,6 +68,8 @@ from opensees_studio.core.warehouse import (
     force_from_kn,
     length_from_m,
     pressure_from_kpa,
+    seismic_coefficient,
+    warehouse_snow_cases,
     warehouse_wind_cases,
 )
 from opensees_studio.core.wind import (
@@ -74,6 +91,15 @@ CREATE_DEFAULT = -1
 
 _COS30 = math.cos(math.radians(30.0))
 
+#: Labels of :data:`opensees_studio.core.warehouse.ROOF_STRUCTURES`, in its order.
+ROOF_STRUCTURE_LABELS: tuple[str, ...] = ("Rafters", "Roof trusses")
+
+#: Labels of :data:`opensees_studio.core.warehouse.TRUSS_BOTTOMS`, in its order.
+TRUSS_BOTTOM_LABELS: tuple[str, ...] = ("Horizontal chord", "Chord parallel to the roof")
+
+#: (label, type) of the web patterns a roof truss can have.
+ROOF_TRUSS_LABELS = [(label, kind) for label, kind in TRUSS_TYPE_LABELS if kind in ROOF_TRUSS_TYPES]
+
 #: Exposure choices per wind procedure: (key, label).
 WIND_EXPOSURES: dict[str, tuple[tuple[str, str], ...]] = {
     "rnc07": (
@@ -87,9 +113,18 @@ WIND_EXPOSURES: dict[str, tuple[tuple[str, str], ...]] = {
         ("C", "C: open terrain with scattered obstructions"),
         ("D", "D: flat, unobstructed terrain facing open water"),
     ),
+    "en1991": (
+        ("0", "0: sea, coast exposed to the open sea"),
+        ("I", "I: lakes, flat country without obstacles"),
+        ("II", "II: low vegetation, isolated obstacles"),
+        ("III", "III: villages, suburbs, permanent forest"),
+        ("IV", "IV: at least 15 % covered with buildings over 15 m"),
+    ),
 }
 #: The exposure each procedure starts with.
-DEFAULT_EXPOSURE: dict[str, str] = {"rnc07": "R2", "asce7": "C"}
+DEFAULT_EXPOSURE: dict[str, str] = {"rnc07": "R2", "asce7": "C", "en1991": "II"}
+#: The wind speed a procedure starts with when the design code brings another one, m/s.
+DEFAULT_WIND_SPEED: dict[str, float] = {"asce7": 57.0, "en1991": 26.0}
 
 #: RNC-07 Tabla 7: (key, label).
 WIND_TOPOGRAPHIES: tuple[tuple[str, str], ...] = (
@@ -99,6 +134,38 @@ WIND_TOPOGRAPHIES: tuple[tuple[str, str], ...] = (
     ("T4", "T4: slopes between 5 and 10 %"),
     ("T5", "T5: hilltops, slopes above 10 %"),
 )
+
+#: Soil choices per seismic method: RNC-07 soil types, NSCM and ASCE site classes.
+SEISMIC_SOILS: dict[str, tuple[str, ...]] = {
+    "rnc07": RNC07_SOILS,
+    "nscm": ("A", "B", "C", "D"),
+    "asce7": (),
+    "en1998": tuple(EN1998_SOIL_FACTORS),
+}
+#: The soil each method starts with.
+DEFAULT_SOIL: dict[str, str] = {"rnc07": "II", "nscm": "C", "en1998": "C"}
+
+#: Importance choices per seismic method: RNC-07 groups, NSCM risk categories.
+SEISMIC_CLASSES: dict[str, tuple[str, ...]] = {
+    "rnc07": ("A", "B", "C"),
+    "nscm": tuple(NSCM_IMPORTANCE),
+    "asce7": (),
+    "en1998": tuple(EN1998_IMPORTANCE),
+}
+DEFAULT_CLASS: dict[str, str] = {"rnc07": "B", "nscm": "II", "en1998": "II"}
+
+#: a0 each method starts with, g: RNC-07 zone C; NSCM Tabla 14.2, Managua; an
+#: agR of moderate seismicity for EN 1998-1 (the National Annex has the map).
+DEFAULT_A0: dict[str, float] = {
+    "rnc07": RNC07_ZONE_A0["C"],
+    "nscm": 0.36667,
+    "asce7": 0.0,
+    "en1998": 0.15,
+}
+
+#: Load each rule of the ash and snow page starts with, kN/m²: 20 kg/m² of wet
+#: ash (RNC-07 Art. 14); 20 psf of ground snow; a characteristic sk of 1 kN/m².
+DEFAULT_SNOW_KPA: dict[str, float] = {"ash": ASH_LOAD_KPA, "asce7": 0.9576, "en1991": 1.0}
 
 #: Labels of :data:`opensees_studio.core.wind.OPENINGS`, in its order.
 WIND_OPENINGS: tuple[str, ...] = (
@@ -206,6 +273,8 @@ class WarehouseWizard(QWizard):
         self._build_sections_page()
         self._build_loads_page()
         self._build_wind_page()
+        self._build_seismic_page()
+        self._build_snow_page()
         for index, page in enumerate(
             (
                 self._page_geometry,
@@ -213,6 +282,8 @@ class WarehouseWizard(QWizard):
                 self._page_sections,
                 self._page_loads,
                 self._page_wind,
+                self._page_seismic,
+                self._page_snow,
             )
         ):
             self.setPage(index, page)
@@ -257,6 +328,31 @@ class WarehouseWizard(QWizard):
         for label, _support in SUPPORT_CHOICES:
             self._support.addItem(tr(label))
         self._support.setCurrentIndex(1)
+        self._roof_structure = QComboBox()
+        for label in ROOF_STRUCTURE_LABELS:
+            self._roof_structure.addItem(tr(label))
+        self._roof_structure.setToolTip(
+            "What carries the roof in each frame: a rafter, or a truss whose top chord "
+            "follows the roof with a panel point under every purlin line."
+        )
+        self._truss_type = QComboBox()
+        for label, _kind in ROOF_TRUSS_LABELS:
+            self._truss_type.addItem(tr(label))
+        self._truss_type.setToolTip(
+            "Pratt: the diagonals run down towards mid-span, in tension under gravity. "
+            "Howe: up towards mid-span. Warren: alternating. All three have a vertical "
+            "under every purlin line."
+        )
+        self._truss_bottom = QComboBox()
+        for label in TRUSS_BOTTOM_LABELS:
+            self._truss_bottom.addItem(tr(label))
+        self._truss_depth = self._length(1.0)
+        self._truss_depth.setToolTip(
+            "Depth of the truss, measured plumb: at the eave with a horizontal bottom "
+            "chord, everywhere with a parallel one. The eave height stays the top of the "
+            "roof line, so the clear height under the truss is the eave height less this "
+            "depth."
+        )
 
         form.addRow("Roof:", self._roof)
         form.addRow("Nave span:", self._span)
@@ -266,16 +362,32 @@ class WarehouseWizard(QWizard):
         form.addRow("Eave height:", self._eave_height)
         form.addRow("Slope:", self._slope)
         form.addRow("Column bases:", self._support)
+        form.addRow("Roof structure:", self._roof_structure)
+        form.addRow("Truss web:", self._truss_type)
+        form.addRow("Bottom chord:", self._truss_bottom)
+        form.addRow("Truss depth:", self._truss_depth)
 
         self._geometry_summary = QLabel()
         self._geometry_summary.setWordWrap(True)
         form.addRow(self._geometry_summary)
 
-        for field in (self._span, self._frame_spacing, self._eave_height, self._slope):
+        for field in (
+            self._span,
+            self._frame_spacing,
+            self._eave_height,
+            self._slope,
+            self._truss_depth,
+        ):
             field.valueChanged.connect(self._refresh)
         for spin in (self._n_naves, self._n_frames):
             spin.valueChanged.connect(self._refresh)
-        for combo in (self._roof, self._support):
+        for combo in (
+            self._roof,
+            self._support,
+            self._roof_structure,
+            self._truss_type,
+            self._truss_bottom,
+        ):
             combo.currentIndexChanged.connect(self._refresh)
         self._page_geometry = page
 
@@ -318,6 +430,17 @@ class WarehouseWizard(QWizard):
             "purlin line, pinned at both ends. With end wall columns the end walls also get "
             "girts, at the girt spacing."
         )
+        self._chord_ties = QSpinBox()
+        self._chord_ties.setRange(0, 50)
+        self._chord_ties.setValue(4)
+        self._chord_ties.setSpecialValueText(tr("Columns and ridge only"))
+        self._chord_ties.setToolTip(
+            "With roof trusses: every n-th panel point of the bottom chord is tied to the "
+            "next frame; the column lines and the ridge always are. In the braced bays "
+            "each tie line gets a vertical X between the two chords. The steel check "
+            "takes the bottom chord's unbraced length between tie lines: it is the chord "
+            "in compression when the wind lifts the roof."
+        )
         self._roof_bracing = QCheckBox("X bracing in the roof")
         self._roof_bracing.setChecked(True)
         self._wall_bracing = QCheckBox("X bracing in the side walls")
@@ -334,6 +457,7 @@ class WarehouseWizard(QWizard):
         form.addRow("Girt spacing:", self._girt_spacing)
         form.addRow("Stabilising angle every (girts):", self._column_fly)
         form.addRow("End wall column spacing:", self._end_wall_spacing)
+        form.addRow("Bottom chord tie every (panel points):", self._chord_ties)
         form.addRow(self._roof_bracing)
         form.addRow(self._wall_bracing)
         form.addRow("Braced bays:", self._braced_bays)
@@ -350,7 +474,7 @@ class WarehouseWizard(QWizard):
 
         for field in (self._purlin_spacing, self._girt_spacing, self._end_wall_spacing):
             field.valueChanged.connect(self._refresh)
-        for spin in (self._rafter_fly, self._column_fly):
+        for spin in (self._rafter_fly, self._column_fly, self._chord_ties):
             spin.valueChanged.connect(self._refresh)
         for box in (self._roof_bracing, self._wall_bracing):
             box.toggled.connect(self._refresh)
@@ -371,13 +495,19 @@ class WarehouseWizard(QWizard):
             )
             for section in self._sections:
                 combo.addItem(f"#{section.id}  {section.name or '(unnamed)'}", userData=section.id)
+            # A long section name must not push the page wider than the wizard.
+            combo.setSizeAdjustPolicy(
+                QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+            )
+            combo.setMinimumContentsLength(24)
             self._section_combos[key] = combo
             form.addRow(tr(label) + ":", combo)
+        self._sections_form = form
         note = QLabel(
             "<i>The sections that do not exist yet are created with the warehouse, as the "
-            "same undoable step: columns, rafters and braces from the AISC library, purlins "
-            "and girts as a cold-formed lipped channel. The end wall column section is used "
-            "only when the warehouse has end wall columns.</i>"
+            "same undoable step: columns, rafters, truss members and braces from the AISC "
+            "library, purlins and girts as a cold-formed lipped channel. The end wall "
+            "column section is used only when the warehouse has end wall columns.</i>"
         )
         note.setWordWrap(True)
         form.addRow(note)
@@ -439,7 +569,7 @@ class WarehouseWizard(QWizard):
         page = _CompletablePage()
         page.complete_check = lambda: not self._wind_error
         page.setTitle("Wind")
-        page.setSubTitle("The wind cases on the walls and the roof, one or two per direction.")
+        page.setSubTitle("The wind cases on the walls and the roof, one to four per direction.")
         form = QFormLayout(page)
         self._wind_error = ""
 
@@ -469,7 +599,10 @@ class WarehouseWizard(QWizard):
             self._wind_topography.addItem(tr(label), userData=key)
         self._wind_topography.setCurrentIndex(2)
         self._wind_kzt = _field(1.0, minimum=0.0, maximum=10.0, step=0.1)
-        self._wind_kzt.setToolTip("ASCE 7-16 26.8: 1 on flat terrain.")
+        self._wind_kzt.setToolTip(
+            "Kzt of ASCE 7-16 26.8 or the orography factor co of EN 1991-1-4 4.3.3: 1 on "
+            "flat terrain."
+        )
         self._wind_openings = QComboBox()
         for label in WIND_OPENINGS:
             self._wind_openings.addItem(tr(label))
@@ -506,7 +639,7 @@ class WarehouseWizard(QWizard):
         form.addRow("Wind speed:", self._wind_speed)
         form.addRow("Exposure:", self._wind_exposure)
         form.addRow("Topography:", self._wind_topography)
-        form.addRow("Topographic factor Kzt:", self._wind_kzt)
+        form.addRow("Topographic factor (Kzt, co):", self._wind_kzt)
         form.addRow("Openings:", self._wind_openings)
         form.addRow("Wind towards:", directions)
         self._wind_summary = QLabel()
@@ -530,6 +663,195 @@ class WarehouseWizard(QWizard):
         self._page_wind = page
         self._on_wind_method_changed()
 
+    def _build_seismic_page(self) -> None:
+        page = _CompletablePage()
+        page.complete_check = lambda: not self._seismic_error
+        page.setTitle("Earthquake")
+        page.setSubTitle("The static earthquake forces, one case per direction.")
+        form = QFormLayout(page)
+        self._seismic_error = ""
+
+        self._seismic_on = QCheckBox("Create the earthquake load cases")
+        self._seismic_method = QComboBox()
+        for key, label in SEISMIC_METHODS.items():
+            self._seismic_method.addItem(tr(label), userData=key)
+        self._seismic_a0 = _field(0.3, minimum=0.0, maximum=2.0, step=0.05, suffix="g")
+        self._seismic_a0.setToolTip(
+            "Peak ground acceleration a0. RNC-07 Art. 24: zone A 0.1, B 0.2, C 0.3 g, or the "
+            "value of the map of Anexo C. NSCM Tabla 14.2 per municipality: Managua 0.36667 g. "
+            "EN 1998-1 3.2.1: the reference acceleration agR on type A ground, from the "
+            "National Annex."
+        )
+        self._seismic_soil = QComboBox()
+        self._seismic_soil.setToolTip(
+            "RNC-07 Art. 25: soil type I (rock) to III (soft). NSCM Tabla 6.4.1: site class "
+            "A to D. EN 1998-1 Table 3.1: ground type A to E, with the soil factor S of the "
+            "Type 1 spectrum. A softer soil needs a site study."
+        )
+        self._seismic_class = QComboBox()
+        self._seismic_class.setToolTip(
+            "RNC-07 Art. 20: group A (essential, forces times 1.5), B or C. NSCM Tabla 5.2.1: "
+            "risk category I to IV. EN 1998-1 Table 4.3: importance class I to IV (0.8, 1.0, "
+            "1.2, 1.4)."
+        )
+        self._seismic_reduction = _field(2.0, minimum=0.01, maximum=20.0, step=0.5)
+        self._seismic_reduction.setToolTip(
+            "Q of RNC-07 Art. 21, Ro of NSCM (Ec. 6.6-1), R of ASCE 7-16 Table 12.2-1 or the "
+            "behaviour factor q of EN 1998-1 6.3.2, for the lateral system of the warehouse "
+            "in the direction that has the least."
+        )
+        self._seismic_regularity = QComboBox()
+        for key, label in RNC07_REGULARITY_LABELS.items():
+            self._seismic_regularity.addItem(tr(label), userData=key)
+        self._seismic_sds = _field(1.0, minimum=0.0, maximum=10.0, step=0.1, suffix="g")
+        self._seismic_sds.setToolTip(
+            "ASCE 7-16 11.4.5: design spectral acceleration at short periods, SDS."
+        )
+        self._seismic_ie = _field(1.0, minimum=0.01, maximum=10.0, step=0.25)
+        self._seismic_ie.setToolTip("ASCE 7-16 Table 1.5-2: importance factor Ie.")
+        self._seismic_live = _field(
+            0.0, minimum=0.0, maximum=1e9, step=pressure_from_kpa(0.05, self._units),
+            suffix=self._pressure,
+        )  # fmt: skip
+        self._seismic_live.setToolTip(
+            "Roof live load that counts as seismic weight, per area of horizontal "
+            "projection. RNC-07 Art. 11 a: 10 kg/m² on light roofs (CVR). NSCM 9.6: 0.3 CV "
+            "in warehouses and storage, 0.15 CV elsewhere. ASCE 7-16 12.7.2 and EN 1998-1 "
+            "3.2.4 (ψ2 = 0 on a roof) count none."
+        )
+        self._seismic_directions: dict[str, QCheckBox] = {}
+        directions = QHBoxLayout()
+        for direction in SEISMIC_DIRECTIONS:
+            box = QCheckBox(direction)
+            box.setChecked(True)
+            box.toggled.connect(self._refresh_seismic)
+            self._seismic_directions[direction] = box
+            directions.addWidget(box)
+        directions.addStretch(1)
+
+        for combo in (self._seismic_method, self._seismic_regularity):
+            combo.setSizeAdjustPolicy(
+                QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+            )
+            combo.setMinimumContentsLength(24)
+        form.addRow(self._seismic_on)
+        form.addRow("Method:", self._seismic_method)
+        form.addRow("Ground acceleration a0:", self._seismic_a0)
+        form.addRow("Soil:", self._seismic_soil)
+        form.addRow("Group or risk category:", self._seismic_class)
+        form.addRow("Reduction factor (Q, Ro, R or q):", self._seismic_reduction)
+        form.addRow("Regularity:", self._seismic_regularity)
+        form.addRow("SDS:", self._seismic_sds)
+        form.addRow("Importance factor Ie:", self._seismic_ie)
+        form.addRow("Roof live load in the seismic weight:", self._seismic_live)
+        form.addRow("Earthquake along:", directions)
+        self._seismic_summary = QLabel()
+        self._seismic_summary.setWordWrap(True)
+        form.addRow(self._seismic_summary)
+        note = QLabel(
+            "<i>The base shear is the coefficient times the weight of the steel, the roof "
+            "dead load and this part of the roof live load, shared between the joints by "
+            "weight and height. The coefficient is that of the plateau of the spectrum: the "
+            "period is not used. Accidental torsion is not included.</i>"
+        )
+        note.setWordWrap(True)
+        form.addRow(note)
+
+        self._seismic_on.toggled.connect(self._refresh_seismic)
+        self._seismic_method.currentIndexChanged.connect(self._on_seismic_method_changed)
+        for field in (
+            self._seismic_a0,
+            self._seismic_reduction,
+            self._seismic_sds,
+            self._seismic_ie,
+            self._seismic_live,
+        ):
+            field.valueChanged.connect(self._refresh_seismic)
+        for combo in (self._seismic_soil, self._seismic_class, self._seismic_regularity):
+            combo.currentIndexChanged.connect(self._refresh_seismic)
+        self._page_seismic = page
+        self._on_seismic_method_changed()
+
+    def _build_snow_page(self) -> None:
+        page = _CompletablePage()
+        page.complete_check = lambda: not self._snow_error
+        page.setTitle("Ash and snow")
+        page.setSubTitle("What settles on the roof: volcanic ash, or snow.")
+        form = QFormLayout(page)
+        self._snow_error = ""
+
+        self._snow_on = QCheckBox("Create the ash or snow load cases")
+        self._snow_method = QComboBox()
+        for key, label in SNOW_METHODS.items():
+            self._snow_method.addItem(tr(label), userData=key)
+        self._snow_method.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self._snow_method.setMinimumContentsLength(34)
+        self._snow_ground = _field(0.0, minimum=0.0, maximum=1e12, step=0.0, suffix=self._pressure)
+        self._snow_ground.setToolTip(
+            "Per area of horizontal projection. Volcanic ash: the load itself, 20 kg/m² of "
+            "wet ash when there is no local record (RNC-07 Art. 14, NSCM 7.3; mandatory in "
+            "León, Chinandega, Carazo, Ometepe and Masaya). ASCE 7-16: the ground snow "
+            "load pg of Fig. 7.2-1. EN 1991-1-3: the characteristic value sk of the "
+            "National Annex."
+        )
+        self._snow_ce = _field(1.0, minimum=0.01, maximum=10.0, step=0.1)
+        self._snow_ce.setToolTip(
+            "ASCE 7-16 Table 7.3-1: 0.9 fully exposed (0.8 in terrain D), 1.0 partially "
+            "exposed, 1.2 sheltered in terrain B (1.1 in C, 1.0 in D). EN 1991-1-3 Table "
+            "5.1: 0.8 windswept, 1.0 normal, 1.2 sheltered."
+        )
+        self._snow_ct = _field(1.0, minimum=0.01, maximum=10.0, step=0.1)
+        self._snow_ct.setToolTip(
+            "ASCE 7-16 Table 7.3-2: 1.0 heated, 1.1 kept just above freezing or cold and "
+            "ventilated, 1.2 unheated or open, 1.3 kept below freezing. EN 1991-1-3 5.2 (8): "
+            "1.0 unless the roof loses much heat."
+        )
+        self._snow_is = _field(1.0, minimum=0.01, maximum=10.0, step=0.1)
+        self._snow_is.setToolTip(
+            "ASCE 7-16 Table 1.5-2: 0.8, 1.0, 1.1 or 1.2 for risk category I to IV."
+        )
+        self._snow_slippery = QCheckBox("Slippery roof the snow can slide off")
+        self._snow_slippery.setToolTip(
+            "ASCE 7-16 7.4: an unobstructed metal or membrane roof with room below the "
+            "eaves for the snow. It sheds snow from a lower slope."
+        )
+        self._snow_unbalanced = QCheckBox("Also the unbalanced arrangements")
+        self._snow_unbalanced.setChecked(True)
+        self._snow_unbalanced.setToolTip(
+            "ASCE 7-16 7.6.1: the drift to either side of the ridge of a gable roof. "
+            "EN 1991-1-3 5.3.3: half the snow on one slope."
+        )
+        form.addRow(self._snow_on)
+        form.addRow("Rule:", self._snow_method)
+        form.addRow("Ash load, or snow load on the ground:", self._snow_ground)
+        form.addRow("Exposure factor Ce:", self._snow_ce)
+        form.addRow("Thermal factor Ct:", self._snow_ct)
+        form.addRow("Importance factor Is:", self._snow_is)
+        form.addRow(self._snow_slippery)
+        form.addRow(self._snow_unbalanced)
+        self._snow_summary = QLabel()
+        self._snow_summary.setWordWrap(True)
+        form.addRow(self._snow_summary)
+        note = QLabel(
+            "<i>The load falls on the horizontal projection of the roof and goes to the "
+            "purlins. A balanced and an unbalanced case never enter the same combination. "
+            "Build-up against parapets or taller walls and in gutters is not included, and "
+            "neither is the part of the snow some codes count as seismic weight.</i>"
+        )
+        note.setWordWrap(True)
+        form.addRow(note)
+
+        self._snow_on.toggled.connect(self._refresh_snow)
+        self._snow_method.currentIndexChanged.connect(self._on_snow_method_changed)
+        for field in (self._snow_ground, self._snow_ce, self._snow_ct, self._snow_is):
+            field.valueChanged.connect(self._refresh_snow)
+        self._snow_slippery.toggled.connect(self._refresh_snow)
+        self._snow_unbalanced.toggled.connect(self._refresh_snow)
+        self._page_snow = page
+        self._on_snow_method_changed()
+
     # ── live state ──────────────────────────────────────────────────
     def _on_code_changed(self, _index: int = 0) -> None:
         preset = CODE_PRESETS[self._code.currentData()]
@@ -544,6 +866,171 @@ class WarehouseWizard(QWizard):
             self._wind_method.setCurrentIndex(index)
         else:
             self._on_wind_method_changed()
+        index = self._seismic_method.findData(preset.seismic_method)
+        if index != self._seismic_method.currentIndex():
+            self._seismic_method.setCurrentIndex(index)
+        else:
+            self._on_seismic_method_changed()
+        index = self._snow_method.findData(preset.snow_method)
+        if index != self._snow_method.currentIndex():
+            self._snow_method.setCurrentIndex(index)
+        else:
+            self._on_snow_method_changed()
+
+    def _on_snow_method_changed(self, _index: int = 0) -> None:
+        method = str(self._snow_method.currentData())
+        self._snow_ground.blockSignals(True)
+        self._snow_ground.setValue(pressure_from_kpa(DEFAULT_SNOW_KPA[method], self._units))
+        self._snow_ground.blockSignals(False)
+        self._refresh_snow()
+
+    def snow(self) -> WarehouseSnow | None:
+        """The ash or snow the fields describe; None when no such cases are wanted.
+
+        Raises:
+            WarehouseError: if they do not describe one.
+        """
+        if not self._snow_on.isChecked():
+            return None
+        return WarehouseSnow(
+            method=str(self._snow_method.currentData()),
+            ground=self._snow_ground.value(),
+            exposure=self._snow_ce.value(),
+            thermal=self._snow_ct.value(),
+            importance=self._snow_is.value(),
+            slippery=self._snow_slippery.isChecked(),
+            unbalanced=self._snow_unbalanced.isChecked(),
+        )
+
+    def _refresh_snow(self, *_args: object) -> None:
+        if not hasattr(self, "_page_snow"):
+            return
+        on = self._snow_on.isChecked()
+        method = self._snow_method.currentData()
+        ash, asce = method == "ash", method == "asce7"
+        for widget, enabled in (
+            (self._snow_method, True),
+            (self._snow_ground, True),
+            (self._snow_ce, not ash),
+            (self._snow_ct, not ash),
+            (self._snow_is, asce),
+            (self._snow_slippery, asce),
+            (self._snow_unbalanced, not ash),
+        ):
+            widget.setEnabled(on and enabled)
+        self._snow_error = ""
+        text = ""
+        try:
+            snow = self.snow()
+            if snow is not None and not self._error:
+                cases = warehouse_snow_cases(self.spec(), snow, self._units)
+                if len(cases) == 1:
+                    text = tr(
+                        "Load case {names}: <b>{pressure} {unit}</b> on the whole roof."
+                    ).format(
+                        names=cases[0].name,
+                        pressure=f"{cases[0].peak:.4g}",
+                        unit=self._pressure,
+                    )
+                elif cases:
+                    text = tr(
+                        "<b>{cases}</b> load cases: {names}. On the whole roof "
+                        "<b>{pressure} {unit}</b>, up to <b>{peak} {unit}</b>."
+                    ).format(
+                        cases=len(cases),
+                        names=", ".join(case.name for case in cases),
+                        pressure=f"{cases[0].points[0][1]:.4g}",
+                        peak=f"{max(case.peak for case in cases):.4g}",
+                        unit=self._pressure,
+                    )
+                else:
+                    text = tr("No load: nothing is created.")
+        except WarehouseError as exc:
+            self._snow_error = str(exc)
+            text = "<b>" + tr("Check the numbers:") + f"</b> {tr(self._snow_error)}"
+        self._snow_summary.setText(text)
+        self._page_snow.completeChanged.emit()
+
+    def _on_seismic_method_changed(self, _index: int = 0) -> None:
+        method = str(self._seismic_method.currentData())
+        chosen = CODE_PRESETS[self._code.currentData()]
+        # The numbers of the method, also when the combinations follow another code.
+        preset = next(p for p in (chosen, *CODE_PRESETS.values()) if p.seismic_method == method)
+        for combo, choices, default in (
+            (self._seismic_soil, SEISMIC_SOILS[method], DEFAULT_SOIL.get(method, "")),
+            (self._seismic_class, SEISMIC_CLASSES[method], DEFAULT_CLASS.get(method, "")),
+        ):
+            combo.blockSignals(True)
+            combo.clear()
+            for item in choices:
+                combo.addItem(item, userData=item)
+            combo.setCurrentIndex(max(0, combo.findData(default)))
+            combo.blockSignals(False)
+        for field, value in (
+            (self._seismic_a0, DEFAULT_A0[method]),
+            (self._seismic_reduction, preset.seismic_reduction),
+            (self._seismic_live, pressure_from_kpa(preset.seismic_live_kpa, self._units)),
+        ):
+            field.blockSignals(True)
+            field.setValue(value)
+            field.blockSignals(False)
+        self._refresh_seismic()
+
+    def seismic(self) -> WarehouseSeismic | None:
+        """The earthquake the fields describe; None when no earthquake cases are wanted.
+
+        Raises:
+            WarehouseError: if they do not describe one.
+        """
+        if not self._seismic_on.isChecked():
+            return None
+        return WarehouseSeismic(
+            method=str(self._seismic_method.currentData()),
+            a0=self._seismic_a0.value(),
+            soil=str(self._seismic_soil.currentData() or ""),
+            importance_class=str(self._seismic_class.currentData() or ""),
+            reduction=self._seismic_reduction.value(),
+            regularity=str(self._seismic_regularity.currentData()),
+            sds=self._seismic_sds.value(),
+            importance=self._seismic_ie.value(),
+            roof_live=self._seismic_live.value(),
+            directions=tuple(d for d, box in self._seismic_directions.items() if box.isChecked()),
+        )
+
+    def _refresh_seismic(self, *_args: object) -> None:
+        if not hasattr(self, "_page_seismic"):
+            return
+        on = self._seismic_on.isChecked()
+        method = self._seismic_method.currentData()
+        asce = method == "asce7"
+        for widget, enabled in (
+            (self._seismic_method, True),
+            (self._seismic_a0, not asce),
+            (self._seismic_soil, not asce),
+            (self._seismic_class, not asce),
+            (self._seismic_reduction, True),
+            (self._seismic_regularity, method == "rnc07"),
+            (self._seismic_sds, asce),
+            (self._seismic_ie, asce),
+            (self._seismic_live, True),
+            *((box, True) for box in self._seismic_directions.values()),
+        ):
+            widget.setEnabled(on and enabled)
+        self._seismic_error = ""
+        text = ""
+        try:
+            seismic = self.seismic()
+            if seismic is not None:
+                coefficient, clause = seismic_coefficient(seismic)
+                text = tr(
+                    "<b>{cases}</b> earthquake cases. Seismic coefficient "
+                    "<b>c = {c}</b> of the weight ({clause})."
+                ).format(cases=len(seismic.directions), c=f"{coefficient:.4g}", clause=clause)
+        except WarehouseError as exc:
+            self._seismic_error = str(exc)
+            text = "<b>" + tr("Check the numbers:") + f"</b> {tr(self._seismic_error)}"
+        self._seismic_summary.setText(text)
+        self._page_seismic.completeChanged.emit()
 
     def _on_wind_method_changed(self, _index: int = 0) -> None:
         method = str(self._wind_method.currentData())
@@ -567,11 +1054,17 @@ class WarehouseWizard(QWizard):
             self._on_wind_zone_changed()
         else:
             self._wind_speed.setToolTip(
-                "ASCE 7-16 26.5: the basic wind speed V of the building's risk category. It "
-                "is an ultimate speed: a 50 year velocity, such as RNC-07's, is multiplied by "
-                "1.26 (the square root of 1.6) before it is entered here."
+                "EN 1991-1-4 4.2: the basic wind velocity vb, a 10 minute mean at 10 m over "
+                "open country with 50 years of return period, from the National Annex. A 3 "
+                "second gust, such as RNC-07's, is about 1.5 times larger."
+                if method == "en1991"
+                else "ASCE 7-16 26.5: the basic wind speed V of the building's risk category. "
+                "It is an ultimate speed: a 50 year velocity, such as RNC-07's, is multiplied "
+                "by 1.26 (the square root of 1.6) before it is entered here."
             )
-            self._wind_speed.setValue(preset.wind_speed if preset.wind_method == "asce7" else 57.0)
+            self._wind_speed.setValue(
+                preset.wind_speed if preset.wind_method == method else DEFAULT_WIND_SPEED[method]
+            )
         self._refresh_wind()
 
     def _on_wind_zone_changed(self, _index: int = 0) -> None:
@@ -653,6 +1146,13 @@ class WarehouseWizard(QWizard):
         self._wind_summary.setText(text)
         self._page_wind.completeChanged.emit()
 
+    def _has_truss(self) -> bool:
+        return ROOF_STRUCTURES[self._roof_structure.currentIndex()] == "truss"
+
+    def _uses_section(self, key: str) -> bool:
+        """The member kind ``key`` exists with the roof structure chosen."""
+        return key != "rafter" if self._has_truss() else key not in TRUSS_SECTION_KEYS
+
     def _bays(self) -> tuple[int, ...] | None:
         text = self._braced_bays.text().strip()
         if not text:
@@ -673,6 +1173,15 @@ class WarehouseWizard(QWizard):
             WarehouseError: if they do not describe one.
         """
         _label, roof, has_slope = ROOF_CHOICES[self._roof.currentIndex()]
+        truss: dict[str, Any] = {}
+        if self._has_truss():
+            truss = {
+                "roof_structure": "truss",
+                "truss_type": ROOF_TRUSS_LABELS[self._truss_type.currentIndex()][1],
+                "truss_bottom": TRUSS_BOTTOMS[self._truss_bottom.currentIndex()],
+                "truss_depth": self._truss_depth.value(),
+                "bottom_chord_tie_every": self._chord_ties.value(),
+            }
         return WarehouseSpec(
             span=self._span.value(),
             eave_height=self._eave_height.value(),
@@ -690,9 +1199,16 @@ class WarehouseWizard(QWizard):
             wall_bracing=self._wall_bracing.isChecked(),
             braced_bays=self._bays(),
             end_wall_column_spacing=self._end_wall_spacing.value(),
+            **truss,
         )
 
     def _refresh(self, *_args: object) -> None:
+        truss = self._has_truss()
+        for widget in (self._truss_type, self._truss_bottom, self._truss_depth, self._chord_ties):
+            widget.setEnabled(truss)
+        self._rafter_fly.setEnabled(not truss)
+        for key, combo in self._section_combos.items():
+            self._sections_form.setRowVisible(combo, self._uses_section(key))
         try:
             spec = self.spec()
             warehouse = build_warehouse(
@@ -707,26 +1223,36 @@ class WarehouseWizard(QWizard):
         else:
             self._error = ""
             self._preview.set_warehouse(warehouse)
-            self._geometry_summary.setText(
+            summary = tr(
+                "Plan <b>{width} × {length} {unit}</b>, ridge at <b>{ridge} {unit}</b>, "
+                "{frames} frames."
+            ).format(
+                width=f"{spec.width:g}",
+                length=f"{spec.length:g}",
+                ridge=f"{spec.ridge_height:g}",
+                unit=self._unit,
+                frames=spec.n_frames,
+            )
+            if spec.has_truss:
+                summary += " " + tr(
+                    "Clear height under the trusses: <b>{clear} {unit}</b>."
+                ).format(clear=f"{spec.eave_height - spec.truss_depth:g}", unit=self._unit)
+            self._geometry_summary.setText(summary)
+            chord = warehouse.bottom_chord_elements if spec.has_truss else warehouse.rafter_elements
+            lengths = sorted({round(warehouse.unbraced[e], 9) for e in chord[0]})
+            text = (
                 tr(
-                    "Plan <b>{width} × {length} {unit}</b>, ridge at <b>{ridge} {unit}</b>, "
-                    "{frames} frames."
-                ).format(
-                    width=f"{spec.width:g}",
-                    length=f"{spec.length:g}",
-                    ridge=f"{spec.ridge_height:g}",
-                    unit=self._unit,
-                    frames=spec.n_frames,
+                    "<b>{lines}</b> purlin lines. Bottom chord unbraced length for the steel "
+                    "check: <b>{longest} {unit}</b>. {nodes} nodes, {elements} elements."
                 )
-            )
-            lengths = sorted(
-                {round(warehouse.unbraced[e], 9) for e in warehouse.rafter_elements[0]}
-            )
-            self._secondary_summary.setText(
-                tr(
+                if spec.has_truss
+                else tr(
                     "<b>{lines}</b> purlin lines. Rafter unbraced length for the steel "
                     "check: <b>{longest} {unit}</b>. {nodes} nodes, {elements} elements."
-                ).format(
+                )
+            )
+            self._secondary_summary.setText(
+                text.format(
                     lines=len(warehouse.stations),
                     longest=f"{lengths[-1]:.4g}",
                     unit=self._unit,
@@ -737,12 +1263,15 @@ class WarehouseWizard(QWizard):
         for page in (self._page_geometry, self._page_secondary):
             page.completeChanged.emit()
         self._refresh_wind()
+        self._refresh_snow()
 
     # ── results ─────────────────────────────────────────────────────
     def section_choice(self) -> dict[str, int | None]:
         """Section id per member kind; None means "create the default one"."""
         out: dict[str, int | None] = {}
         for key, combo in self._section_combos.items():
+            if not self._uses_section(key):
+                continue
             data = combo.currentData()
             out[key] = None if data in (None, CREATE_DEFAULT) else int(data)
         return out
@@ -757,6 +1286,8 @@ class WarehouseWizard(QWizard):
             combinations=self._combinations.isChecked(),
             design_lengths=self._design_lengths.isChecked(),
             wind=self.wind(),
+            seismic=self.seismic(),
+            snow=self.snow(),
         )
 
 

@@ -3668,13 +3668,13 @@ case carries them: half of each bar's weight goes to each of its joints.
         "define.warehouse": _t(
             "Define → Create Warehouse",
             "Define",
-            "A 3D steel warehouse from a few numbers, with its loads, wind and combinations.",
+            "A 3D steel warehouse from a few numbers: loads, wind, earthquake, ash or snow.",
             """
 Builds a warehouse (bodega, nave industrial) into the open 3D frame model as one
-undoable step: portal frames in X-Z planes repeated along Y, the purlins, girts
-and X bracing between them, the end wall columns, the supports, a group per kind
-of member, a grid on the column lines, the roof loads, the wind cases and the
-load combinations of a design code.
+undoable step: portal frames in X-Z planes repeated along Y, with rafters or
+with roof trusses, the purlins, girts and X bracing between them, the end wall columns, the supports, a group per kind
+of member, a grid on the column lines, the roof loads, the wind and earthquake
+cases and the load combinations of a design code.
 File → New Model → **Warehouse** starts a new model with it. The preview on the
 left follows every field.
 
@@ -3686,6 +3686,43 @@ left follows every field.
 - **Number of frames** and **distance between frames** — the building's length
   is their product, less one bay.
 - **Eave height** and **column bases** (fixed or pinned).
+- **Roof structure** — rafters, or roof trusses (see below).
+
+# Roof trusses
+With **Roof trusses** each frame carries the roof on a truss instead of a
+rafter:
+
+- The **top chord** follows the roof line, with a panel point under every
+  purlin line, so the purlin spacing is also the panel of the truss.
+- **Bottom chord** — *horizontal*, at one level below the eave, or *parallel to
+  the roof*. **Truss depth** is measured plumb: at the eave for a horizontal
+  chord (the truss is deeper towards the ridge by the rise of the roof), and
+  everywhere for a parallel one. The eave height stays the top of the roof
+  line, so the clear height under the truss is the eave height less the depth.
+- **Truss web** — a vertical under every purlin line, and one diagonal per
+  panel: **Pratt** (down towards the middle of the nave: in tension under
+  gravity next to the columns), **Howe** (up towards the middle) or **Warren
+  with verticals** (alternating from each column line). Each nave has its own
+  pattern.
+- The chords are **continuous** and run into the columns, and a column goes on
+  up to the top chord: the truss and its columns work as a frame, which is what
+  holds a building on pinned bases against the wind across it. Verticals and
+  diagonals are **pinned** at both ends.
+- **Bottom chord tie every** — the bottom chord is tied to the next frame at
+  the column lines and at the ridge, and besides at every n-th panel point. In
+  the braced bays each tie line gets a vertical X between the two chords (sway
+  bracing) that takes it up to the roof bracing; at the side walls the wall
+  bracing does that, and a girt line at the level of the chord is the tie.
+- An end wall column passes through the bottom chord of the end truss and is
+  its vertical there. Where a horizontal bottom chord lies on a girt line of
+  the end wall, the chord carries that strip of cladding.
+
+A purlin is fixed to the top chord itself, so **every purlin braces the top
+chord** and the stabilising angle setting of the purlins does not apply. The
+**bottom chord is braced only at its tie lines**: it is the chord in
+compression when the wind lifts the roof, and the wizard writes the distance
+between tie lines as its unbraced length. A column is braced where the bottom
+chord meets it.
 
 # Purlins, girts and bracing
 - **Purlin spacing** — the largest distance between purlin lines, on the roof
@@ -3733,9 +3770,13 @@ One section per kind of member. Choose one the project has, or let the wizard
 create the default: **W14X48** columns, **W16X40** rafters, **L3X3X1/4**
 braces and **W8X31** end wall columns from the AISC library, and a cold-formed
 lipped channel **C 150 × 50 × 15 × 2.38 mm** for purlins and girts, of the
-project's default steels. Change them afterwards with Assign → Frame → Section
-on the groups the wizard creates (Columns, Rafters, Purlins, Girts, Roof
-bracing, Wall bracing, End wall columns). A purlin's web stands normal to the
+project's default steels. A roof truss takes **HSS6X6X1/4** chords,
+**HSS3X3X3/16** verticals and diagonals and **HSS4X4X3/16** bottom chord ties;
+the page lists only the members the roof structure has. Change them afterwards
+with Assign → Frame → Section on the groups the wizard creates (Columns,
+Rafters, Purlins, Girts, Roof bracing, Wall bracing, End wall columns; with
+trusses also Truss top chords, Truss bottom chords, Truss web members, Bottom
+chord ties and Truss sway bracing). A purlin's web stands normal to the
 roof and a girt's lies flat. The defaults are a starting point, not a design:
 run the cases and the steel check, and size the members from them.
 
@@ -3748,14 +3789,23 @@ run the cases and the steel check, and size the members from them.
 - **Design code** — sets the defaults of the two live loads and the
   combinations: **RNC-07** (Art. 11 a, light roofs: 10 kg/m² plus 200 kg at
   mid-span of the main members; the roof live case is the code's CV),
-  **NSCM Managua** (the same gravity loads, as roof live CVT), or **ASCE 7-16**
-  LRFD or ASD (Table 4.3-1: 20 psf, before any reduction).
+  **NSCM Managua** (the same gravity loads, as roof live CVT), **ASCE 7-16**
+  LRFD or ASD (Table 4.3-1: 20 psf, before any reduction), or **EN 1990**
+  (the Eurocodes: a roof of category H of EN 1991-1-1, 0.4 kN/m²; its 1 kN
+  concentrated load is a separate local check and is not created). The
+  Eurocode values are the recommended ones: check them against the National
+  Annex of the country. The steel check of the app stays AISC 360.
 
 The area loads are applied to the purlins as uniform loads over their tributary
 width, in the purlin's local axes. With **Generate the load combinations of the
-code** the combinations of the gravity and wind cases are added with their
-envelope; the earthquake combinations appear once those cases exist (Define →
-Load Combinations → Generate).
+code** the combinations of the gravity, wind and earthquake cases the wizard
+creates are added with their envelope.
+
+The load cases the wizard creates use the sparse solver **UmfPack** (Define →
+Load Cases → System). A warehouse has hundreds of pinned members, each with its
+own released rotations, and the band solver a new case has by default takes
+tens of seconds per case on it for the same result. A case the project already
+had keeps its solver; the log says so when the model is large.
 
 # Wind
 With **Create the wind load cases** the wizard adds one load case per wind
@@ -3784,12 +3834,30 @@ four walls and the roof.
   pressure (the largest uplift), **B** the other roof coefficients with
   negative internal pressure (the largest downward load and the largest push on
   the windward wall): `WIND +X A`, `WIND +X B`, …
+- **EN 1991-1-4**, section 7.2, recommended values. **Wind speed** is the
+  basic wind velocity vb of the National Annex, a *10 minute mean* (a 3 second
+  gust such as RNC-07's is about 1.5 times larger). **Exposure** is the terrain
+  category 0 to IV (Table 4.1) and **Topographic factor** the orography factor
+  co. The peak velocity pressure qp = [1 + 7 Iv] ρ vm² / 2 (Expression 4.8) is
+  taken at the height of the ridge for every surface, and w = qp (cpe - cpi).
+  Walls by Table 7.1: windward D and leeward E by h/d, and A, B, C (-1.2, -0.8,
+  -0.5) *along* the walls parallel to the wind, from the windward corner. Roof
+  by Tables 7.2 (under 5°), 7.3 and 7.4: the zones F and G along the windward
+  edge, F at its corners, then H, I and J, so the members near the windward
+  edge and its corners take more than the rest. Where the tables give a
+  negative and a positive value for a slope, each is a case: across the ridge
+  of a duopitch roof **A** (all negative, +0.2 inside), **B** (all positive,
+  -0.3 inside), **C** (windward slope positive, leeward negative) and **D**
+  (the opposite); a direction with one set of values gets **A** and **B**, with
+  +0.2 and -0.3 inside.
 - **Openings** — a closed building has no internal pressure in RNC-07 and
   ±0.18 in ASCE 7. Openings spread over the four walls: -0.3 (RNC-07 Art. 55)
   and ±0.18. Openings mainly in one wall (more than 30 % of it): 0.75 when
   that wall faces the wind, -0.6 when it is to leeward and -0.5 when it is
   parallel to the wind (RNC-07), or ±0.55, a partially enclosed building
-  (ASCE 7).
+  (ASCE 7). EN 1991-1-4 takes +0.2 and -0.3 for a closed building or openings
+  spread over the walls (7.2.9 (6), Note 2), and for a dominant wall 0.90 of
+  the external coefficient at that wall (openings three times the others').
 
 Where the pressures go: the roof to the **purlins**, each taking half the strip
 to its neighbours, normal to the roof. A wall with girts to its **girts**; the
@@ -3804,13 +3872,122 @@ wind. Define → Load Combinations → Generate treats a static wind case as act
 both ways, so delete the reversed ones if you regenerate there.
 
 The wizard's wind is that of the main structure. Purlins, girts and cladding
-also need the local pressures of the code (RNC-07 Art. 58, ASCE 7 chapter 30),
-which are larger near the edges; the envelope procedure of ASCE 7 chapter 28,
-open buildings, the minimum wind load of ASCE 7 27.1.5 and the torsional load
-cases are not created either.
+also need the local pressures of the code (RNC-07 Art. 58, ASCE 7 chapter 30,
+cpe,1 of EN 1991-1-4), which are larger near the edges; the envelope procedure
+of ASCE 7 chapter 28, open buildings, the minimum wind load of ASCE 7 27.1.5
+and the torsional load cases are not created either. For EN 1991-1-4 the
+structural factor cs cd is 1 (a building under 15 m), and neither the 0.85
+factor of 7.2.2 (3) nor friction (7.5) is applied.
+
+# Earthquake
+With **Create the earthquake load cases** (off until you tick it: the ground
+acceleration, the soil and the reduction factor belong to your site and your
+structure) the wizard adds one static load case per direction ticked under
+**Earthquake along**: `EQ X`, across the ridge, on the frames, and `EQ Y`,
+along the building, on the bracing.
+
+The base shear is **V = c W**. The coefficient **c** is that of the *plateau*
+of the design spectrum: the period of the building is not computed and not
+used, which is the simplification the codes allow for a low building and is on
+the safe side. The summary on the page shows c and the clause it comes from.
+
+- **RNC-07 Art. 32** — c = S (2.7 a0) / (Q' Ω), not less than S a0 (Ec. 3),
+  times 1.5 for Group A. **a0** is the ground acceleration of Art. 24 (zone A
+  0.1, B 0.2, C 0.3 g, or the map of Anexo C), **Soil** the type I to III of
+  Art. 25 (the factor S depends on the zone too), **Reduction factor** the
+  ductility Q of Art. 21, reduced by the **Regularity** of Art. 23 to Q', and
+  Ω = 2.
+- **NSCM Managua 8.2.1** — the plateau β A0 / Ro of its spectrum, with **a0**
+  of Tabla 14.2 (Managua 0.36667 g), the **site class** A to D, the **risk
+  category** I to IV and **Ro**, which cannot be below 1.
+- **ASCE 7-16 12.8** — Cs = SDS / (R / Ie) (Eq. 12.8-2): **SDS**, **R** and
+  the **importance factor Ie**.
+- **EN 1998-1 4.3.3.2** — the lateral force method on the plateau of the
+  design spectrum, Sd = 2.5 ag S / q (Expression 3.14) with λ = 1 (one storey):
+  **a0** is the reference acceleration agR of the National Annex, the
+  **importance class** I to IV gives γI (0.8, 1.0, 1.2, 1.4; ag = γI agR),
+  **Soil** the ground type A to E with the soil factor S of the Type 1 spectrum
+  (1.0, 1.2, 1.15, 1.35, 1.4; a region of low seismicity uses the Type 2
+  spectrum, which is not offered) and **Reduction factor** the behaviour
+  factor q (1.5 for low dissipative steel).
+
+The **Reduction factor** is one number for both directions: enter that of the
+lateral system with the least (the frames across, the bracing along). The value
+the page starts with is not a recommendation.
+
+**Seismic weight W** — the self weight of the steel (as the dead case counts
+it), the roof dead load, and the **roof live load in the seismic weight**:
+10 kg/m² of horizontal projection by RNC-07 Art. 11 a (the reduced live load of
+light roofs), 0.3 CV by NSCM 9.6 b (warehouses and storage: W = CM + 0.3 CV, so
+3 kg/m² of that roof), none by ASCE 7-16 12.7.2 nor by EN 1998-1 3.2.4 (ψ2 = 0
+on a roof). Wall cladding is not in the model: add its weight to the roof dead
+load if it matters.
+
+**Where the forces go** — each joint of the warehouse gets
+Fi = c Wi hi ΣW / ΣWi hi, with Wi the weight gathered at the joint and hi its
+height above the bases (RNC-07 Art. 32; ASCE 7 Eq. 12.8-12 with k = 1), as
+nodal loads. So the roof takes almost all of it, and a joint half way up a wall
+its smaller part.
+
+In the combinations an earthquake case acts **both ways**. RNC-07 (Art. 32 f),
+NSCM and EN 1998-1 (4.3.3.5.1) take each direction with 30 % of the other, in
+every sign; the ASCE 7
+combinations here take the two directions one at a time (12.5 asks for the
+100 % + 30 % rule only in some seismic design categories: Define → Load
+Combinations → Generate has the option). NSCM's vertical component
+Ev = 0.2 a0 Fas CM (Ec. 7.8-4) goes into the dead load factor with the a0 and
+the site class of this page. **Accidental torsion** is
+not included, nor the vertical component, the redundancy factor ρ and the
+overstrength combinations of ASCE 7. Check the drifts with the rules of the
+code: the displacements of these cases are those of the reduced forces.
+
+For the period, a response spectrum or other buildings use Define → Seismic
+Loads (Equivalent Lateral Force) and the response spectrum cases.
+
+# Ash and snow
+With **Create the ash or snow load cases** (off until you tick it) the wizard
+adds what settles on the roof, as a load per area of **horizontal projection**
+on the purlins. The **Rule** follows the design code and can be changed:
+
+- **Volcanic ash** — RNC-07 Art. 14 and NSCM 7.3: one case, `ASH`, uniform over
+  the roof. The load starts at 20 kg/m², the wet ash both codes recommend when
+  there is no local record; it is mandatory in León, Chinandega, Carazo,
+  Ometepe and Masaya and wherever ash can fall. NSCM has a load of its own for
+  it in the combinations (CCV); RNC-07 has none, so there the ash goes with the
+  live load (CV), "in addition to the live load" as Art. 14 says.
+- **ASCE 7-16 chapter 7** — from the ground snow load **pg**:
+  pf = 0.7 Ce Ct Is pg (Eq. 7.3-1) and ps = Cs pf, with the slope factor Cs of
+  Fig. 7.4-1 (a **slippery roof** sheds snow from a lower slope) and, under
+  15°, not less than the minimum of 7.3.4. `SNOW` is that balanced load. A
+  gable roof between 1/2 on 12 and 7 on 12 also gets `SNOW +X` and `SNOW -X`
+  (7.6.1), the drift on the side the wind blows to: 0.3 ps to windward, ps to
+  leeward and a surcharge hd γ / √S over 8 hd √S / 3 from the ridge.
+- **EN 1991-1-3** — s = μ Ce Ct sk (5.1) with the shape coefficients of Table
+  5.2: `SNOW` with μ1 everywhere, and on a duopitch roof `SNOW +X` and
+  `SNOW -X` (5.3.3), half the snow on one slope and all of it on the other, the
+  one named.
+
+Several naves stand under **one roof** (one ridge, or one slope, over the whole
+width), so the roof has no valleys and the cases are those of that one roof.
+
+**Ce**, **Ct** and **Is** are typed as numbers: the tool tips list the tables.
+Untick **Also the unbalanced arrangements** to keep the balanced case only.
+The summary on the page names the cases and the load on the roof.
+
+In the combinations the snow cases are **alternatives**: a balanced and an
+unbalanced case never enter the same one. A code without a snow load (RNC-07)
+gets the balanced case only, as a live load.
+
+Not included: the build-up against a parapet or a taller wall, the snow that
+slides onto a lower roof, the ash that gathers in valleys and gutters (both
+Nicaraguan codes ask you to estimate it), rain on snow, ponding, and the part
+of the snow that ASCE 7-16 12.7.2 counts as seismic weight.
 
 # Not included yet
-Earthquake load cases, trussed roofs and haunches. RNC-07 Art. 11 also asks
+Haunches, and trusses with a Warren web without
+verticals. The X braces are modelled as bars that also take compression:
+the steel check reports the compressed diagonal of each X, which in a
+tension-only bracing is ignored. RNC-07 Art. 11 also asks
 each purlin for 100 kg at mid-span: check the purlins for it separately.
 """,
             "define.portal_frame",
@@ -4613,7 +4790,9 @@ The overstrength option adds Section 2.4.5:
 The ψ factors are those of Table A1.1: the *imposed load category* (A to H) sets
 them for Live cases, roofs (Lr) are category H, wind is 0.6 / 0.2 / 0, snow is
 0.5 / 0.2 / 0 (0.7 / 0.5 / 0.2 above 1000 m). Rain has no EN 1990 factors and is
-not used.
+not used. With *Roof imposed load without snow or wind* the roof load (Lr),
+when it leads, is not accompanied by the snow or the wind (EN 1991-1-1
+3.3.2 (1)).
 
 ## TS 500 / TBDY 2018
 - 1.4G + 1.6Q
@@ -7440,9 +7619,11 @@ Joint → Masses always count on top.
 - **Element self mass** — frames and shells whose section has a unit weight,
   lumped half on each end of a frame and by tributary area on a shell's corners.
 - **Load patterns** — tick a pattern and give its factor (the usual D + 0.3 L
-  is DEAD 1.0, LIVE 0.3). Only the **downward** part of its nodal, uniform and
-  point loads counts, plus its self-weight multiplier; element loads go to the
-  element's ends. A node whose total comes out upward gets nothing.
+  is DEAD 1.0, LIVE 0.3). Only the **downward** part of its nodal, uniform,
+  distributed (trapezoidal) and point loads counts, plus its floor panels and
+  its self-weight multiplier; element loads go to the element's ends, a
+  distributed load by its resultant. A node whose total comes out upward gets
+  nothing.
 - **Also on the vertical translation** — by default the mass goes on the
   lateral translations only, so the model has no vertical modes.
 - **Lump at the retained node** — each rigid diaphragm's in-plane mass and its

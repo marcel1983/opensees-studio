@@ -84,6 +84,22 @@ def test_en1990_roof_category_has_zero_psi() -> None:
     assert not any("Q+" in name and name.startswith("ULS 1.35G+1.5Q+") for name in got)
 
 
+def test_en1990_roof_imposed_load_can_stand_without_snow_or_wind() -> None:
+    roles = {"D": [D], "L": [L], "Lr": [LR], "S": [S], "W": [W]}
+    both = _by_name("en1990", roles)
+    alone = _by_name("en1990", roles, options={"roof_imposed_alone": True})
+    # EN 1991-1-1 3.3.2 (1): with the roof load leading, no snow and no wind.
+    assert [n for n in both if "1.5Qr" in n and ("S" in n.split("Qr")[1] or "W" in n)]
+    leading = [n for n in alone if "1.5Qr" in n]
+    assert leading and not [n for n in leading if "S" in n.split("Qr")[1] or "W" in n]
+    assert alone["ULS 1.35G+1.05Q+1.5Qr"] == {D: 1.35, L: 1.05, LR: 1.5}
+    # Every other combination is the same.
+    assert {n: t for n, t in both.items() if "Qr" not in n} == {
+        n: t for n, t in alone.items() if "Qr" not in n
+    }
+    assert set(alone) <= set(both)
+
+
 def test_en1990_serviceability_combinations() -> None:
     roles = {"D": [D], "L": [L], "W": [W]}
     out = generate_for_code("en1990", roles)
@@ -153,6 +169,61 @@ def test_orthogonal_rule_with_spectrum_cases_needs_no_sign_pairs() -> None:
     # One static, one spectrum: only the static case takes both signs.
     mixed = lateral_variants([10, 11], [11], orthogonal=True)
     assert len(mixed) == 4
+
+
+def test_cases_of_one_direction_are_alternatives_in_the_orthogonal_rule() -> None:
+    # 10 and 11 are the earthquake along X with +e and -e, 20 and 21 along Y.
+    directions = {10: "X", 11: "X", 20: "Y", 21: "Y"}
+    variants = lateral_variants([10, 11, 20, 21], orthogonal=True, directions=directions)
+    # Four primaries, two companions each, two signs each: never two of a direction.
+    assert len(variants) == 4 * 2 * 4
+    for variant in variants:
+        assert len(variant) == 2
+        (main, primary), (share, companion) = variant
+        assert abs(main) == 1.0 and abs(share) == 0.3
+        assert directions[primary] != directions[companion]
+    assert ((1.0, 10), (-0.3, 21)) in variants and ((-1.0, 21), (0.3, 11)) in variants
+    # One direction only: nothing to combine, each case both ways.
+    alone = lateral_variants([10, 11], orthogonal=True, directions=directions)
+    assert alone == [((1.0, 10),), ((-1.0, 10),), ((1.0, 11),), ((-1.0, 11),)]
+    # A case without a direction is one of its own, as before.
+    mixed = lateral_variants([10, 11, 30], orthogonal=True, directions={10: "X", 11: "X"})
+    assert ((1.0, 30), (0.3, 10)) in mixed and ((1.0, 10), (0.3, 30)) in mixed
+    assert not any({c for _f, c in v} == {10, 11} for v in mixed)
+
+
+@pytest.mark.parametrize("code", ["asce7_lrfd", "asce7_asd", "rnc07", "nscm", "en1990", "tbdy"])
+def test_every_code_takes_the_earthquake_directions(code: str) -> None:
+    roles = {"D": [D], "E": [10, 11, 20, 21]}
+    directions = {10: "X", 11: "X", 20: "Y", 21: "Y"}
+    generated = generate_for_code(
+        code, roles, options={"orthogonal": True, "earthquake_directions": directions}
+    )
+    with_e = [c for c in generated if any(t.ref_id in directions for t in c.terms)]
+    assert with_e
+    for combination in with_e:
+        used = [directions[t.ref_id] for t in combination.terms if t.ref_id in directions]
+        assert sorted(used) == ["X", "Y"], combination.name
+
+
+@pytest.mark.parametrize("code", ["asce7_lrfd", "asce7_asd", "nscm", "en1990"])
+def test_the_cases_of_an_alternative_role_never_act_together(code: str) -> None:
+    # A balanced snow and two drifted ones, with wind and earthquake around.
+    roles = {"D": [D], "L": [L], "S": [30, 31, 32], "W": [W], "E": [E]}
+    snow = {30, 31, 32}
+    together = generate_for_code(code, roles)
+    apart = generate_for_code(code, roles, options={"alternative_roles": ("S",)})
+    assert all(len(snow & {t.ref_id for t in c.terms}) <= 1 for c in apart), code
+    assert {t.ref_id for c in apart for t in c.terms} >= snow
+    names = [c.name for c in apart]
+    assert len(names) == len(set(names))
+    if code in ("asce7_lrfd", "nscm"):  # the others already take one snow case at a time
+        assert any(len(snow & {t.ref_id for t in c.terms}) == 3 for c in together), code
+    # One snow case is the same with or without the option.
+    single = {**roles, "S": [30]}
+    assert [c.name for c in generate_for_code(code, single)] == [
+        c.name for c in generate_for_code(code, single, options={"alternative_roles": ("S",)})
+    ]
 
 
 def test_orthogonal_option_applies_to_every_code_with_earthquake() -> None:

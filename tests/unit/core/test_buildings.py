@@ -38,6 +38,7 @@ from opensees_studio.core.diaphragms import (
     constrained_node_ids,
     diaphragm_problems,
 )
+from opensees_studio.core.loads import FloorLoad, TrapezoidalElementLoad
 from opensees_studio.core.mass_source import (
     effective_nodal_masses,
     pattern_weight_per_node,
@@ -239,6 +240,42 @@ def test_pattern_weight_lumps_uniform_point_and_nodal_loads() -> None:
     assert weights[5] == pytest.approx(3000.0 + 450.0)
     assert weights[6] == pytest.approx(3000.0 + 150.0)
     assert weights[7] == pytest.approx(200.0)
+
+
+def test_pattern_weight_lumps_a_distributed_load_by_its_resultant() -> None:
+    project = _one_storey()
+    pattern = PlainLoadPattern(
+        id=1,
+        time_series_id=1,
+        # Beam 5 runs 5 -> 6 along X, 6 m: a triangle from 0 at the first quarter
+        # to 1200 N/m at the far end. 0.5 x 1200 x 4.5 = 2700 N, centred 1.5 m
+        # from joint 6.
+        distributed_loads=[
+            TrapezoidalElementLoad(element_id=5, x_start=0.25, x_end=1.0, wz_end=-1200.0)
+        ],
+    )
+    weights = pattern_weight_per_node(project, pattern)
+    assert weights[5] == pytest.approx(2700.0 * 1.5 / 6.0)
+    assert weights[6] == pytest.approx(2700.0 * 4.5 / 6.0)
+
+
+@pytest.mark.parametrize("distribution", ["two_way", "one_way_12", "one_way_23"])
+def test_a_floor_panel_weighs_its_load_times_its_area(distribution: str) -> None:
+    project = _one_storey()
+    pattern = PlainLoadPattern(
+        id=1,
+        time_series_id=1,
+        floor_loads=[FloorLoad(nodes=(5, 6, 7, 8), value=2000.0, distribution=distribution)],
+    )
+    weights = pattern_weight_per_node(project, pattern)
+    # 6 x 4 m: the whole panel, a quarter at each corner by symmetry.
+    assert set(weights) == {5, 6, 7, 8}
+    assert list(weights.values()) == pytest.approx([2000.0 * 24.0 / 4.0] * 4)
+    project.load_patterns.append(pattern)
+    source = MassSource(
+        element_self_mass=False, patterns=[MassSourcePattern(pattern_id=1, factor=0.5)]
+    )
+    assert sum(source_weight_per_node(project, source).values()) == pytest.approx(24_000.0)
 
 
 def test_mass_source_scales_patterns_and_drops_upward_weight() -> None:

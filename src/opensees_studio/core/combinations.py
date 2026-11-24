@@ -473,6 +473,7 @@ def lateral_variants(
     peak_cases: Iterable[int] = (),
     *,
     orthogonal: bool = False,
+    directions: Mapping[int, str] | None = None,
 ) -> list[LateralVariant]:
     """The ways the lateral cases of one role act, as :data:`LateralVariant` parts.
 
@@ -482,21 +483,34 @@ def lateral_variants(
     cases, each case in turn acts at 100% with every other at 30%
     (``ORTHOGONAL_FACTOR``), each static case in both signs: ``±Ex ± 0.3Ey``
     and ``±0.3Ex ± Ey``.
+
+    ``directions`` names the direction of a case (``{12: "X", 13: "X", 14: "Y"}``).
+    Cases of one direction are alternatives of the same earthquake (the two
+    accidental eccentricities, say) and are never added together: each case
+    in turn acts at 100% with one case of every *other* direction at 30%, in
+    every choice of those. A case without a direction is one of its own.
     """
     peaks = set(peak_cases)
     ordered = list(dict.fromkeys(cases))
-    if not orthogonal or len(ordered) < 2:
+    named = directions or {}
+    by_direction: dict[object, list[int]] = {}
+    for cid in ordered:
+        by_direction.setdefault(named.get(cid, ("case", cid)), []).append(cid)
+    if not orthogonal or len(by_direction) < 2:
         return [
             ((sign, cid),) for cid in ordered for sign in ((1.0,) if cid in peaks else (1.0, -1.0))
         ]
     out: list[LateralVariant] = []
     for primary in ordered:
-        parts = [primary, *[c for c in ordered if c != primary]]
-        weight = {c: (1.0 if c == primary else ORTHOGONAL_FACTOR) for c in parts}
-        free = [c for c in parts if c not in peaks]
-        for signs in itertools.product((1.0, -1.0), repeat=len(free)):
-            sign_of = dict(zip(free, signs, strict=True))
-            out.append(tuple((sign_of.get(c, 1.0) * weight[c], c) for c in parts))
+        own = named.get(primary, ("case", primary))
+        others = [group for key, group in by_direction.items() if key != own]
+        for companions in itertools.product(*others):
+            parts = [primary, *companions]
+            weight = {c: (1.0 if c == primary else ORTHOGONAL_FACTOR) for c in parts}
+            free = [c for c in parts if c not in peaks]
+            for signs in itertools.product((1.0, -1.0), repeat=len(free)):
+                sign_of = dict(zip(free, signs, strict=True))
+                out.append(tuple((sign_of.get(c, 1.0) * weight[c], c) for c in parts))
     return out
 
 
@@ -522,6 +536,8 @@ def asce7_16_lrfd(
     orthogonal: bool = False,
     omega0: float | None = None,
     sds: float = 1.0,
+    directions: Mapping[int, str] | None = None,
+    alternatives: Iterable[str] = (),
 ) -> list[tuple[str, list[CombinationTerm]]]:
     """ASCE 7-16 Section 2.3.1 basic LRFD combinations, as ``(name, terms)`` pairs.
 
@@ -554,6 +570,10 @@ def asce7_16_lrfd(
 
     ``E`` there is the horizontal earthquake case (the 0.2 SDS D term is
     explicit), and ``sds`` is the design short-period spectral acceleration.
+
+    With ``"S"`` in ``alternatives`` the snow cases never act together (a
+    balanced and an unbalanced arrangement): ``0.2S`` is then one combination
+    per snow case, not their sum.
     """
     by_role = {role: list(dict.fromkeys(roles.get(role, ()))) for role in LOAD_ROLES}
     dead = by_role["D"]
@@ -563,7 +583,7 @@ def asce7_16_lrfd(
     roof = [(r, cid) for r in ("Lr", "S", "R") for cid in by_role[r]]
     peaks = list(peak_cases)
     lateral_w = lateral_variants(by_role["W"], peaks)
-    lateral_e = lateral_variants(by_role["E"], peaks, orthogonal=orthogonal)
+    lateral_e = lateral_variants(by_role["E"], peaks, orthogonal=orthogonal, directions=directions)
 
     out: list[tuple[str, list[CombinationTerm]]] = []
 
@@ -627,13 +647,17 @@ def asce7_16_lrfd(
             )
     # 5. 1.2D + 1.0E + L + 0.2S
     snow = by_role["S"]
+    snows: list[tuple[str, list[int]]] = [("+0.2S" if snow else "", snow)]
+    if "S" in set(alternatives) and len(snow) > 1:
+        snows = [(f"+0.2{load('S', cid)}", [cid]) for cid in snow]
     for e in lateral_e:
-        out.append(
-            (
-                f"1.2D{signed(1.0, 'E', e)}{with_live}{'+0.2S' if snow else ''}",
-                terms((1.2, dead), *scaled_parts(1.0, e), (1.0, live), (0.2, snow)),
+        for s_name, s_cases in snows:
+            out.append(
+                (
+                    f"1.2D{signed(1.0, 'E', e)}{with_live}{s_name}",
+                    terms((1.2, dead), *scaled_parts(1.0, e), (1.0, live), (0.2, s_cases)),
+                )
             )
-        )
     # 6. 0.9D + 1.0W
     for w in lateral_w:
         out.append((f"0.9D{signed(1.0, 'W', w)}", terms((0.9, dead), *scaled_parts(1.0, w))))
@@ -646,17 +670,18 @@ def asce7_16_lrfd(
         uplift = 0.9 - 0.2 * sds
         for e in lateral_e:
             e_name = signed(omega0, "E", e)
-            out.append(
-                (
-                    f"Ω0: {gravity:g}D{e_name}{with_live}{'+0.2S' if snow else ''}",
-                    terms(
-                        (gravity, dead),
-                        *scaled_parts(omega0, e),
-                        (1.0, live),
-                        (0.2, snow),
-                    ),
+            for s_name, s_cases in snows:
+                out.append(
+                    (
+                        f"Ω0: {gravity:g}D{e_name}{with_live}{s_name}",
+                        terms(
+                            (gravity, dead),
+                            *scaled_parts(omega0, e),
+                            (1.0, live),
+                            (0.2, s_cases),
+                        ),
+                    )
                 )
-            )
             out.append(
                 (
                     f"Ω0: {uplift:g}D{e_name}",
