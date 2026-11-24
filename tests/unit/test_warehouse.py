@@ -240,9 +240,26 @@ def test_the_design_overrides_carry_the_unbraced_lengths() -> None:
         assert override.length_minor == pytest.approx(warehouse.unbraced[element_id], rel=1e-11)
         assert override.length_major is None  # in the frame's plane: as modelled
     # A girt without an angle does not brace the column either: the full height.
-    columns = set(overrides) - rafters
+    columns = set(warehouse.unbraced) - rafters
     assert len(columns) == len(warehouse.members["columns"])
     assert {overrides[e].length_ltb for e in columns} == {6.0}
+
+
+def test_a_purlin_or_girt_buckles_about_its_major_axis_over_its_own_span() -> None:
+    """It rests on every frame: the line over all the bays is not one unbraced member."""
+    warehouse = _build(girt_spacing=1.5)
+    overrides = {o.element_id: o for o in member_design_overrides(warehouse)}
+    secondary = set(warehouse.members["purlins"]) | set(warehouse.members["girts"])
+    assert secondary and secondary <= set(overrides)
+    nodes = {n.id: np.asarray(n.coords) for n in warehouse.nodes}
+    by_id = {e.id: e for e in warehouse.elements}
+    for element_id in secondary:
+        override = overrides[element_id]
+        a, b = by_id[element_id].nodes
+        assert override.length_major == pytest.approx(float(np.linalg.norm(nodes[b] - nodes[a])))
+        # The sheeting is not counted as a brace: these stay as modelled.
+        assert override.length_minor is None and override.length_ltb is None
+    assert set(overrides) == set(warehouse.unbraced) | secondary
 
 
 def test_interior_columns_get_no_override() -> None:
@@ -358,7 +375,8 @@ def test_planning_does_not_touch_the_project_and_applying_builds_it() -> None:
         "RNC-07 ultimate envelope",
     ]
     assert project.design is not None and project.design.method == "LRFD"
-    assert len(project.design.members) == len(plan.warehouse.unbraced)
+    secondary = plan.warehouse.members["purlins"] + plan.warehouse.members["girts"]
+    assert len(project.design.members) == len(plan.warehouse.unbraced) + len(secondary)
     # The saved file reloads: every reference the plan wrote resolves.
     Project.model_validate(project.model_dump())
 

@@ -69,8 +69,9 @@ and distortional buckling loads of the whole section from a rational analysis
 
 **Built-up pairs.** Two equal channels joined toe to toe (box) or back to
 back (I) are a section option from phase 1 (`ColdFormedShape.assembly`), so
-they can be modelled and analysed now; their design goes with phases 2 and 3,
-and the steel frame check covers them as soon as it covers single channels.
+they can be modelled and analysed now. Their design was planned with phases 2
+and 3 and moved to phase 4 (section 6): the steel frame check reports a pair as
+not checked.
 
 ## 4. Consequences
 
@@ -83,9 +84,12 @@ and the steel frame check covers them as soon as it covers single channels.
   distinct distortional minimum for many lipped sections in bending, but in
   compression it is often only a shoulder (the 9CS2.5x059 channel is one).
   The solver then reports no distortional load instead of guessing one.
-  Phase 2 must close that gap before DSM uses `Pcrd`: by the constrained
-  finite strip method (modal identification) or by the closed-form
-  distortional expressions of Appendix 2, checked against the specification.
+  Phase 2 closes that gap with the closed-form flange model of Appendix 2
+  (Schafer): it gives the half-wavelength `Lcrd`, and the distortional load is
+  the **finite strip value at `Lcrd`** (0.271 `Py` for that channel, 0.27 in
+  the DSM Design Guide). A minimum of the curve is local up to
+  `sqrt(size × Lcrd)` and distortional beyond; when there is a distortional
+  minimum it is used as it is.
 - A signature curve of 90 half-wavelengths takes about a second for a
   20-node section; the check will compute it once per section and cache it.
 
@@ -100,3 +104,34 @@ and the steel frame check covers them as soon as it covers single channels.
   Cw, xo, j, ro) against the AISI Cold-Formed Steel Design Manual, the
   monosymmetry constant of a sharp channel in closed form, and the principal
   axes of a zee.
+
+## 6. Status
+
+**2026-11-24: phases 2 and 3, single profiles.** `core/design/aisi_s100.py`
+and the dispatch in `steel_frame_check` cover the lipped channel, the plain
+channel and the lipped zee: D2/D3, E2 (flexural, torsional and
+flexural-torsional), E3.2, E4, F2 (major axis with `Cb`; minor axis with the
+monosymmetry constant, the lower of the two senses of bending), F3.2, F4, G2.1,
+H1.1, H1.2, H2 and the B1 of C1.2.1.1; the calculation memory and the help page
+follow.
+
+- **Gate.** The flexure example of the DSM Design Guide (CF06-1, 9CS2.5x059,
+  Fy = 55 ksi: `Mcrl`/`My` 0.67, `Mcrd`/`My` 0.85, `Mnl` 94, `Mnd` 93, `φMn` 84,
+  `Mn/Ω` 56 kip-in) is reproduced within 1 % on the strengths
+  (`tests/unit/test_aisi_s100.py`). The closed forms of global buckling agree
+  with the finite strips within 0.5 % (column, major-axis and minor-axis
+  lateral-torsional buckling).
+- **Source of the equations.** No copy of S100-16 was at hand: the equations,
+  limits, factors and clause numbers were written from memory and then pinned
+  by the example above and by the closed forms. They need a pass against the
+  specification.
+- **Simplifications.** Twisting takes the minor-axis unbraced length (no
+  `Lt`/`Kt` yet). A zee takes half the channel's lateral-torsional stress
+  (F2.1.3). The sign of a minor-axis moment is not tracked. Shear across the
+  depth of the section treats each flange as a web.
+- **Moved to phase 4.** The built-up pairs (the finite strip model of the box
+  and the I, and I1.2), `Lt`/`Kt` overrides and the signature-curve panel. Hats
+  and angles are reported as not checked.
+- **Next.** The bracing a through-fastened sheeting gives a purlin, with the R
+  factor of I6.2.1 under uplift, and sag-rod lines in the Warehouse Wizard: as
+  modelled, a purlin is unbraced over its whole bay and the default one fails.

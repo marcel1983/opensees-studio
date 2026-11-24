@@ -16,7 +16,9 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from opensees_studio import __version__
+from opensees_studio.core.design.aisi_s100 import cold_formed_member
 from opensees_studio.core.design.ratio_bands import ratio_text
+from opensees_studio.core.sections.cold_formed import ColdFormedShape
 from opensees_studio.services.steel_design import shape_in_units
 
 Language = Literal["en", "es"]
@@ -269,10 +271,21 @@ def _properties(shape: object) -> list[tuple[str, str]]:
     return out
 
 
-def _member_shape(project: Any, shape_name: str) -> object | None:
+def _member_shape(project: Any, shape_name: str, element_id: int = 0) -> object | None:
+    """The AISC shape of that name, or the cold-formed profile of the element's section."""
     try:
         return shape_in_units(shape_name, project.meta.units)
     except (KeyError, ValueError):
+        pass
+    element = next((e for e in project.elements if e.id == element_id), None)
+    section_id = getattr(element, "section_id", None)
+    section = next((s for s in project.sections if s.id == section_id), None)
+    profile = getattr(section, "shape", None)
+    if not isinstance(profile, ColdFormedShape):
+        return None
+    try:
+        return cold_formed_member(profile, float(getattr(section, "E", 0.0) or 1.0))
+    except ValueError:
         return None
 
 
@@ -464,7 +477,7 @@ def _capacity_rows(report: Any) -> list[list[str]]:
 
 
 def _member_html(project: Any, member: Any, labels: dict[str, str]) -> list[str]:
-    shape = _member_shape(project, member.shape)
+    shape = _member_shape(project, member.shape, member.element_id)
     out = [
         f"<h2>{labels['element']} {member.element_id} - {_e(member.shape)}</h2>",
         f"<p>{labels['governing']}: <b>{_e(member.check)}</b> "
@@ -917,7 +930,7 @@ def _markdown(project: Any, report: Any, labels: dict[str, str]) -> str:
             f"{labels['ratio']} {ratio_text(member.ratio)}; {labels['load_set']} "
             f"{member.load_set}; {labels['station']} {member.station:.2f}.",
         ]
-        shape = _member_shape(project, member.shape)
+        shape = _member_shape(project, member.shape, member.element_id)
         if shape is not None and (props := _properties(shape)):
             lines += ["", f"### {labels['properties']}", "", "| Property | Value |", "|---|---|"]
             lines += [f"| {k} | {v} |" for k, v in props]
@@ -1240,7 +1253,7 @@ def _latex(project: Any, report: Any, labels: dict[str, str]) -> str:
             rf"{_tex_escape(labels['station'])} {member.station:.2f}.",
             "",
         ]
-        shape = _member_shape(project, member.shape)
+        shape = _member_shape(project, member.shape, member.element_id)
         if shape is not None and (props := _properties(shape)):
             lines += [rf"\textbf{{{_tex_escape(labels['properties'])}}}", r"\begin{longtable}{ll}"]
             lines += [rf"{_tex_escape(k)} & {_tex_escape(v)} \\" for k, v in props]
@@ -1616,7 +1629,7 @@ def odt_bytes(project: Any, report: Any, *, language: Language = "en") -> bytes:
         body.append(
             f"<text:p>{_odt_text(labels['governing'])}: {_odt_text(member.check)} ({_odt_text(member.equation)}); {_odt_text(labels['ratio'])} {ratio_text(member.ratio)}</text:p>"
         )
-        shape = _member_shape(project, member.shape)
+        shape = _member_shape(project, member.shape, member.element_id)
         if shape is not None and (props := _properties(shape)):
             body.append(
                 f"<text:h text:outline-level='3'>{_odt_text(labels['properties'])}</text:h>"

@@ -1690,6 +1690,7 @@
  "Shear-lag factor U in Ae = U An (D2-2)": "Factor de retraso de corte U en Ae = U An (D2-2)",
  "Close with OK and paint every member by its governing ratio": "Cerrar con Aceptar y pintar cada miembro según su ratio determinante",
  "Frame members whose section is an AISC <b>W, M, S, HP, channel, tee, equal-leg angle, HSS or pipe</b> shape (by name, or named below) are checked for tension, compression, flexure, shear and the H1 interaction, over the results of the load sets ticked here": "Las barras cuya sección es un perfil AISC <b>W, M, S, HP, canal, T, angular de alas iguales, HSS o tubo</b> (por nombre, o nombrado abajo) se verifican a tracción, compresión, flexión, corte y la interacción H1, sobre los resultados de los conjuntos de cargas marcados aquí",
+ "A member with a <b>cold-formed</b> section (lipped or plain channel, lipped zee) is checked by AISI S100-16 with the Direct Strength Method; Fy and Fu are those of the section's material": "Una barra con sección <b>formada en frío</b> (canal con o sin labios, zeta con labios) se verifica por AISI S100-16 con el Método de Resistencia Directa; Fy y Fu son los del material de la sección",
  "Apply to the selected members": "Aplicar a los miembros seleccionados",
  "Supporting medium": "Medio de apoyo",
  "Behaviour": "Comportamiento",
