@@ -50,8 +50,8 @@ those tables, connects them and enables them; `MainWindow.action("file.save")`
 returns one. The spec tables are plain data with no Qt import, so a unit test
 checks that every command has a handler and a help page.
 
-The migration is by menu: File and parts of Edit, Define and Assign are
-declared this way, the rest is still built by hand in
+The migration is by menu: File, Design and parts of Edit, Define and Assign
+are declared this way, the rest is still built by hand in
 `MainWindow._build_actions`. A declared action is also stored as `_act_<name>`,
 the name the ribbon layout, `core.help.ACTION_TOPICS` and the icon files use; a
 command that had another name before it was declared keeps it through
@@ -73,6 +73,13 @@ handler: `"transforms.move"` is `window.transforms.move`.
 |---|---|---|
 | `TransformsController` | `transforms` | Edit → Copy, Paste, Move, Replicate, Mirror, Extrude |
 | `BuildingController` | `building` | Define → Storeys, Mass Source, Seismic Loads; Assign → Diaphragm, Rigid Link, Remove Constraints |
+| `DesignController` | `design` | The Design menu (19 commands): basis, Direct Analysis, notional loads, members, steel and concrete checks, connections, base plates, footings |
+
+`DesignController` is the example of the named hooks: it is created with
+`results` (the case results computed on the project as it is now) and
+`show_ratios` (the ratio overlay and its legend dock, which belong to the
+window's post-processing display), and `tests/gui/test_design_controller.py`
+runs it with a plain `QMainWindow` and two lambdas.
 
 `MainWindow` is being emptied this way, one area per pull request; it keeps
 the layout, the docks and the wiring.

@@ -58,7 +58,6 @@ from opensees_studio.commands import (
     AddMaterialsCommand,
     AddNodalLoadsCommand,
     AddNodesCommand,
-    AddNotionalLoadsCommand,
     AddPointElementLoadsCommand,
     AddSectionsCommand,
     AddTemperatureLoadsCommand,
@@ -71,18 +70,11 @@ from opensees_studio.commands import (
     MergeJointsCommand,
     MeshCommand,
     ReplaceElementsCommand,
-    SetChapterJChecksCommand,
-    SetColumnSplicesCommand,
-    SetConnectionsCommand,
     SetCoordSystemsCommand,
-    SetGussetsCommand,
     SetMassCommand,
     SetProjectMetaCommand,
     SetRestraintCommand,
     SetSpringCommand,
-)
-from opensees_studio.commands.buildings import (
-    SetDesignSettingsCommand,
 )
 from opensees_studio.commands.generated import insert_generated
 from opensees_studio.commands.groups import (
@@ -97,7 +89,6 @@ from opensees_studio.core import (
     SHELL_ELEMENT_CLASSES,
     SUPPORTED_NDF,
     ElasticSection,
-    LinearTimeSeries,
     Project,
     ShellDKGTElement,
     ShellMITC4Element,
@@ -121,7 +112,6 @@ from opensees_studio.core.connectivity import (
 )
 from opensees_studio.core.default_materials import missing_default_materials
 from opensees_studio.core.design.settings import DesignSettings
-from opensees_studio.core.design.stability import notional_pattern
 from opensees_studio.core.duplicates import default_tolerance
 from opensees_studio.core.generated import GeneratedModel
 from opensees_studio.core.geometry.ordering import QuadOrderError, order_quad_nodes
@@ -194,6 +184,7 @@ from opensees_studio.views.canvas3d.model_renderer import RendererMode
 from opensees_studio.views.canvas3d.shell_contour_renderer import ShellContourRenderer
 from opensees_studio.views.controllers import Shell
 from opensees_studio.views.controllers.building import BuildingController
+from opensees_studio.views.controllers.design import DesignController
 from opensees_studio.views.controllers.transforms import TransformsController
 from opensees_studio.views.dialogs import (
     AddNodeDialog,
@@ -217,7 +208,6 @@ from opensees_studio.views.dialogs import (
     CalculationMemoryDialog,
     CoordinateGridSystemsDialog,
     DisplayOptionsDialog,
-    DriftCheckDialog,
     DuplicatesDialog,
     DxfImportDialog,
     ElementDiagramWindow,
@@ -235,7 +225,6 @@ from opensees_studio.views.dialogs import (
     MeshDialog,
     ModelCheckDialog,
     MoveDialog,
-    NotionalLoadsDialog,
     PathTimeSeriesDialog,
     PerformanceDialog,
     PlainPatternDialog,
@@ -244,7 +233,6 @@ from opensees_studio.views.dialogs import (
     RunAnalysisDialog,
     S3dImportDialog,
     SectionLibraryDialog,
-    SteelDesignDialog,
     TclImportDialog,
     TrapezoidalLoadDialog,
     UniformExcitationDialog,
@@ -257,10 +245,7 @@ from opensees_studio.views.dialogs.area_loads import (
 )
 from opensees_studio.views.dialogs.assign_springs import AssignSpringsDialog
 from opensees_studio.views.dialogs.batch_run import BatchRunDialog
-from opensees_studio.views.dialogs.chapter_j import ChapterJDialog
-from opensees_studio.views.dialogs.column_splices import ColumnSplicesDialog
 from opensees_studio.views.dialogs.connect_joints import DivideFramesDialog, MergeJointsDialog
-from opensees_studio.views.dialogs.connections import ConnectionsDialog
 from opensees_studio.views.dialogs.grid_line_view import GridLineViewDialog
 from opensees_studio.views.dialogs.grid_wizard import GridWizardDialog
 from opensees_studio.views.dialogs.groups import (
@@ -269,7 +254,6 @@ from opensees_studio.views.dialogs.groups import (
     GroupsDialog,
     SectionCutsDialog,
 )
-from opensees_studio.views.dialogs.gussets import GussetsDialog
 from opensees_studio.views.dialogs.joint_patterns import (
     AssignJointPatternDialog,
     JointPatternsDialog,
@@ -500,6 +484,12 @@ class MainWindow(QMainWindow):
 
         #: Storeys, mass source, seismic loads, diaphragms, rigid links.
         self.building = BuildingController(shell)
+        #: The Design menu: basis, members, steel and concrete checks, connections, footings.
+        self.design = DesignController(
+            shell,
+            results=self._current_case_results,
+            show_ratios=self._show_design_ratios,
+        )
 
         self._build_docks()
         self._log(f"OpenSees Studio {__version__} started.")
@@ -904,25 +894,6 @@ class MainWindow(QMainWindow):
         self._act_auto_mesh_frames.setStatusTip(
             "Run divides frames where another frame ends on them or crosses them."
         )
-        self._act_design_basis = QAction("Design &Basis (AISC)…", self)
-        self._act_direct_analysis = QAction("Direct &Analysis Method…", self)
-        self._act_member_classification = QAction("&Member Classification…", self)
-        self._act_base_plates = QAction("Base &Plates (Column Bases)…", self)
-        self._act_joint_connections = QAction("Connections by &Joint…", self)
-        self._act_built_up = QAction("B&uilt-Up Shapes…", self)
-        self._act_steel_check = QAction("&Steel Frame Check (AISC 360-16)…", self)
-        self._act_concrete_check = QAction("Co&ncrete Frame Check (ACI 318-19)…", self)
-        self._act_footings = QAction("&Footings (ACI 318-19, Soil)…", self)
-        self._act_footing_pressures = QAction("Footing &Pressure Plan…", self)
-        self._act_base_plate = QAction("&Base Plate && Anchors (DG1, ACI 318)…", self)
-        self._act_bolted = QAction("Bolted Connection (&Prying, Bolt Group)…", self)
-        self._act_connections = QAction("&Connections (AISC 358-22)…", self)
-        self._act_gussets = QAction("&Gussets (AISC 341-22)…", self)
-        self._act_column_splices = QAction("&Column Splices (AISC 341-22)…", self)
-        self._act_chapter_j = QAction("Connection Checks (AISC 360 &J)…", self)
-        self._act_drift_check = QAction("Storey &Drift Check…", self)
-        self._act_steel_ratios = QAction("Display Steel &Ratios on Model", self)
-        self._act_notional_loads = QAction("Generate &Notional Loads (DAM)…", self)
         self._act_check_stability = QAction("Check Model &Stability…", self)
         self._act_cancel_stability = QAction("&Cancel Stability Check", self)
 
@@ -1278,33 +1249,41 @@ class MainWindow(QMainWindow):
         m_design = mb.addMenu("Desi&gn")
         m_design.addActions(
             [
-                self._act_design_basis,
-                self._act_direct_analysis,
-                self._act_notional_loads,
+                self.action("design.design_basis"),
+                self.action("design.direct_analysis"),
+                self.action("design.notional_loads"),
             ]
         )
         m_design.addSeparator()
-        m_design.addActions([self._act_member_classification, self._act_built_up])
+        m_design.addActions(
+            [self.action("design.member_classification"), self.action("design.built_up")]
+        )
         m_design.addSeparator()
-        m_design.addActions([self._act_steel_check, self._act_steel_ratios, self._act_drift_check])
+        m_design.addActions(
+            [
+                self.action("design.steel_check"),
+                self.action("design.steel_ratios"),
+                self.action("design.drift_check"),
+            ]
+        )
         m_design.addSeparator()
         m_connections = m_design.addMenu("Steel &Connections")
         m_connections.addActions(
             [
-                self._act_joint_connections,
-                self._act_base_plates,
-                self._act_connections,
-                self._act_gussets,
-                self._act_column_splices,
-                self._act_chapter_j,
+                self.action("design.joint_connections"),
+                self.action("design.base_plates"),
+                self.action("design.connections"),
+                self.action("design.gussets"),
+                self.action("design.column_splices"),
+                self.action("design.chapter_j"),
             ]
         )
         m_calculators = m_design.addMenu("Connection Calc&ulators")
-        m_calculators.addActions([self._act_base_plate, self._act_bolted])
+        m_calculators.addActions([self.action("design.base_plate"), self.action("design.bolted")])
         m_design.addSeparator()
-        m_design.addAction(self._act_concrete_check)
-        m_design.addAction(self._act_footings)
-        m_design.addAction(self._act_footing_pressures)
+        m_design.addAction(self.action("design.concrete_check"))
+        m_design.addAction(self.action("design.footings"))
+        m_design.addAction(self.action("design.footing_pressures"))
         for menu, topic_id in (
             (m_connections, "design.joint_connections"),
             (m_calculators, "design.base_plate"),
@@ -2122,26 +2101,7 @@ class MainWindow(QMainWindow):
         self._act_clear_results.triggered.connect(self._on_clear_results)
         self._act_auto_mesh_frames.toggled.connect(self._on_toggle_auto_mesh_frames)
         self._act_assign_auto_mesh.triggered.connect(self._on_assign_auto_mesh)
-        self._act_design_basis.triggered.connect(self._on_design_basis)
-        self._act_direct_analysis.triggered.connect(self._on_direct_analysis)
-        self._act_member_classification.triggered.connect(self._on_member_classification)
-        self._act_base_plates.triggered.connect(self._on_base_plates)
-        self._act_joint_connections.triggered.connect(self._on_joint_connections)
-        self._act_built_up.triggered.connect(self._on_built_up)
-        self._act_steel_check.triggered.connect(self._on_steel_check)
         self._act_dark_mode.toggled.connect(self._apply_dark_mode)
-        self._act_concrete_check.triggered.connect(self._on_concrete_check)
-        self._act_footings.triggered.connect(self._on_footings)
-        self._act_footing_pressures.triggered.connect(self._on_footing_pressures)
-        self._act_base_plate.triggered.connect(self._on_base_plate)
-        self._act_bolted.triggered.connect(self._on_bolted_connection)
-        self._act_connections.triggered.connect(self._on_connections)
-        self._act_gussets.triggered.connect(self._on_gussets)
-        self._act_column_splices.triggered.connect(self._on_column_splices)
-        self._act_chapter_j.triggered.connect(self._on_chapter_j)
-        self._act_notional_loads.triggered.connect(self._on_notional_loads)
-        self._act_drift_check.triggered.connect(self._on_drift_check)
-        self._act_steel_ratios.triggered.connect(self._on_steel_ratios)
         self._act_check_stability.triggered.connect(self._on_check_stability)
         self._act_cancel_stability.triggered.connect(self._stability.cancel)
         self._stability.log.connect(self._log)
@@ -3782,353 +3742,6 @@ class MainWindow(QMainWindow):
         dialog = InfluenceLineDialog(self._vm.project, results, parent=self)
         dialog.exec()
 
-    def _on_notional_loads(self) -> None:
-        """Design → Generate Notional Loads: AISC 360 C2-1 patterns, one undo step."""
-        project = self._vm.project
-        if project is None:
-            return
-        method: str = project.design.method if project.design is not None else "LRFD"
-        dialog = NotionalLoadsDialog(project, self, method=method)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        directions, factor, method = dialog.settings()
-        series: LinearTimeSeries | None = None
-        if project.time_series:
-            time_series_id = project.time_series[0].id
-        else:
-            series = LinearTimeSeries(id=project.next_time_series_id(), name="Notional")
-            time_series_id = series.id
-        patterns = []
-        next_id = project.next_pattern_id()
-        for direction in directions:
-            pattern = notional_pattern(
-                project,
-                pattern_id=next_id,
-                time_series_id=time_series_id,
-                factor=factor,
-                method=method,
-                direction=direction,
-            )
-            next_id += 1
-            if pattern.nodal_loads:
-                patterns.append(pattern)
-        if not patterns:
-            QMessageBox.warning(
-                self,
-                "Notional loads",
-                "No storey carries a gravity load. Define a mass source or a Dead/Live "
-                "load pattern first.",
-            )
-            return
-        self._vm.apply_command(AddNotionalLoadsCommand(self._vm, patterns, series))
-        total = sum(
-            load.forces[0] + load.forces[1] for pattern in patterns for load in pattern.nodal_loads
-        )
-        self._log(
-            f"Added {len(patterns)} notional load pattern(s), total {total:.6g}; "
-            "use them in the cases of the Direct Analysis Method."
-        )
-
-    def _on_connections(self) -> None:
-        """Design → Connections: edit the AISC 358 RBS connections."""
-        project = self._vm.project
-        if project is None:
-            return
-        dialog = ConnectionsDialog(project, self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        connections = dialog.connections()
-        if connections != project.connections:
-            self._vm.apply_command(SetConnectionsCommand(self._vm, connections))
-        self._log(f"{len(connections)} RBS connection(s).")
-
-    def _on_gussets(self) -> None:
-        """Design → Gussets: edit the AISC 341 SCBF gusset plates."""
-        project = self._vm.project
-        if project is None:
-            return
-        dialog = GussetsDialog(project, self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        gussets = dialog.gussets()
-        if gussets != project.gussets:
-            self._vm.apply_command(SetGussetsCommand(self._vm, gussets))
-        self._log(f"{len(gussets)} gusset plate(s).")
-
-    def _on_column_splices(self) -> None:
-        """Design → Column Splices: edit the AISC 341 SCBF column splices."""
-        project = self._vm.project
-        if project is None:
-            return
-        dialog = ColumnSplicesDialog(project, self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        splices = dialog.splices()
-        if splices != project.column_splices:
-            self._vm.apply_command(SetColumnSplicesCommand(self._vm, splices))
-        self._log(f"{len(splices)} column splice(s).")
-
-    def _on_chapter_j(self) -> None:
-        """Design → Connection Checks: AISC 360 Chapter J checks."""
-        project = self._vm.project
-        if project is None:
-            return
-        dialog = ChapterJDialog(project, self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        checks = dialog.checks()
-        if checks != project.chapter_j_checks:
-            self._vm.apply_command(SetChapterJChecksCommand(self._vm, checks))
-        self._log(f"{len(checks)} Chapter J check(s).")
-
-    def _on_design_basis(self) -> None:
-        """Design → Design Basis: code, method, stability method, systems and steel grades."""
-        from opensees_studio.views.dialogs.design_basis import DesignBasisDialog
-
-        project = self._vm.project
-        if project is None:
-            return
-        dialog = DesignBasisDialog(project, self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        settings = dialog.settings()
-        if settings != project.design:
-            self._vm.apply_command(SetDesignSettingsCommand(self._vm, settings))
-            self._log(
-                f"Design basis: {settings.method}, {settings.stability_method} stability "
-                f"design, system {settings.seismic_system}"
-                + (f" / {settings.seismic_system_y}" if settings.seismic_system_y else "")
-                + (
-                    f", {len(settings.steel_grades)} family grade(s)."
-                    if settings.steel_grades
-                    else "."
-                )
-            )
-
-    def _on_direct_analysis(self) -> None:
-        """Design → Direct Analysis Method: one second-order case per LRFD combination."""
-        from opensees_studio.commands import ReplaceDirectAnalysisCasesCommand
-        from opensees_studio.views.dialogs.design_basis import DirectAnalysisDialog
-
-        project = self._vm.project
-        if project is None:
-            return
-        dialog = DirectAnalysisDialog(project, dict(self._case_results.current(project)), self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        cases = dialog.cases()
-        if not cases:
-            return
-        self._vm.apply_command(
-            ReplaceDirectAnalysisCasesCommand(self._vm, cases, dialog.settings())
-        )
-        self._log(
-            f"Direct Analysis Method: {len(cases)} case(s) generated; run them "
-            "(Analyze → Run All Cases), then check Δ2/Δ1 here and the members in "
-            "Design → Steel Frame Check."
-        )
-
-    def _on_member_classification(self) -> None:
-        """Design → Member Classification: physical members, roles and unbraced lengths."""
-        from opensees_studio.views.dialogs.member_classification import (
-            MemberClassificationDialog,
-        )
-
-        project = self._vm.project
-        if project is None:
-            return
-        dialog = MemberClassificationDialog(project, self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        settings = dialog.settings()
-        if settings != (project.design or DesignSettings()):
-            self._vm.apply_command(SetDesignSettingsCommand(self._vm, settings))
-            chosen = sum(1 for m in settings.members if m.role is not None)
-            self._log(
-                f"Member classification: {dialog.member_count()} member(s), "
-                f"{chosen} element(s) with a role set by hand."
-            )
-
-    def _on_built_up(self) -> None:
-        """Design → Built-Up Shapes: welded I-shapes, and their analysis sections, one undo step."""
-        from opensees_studio.views.dialogs.built_up_shapes import BuiltUpShapesDialog
-
-        project = self._vm.project
-        if project is None:
-            return
-        dialog = BuiltUpShapesDialog(project, self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        settings = dialog.settings()
-        sections = dialog.new_sections()
-        if settings == (project.design or DesignSettings()) and not sections:
-            return
-        stack = self._vm.undo_stack
-        stack.beginMacro("Built-up shapes")
-        try:
-            if settings != (project.design or DesignSettings()):
-                self._vm.apply_command(SetDesignSettingsCommand(self._vm, settings))
-            if sections:
-                self._vm.apply_command(AddSectionsCommand(self._vm, sections))
-        finally:
-            stack.endMacro()
-        self._log(
-            f"Built-up shapes: {len(settings.built_up)} defined"
-            + (f", {len(sections)} analysis section(s) added." if sections else ".")
-        )
-
-    def _on_joint_connections(self) -> None:
-        """Design → Connections by Joint: topology of every member end, shear tabs checked."""
-        from opensees_studio.views.dialogs.joint_connections import JointConnectionsDialog
-
-        project = self._vm.project
-        if project is None:
-            return
-        dialog = JointConnectionsDialog(project, dict(self._case_results.current(project)), self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        settings = dialog.settings()
-        if settings != (project.design or DesignSettings()):
-            self._vm.apply_command(SetDesignSettingsCommand(self._vm, settings))
-        rows = dialog.run_check()
-        tabs = [r for r in rows if r.status in ("OK", "NG")]
-        failing = [f"{r.connection.element_id}{r.connection.end}" for r in tabs if r.status == "NG"]
-        self._log(
-            f"Connections by joint: {len(rows)} connection(s), {len(tabs)} shear tab(s)"
-            + (f", over the limit at {', '.join(failing)}." if failing else ".")
-        )
-
-    def _on_base_plates(self) -> None:
-        """Design → Base Plates: every column base over the design load sets."""
-        from opensees_studio.views.dialogs.base_plates import BasePlatesDialog
-
-        project = self._vm.project
-        if project is None:
-            return
-        dialog = BasePlatesDialog(project, dict(self._case_results.current(project)), self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        settings = dialog.settings()
-        if settings != (project.design or DesignSettings()):
-            self._vm.apply_command(SetDesignSettingsCommand(self._vm, settings))
-        failing = [r.node_id for r in dialog.run_check() if r.status == "NG"]
-        self._log(
-            f"Base plates: {len(dialog.designs())} column base(s)"
-            + (f", over the limit at node(s) {', '.join(map(str, failing))}." if failing else ".")
-        )
-
-    def _on_steel_check(self) -> None:
-        """Design → Steel Frame Check: AISC 360-16 ratios over this session's results.
-
-        The dialog reads the case results cache and runs nothing itself; its
-        settings are stored on OK with one undoable command.
-        """
-        project = self._vm.project
-        if project is None:
-            return
-        dialog = SteelDesignDialog(
-            project,
-            dict(self._case_results.current(project)),
-            selected_elements=frozenset(self._canvas.selection.elements),
-            parent=self,
-        )
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        settings = dialog.settings()
-        if settings != project.design:
-            self._vm.apply_command(SetDesignSettingsCommand(self._vm, settings))
-        report = dialog.report()
-        if report is not None:
-            self._log(f"Steel frame check (AISC 360-16, {settings.method}): {report.summary()}")
-            for note in report.notes:
-                self._log(note)
-        if dialog.select_failing_requested:
-            failing = dialog.failing_elements()
-            self._canvas.selection.set_selection(set(), failing)
-            self.statusBar().showMessage(f"Selected {len(failing)} failing member(s).", 4000)
-        if dialog.show_ratios_requested and report is not None:
-            self._show_design_ratios(report, settings)
-
-    def _on_concrete_check(self) -> None:
-        """Design → Concrete Frame Check: ACI 318-19 ratios over this session's results."""
-        from opensees_studio.views.dialogs.concrete_design import ConcreteDesignDialog
-
-        project = self._vm.project
-        if project is None:
-            return
-        dialog = ConcreteDesignDialog(project, dict(self._case_results.current(project)), self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        settings = dialog.settings()
-        if settings != project.design:
-            self._vm.apply_command(SetDesignSettingsCommand(self._vm, settings))
-        report = dialog.report()
-        if report is not None:
-            self._log(f"Concrete frame check (ACI 318-19): {report.summary()}")
-            for note in report.notes:
-                self._log(note)
-            if dialog.show_ratios_requested:
-                self._show_design_ratios(report, settings, concrete=True)
-
-    def _on_footings(self) -> None:
-        """Design → Footings: an isolated footing under every support, ACI 318-19 and the soil."""
-        from opensees_studio.views.dialogs.footings import FootingsDialog
-
-        project = self._vm.project
-        if project is None:
-            return
-        dialog = FootingsDialog(project, dict(self._case_results.current(project)), self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        settings = dialog.settings()
-        if settings != (project.design or DesignSettings()):
-            self._vm.apply_command(SetDesignSettingsCommand(self._vm, settings))
-        reports = dialog.reports()
-        failing = [r.label for r in reports if r.status == "NG"]
-        combined = len(settings.combined_footings)
-        self._log(
-            f"Footings: {len(settings.footings)} footing(s)"
-            + (f" and {combined} combined" if combined else "")
-            + (f", over the limit: {', '.join(failing)}." if failing else ".")
-        )
-
-    def _on_footing_pressures(self) -> None:
-        """Design → Footing Pressure Plan: the soil pressure under every footing, in plan."""
-        from opensees_studio.services.footings import all_footing_reports
-        from opensees_studio.views.dialogs.footing_pressures import FootingPressuresDialog
-
-        project = self._vm.project
-        if project is None:
-            return
-        results = dict(self._case_results.current(project))
-        reports = all_footing_reports(project, results, project.design)
-        FootingPressuresDialog(project, reports, self).exec()
-
-    def _on_base_plate(self) -> None:
-        """Design → Base Plate & Anchors: DG1 and ACI 318 Ch. 17 for one column base."""
-        from opensees_studio.views.dialogs.connection_calculators import BasePlateDialog
-
-        project = self._vm.project
-        if project is None:
-            return
-        nodes = sorted(self._canvas.selection.nodes)
-        dialog = BasePlateDialog(
-            project,
-            dict(self._case_results.current(project)),
-            nodes[0] if len(nodes) == 1 else None,
-            self,
-        )
-        dialog.exec()
-
-    def _on_bolted_connection(self) -> None:
-        """Design → Bolted Connection: prying action and an eccentric bolt group."""
-        from opensees_studio.views.dialogs.connection_calculators import BoltedConnectionDialog
-
-        project = self._vm.project
-        if project is None:
-            return
-        BoltedConnectionDialog(project, self).exec()
-
     def _on_language(self, code: str) -> None:
         """Options → Language: switch the interface now and remember it."""
         from PySide6.QtCore import QSettings
@@ -4154,26 +3767,10 @@ class MainWindow(QMainWindow):
         self._project_dock.set_project(self._vm.project)
         self._log(f"Interface language: {LANGUAGES[code]}.")
 
-    def _on_steel_ratios(self) -> None:
-        """Design → Display Steel Ratios: paint the members by the stored check's ratios.
-
-        Runs the AISC 360-16 check with the project's design settings (the
-        defaults when none were stored) over this session's results, as the
-        Steel Frame Check dialog would, and shows the overlay with its legend.
-        """
+    def _current_case_results(self) -> dict[int, Any]:
+        """The results computed on the project as it is now, by case id."""
         project = self._vm.project
-        if project is None:
-            return
-        settings = project.design or DesignSettings()
-        report = steel_frame_check(project, dict(self._case_results.current(project)), settings)
-        if not any(m.status != "not designed" for m in report.members):
-            reason = " ".join(report.notes) or (
-                "No frame member has an AISC section the check covers."
-            )
-            QMessageBox.information(self, "Display Steel Ratios", reason)
-            return
-        self._log(f"Steel frame check (AISC 360-16, {settings.method}): {report.summary()}")
-        self._show_design_ratios(report, settings)
+        return dict(self._case_results.current(project)) if project is not None else {}
 
     def _show_design_ratios(
         self, report: Any, settings: DesignSettings, *, concrete: bool = False
@@ -4204,18 +3801,6 @@ class MainWindow(QMainWindow):
             else f"Steel ratios · AISC 360-16 {settings.method}"
         )
         self._canvas.render()
-
-    def _on_drift_check(self) -> None:
-        """Design → Storey Drift Check: amplified drift ratios against the allowable one."""
-        project = self._vm.project
-        if project is None:
-            return
-        dialog = DriftCheckDialog(project, dict(self._case_results.current(project)), parent=self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        settings = dialog.settings()
-        if settings != project.design:
-            self._vm.apply_command(SetDesignSettingsCommand(self._vm, settings))
 
     def _on_delete_loads(self) -> None:
         """Edit → Delete Loads: remove loads by type, pattern and selection, one undo step."""
@@ -8875,25 +8460,6 @@ class MainWindow(QMainWindow):
             self._act_auto_mesh_frames.setChecked(
                 project_now is None or project_now.auto_mesh_frames
             )
-        self._act_design_basis.setEnabled(has_project)
-        self._act_direct_analysis.setEnabled(has_project)
-        self._act_member_classification.setEnabled(has_project)
-        self._act_base_plates.setEnabled(has_project)
-        self._act_joint_connections.setEnabled(has_project)
-        self._act_built_up.setEnabled(has_project)
-        self._act_steel_check.setEnabled(has_project)
-        self._act_concrete_check.setEnabled(has_project)
-        self._act_footings.setEnabled(has_project)
-        self._act_footing_pressures.setEnabled(has_project)
-        self._act_base_plate.setEnabled(has_project)
-        self._act_bolted.setEnabled(has_project)
-        self._act_connections.setEnabled(has_project)
-        self._act_gussets.setEnabled(has_project)
-        self._act_column_splices.setEnabled(has_project)
-        self._act_chapter_j.setEnabled(has_project)
-        self._act_notional_loads.setEnabled(has_project)
-        self._act_drift_check.setEnabled(has_project)
-        self._act_steel_ratios.setEnabled(has_project)
         self._act_check_stability.setEnabled(
             has_project
             and opensees
