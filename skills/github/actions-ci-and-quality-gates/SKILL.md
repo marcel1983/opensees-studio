@@ -44,6 +44,7 @@ Cubre los dos flujos del repositorio y sus jobs, las puertas de calidad que ejec
 | Comandos exactos de lint y formato | `ci.yml`, job `lint` | no reconstruirlos de memoria: leerlos del flujo |
 | Versiones de ruff y mypy | `ci.yml` (fijadas) | el presupuesto está medido con `mypy==2.4.0` |
 | Presupuesto de errores de mypy | `tools/mypy-budget.txt` | solo puede bajar; lo aplica `tools/typecheck.py` |
+| Presupuesto de tamaño de archivos | `tools/file-size-budget.txt` | 1.500 líneas por archivo de `src/opensees_studio`, o el techo propio de los que ya eran más largos; solo puede bajar; lo aplica `tests/tools/test_file_size_budget.py` |
 | Umbral de cobertura | `ci.yml`: `--cov-fail-under=75` | no bajarlo sin justificarlo en el PR |
 | Sistemas operativos y Pythons | matriz de los jobs `test` y `gui` | 3.12 obligatorio; 3.13 y 3.14 solo en Linux |
 | Qué secretos de firma existen | ajustes del repositorio | `gh secret list` (ver bloque `VERIFICAR`) |

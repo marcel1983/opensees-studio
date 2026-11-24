@@ -499,6 +499,17 @@ live in `tools/render-budget.txt` and are a ratchet: the actor count is exact,
 the time ceiling is wide enough to survive a busy runner. Target from the
 roadmap: 10k nodes and 20k frames at 30 fps, so the numbers only go down.
 
+## File-size budget
+
+`tools/file-size-budget.txt` is the ceiling on the length of every Python file
+of `src/opensees_studio`: 1,500 lines, or the file's own ceiling when it was
+already longer (`views/main_window.py`, the runner, the importers…).
+`tests/tools/test_file_size_budget.py` fails when a file goes over, and also
+when a listed file is 150 lines under its ceiling, so the ceiling follows the
+file down. Do not raise a ceiling or add a file to make a change fit: split
+the file (a controller, a widget of its own, a module per case type or code).
+`core/help.py` and generated code are exempt.
+
 ## Examples
 
 The `examples/` directory contains both Python scripts and

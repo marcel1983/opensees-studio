@@ -5,6 +5,7 @@ from opensees_studio.views.docks.design_ratios import DesignRatioView
 from opensees_studio.views.docks.force_diagram import ForceDiagramView
 from opensees_studio.views.docks.hysteresis import HysteresisView
 from opensees_studio.views.docks.mode_shape_animator import ModeShapeAnimator
+from opensees_studio.views.docks.model_explorer import ModelExplorer
 from opensees_studio.views.docks.property_editor import PropertyEditorDock
 from opensees_studio.views.docks.pushover_curve import PushoverCurveView
 from opensees_studio.views.docks.reactions_panel import ReactionsPanel
@@ -19,6 +20,7 @@ __all__ = [
     "ForceDiagramView",
     "HysteresisView",
     "ModeShapeAnimator",
+    "ModelExplorer",
     "PropertyEditorDock",
     "PushoverCurveView",
     "ReactionsPanel",

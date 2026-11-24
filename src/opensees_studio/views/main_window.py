@@ -35,8 +35,6 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QStackedWidget,
     QToolBar,
-    QTreeWidget,
-    QTreeWidgetItem,
 )
 
 from opensees_studio import __version__
@@ -125,6 +123,7 @@ from opensees_studio.views.dialogs.load_combinations import LoadCombinationsDial
 from opensees_studio.views.dialogs.object_info import ObjectInfoDialog
 from opensees_studio.views.dialogs.solver_settings import SolverSettingsDialog
 from opensees_studio.views.docks import (
+    ModelExplorer,
     PropertyEditorDock,
 )
 from opensees_studio.views.help_window import HelpController
@@ -471,29 +470,10 @@ class MainWindow(QMainWindow):
 
     def _build_docks(self) -> None:
         # Model tree (left)
-        self._tree = QTreeWidget()
-        self._tree.setHeaderLabel("Model")
-        # Allow Ctrl+click / Shift+click to build up a multi-row selection,
-        # so Assign → Joint → Zero-Length Section (and other multi-entity
-        # commands) work directly from the tree.
-        self._tree.setSelectionMode(
-            QTreeWidget.SelectionMode.ExtendedSelection,
+        self._tree = ModelExplorer()
+        self._tree.picked.connect(
+            lambda nodes, elements: self._canvas.selection.set_selection(nodes, elements)
         )
-        self._tree.itemSelectionChanged.connect(self._on_tree_selection_changed)
-        # Top-level category items, populated lazily on refresh.
-        self._tree_categories: dict[str, QTreeWidgetItem] = {}
-        for label in (
-            "Nodes",
-            "Elements",
-            "Materials",
-            "Sections",
-            "Time Series",
-            "Patterns",
-            "Analyses",
-        ):
-            cat = QTreeWidgetItem([label])
-            self._tree_categories[label] = cat
-            self._tree.addTopLevelItem(cat)
         tree_dock = QDockWidget("Model Explorer", self)
         tree_dock.setObjectName("modelExplorerDock")
         tree_dock.setWidget(self._tree)
@@ -1892,7 +1872,7 @@ class MainWindow(QMainWindow):
         elif isinstance(app, QApplication):
             InterfaceTranslator(app, code)  # parented to the application, which keeps it
         # Texts the code sets itself (the explorer, the status bar) follow by hand.
-        self._refresh_tree(self._vm.project)
+        self._tree.refresh(self._vm.project)
         self._ribbon.retranslate()
         self._project_dock.set_project(self._vm.project)
         self._log(f"Interface language: {LANGUAGES[code]}.")
@@ -2543,7 +2523,7 @@ class MainWindow(QMainWindow):
                 # previous distance; fit the new model after choosing the view.
                 self._canvas.reframe()
         self._props.set_project(project)
-        self._refresh_tree(project)
+        self._tree.refresh(project)
         self._refresh_status()
         self.units.sync_combo()
         self._refresh_action_enablement()
@@ -2559,7 +2539,7 @@ class MainWindow(QMainWindow):
             self._canvas._renderer.render(self._vm.project)
             self._canvas.render()
         self._sync_grid_actions()
-        self._refresh_tree(self._vm.project)
+        self._tree.refresh(self._vm.project)
         self.drawing.model_changed()
         # Update the property editor with the (possibly new) entity values
         # at the current selection.
@@ -2634,88 +2614,6 @@ class MainWindow(QMainWindow):
         self._refresh_action_enablement()
 
     # ── helpers ──────────────────────────────────────────────────────
-    def _refresh_tree(self, project: Project | None) -> None:
-        """Repopulate the model explorer with category counts AND children."""
-
-        # The category's English name is the key the selection sync dispatches
-        # on; only the text on screen is translated.
-        self._tree.setHeaderLabel(tr("Model"))
-
-        # Helper to refill one category in place.
-        def _fill(cat: QTreeWidgetItem, items: list, label_fn) -> None:  # type: ignore[no-untyped-def]
-            kind = next(k for k, c in self._tree_categories.items() if c is cat)
-            cat.takeChildren()
-            cat.setText(0, f"{tr(kind)} ({len(items)})")
-            for it in items:
-                child = QTreeWidgetItem([label_fn(it)])
-                # Tag with kind + id so selection sync can dispatch.
-                child.setData(0, Qt.ItemDataRole.UserRole, (kind, it.id))
-                cat.addChild(child)
-
-        if project is None:
-            for kind, cat in self._tree_categories.items():
-                cat.takeChildren()
-                cat.setText(0, f"{tr(kind)} (0)")
-            return
-
-        _fill(
-            self._tree_categories["Nodes"],
-            project.nodes,
-            lambda n: f"#{n.id}  {n.name or ''}".strip(),
-        )
-        _fill(
-            self._tree_categories["Elements"],
-            project.elements,
-            lambda e: f"#{e.id}  [{e.type}]  {e.name or ''}".strip(),
-        )
-        _fill(
-            self._tree_categories["Materials"],
-            project.materials,
-            lambda m: f"#{m.id}  [{m.type}]  {m.name or ''}".strip(),
-        )
-        _fill(
-            self._tree_categories["Sections"],
-            project.sections,
-            lambda s: f"#{s.id}  [{s.type}]  {s.name or ''}".strip(),
-        )
-        _fill(
-            self._tree_categories["Time Series"],
-            project.time_series,
-            lambda t: f"#{t.id}  [{t.type}]  {t.name or ''}".strip(),
-        )
-        _fill(
-            self._tree_categories["Patterns"],
-            project.load_patterns,
-            lambda p: f"#{p.id}  [{p.type}]  {p.name or ''}".strip(),
-        )
-        _fill(
-            self._tree_categories["Analyses"],
-            project.analyses,
-            lambda a: f"#{a.id}  [{a.type}]  {a.name or ''}".strip(),
-        )
-
-    def _on_tree_selection_changed(self) -> None:
-        """Sync the canvas selection with every picked Node / Element row.
-
-        Multi-select via Ctrl+click / Shift+click populates the canvas
-        selection in one atomic set_selection call — so commands like
-        'Zero-Length Section' (needs exactly 2 joints) can be driven
-        entirely from the tree.
-        """
-        node_ids: set[int] = set()
-        element_ids: set[int] = set()
-        for item in self._tree.selectedItems():
-            data = item.data(0, Qt.ItemDataRole.UserRole)
-            if data is None:
-                continue
-            kind, entity_id = data
-            if kind == "Nodes":
-                node_ids.add(entity_id)
-            elif kind == "Elements":
-                element_ids.add(entity_id)
-        if node_ids or element_ids:
-            self._canvas.selection.set_selection(node_ids, element_ids)
-
     def _refresh_status(self) -> None:
         if self._vm.project is None:
             self._status_label.setText("No project")
