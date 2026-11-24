@@ -54,4 +54,5 @@
 # went with them: Linux 181 -> 177.
 # Move and Replicate are declared the same way (their `shortcut="Ctrl+M"` strings
 # matched no `QAction` overload either): Linux 177 -> 175.
-175
+# Point Loads is declared too (`shortcut="Ctrl+L"` matched no overload): Linux 175 -> 174.
+174

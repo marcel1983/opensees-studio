@@ -22,4 +22,5 @@ EDIT_ACTIONS: tuple[ActionSpec, ...] = (
     ),
     ActionSpec("edit.mirror", "Mirr&or…", "transforms.mirror", needs=_SELECTION),
     ActionSpec("edit.extrude", "E&xtrude…", "transforms.extrude", needs=_SELECTION),
+    ActionSpec("edit.delete_loads", "Delete &Loads…", "loads.delete_loads", needs=Needs.PROJECT),
 )

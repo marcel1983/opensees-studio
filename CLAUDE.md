@@ -200,8 +200,9 @@ These are non-obvious things that are easy to break if you don't know:
   (storeys, mass source, seismic loads, diaphragms, rigid links) has no state
   at all, and `DesignController` (the whole Design menu) shows the hooks: it
   gets `results` (the current case results) and `show_ratios` (the overlay the
-  window still owns) and runs in a test with no `MainWindow`. The rest of the
-  window is being moved out the same way.
+  window still owns) and runs in a test with no `MainWindow`; `LoadsController`
+  assigns and deletes loads. The rest of the window is being moved out the
+  same way.
 - An unregistered material type is not a crash: `material_forms.form_for`
   returns a read-only placeholder, the same contract `section_forms` has.
 - Never hardcode how the analysis child is spawned. Every spawn site

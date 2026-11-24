@@ -86,7 +86,7 @@ def test_a_surface_load_on_the_selected_shell(qtbot, monkeypatch) -> None:  # ty
     mw = _window(qtbot)
     mw._canvas.selection.set_selection(set(), {20, 1})  # a beam in the selection is skipped
     _accept(monkeypatch, SurfaceLoadDialog, lambda d: d.value.setValue(-2.5))
-    mw._on_assign_surface_load()
+    mw.loads.assign_surface_load()
     (load,) = _dead(mw).surface_loads
     assert (load.element_id, load.value, load.direction) == (20, -2.5, "Z")
     mw._vm.undo_stack.undo()
@@ -105,7 +105,7 @@ def test_a_floor_load_on_the_bay_the_selected_joints_frame(qtbot, monkeypatch) -
         d.distribution.setCurrentIndex(d.distribution.findData("one_way_y"))
 
     _accept(monkeypatch, FloorLoadDialog, fill)
-    mw._on_assign_floor_load()
+    mw.loads.assign_floor_load()
     (load,) = _dead(mw).floor_loads
     assert load.nodes == (1, 2, 3, 4) and load.value == 5.0
     # Corner 1 -> 2 runs along X, so a slab spanning along Y spans edge 2-3.
@@ -118,6 +118,6 @@ def test_an_imposed_settlement_on_the_selected_joints(qtbot, monkeypatch) -> Non
     mw._canvas.selection.set_selection({11, 12}, set())
     mw._refresh_action_enablement()
     _accept(monkeypatch, ImposedDisplacementDialog)
-    mw._on_assign_imposed_displacement()
+    mw.loads.assign_imposed_displacement()
     loads = _dead(mw).imposed_displacements
     assert [(x.node_id, x.dof, x.value) for x in loads] == [(11, 3, -0.01), (12, 3, -0.01)]
