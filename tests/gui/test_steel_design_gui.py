@@ -253,16 +253,16 @@ def test_display_steel_ratios_paints_the_members(qtbot) -> None:  # type: ignore
     project = _beam_project()
     mw._vm.adopt(project)
     for results in _results(project).values():
-        mw._case_results.put(project, results)
+        mw.results.cases.put(project, results)
     assert mw._act_steel_ratios.isEnabled()
     mw._act_steel_ratios.trigger()
     assert mw._ratio_renderer.is_drawn
     assert mw._ratio_renderer.members == 4
-    view = mw._post_dock.widget()
+    view = mw.display.dock.widget()
     assert "4 member(s) checked" in view.summary_text()
     view.closed.emit()
     assert not mw._ratio_renderer.is_drawn
-    assert mw._post_dock is None
+    assert mw.display.dock is None
 
 
 @pytest.mark.gui
@@ -292,7 +292,7 @@ def test_the_dialog_button_shows_the_ratios(qtbot, monkeypatch) -> None:  # type
     project = _beam_project()
     mw._vm.adopt(project)
     for results in _results(project).values():
-        mw._case_results.put(project, results)
+        mw.results.cases.put(project, results)
 
     def _show(self) -> int:  # type: ignore[no-untyped-def]
         self.run_check()

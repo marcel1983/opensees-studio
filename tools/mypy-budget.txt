@@ -62,4 +62,5 @@
 # matched no overload either): Linux 168 -> 164.
 # Delete is declared too (`shortcut=QKeySequence.StandardKey.Delete` matched no overload): Linux 164 -> 163.
 # Coordinate System/Grids is declared too (`shortcut="Ctrl+G"` matched no overload): Linux 163 -> 162.
-162
+# Back to Model View is declared too (`shortcut="Ctrl+Shift+B"` matched no overload): Linux 162 -> 161.
+161

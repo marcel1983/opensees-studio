@@ -90,12 +90,22 @@ handler: `"transforms.move"` is `window.transforms.move`.
 | `ViewportController` | `viewport` | View → Isometric, Top, Front, Right, Rotate, Spin, Parallel projection, Move Up/Down in List, Grid Line View, Hide/Isolate Selected, Invert Visible, Show All Objects. Owns the Level list of the View toolbar and the grid line being viewed (`grid_view`); gets `action` for the three commands it enables itself |
 | `DrawingController` | `drawing` | Tools → Select, Draw Node, Draw Frame, Draw Truss, Quick Draw Frame, Draw Shell, Quick Draw Shell, Measure Distance. Builds each tool when it is first armed and owns the two Section boxes of the Tools bar. Gets `tools` (the window's `ToolController`), `check_select`/`check_measure` (the tool buttons are an exclusive group of the window) and `offset_dialog` (the open Move or Replicate window) |
 | `GridsController` | `grids` | Define → Coordinate System/Grids, Grid Wizard; View → Show Grids and Show Grid Labels (each an undo step). Gets `new_project` (both dialogs work with no project open) and `sync_actions` (the window ticks its two checkable commands again) |
+| `DisplayController` | `display` | Display → Show Deformed Shape, Animate Mode Shape, Show Force Diagram, Show Shell Contours, Time-History Plot and its animation export, Hysteresis Plot, Pushover Curve, Influence Line, Response Spectrum, Back to Model View; also the design ratios and the mechanisms of Check Model. Owns the dock of the open view (`dock`), what the canvas shows (`mode`) and the caption of the viewports. Gets `results` (the window's `ResultsSession`), the three overlays (`diagram`, `contours`, `ratios`), `canvases`, `busy`, `select_rows` and `close_member_windows` |
 
 `DesignController` is the example of the named hooks: it is created with
 `results` (the case results computed on the project as it is now) and
-`show_ratios` (the ratio overlay and its legend dock, which belong to the
-window's post-processing display), and `tests/gui/test_design_controller.py`
+`show_ratios` (the ratio overlay and its legend dock, which belong to
+`DisplayController`), and `tests/gui/test_design_controller.py`
 runs it with a plain `QMainWindow` and two lambdas.
+
+The results in memory are not attributes of the window either:
+`viewmodels.results_session.ResultsSession` (`window.results`) holds the
+results on screen (`latest`), the case results the combinations are built from
+(`cases`) and the ones kept for the report only (`extra`), and answers what the
+window and the controllers ask of them (which are current for the model, the
+caption, the static result or one bound of a combination, the diagram of a
+component, the reactions). It has no widget, and
+`tests/gui/test_results_session.py` uses it without a window.
 
 `MainWindow` is being emptied this way, one area per pull request; it keeps
 the layout, the docks and the wiring.

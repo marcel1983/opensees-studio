@@ -84,7 +84,7 @@ def test_the_deformed_shape_and_the_modes_hover_joints_only(qtbot, monkeypatch) 
         monkeypatch.setattr(canvas, "_nearest_frame", lambda x, y: (9, 0.0, 200.0))
         canvas._update_element_tooltip(10.0, 10.0)
         for mode in ("deformed", "mode"):
-            window._post_mode = mode
+            window.display.mode = mode
             canvas._tooltip_element = None
             # The member is ignored and the joint answers from a little further away.
             canvas._update_element_tooltip(10.0, 10.0)
@@ -94,5 +94,5 @@ def test_the_deformed_shape_and_the_modes_hover_joints_only(qtbot, monkeypatch) 
             monkeypatch.setattr(canvas, "_nearest_node", lambda x, y: (5, 15.0))
         assert shown == ["member 9", "joint 5", "joint 5"]
     finally:
-        window._post_mode = None
+        window.display.mode = None
         window._help_controller.uninstall()

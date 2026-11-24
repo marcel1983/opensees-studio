@@ -50,7 +50,7 @@ def test_the_menu_stores_the_footings_in_one_undo_step(qtbot, monkeypatch) -> No
     qtbot.addWidget(mw)
     mw._vm.adopt(project)
     for result in results.values():
-        mw._case_results.put(project, result)
+        mw.results.cases.put(project, result)
 
     def _accept(self) -> int:  # type: ignore[no-untyped-def]
         self._table.selectAll()
@@ -63,7 +63,7 @@ def test_the_menu_stores_the_footings_in_one_undo_step(qtbot, monkeypatch) -> No
     assert len(mw._vm.project.design.footings) == 2
     assert "Footings: 2 footing(s)." in mw._console.toPlainText()
     # Design data: the results stay current.
-    assert mw._case_results.current(mw._vm.project)
+    assert mw.results.cases.current(mw._vm.project)
     mw._vm.undo_stack.undo()
     assert mw._vm.project.design is None
 
@@ -106,7 +106,7 @@ def test_the_pressure_plan_menu_and_the_footing_toggle(qtbot, monkeypatch) -> No
     qtbot.addWidget(mw)
     mw._vm.adopt(project)
     for result in results.values():
-        mw._case_results.put(project, result)
+        mw.results.cases.put(project, result)
     seen: list[int] = []
     monkeypatch.setattr(
         FootingPressuresDialog, "exec", lambda self: seen.append(len(self.images)) or 1
