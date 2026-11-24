@@ -48,7 +48,7 @@ def test_going_back_to_the_model_clears_the_caption(qtbot, tmp_path) -> None:  #
     window = _window(qtbot, tmp_path)
     window._on_analysis_finished(_results())
 
-    window._on_back_to_model()
+    window.display.back_to_model()
 
     assert not window._main_canvas._result_label.isVisibleTo(window._main_canvas)
 

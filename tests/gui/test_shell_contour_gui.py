@@ -155,21 +155,21 @@ def test_showing_the_dock_paints_a_contour_and_closing_it_clears_it(qtbot) -> No
     mw = _window(qtbot)
     mw._on_analysis_finished(_results())
 
-    mw._on_show_shell_contours()
+    mw.display.shell_contours()
 
-    assert mw._post_dock is not None
+    assert mw.display.dock is not None
     assert mw._contour_renderer.is_drawn
     assert mw._contour_renderer.range is not None
 
-    view = mw._post_dock.widget()
+    view = mw.display.dock.widget()
     assert isinstance(view, ShellContourView)
 
     # Picking a resultant repaints with the element's own values.
     view._field.setCurrentIndex(view._field.findData("M11"))
     assert mw._contour_renderer.range == pytest.approx((0.0, 8000.0))  # 4000, padded
 
-    mw._on_back_to_model()
-    assert mw._post_dock is None
+    mw.display.back_to_model()
+    assert mw.display.dock is None
     assert not mw._contour_renderer.is_drawn
 
 
@@ -178,8 +178,8 @@ def test_the_step_produces_a_different_field(qtbot) -> None:  # type: ignore[no-
     """Step 1 has no moment yet; the last step has 4000."""
     mw = _window(qtbot)
     mw._on_analysis_finished(_results())
-    mw._on_show_shell_contours()
-    view = mw._post_dock.widget()
+    mw.display.shell_contours()
+    view = mw.display.dock.widget()
 
     view._field.setCurrentIndex(view._field.findData("M11"))
     assert mw._contour_renderer.range == pytest.approx((0.0, 8000.0))  # 4000, padded
@@ -192,7 +192,7 @@ def test_the_step_produces_a_different_field(qtbot) -> None:  # type: ignore[no-
 def test_a_display_unit_change_repaints_the_contour(qtbot) -> None:  # type: ignore[no-untyped-def]
     mw = _window(qtbot)
     mw._on_analysis_finished(_results())
-    mw._on_show_shell_contours()
+    mw.display.shell_contours()
 
     calls: list[tuple] = []
     original = mw._contour_renderer.render

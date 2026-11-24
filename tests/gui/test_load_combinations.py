@@ -399,14 +399,14 @@ def test_run_dialog_runs_missing_cases_once_then_combines_from_stored_results(
 
     # Display works on the envelope: Max/Min deformed shape, both diagrams.
     assert window._act_show_deformed.isEnabled()
-    window._on_show_deformed()
-    view = window._post_dock.widget()
+    window.display.show_deformed()
+    view = window.display.dock.widget()
     assert view.current_bound() == "max"
     view._bound.setCurrentIndex(1)
     assert view.current_bound() == "min"
-    window._on_show_force_diagram()
+    window.display.show_force_diagram()
     data = window.results.diagram_data(
-        window._vm.project, window._post_dock.widget().current_component()
+        window._vm.project, window.display.dock.widget().current_component()
     )
     n_frames = len(project.elements)
     assert len(data.element_ids) == 2 * n_frames
@@ -475,7 +475,7 @@ def test_envelope_with_a_spectrum_case_draws_both_force_diagrams(qtbot, tmp_path
     combo = window.results.latest
     assert isinstance(combo, CombinationResults) and not combo.single_valued
     assert combo.missing_fields == []
-    window._on_show_force_diagram()
+    window.display.show_force_diagram()
     data = window.results.diagram_data(window._vm.project, ForceComponent.M3)
     assert len(data.element_ids) == 2 * len(project.elements)
     # The upper diagram is dead + peak, the lower dead - peak.

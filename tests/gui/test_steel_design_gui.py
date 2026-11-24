@@ -258,11 +258,11 @@ def test_display_steel_ratios_paints_the_members(qtbot) -> None:  # type: ignore
     mw._act_steel_ratios.trigger()
     assert mw._ratio_renderer.is_drawn
     assert mw._ratio_renderer.members == 4
-    view = mw._post_dock.widget()
+    view = mw.display.dock.widget()
     assert "4 member(s) checked" in view.summary_text()
     view.closed.emit()
     assert not mw._ratio_renderer.is_drawn
-    assert mw._post_dock is None
+    assert mw.display.dock is None
 
 
 @pytest.mark.gui

@@ -96,8 +96,8 @@ def test_a_right_click_on_a_member_with_a_force_diagram_opens_its_window(
 ) -> None:  # type: ignore[no-untyped-def]
     mw = _window(qtbot)
     mw.results.latest = _results()
-    mw._on_show_force_diagram()
-    assert mw._post_mode == "force"
+    mw.display.show_force_diagram()
+    assert mw.display.mode == "force"
     assert mw._diagram_renderer.is_drawn
 
     calls = _install_menu_recorder(mw, monkeypatch)
@@ -137,7 +137,7 @@ def test_without_a_post_processing_view_the_menu_is_unchanged(qtbot, monkeypatch
 def test_an_empty_area_keeps_the_normal_menu(qtbot, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     mw = _window(qtbot)
     mw.results.latest = _results()
-    mw._on_show_force_diagram()
+    mw.display.show_force_diagram()
     calls = _install_menu_recorder(mw, monkeypatch)
     monkeypatch.setattr(mw._canvas, "frame_element_at", lambda *args, **kwargs: None)
 
@@ -151,7 +151,7 @@ def test_an_empty_area_keeps_the_normal_menu(qtbot, monkeypatch) -> None:  # typ
 def test_a_zero_diagram_does_not_hijack_the_right_click(qtbot, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     mw = _window(qtbot)
     mw.results.latest = _results(axial=0.0)
-    mw._on_show_force_diagram()
+    mw.display.show_force_diagram()
     assert not mw._diagram_renderer.is_drawn
     calls = _install_menu_recorder(mw, monkeypatch)
     monkeypatch.setattr(mw._canvas, "frame_element_at", lambda *args, **kwargs: 10)
@@ -166,8 +166,8 @@ def test_a_zero_diagram_does_not_hijack_the_right_click(qtbot, monkeypatch) -> N
 def test_a_right_click_with_a_deformed_shape_opens_the_window(qtbot, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     mw = _window(qtbot)
     mw.results.latest = _results()
-    mw._on_show_deformed()
-    assert mw._post_mode == "deformed"
+    mw.display.show_deformed()
+    assert mw.display.mode == "deformed"
     calls = _install_menu_recorder(mw, monkeypatch)
     monkeypatch.setattr(mw._canvas, "frame_element_at", lambda *args, **kwargs: 10)
 
@@ -190,7 +190,7 @@ def test_the_result_picker_switches_to_a_combination(qtbot) -> None:  # type: ig
         )
     )
     mw.results.cases.put(mw._vm.project, results)
-    mw._on_show_force_diagram()
+    mw.display.show_force_diagram()
     mw._show_element_diagrams(10)
 
     window = mw._element_diagram_windows[0]
@@ -210,7 +210,7 @@ def test_the_result_picker_switches_to_a_combination(qtbot) -> None:  # type: ig
 def test_the_units_picker_rewrites_the_window(qtbot) -> None:  # type: ignore[no-untyped-def]
     mw = _window(qtbot)
     mw.results.latest = _results()
-    mw._on_show_force_diagram()
+    mw.display.show_force_diagram()
     mw._show_element_diagrams(10)
 
     window = mw._element_diagram_windows[0]
@@ -229,8 +229,8 @@ def test_the_units_picker_rewrites_the_window(qtbot) -> None:  # type: ignore[no
 def test_back_to_model_restores_the_plain_right_click(qtbot, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     mw = _window(qtbot)
     mw.results.latest = _results()
-    mw._on_show_force_diagram()
-    mw._on_back_to_model()
+    mw.display.show_force_diagram()
+    mw.display.back_to_model()
     calls = _install_menu_recorder(mw, monkeypatch)
     monkeypatch.setattr(mw._canvas, "frame_element_at", lambda *args, **kwargs: 10)
 
