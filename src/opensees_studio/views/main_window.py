@@ -58,8 +58,6 @@ from opensees_studio.commands import (
     AssignSectionCommand,
     DeleteElementsCommand,
     DeleteNodesCommand,
-    FixDuplicatesCommand,
-    MergeJointsCommand,
     MeshCommand,
     ReplaceElementsCommand,
     SetCoordSystemsCommand,
@@ -173,6 +171,7 @@ from opensees_studio.views.controllers.joints import JointsController
 from opensees_studio.views.controllers.library import LibraryController
 from opensees_studio.views.controllers.loads import LoadsController
 from opensees_studio.views.controllers.members import MembersController
+from opensees_studio.views.controllers.model_tools import ModelToolsController
 from opensees_studio.views.controllers.patterns import PatternsController
 from opensees_studio.views.controllers.transforms import TransformsController
 from opensees_studio.views.dialogs import (
@@ -181,11 +180,9 @@ from opensees_studio.views.dialogs import (
     CalculationMemoryDialog,
     CoordinateGridSystemsDialog,
     DisplayOptionsDialog,
-    DuplicatesDialog,
     ElementDiagramWindow,
     FrameWizard,
     InfluenceLineDialog,
-    MeshDialog,
     ModelCheckDialog,
     MoveDialog,
     PerformanceDialog,
@@ -194,7 +191,6 @@ from opensees_studio.views.dialogs import (
     RunAnalysisDialog,
 )
 from opensees_studio.views.dialogs.batch_run import BatchRunDialog
-from opensees_studio.views.dialogs.connect_joints import DivideFramesDialog, MergeJointsDialog
 from opensees_studio.views.dialogs.grid_line_view import GridLineViewDialog
 from opensees_studio.views.dialogs.grid_wizard import GridWizardDialog
 from opensees_studio.views.dialogs.load_combinations import LoadCombinationsDialog
@@ -422,6 +418,9 @@ class MainWindow(QMainWindow):
         self.building = BuildingController(shell)
         #: Assign → Frame: section, material, formulation, frame member options.
         self.joints = JointsController(shell)
+        self.model_tools = ModelToolsController(
+            shell, select_rows=lambda nodes, elements: self._select_report_row(nodes, elements)
+        )
         self.groups = GroupsController(shell)
         self.imports = ImportsController(
             shell,
@@ -629,11 +628,6 @@ class MainWindow(QMainWindow):
         self._act_select_shell_edge_joints = QAction("Joints on S&hell Edges", self)
 
         # Edit → transforms
-        self._act_check_duplicates = QAction("Check Model for &Duplicates…", self)
-        self._act_mesh = QAction("&Mesh…", self)
-        self._act_merge_joints = QAction("Merge &Joints…", self)
-        self._act_divide_frames = QAction("Divide Frames at &Joints…", self)
-        self._act_join_frames = QAction("Join &Frames", self)
 
         # Tools (exclusive)
         self._tool_group = QActionGroup(self)
@@ -967,11 +961,11 @@ class MainWindow(QMainWindow):
         )
         m_edit.addSeparator()
         m_edit.addAction(self._act_table_editing)
-        m_edit.addAction(self._act_check_duplicates)
-        m_edit.addAction(self._act_merge_joints)
-        m_edit.addAction(self._act_divide_frames)
-        m_edit.addAction(self._act_join_frames)
-        m_edit.addAction(self._act_mesh)
+        m_edit.addAction(self.action("edit.check_duplicates"))
+        m_edit.addAction(self.action("edit.merge_joints"))
+        m_edit.addAction(self.action("edit.divide_frames"))
+        m_edit.addAction(self.action("edit.join_frames"))
+        m_edit.addAction(self.action("edit.mesh"))
         m_edit.addSeparator()
         m_edit.addAction(self.action("edit.delete_loads"))
 
@@ -1872,11 +1866,6 @@ class MainWindow(QMainWindow):
             ),
         ):
             action.triggered.connect(lambda _=False, query=query: self._select_from(query))
-        self._act_check_duplicates.triggered.connect(self._on_check_duplicates)
-        self._act_mesh.triggered.connect(self._on_mesh)
-        self._act_merge_joints.triggered.connect(self._on_merge_joints)
-        self._act_divide_frames.triggered.connect(self._on_divide_frames)
-        self._act_join_frames.triggered.connect(self._on_join_frames)
 
         # Tools
         self._act_tool_select.triggered.connect(self._on_select_tool)
@@ -3306,30 +3295,6 @@ class MainWindow(QMainWindow):
         self._log(f"Shell formulation: {len(replaced)} shell(s) are now {choice.split(' — ')[0]}.")
         self._canvas.render()
 
-    def _on_check_duplicates(self) -> None:
-        """Edit → Check Model for Duplicates: report, then repair on request.
-
-        The dialog reports; :class:`FixDuplicatesCommand` repairs and recomputes
-        the element duplicates *after* merging the nodes, because merging two
-        coincident nodes can turn two members into the same member.
-        """
-        project = self._vm.project
-        if project is None:
-            QMessageBox.information(self, "Duplicates", "Open or create a project first.")
-            return
-        dlg = DuplicatesDialog(project, on_select=self._select_report_row, parent=self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        command = FixDuplicatesCommand(self._vm, tolerance=dlg.tolerance())
-        try:
-            self._vm.apply_command(command)
-        except Exception as exc:
-            QMessageBox.critical(self, "Could not fix the duplicates", str(exc))
-            return
-        self._canvas.selection.clear()
-        self._canvas.render()
-        self._log(f"Duplicates: {command.report.summary()}")
-
     def _select_report_row(self, node_ids: Sequence[int], element_ids: Sequence[int]) -> None:
         """Highlight the nodes/elements of a report row so they can be inspected."""
         self._canvas.selection.clear()
@@ -3411,125 +3376,6 @@ class MainWindow(QMainWindow):
             else f"Steel ratios · AISC 360-16 {settings.method}"
         )
         self._canvas.render()
-
-    def _on_mesh(self) -> None:
-        """Edit → Mesh: subdivide members and shells, and join the mesh up.
-
-        The plan comes from ``core.mesh`` (pure geometry, tested on its own) and
-        is applied by one command, so a mesh is a single undo step.
-        """
-        project = self._vm.project
-        if project is None:
-            QMessageBox.information(self, "Mesh", "Open or create a project first.")
-            return
-        selected = set(self._canvas.selection.elements)
-        dialog = MeshDialog(
-            project,
-            selected_element_ids=selected,
-            has_selection=bool(selected),
-            parent=self,
-        )
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        plan = dialog.plan()
-        if plan.is_empty:
-            return
-        try:
-            self._vm.apply_command(MeshCommand(self._vm, plan))
-        except Exception as exc:
-            QMessageBox.critical(self, "Could not mesh the model", str(exc))
-            return
-        self._canvas.selection.clear()
-        for node in plan.new_nodes:
-            self._canvas.selection.select_node(node.id, additive=True)
-        self._canvas.render()
-        self._log(f"Mesh: {plan.summary()}")
-
-    def _on_merge_joints(self) -> None:
-        """Edit → Merge Joints: joints closer than a tolerance become one, one undo step."""
-        project = self._vm.project
-        if project is None:
-            return
-        dialog = MergeJointsDialog(
-            project, selected_nodes=set(self._canvas.selection.nodes), parent=self
-        )
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        command = MergeJointsCommand(
-            self._vm, tolerance=dialog.tolerance(), node_ids=dialog.scope_ids()
-        )
-        try:
-            self._vm.apply_command(command)
-        except Exception as exc:
-            QMessageBox.critical(self, "Could not merge the joints", str(exc))
-            return
-        self._canvas.selection.clear()
-        report = command.report
-        self._log(
-            f"Merge Joints: {report.merged_node_groups} group(s), {report.removed_nodes} "
-            f"joint(s) removed, {report.removed_elements} repeated member(s) removed."
-        )
-
-    def _on_divide_frames(self) -> None:
-        """Edit → Divide Frames at Joints: split members at the joints inside them."""
-        project = self._vm.project
-        if project is None:
-            return
-        dialog = DivideFramesDialog(
-            project, selected_elements=set(self._canvas.selection.elements), parent=self
-        )
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        plan = dialog.plan()
-        if plan.is_empty:
-            return
-        try:
-            self._vm.apply_command(MeshCommand(self._vm, plan))
-        except Exception as exc:
-            QMessageBox.critical(self, "Could not divide the frames", str(exc))
-            return
-        self._canvas.selection.set_selection(set(), {e.id for e in plan.new_elements})
-        self._log(f"Divide Frames at Joints: {plan.summary()}")
-
-    def _on_join_frames(self) -> None:
-        """Edit → Join Frames: merge selected members that continue each other."""
-        from opensees_studio.commands import JoinFramesCommand
-
-        if self._vm.project is None:
-            return
-        command = JoinFramesCommand(self._vm, set(self._canvas.selection.elements))
-        if not self._dry_join_finds_something():
-            return
-        try:
-            self._vm.apply_command(command)
-        except Exception as exc:
-            QMessageBox.critical(self, "Join Frames failed", str(exc))
-            return
-        report = command.report
-        survivors = {e.id for e in self._vm.project.elements} & set(self._canvas.selection.elements)
-        self._canvas.selection.set_selection(set(), survivors)
-        self._log(f"Join Frames: {report.summary()}")
-        for node_id, reason in sorted(report.kept.items()):
-            self._log(f"  joint {node_id} kept: {reason}.")
-        self.statusBar().showMessage(f"Join Frames: {report.summary()}", 6000)
-
-    def _dry_join_finds_something(self) -> bool:
-        """Try the join on a copy first: nothing to join is a message, not an undo step."""
-        from opensees_studio.core.geometry.join import join_frames
-
-        project = self._vm.project
-        assert project is not None
-        trial = join_frames(project.model_copy(deep=True), set(self._canvas.selection.elements))
-        if trial.joined:
-            return True
-        reasons = sorted(set(trial.kept.values()))
-        QMessageBox.information(
-            self,
-            "Join Frames",
-            "Nothing to join: select two or more members that meet end to end in a "
-            "straight line." + (f"\n\nKept because {'; '.join(reasons)}." if reasons else ""),
-        )
-        return False
 
     def _on_frame_wizard(self) -> None:
         """Define → Create Portal Frame: a parametric 2D frame, one undo step.
@@ -6665,7 +6511,6 @@ class MainWindow(QMainWindow):
         self._act_truss_wizard.setEnabled(has_project)
         self._act_warehouse_wizard.setEnabled(has_project)
         self._act_create_shell.setEnabled(has_project and n_sel in (3, 4))
-        self._act_check_duplicates.setEnabled(has_project)
         self._act_table_editing.setEnabled(has_project)
         has_cases = has_project and bool(self._vm.project and self._vm.project.analyses)
         # Without a solver the model is still built, exported and reported; only
@@ -6707,10 +6552,9 @@ class MainWindow(QMainWindow):
         # Only there while a check runs, rather than a permanent grey entry.
         self._act_cancel_stability.setVisible(self._stability.is_running)
         self._act_check_model.setEnabled(has_project)
-        self._act_mesh.setEnabled(has_project)
-        self._act_merge_joints.setEnabled(has_project)
-        self._act_divide_frames.setEnabled(has_project)
-        self._act_join_frames.setEnabled(has_project and len(self._canvas.selection.elements) >= 2)
+        self.action("edit.join_frames").setEnabled(
+            has_project and len(self._canvas.selection.elements) >= 2
+        )
         for action in self._restraint_actions():
             action.setEnabled(has_project and has_selected_nodes)
         self._act_custom_commands.setEnabled(has_project)

@@ -210,7 +210,9 @@ These are non-obvious things that are easy to break if you don't know:
   Ground Motions windows it keeps open. `ImportsController`
   (File → Import) gets `confirm_discard` and `apply_view_settings`; the window
   passes a hook as a lambda, so a test that replaces the window's method still
-  reaches it.
+  reaches it. A controller's attribute must not be the name of a `QMainWindow`
+  method (`window.geometry` would replace `QWidget.geometry()`):
+  `tests/gui/test_action_registry.py` checks it, hence `model_tools`.
   The rest of the window is being moved out the same way.
 - An unregistered material type is not a crash: `material_forms.form_for`
   returns a read-only placeholder, the same contract `section_forms` has.

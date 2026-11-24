@@ -22,5 +22,23 @@ EDIT_ACTIONS: tuple[ActionSpec, ...] = (
     ),
     ActionSpec("edit.mirror", "Mirr&or…", "transforms.mirror", needs=_SELECTION),
     ActionSpec("edit.extrude", "E&xtrude…", "transforms.extrude", needs=_SELECTION),
+    ActionSpec(
+        "edit.check_duplicates",
+        "Check Model for &Duplicates…",
+        "model_tools.check_duplicates",
+        needs=Needs.PROJECT,
+    ),
+    ActionSpec(
+        "edit.merge_joints", "Merge &Joints…", "model_tools.merge_joints", needs=Needs.PROJECT
+    ),
+    ActionSpec(
+        "edit.divide_frames",
+        "Divide Frames at &Joints…",
+        "model_tools.divide_frames",
+        needs=Needs.PROJECT,
+    ),
+    # Enabled with two or more members selected: the window sets it.
+    ActionSpec("edit.join_frames", "Join &Frames", "model_tools.join_frames", needs=None),
+    ActionSpec("edit.mesh", "&Mesh…", "model_tools.mesh", needs=Needs.PROJECT),
     ActionSpec("edit.delete_loads", "Delete &Loads…", "loads.delete_loads", needs=Needs.PROJECT),
 )
