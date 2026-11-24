@@ -194,20 +194,20 @@ def test_a_solved_model_shows_converted_element_forces(qtbot) -> None:  # type: 
 @pytest.mark.gui
 def test_the_deformed_shape_tooltip_shows_the_joint_displacements(qtbot) -> None:  # type: ignore[no-untyped-def]
     mw = _window(qtbot)
-    assert mw.node_tooltip(2).startswith("Joint 2")  # the model's own summary
+    assert mw.display.node_tooltip(2).startswith("Joint 2")  # the model's own summary
     mw.display.show_deformed()
-    text = mw.node_tooltip(2)
+    text = mw.display.node_tooltip(2)
     assert text.startswith("<b>Joint 2</b>")
     assert "Case: tip load" in text
     assert ">Ux<" in text and "0.006" in text and "-0.008" in text and ">Ry<" in text
     assert "&nbsp;m<" in text and "rad" in text
 
     mw._set_display_units(UnitSystem.SI_MM_N)
-    text = mw.node_tooltip(2)
+    text = mw.display.node_tooltip(2)
     assert "&nbsp;6<" in text and "&nbsp;-8<" in text and "&nbsp;mm<" in text
 
     mw.display.back_to_model()
-    assert mw.node_tooltip(2).startswith("Joint 2")
+    assert mw.display.node_tooltip(2).startswith("Joint 2")
 
 
 @pytest.mark.gui
@@ -223,9 +223,9 @@ def test_the_mode_shape_tooltip_shows_the_joint_components(qtbot) -> None:  # ty
     )
     mw._on_analysis_finished(modal)
     mw.display.show_mode_shape()
-    text = mw.node_tooltip(2)
+    text = mw.display.node_tooltip(2)
     assert text.startswith("<b>Joint 2</b><br>Mode 1 · T = 0.5 s")
     assert ">Uz<" in text and "&nbsp;1<" in text and "&nbsp;-0.25<" in text
 
     mw.display.back_to_model()
-    assert mw.node_tooltip(2).startswith("Joint 2")
+    assert mw.display.node_tooltip(2).startswith("Joint 2")

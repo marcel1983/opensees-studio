@@ -233,3 +233,23 @@ def test_the_caption_carries_the_title_of_the_view(qtbot) -> None:  # type: igno
     controller.tear_down()
     assert controller.title is None
     assert main.label == "GRAVITY  ·  Static"
+
+
+def test_the_hover_text_follows_the_view(qtbot) -> None:  # type: ignore[no-untyped-def]
+    controller, results, _canvases, _overlays, _closed, _parent = _controller(qtbot)
+    # In the model view a joint and a member say what they are.
+    assert controller.node_tooltip(2).startswith("Joint 2")
+    assert controller.element_tooltip(10).startswith("ElasticBeamColumn 10")
+    assert controller.element_tooltip(99) is None
+    assert controller.element_tooltips_enabled()
+
+    # A deformed shape is read at the joints: the case and its displacements.
+    results.latest = _results()
+    controller.mode = "deformed"
+    assert not controller.element_tooltips_enabled()
+    text = controller.node_tooltip(2)
+    assert "<b>Joint 2</b>" in text and "Case: GRAVITY" in text
+    # A mode shape without a modal result on screen falls back to the summary.
+    controller.mode = "mode"
+    assert controller.node_tooltip(2).startswith("Joint 2")
+    assert not controller.element_tooltips_enabled()

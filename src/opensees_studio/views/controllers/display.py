@@ -52,6 +52,7 @@ from opensees_studio.views.docks import (
     ShellContourView,
     TimeHistoryView,
 )
+from opensees_studio.views.i18n import tr
 
 
 class DisplayController(QObject):
@@ -720,6 +721,143 @@ class DisplayController(QObject):
         _apply(0, 1.0, 1.0)
         self._shell.log("Mechanism: " + " ".join(m.description for m in modes))
 
+    # ── what the pointer is over ─────────────────────────────────────
+    def element_tooltips_enabled(self) -> bool:
+        """False while a deformed or a mode shape is drawn: they are read at the joints."""
+        return self.mode not in ("deformed", "mode")
+
+    def node_tooltip(self, node_id: int) -> str | None:
+        """Hover text for a joint: where it is, its restraint, mass, members and loads."""
+        from opensees_studio.core.hover import node_summary
+
+        project = self._vm.project
+        if project is None:
+            return None
+        text = None
+        if self.mode == "deformed":
+            text = self._deformed_node_tooltip(node_id)
+        elif self.mode == "mode":
+            text = self._mode_shape_node_tooltip(node_id)
+        return text if text is not None else node_summary(project, node_id)
+
+    @staticmethod
+    def _node_box(title: str, subtitle: str, rows: list[tuple[str, str, str]]) -> str:
+        """The rich-text box a joint's hover shows: a title, a line and a value table."""
+        from html import escape
+
+        cells = "".join(
+            f"<tr><td><b>{escape(label)}</b></td><td align='right'>&nbsp;{escape(value)}</td>"
+            f"<td>&nbsp;{escape(unit)}</td></tr>"
+            for label, value, unit in rows
+        )
+        return (
+            f"<b>{escape(title)}</b><br>{escape(subtitle)}"
+            f"<table cellspacing='0' cellpadding='1'>{cells}</table>"
+        )
+
+    def _joint_title(self, node_id: int) -> str:
+        project = self._vm.project
+        node = next((n for n in project.nodes if n.id == node_id), None) if project else None
+        title = tr("Joint {id}").format(id=node_id)
+        return f"{title} ({node.name})" if node is not None and node.name else title
+
+    def _mode_shape_node_tooltip(self, node_id: int) -> str | None:
+        """A box with the joint and its components in the mode the animator draws."""
+        from opensees_studio.core.hover import node_mode_shape
+
+        project = self._vm.project
+        results = self._results.latest
+        view = self.dock.widget() if self.dock is not None else None
+        if project is None or not isinstance(results, ModalResults):
+            return None
+        if not isinstance(view, ModeShapeAnimator):
+            return None
+        mode = view.current_mode() + 1
+        rows = node_mode_shape(project, results, node_id, mode)
+        if rows is None:
+            return None
+        periods = results.periods
+        subtitle = tr("Mode {n}").format(n=mode)
+        if mode - 1 < len(periods):
+            subtitle += f" · T = {float(periods[mode - 1]):.4g} s"
+        return self._node_box(
+            self._joint_title(node_id),
+            subtitle,
+            [(label, f"{value:.4g}", "") for label, value, _rotation in rows],
+        )
+
+    def _deformed_node_tooltip(self, node_id: int) -> str | None:
+        """A box with the joint and its displacements in the case the deformed shape draws."""
+        from opensees_studio.core.hover import node_displacements
+
+        project = self._vm.project
+        view = self.dock.widget() if self.dock is not None else None
+        bound = view.current_bound() if isinstance(view, DeformedShapeView) else "max"
+        results = self._results.static(bound)
+        if project is None or results is None:
+            return None
+        rows = node_displacements(project, results, node_id)
+        if rows is None:
+            return None
+        case = self._results.caption_for(self._vm.project, self._results.latest).split("  ·  ")[0]
+        if self._results.is_envelope():
+            case += " · " + (tr("Max") if bound == "max" else tr("Min"))
+        converter = UnitConverter.of(project.meta)
+        length = converter.labels.length
+        return self._node_box(
+            self._joint_title(node_id),
+            tr("Case: {name}").format(name=case),
+            [
+                (
+                    label,
+                    f"{value if rotation else value * converter.length:.6g}",
+                    "rad" if rotation else length,
+                )
+                for label, value, rotation in rows
+            ],
+        )
+
+    def element_tooltip(self, element_id: int) -> str | None:
+        """Hover text for the canvas: a bearing's key parameters, else the element summary."""
+        from opensees_studio.core import BEARING_CLASSES, SLIDING_BEARING_CLASSES
+        from opensees_studio.core.hover import element_summary
+
+        if self._vm.project is None:
+            return None
+        try:
+            el = self._vm.project.element(element_id)
+        except KeyError:
+            return None
+        if not isinstance(el, BEARING_CLASSES):
+            return element_summary(self._vm.project, element_id)
+        if isinstance(el, SLIDING_BEARING_CLASSES):
+            try:
+                friction = self._vm.project.friction_model(el.friction_model_id).type
+            except KeyError:
+                friction = "missing"
+            lines = [
+                f"{el.type} #{el.id}, nodes {el.nodes[0]}-{el.nodes[1]}",
+                f"Kinit = {el.k_init:g}, friction model #{el.friction_model_id} ({friction})",
+            ]
+            if el.type == "SingleFPBearing":
+                units = self._vm.project.meta.units
+                lines.append(
+                    f"Reff = {el.r_eff:g}, T = 2 pi sqrt(Reff / g) = "
+                    f"{el.isolated_period(units):.4g} s"
+                )
+            return "\n".join(lines)
+        lines = [
+            f"{el.type} #{el.id}, nodes {el.nodes[0]}-{el.nodes[1]}",
+            f"Kinit = {el.k_init:g}, Qd = {el.qd:g}, alpha1 = {el.alpha1:g}",
+            f"u_y = {el.yield_displacement:.6g}, F_y = {el.yield_force:.6g}",
+        ]
+        if el.alpha2:
+            lines.append(f"alpha2 = {el.alpha2:g}, mu = {el.mu:g}")
+        if el.type == "ElastomericBearingBoucWen":
+            lines.append(f"eta = {el.eta:g}, beta = {el.beta:g}, gamma = {el.gamma:g}")
+        return "\n".join(lines)
+
+    # ── leaving a view ───────────────────────────────────────────────
     def back_to_model(self) -> None:
         """Display → Back to Model View: close the view and clear every overlay."""
         self.tear_down()
