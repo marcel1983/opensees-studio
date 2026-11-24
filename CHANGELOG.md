@@ -142,9 +142,38 @@ refused instead of silently downgraded).
   100 % + 30 % rule takes the cases of one direction as alternatives: each one
   at 100 % with one case of every other direction at 30 %, and never `EQ X +e`
   together with `EQ X -e`. Without the option nothing changes.
+- **AISI S100-16 check of cold-formed members.** Design → Steel Frame Check
+  now checks a member whose section comes from Section Library → Add
+  Cold-Formed (AISI): a lipped channel, a plain channel or a lipped zee, by the
+  **Direct Strength Method**, LRFD or ASD, in the same table, ratio view and
+  calculation memory as the AISC members. The elastic local and distortional
+  buckling loads come from the program's finite strip analysis of the section
+  (where the signature curve has no distortional minimum, its value at the
+  half-wavelength of the closed-form flange model). Limit states: tension (D2,
+  D3), compression (E2 global with the section's own torsional properties, E3.2
+  local, E4 distortional), flexure about both axes (F2 lateral-torsional with
+  Cb, F3.2 local, F4 distortional), shear (G2.1), the H1.2 and H1.1
+  interactions, H2 bending with shear, and the B1 amplification of C1.2.1.1. Fy
+  and Fu are those of the section's material (A653 SS Gr. 33 or Gr. 50 in the
+  default library). The 9CS2.5x059 flexure example of the AISI DSM Design Guide
+  is reproduced within 1 %. **Not covered yet**: web crippling, hats, angles
+  and the built-up pairs, and the bracing a sheeting gives a purlin (with the
+  R factor of I6.2.1 under uplift): a purlin is checked with the unbraced
+  lengths of the model, so the default purlin of the Warehouse Wizard, unbraced
+  over a 6 m bay, does not pass until its Lb is set to what really holds it.
 
 ### Changed
 
+- **A purlin or girt of the Warehouse Wizard buckles about its major axis over
+  its own span.** The members of a purlin line are pinned at every frame, and
+  the steel check took the whole line as one member (30 m in the gable
+  example). The wizard now writes each one's bay as its major-axis length. The
+  six warehouse examples were regenerated: only their design overrides gained
+  entries, and their pinned results did not move.
+- **Spanish: *cercha* in place of *celosía*.** A truss is a *cercha* everywhere
+  in the Spanish interface: the truss element (Dibujar barra de cercha), the
+  Truss Wizard (Asistente de cerchas), New 2D Truss and the roof trusses of the
+  Warehouse Wizard.
 - **The mass source counts distributed loads and floor panels.** A load pattern
   in Define → Mass Source gave mass for its nodal, uniform and point loads and
   its self weight; a distributed (trapezoidal) load and a floor panel (Assign →

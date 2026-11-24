@@ -498,7 +498,14 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   H1 interaction over the combinations already run, at 25 stations, with `Cb`
   from the moment diagram and per-member K, Lb, Cb, net area and shear-lag
   overrides; an optional **B1 P-δ amplification** (AISC 360-16 C2.1b) covers
-  the member curvature a first-order analysis leaves out. A **seismic system**
+  the member curvature a first-order analysis leaves out. A member with a
+  **cold-formed** section (lipped or plain channel, lipped zee) is checked by
+  **AISI S100-16** with the **Direct Strength Method** instead: the local and
+  distortional buckling loads come from the program's own finite strip
+  analysis of the section, then tension (D), compression (E2–E4), flexure
+  (F2–F4), shear (G2.1) and the H1.2 and H2 interactions, with Fy and Fu of the
+  section's material. Sheeting is not counted as a brace and web crippling is
+  not checked. A **seismic system**
   (AISC 341-22) adds the Table D1.1 width-to-thickness check with `Ry` and
   `Ca`, the SMF joint checks (E3.4a, panel zone J10.6 and continuity plates
   E3.6f), the SCBF F2.3 capacity design and F2.5b brace limits, and the OCBF
@@ -887,7 +894,8 @@ fails, the dialog shows the error message instead of a curve.
   weight. The shear-area modifiers act on sections that define As2 / As3.
 - **Cold-formed sections (AISI)** (Define > Section Library > Add Cold-Formed):
   C and Z purlins, tracks, hats and angles, with gross properties by the AISI
-  linear method (A, Ix, Iy, Ixy, J, Cw, shear centre).
+  linear method (A, Ix, Iy, Ixy, J, Cw, shear centre). Design → Steel Frame
+  Check takes a channel or a lipped zee through AISI S100-16.
 - **Elastic sections are made of a material** (A572 Gr. 50 by default): E, G
   and the unit weight are the material's and follow it when it changes. The
   shear areas As2 / As3 are required (0 = rigid in shear); the AISC picker

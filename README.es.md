@@ -53,7 +53,8 @@ agrega una interfaz visual para:
   obligatorias (0 = rígida a cortante).
 - Perfiles formados en frío AISI (Section Library → Add Cold-Formed): C y Z de
   correas, canales sin labios, sombreros y ángulos, con propiedades brutas por
-  el método lineal de AISI (A, Ix, Iy, Ixy, J, Cw, centro de corte).
+  el método lineal de AISI (A, Ix, Iy, Ixy, J, Cw, centro de corte). Design →
+  Steel Frame Check verifica canales y zetas con labios por AISI S100-16.
 - El modelo se bloquea solo cuando un análisis tiene resultados (el candado de
   la barra de estado, Options → Lock Model): una edición pregunta antes de
   descartarlos.
@@ -118,7 +119,7 @@ script o un notebook de Jupyter: la interfaz es una forma de usarlo, no la únic
   nervios y del topping en la otra dirección); el **asistente de bodegas**
   (Define → Create Warehouse, o File → New Model → Warehouse: nave de pórticos
   3D a dos aguas, a una agua o plana, de una o varias naves, con vigas de techo
-  o con celosías (cerchas) Pratt, Howe o Warren de cordón inferior horizontal o
+  o con cerchas Pratt, Howe o Warren de cordón inferior horizontal o
   paralelo, con tirantes del cordón inferior entre pórticos, con correas y
   largueros a una separación máxima, arriostramiento en X de techo y paredes,
   grupos por tipo de miembro, cargas muerta y viva de techo sobre las correas y
@@ -222,7 +223,14 @@ script o un notebook de Jupyter: la interfaz es una forma de usarlo, no la únic
   combinaciones ya corridas, en 25 estaciones, con `Cb` del diagrama y ajustes
   por miembro de K, Lb, Cb, área neta y retraso; una **amplificación opcional
   B1 de P-δ** (AISC 360-16 C2.1b) cubre la curvatura que un análisis de primer
-  orden deja fuera. Un **sistema sísmico** (AISC 341-22) añade la comprobación
+  orden deja fuera. Una barra con sección **formada en frío** (canal con o sin
+  labios, zeta con labios) se verifica en cambio por **AISI S100-16** con el
+  **Método de Resistencia Directa**: las cargas de pandeo local y distorsional
+  salen del análisis de franjas finitas del propio programa, y con ellas
+  tracción (D), compresión (E2–E4), flexión (F2–F4), corte (G2.1) y las
+  interacciones H1.2 y H2, con Fy y Fu del material de la sección. La chapa de
+  cubierta no cuenta como arriostramiento y no se verifica el aplastamiento del
+  alma. Un **sistema sísmico** (AISC 341-22) añade la comprobación
   de esbeltez de la Tabla D1.1 con `Ry` y `Ca`, las juntas de SMF (E3.4a,
   panel zone J10.6 y placas de continuidad E3.6f), el diseño por capacidad
   F2.3 y los límites F2.5b de SCBF, y la cobertura F1.4/F1.5/F1.6 de OCBF.
