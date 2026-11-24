@@ -75,6 +75,9 @@ class ActionSpec:
     needs: Needs | None = Needs.NOTHING
     checkable: bool = False
     tooltip: str | None = None
+    #: Only for a command whose ``_act_`` name predates its id and is not
+    #: ``_act_<name>`` (``"assign.diaphragm"`` is ``_act_assign_diaphragm``).
+    legacy_attribute: str | None = None
 
     @property
     def area(self) -> str:
@@ -91,4 +94,4 @@ class ActionSpec:
         The ribbon layout, ``core.help.ACTION_TOPICS``, the icon files and the
         GUI tests still find a command by that name.
         """
-        return f"_act_{self.name}"
+        return self.legacy_attribute or f"_act_{self.name}"

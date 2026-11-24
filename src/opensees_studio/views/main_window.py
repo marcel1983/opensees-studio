@@ -82,12 +82,7 @@ from opensees_studio.commands import (
     SetSpringCommand,
 )
 from opensees_studio.commands.buildings import (
-    AddDiaphragmCommand,
-    AddRigidLinkCommand,
-    RemoveConstraintsCommand,
     SetDesignSettingsCommand,
-    SetMassSourceCommand,
-    SetStoreysCommand,
 )
 from opensees_studio.commands.generated import insert_generated
 from opensees_studio.commands.groups import (
@@ -198,6 +193,7 @@ from opensees_studio.views.canvas3d.diagram_renderer import DiagramRenderer
 from opensees_studio.views.canvas3d.model_renderer import RendererMode
 from opensees_studio.views.canvas3d.shell_contour_renderer import ShellContourRenderer
 from opensees_studio.views.controllers import Shell
+from opensees_studio.views.controllers.building import BuildingController
 from opensees_studio.views.controllers.transforms import TransformsController
 from opensees_studio.views.dialogs import (
     AddNodeDialog,
@@ -261,12 +257,6 @@ from opensees_studio.views.dialogs.area_loads import (
 )
 from opensees_studio.views.dialogs.assign_springs import AssignSpringsDialog
 from opensees_studio.views.dialogs.batch_run import BatchRunDialog
-from opensees_studio.views.dialogs.buildings import (
-    AssignDiaphragmDialog,
-    AssignRigidLinkDialog,
-    MassSourceDialog,
-    StoreysDialog,
-)
 from opensees_studio.views.dialogs.chapter_j import ChapterJDialog
 from opensees_studio.views.dialogs.column_splices import ColumnSplicesDialog
 from opensees_studio.views.dialogs.connect_joints import DivideFramesDialog, MergeJointsDialog
@@ -291,7 +281,6 @@ from opensees_studio.views.dialogs.model_tables import ModelTablesDialog
 from opensees_studio.views.dialogs.object_info import ObjectInfoDialog
 from opensees_studio.views.dialogs.reactions import ReactionsDialog
 from opensees_studio.views.dialogs.run_cases import RunCasesDialog
-from opensees_studio.views.dialogs.seismic_loads import SeismicLoadsDialog
 from opensees_studio.views.dialogs.solver_settings import SolverSettingsDialog
 from opensees_studio.views.dialogs.support_springs import SupportSpringDialog
 from opensees_studio.views.dialogs.view_colors import ViewColorsDialog
@@ -508,6 +497,9 @@ class MainWindow(QMainWindow):
             arm_measure=self._arm_measure_tool,
             release_measure=self._release_measure_tool,
         )
+
+        #: Storeys, mass source, seismic loads, diaphragms, rigid links.
+        self.building = BuildingController(shell)
 
         self._build_docks()
         self._log(f"OpenSees Studio {__version__} started.")
@@ -759,15 +751,12 @@ class MainWindow(QMainWindow):
         self._act_grid_wizard = QAction("Grid &Wizard…", self)
         # No shortcut: Ctrl+N is File → New, and F4 draws nodes.
         self._act_add_node = QAction("Add &Node…", self)
-        self._act_storeys = QAction("Store&ys…", self)
         self._act_groups = QAction("&Groups…", self)
         self._act_section_cuts = QAction("Section &Cuts…", self)
         self._act_custom_commands = QAction("Custom OpenSees Co&mmands…", self)
         self._act_assign_group = QAction("Assign to &Group…", self)
         # Ctrl+G is Coordinate System/Grids: a shared shortcut fires neither.
         self._act_assign_group.setShortcut("Ctrl+Shift+G")
-        self._act_mass_source = QAction("Mass S&ource…", self)
-        self._act_seismic_loads = QAction("Seismic &Loads (Equivalent Lateral Force)…", self)
         self._act_create_shell = QAction("Create S&hell from 3 or 4 Nodes…", self)
         self._act_shell_formulation = QAction("Shell &Formulation…", self)
         self._act_frame_wizard = QAction("Create Portal &Frame…", self)
@@ -830,9 +819,6 @@ class MainWindow(QMainWindow):
         self._act_assign_masses = QAction("&Masses…", self)
         self._act_assign_springs = QAction("S&prings…", self)
         self._act_assign_equal_dof = QAction("&EqualDOF…", self)
-        self._act_assign_diaphragm = QAction("&Diaphragm…", self)
-        self._act_assign_rigid_link = QAction("Rigid &Link…", self)
-        self._act_remove_constraints = QAction("Remove &Constraints", self)
         self._act_assign_load = QAction("&Point Loads…", self, shortcut="Ctrl+L")
         self._act_assign_imposed_displacement = QAction("Imposed &Displacement…", self)
         self._act_assign_joint_pattern = QAction("Joint &Pattern Values…", self)
@@ -1141,12 +1127,12 @@ class MainWindow(QMainWindow):
         m_define = mb.addMenu("&Define")
         m_define.addAction(self._act_grid)
         m_define.addAction(self._act_grid_wizard)
-        m_define.addAction(self._act_storeys)
+        m_define.addAction(self.action("define.storeys"))
         m_define.addAction(self._act_groups)
         m_define.addAction(self._act_joint_patterns)
         m_define.addAction(self._act_section_cuts)
-        m_define.addAction(self._act_mass_source)
-        m_define.addAction(self._act_seismic_loads)
+        m_define.addAction(self.action("define.mass_source"))
+        m_define.addAction(self.action("define.seismic_loads"))
         m_define.addAction(self._act_add_node)
         m_define.addAction(self._act_create_shell)
         m_define.addAction(self._act_frame_wizard)
@@ -1191,9 +1177,9 @@ class MainWindow(QMainWindow):
             self._act_assign_masses,
             self._act_assign_springs,
             self._act_assign_equal_dof,
-            self._act_assign_diaphragm,
-            self._act_assign_rigid_link,
-            self._act_remove_constraints,
+            self.action("assign.diaphragm"),
+            self.action("assign.rigid_link"),
+            self.action("assign.remove_constraints"),
             self._act_assign_load,
             self._act_assign_imposed_displacement,
             self._act_assign_zero_length,
@@ -2090,16 +2076,10 @@ class MainWindow(QMainWindow):
         self._act_assign_masses.triggered.connect(self._on_assign_masses)
         self._act_assign_springs.triggered.connect(self._on_assign_springs)
         self._act_assign_equal_dof.triggered.connect(self._on_assign_equal_dof)
-        self._act_assign_diaphragm.triggered.connect(self._on_assign_diaphragm)
-        self._act_assign_rigid_link.triggered.connect(self._on_assign_rigid_link)
-        self._act_remove_constraints.triggered.connect(self._on_remove_constraints)
-        self._act_storeys.triggered.connect(self._on_define_storeys)
         self._act_groups.triggered.connect(self._on_define_groups)
         self._act_section_cuts.triggered.connect(self._on_define_section_cuts)
         self._act_custom_commands.triggered.connect(self._on_custom_commands)
         self._act_assign_group.triggered.connect(self._on_assign_group)
-        self._act_mass_source.triggered.connect(self._on_define_mass_source)
-        self._act_seismic_loads.triggered.connect(self._on_define_seismic_loads)
         self._act_assign_load.triggered.connect(self._on_assign_load)
         self._act_assign_imposed_displacement.triggered.connect(
             self._on_assign_imposed_displacement
@@ -5492,20 +5472,7 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, "Assign EqualDOF failed", str(exc))
 
-    # ── building: storeys, mass source, diaphragms, rigid links ─────
-    def _on_define_storeys(self) -> None:
-        project = self._vm.project
-        if project is None:
-            return
-        dlg = StoreysDialog(project, self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            self._vm.apply_command(SetStoreysCommand(self._vm, dlg.storeys()))
-            self._log(f"Storeys set: {len(project.storeys)}.")
-        except Exception as exc:
-            QMessageBox.critical(self, "Define Storeys failed", str(exc))
-
+    # ── define and assign: groups, section cuts, custom commands ────
     def _on_define_groups(self) -> None:
         """Define → Groups: add, rename, recolour or remove groups."""
         project = self._vm.project
@@ -5589,68 +5556,6 @@ class MainWindow(QMainWindow):
             )
         except Exception as exc:
             QMessageBox.critical(self, "Assign to Group failed", str(exc))
-
-    def _on_define_seismic_loads(self) -> None:
-        """Define → Seismic Loads: ELF base shear and storey forces as load patterns."""
-        if self._vm.project is None:
-            return
-        dlg = SeismicLoadsDialog(self._vm, self)
-        if dlg.exec() == QDialog.DialogCode.Accepted and dlg.written:
-            self._log(
-                "Seismic loads written: " + ", ".join(dlg.written) + ". " + dlg.summary.text()
-            )
-
-    def _on_define_mass_source(self) -> None:
-        project = self._vm.project
-        if project is None:
-            return
-        dlg = MassSourceDialog(project, self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            self._vm.apply_command(SetMassSourceCommand(self._vm, dlg.mass_source()))
-            self._log("Mass source updated.")
-        except Exception as exc:
-            QMessageBox.critical(self, "Define Mass Source failed", str(exc))
-
-    def _on_assign_diaphragm(self) -> None:
-        project = self._vm.project
-        if project is None:
-            return
-        dlg = AssignDiaphragmDialog(project, sorted(self._canvas.selection.nodes), self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            diaphragm, retained = dlg.diaphragm()
-            self._vm.apply_command(AddDiaphragmCommand(self._vm, diaphragm, retained))
-            where = f"new node {retained.id}" if retained else f"node {diaphragm.retained_node}"
-            self._log(f"Added rigid diaphragm {diaphragm.name or diaphragm.id}, retained {where}.")
-        except Exception as exc:
-            QMessageBox.critical(self, "Assign Diaphragm failed", str(exc))
-
-    def _on_assign_rigid_link(self) -> None:
-        sel = sorted(self._canvas.selection.nodes)
-        if len(sel) != 2 or self._vm.project is None:
-            QMessageBox.information(self, "Assign Rigid Link", "Select exactly two nodes first.")
-            return
-        dlg = AssignRigidLinkDialog(sel, self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            link = dlg.link()
-            self._vm.apply_command(AddRigidLinkCommand(self._vm, link))
-            self._log(
-                f"Added rigid {link.kind} link {link.retained_node} -> {link.constrained_node}."
-            )
-        except Exception as exc:
-            QMessageBox.critical(self, "Assign Rigid Link failed", str(exc))
-
-    def _on_remove_constraints(self) -> None:
-        sel = set(self._canvas.selection.nodes)
-        if not sel or self._vm.project is None:
-            return
-        self._vm.apply_command(RemoveConstraintsCommand(self._vm, sel))
-        self._log(f"Removed the constraints of {len(sel)} node(s).")
 
     def _on_assign_load(self) -> None:
         sel_nodes = set(self._canvas.selection.nodes)
@@ -9011,18 +8916,13 @@ class MainWindow(QMainWindow):
         self._act_assign_masses.setEnabled(has_project and has_selected_nodes)
         self._act_assign_springs.setEnabled(has_project and has_selected_nodes)
         self._act_assign_equal_dof.setEnabled(has_project and n_sel == 2)
-        self._act_assign_diaphragm.setEnabled(has_project)
-        self._act_assign_rigid_link.setEnabled(has_project and n_sel == 2)
-        self._act_remove_constraints.setEnabled(has_project and has_selected_nodes)
-        self._act_storeys.setEnabled(has_project)
+        self.action("assign.rigid_link").setEnabled(has_project and n_sel == 2)
         self._act_groups.setEnabled(has_project)
         self._act_joint_patterns.setEnabled(has_project)
         self._act_assign_joint_pattern.setEnabled(has_project and has_selected_nodes)
         self._act_section_cuts.setEnabled(has_project)
         self._act_custom_commands.setEnabled(has_project)
         self._act_assign_group.setEnabled(has_project and has_selection)
-        self._act_mass_source.setEnabled(has_project)
-        self._act_seismic_loads.setEnabled(has_project)
         self._act_assign_load.setEnabled(has_project and has_selected_nodes)
         self._act_assign_imposed_displacement.setEnabled(has_project and has_selected_nodes)
         self._act_assign_surface_load.setEnabled(has_project and has_selected_elements)

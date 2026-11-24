@@ -50,10 +50,12 @@ those tables, connects them and enables them; `MainWindow.action("file.save")`
 returns one. The spec tables are plain data with no Qt import, so a unit test
 checks that every command has a handler and a help page.
 
-The migration is by menu: File and part of Edit are declared this way, the
-other menus are still built by hand in `MainWindow._build_actions`. A declared
-action is also stored as `_act_<name>`, the name the ribbon layout,
-`core.help.ACTION_TOPICS` and the icon files use.
+The migration is by menu: File and parts of Edit, Define and Assign are
+declared this way, the rest is still built by hand in
+`MainWindow._build_actions`. A declared action is also stored as `_act_<name>`,
+the name the ribbon layout, `core.help.ACTION_TOPICS` and the icon files use; a
+command that had another name before it was declared keeps it through
+`legacy_attribute`.
 
 ## Controllers
 
@@ -66,6 +68,11 @@ Whatever else it needs from the window arrives as a named constructor argument
 (`arm_measure`, `release_measure`), so the coupling is visible where the
 controller is created. A command's spec names the controller method as its
 handler: `"transforms.move"` is `window.transforms.move`.
+
+| Controller | Window attribute | Commands |
+|---|---|---|
+| `TransformsController` | `transforms` | Edit → Copy, Paste, Move, Replicate, Mirror, Extrude |
+| `BuildingController` | `building` | Define → Storeys, Mass Source, Seismic Loads; Assign → Diaphragm, Rigid Link, Remove Constraints |
 
 `MainWindow` is being emptied this way, one area per pull request; it keeps
 the layout, the docks and the wiring.

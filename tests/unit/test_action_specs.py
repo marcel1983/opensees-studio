@@ -11,7 +11,7 @@ import re
 from pathlib import Path
 
 from opensees_studio.core.help import ACTION_TOPICS, TOPICS
-from opensees_studio.views.actions import ALL_ACTIONS, ActionState, Needs
+from opensees_studio.views.actions import ALL_ACTIONS, ActionSpec, ActionState, Needs
 
 VIEWS = Path(__file__).resolve().parents[2] / "src" / "opensees_studio" / "views"
 MAIN_WINDOW = ast.parse((VIEWS / "main_window.py").read_text(encoding="utf-8"))
@@ -31,6 +31,14 @@ def test_ids_are_area_dot_name_and_unique() -> None:
     ids = [spec.id for spec in ALL_ACTIONS]
     assert [i for i in ids if not re.fullmatch(r"[a-z]+\.[a-z0-9_]+", i)] == []
     assert len(set(ids)) == len(ids)
+
+
+def test_the_attribute_is_the_name_unless_the_command_kept_an_older_one() -> None:
+    assert ActionSpec("assign.masses", "M", "_on_m").attribute == "_act_masses"
+    kept = ActionSpec("assign.masses", "M", "_on_m", legacy_attribute="_act_assign_masses")
+    assert kept.attribute == "_act_assign_masses"
+    # An override is only for a name that differs: otherwise it is noise.
+    assert [s.id for s in ALL_ACTIONS if s.legacy_attribute == f"_act_{s.name}"] == []
 
 
 def test_no_two_commands_share_an_attribute() -> None:
