@@ -33,6 +33,17 @@ def _joint(name: str, text: str, needs: Needs = _JOINTS, shortcut: str | None = 
     )
 
 
+def _springs(kind: str, text: str) -> ActionSpec:
+    """assign.<kind>_springs runs window.areas.assign_<kind>_springs."""
+    return ActionSpec(
+        f"assign.{kind}_springs",
+        text,
+        f"areas.assign_{kind}_springs",
+        needs=_ELEMENTS,
+        legacy_attribute=f"_act_assign_{kind}_springs",
+    )
+
+
 def _member(name: str, text: str) -> ActionSpec:
     """A member command: ``assign.<name>`` runs ``window.members.assign_<name>``."""
     return ActionSpec(
@@ -98,6 +109,16 @@ ASSIGN_ACTIONS: tuple[ActionSpec, ...] = (
         "building.remove_constraints",
         needs=_JOINTS,
     ),
+    # Shells and the distributed springs under shells, shell edges and members.
+    ActionSpec(
+        "assign.shell_formulation",
+        "Shell &Formulation…",
+        "areas.shell_formulation",
+        needs=_ELEMENTS,
+    ),
+    _springs("area", "&Area Springs…"),
+    _springs("edge", "&Edge Springs…"),
+    _springs("line", "&Line Springs…"),
     # Loads on joints.
     ActionSpec(
         "assign.load",

@@ -51,7 +51,6 @@ from PySide6.QtWidgets import (
 
 from opensees_studio import __version__
 from opensees_studio.commands import (
-    AddElementsCommand,
     AddNodesCommand,
     AddSectionsCommand,
     AssignMaterialCommand,
@@ -59,22 +58,17 @@ from opensees_studio.commands import (
     DeleteElementsCommand,
     DeleteNodesCommand,
     MeshCommand,
-    ReplaceElementsCommand,
     SetCoordSystemsCommand,
     SetMassCommand,
     SetProjectMetaCommand,
     SetRestraintCommand,
 )
 from opensees_studio.commands.generated import insert_generated
-from opensees_studio.commands.support_springs import SetSupportSpringsCommand
 from opensees_studio.commands.tables import ApplyModelTablesCommand
 from opensees_studio.core import (
-    SHELL_ELEMENT_CLASSES,
     SUPPORTED_NDF,
     ElasticSection,
     Project,
-    ShellDKGTElement,
-    ShellMITC4Element,
     UnitConverter,
     UnitSystem,
     build_portal_frame,
@@ -84,7 +78,6 @@ from opensees_studio.core import (
     make_default_slab_section,
     make_default_truss_material,
     shortcut_profiles,
-    with_shell_formulation,
 )
 from opensees_studio.core import selection as selection_queries
 from opensees_studio.core.combinations import model_fingerprint
@@ -96,7 +89,6 @@ from opensees_studio.core.connectivity import (
 from opensees_studio.core.design.settings import DesignSettings
 from opensees_studio.core.duplicates import default_tolerance
 from opensees_studio.core.generated import GeneratedModel
-from opensees_studio.core.geometry.ordering import QuadOrderError, order_quad_nodes
 from opensees_studio.core.groups import group_members
 from opensees_studio.core.help import ACTION_TOPICS, TOPIC_PROPERTY
 from opensees_studio.core.i18n import LANGUAGES
@@ -105,7 +97,6 @@ from opensees_studio.core.mesh import pre_run_auto_mesh
 from opensees_studio.core.model_check import Finding, check_model
 from opensees_studio.core.object_info import element_info, node_info
 from opensees_studio.core.reactions import ReactionRow, reaction_rows
-from opensees_studio.core.sections import SHELL_SECTION_CLASSES
 from opensees_studio.core.view_settings import ViewSettings
 from opensees_studio.services import (
     PROJECT_FILE_SUFFIX,
@@ -163,6 +154,7 @@ from opensees_studio.views.canvas3d.diagram_renderer import DiagramRenderer
 from opensees_studio.views.canvas3d.model_renderer import RendererMode
 from opensees_studio.views.canvas3d.shell_contour_renderer import ShellContourRenderer
 from opensees_studio.views.controllers import Shell
+from opensees_studio.views.controllers.areas import AreasController
 from opensees_studio.views.controllers.building import BuildingController
 from opensees_studio.views.controllers.design import DesignController
 from opensees_studio.views.controllers.groups import GroupsController
@@ -200,7 +192,6 @@ from opensees_studio.views.dialogs.object_info import ObjectInfoDialog
 from opensees_studio.views.dialogs.reactions import ReactionsDialog
 from opensees_studio.views.dialogs.run_cases import RunCasesDialog
 from opensees_studio.views.dialogs.solver_settings import SolverSettingsDialog
-from opensees_studio.views.dialogs.support_springs import SupportSpringDialog
 from opensees_studio.views.dialogs.view_colors import ViewColorsDialog
 from opensees_studio.views.docks import (
     DeformedShapeView,
@@ -415,6 +406,7 @@ class MainWindow(QMainWindow):
         )
 
         #: Storeys, mass source, seismic loads, diaphragms, rigid links.
+        self.areas = AreasController(shell)
         self.building = BuildingController(shell)
         #: Assign → Frame: section, material, formulation, frame member options.
         self.joints = JointsController(shell)
@@ -684,8 +676,6 @@ class MainWindow(QMainWindow):
         # No shortcut: Ctrl+N is File → New, and F4 draws nodes.
         self._act_add_node = QAction("Add &Node…", self)
         self._act_custom_commands = QAction("Custom OpenSees Co&mmands…", self)
-        self._act_create_shell = QAction("Create S&hell from 3 or 4 Nodes…", self)
-        self._act_shell_formulation = QAction("Shell &Formulation…", self)
         self._act_frame_wizard = QAction("Create Portal &Frame…", self)
         self._act_truss_wizard = QAction("Create &Truss…", self)
         self._act_warehouse_wizard = QAction("Create &Warehouse…", self)
@@ -714,9 +704,6 @@ class MainWindow(QMainWindow):
             action.setStatusTip(text)
             action.setProperty("ownTip", text)
             action.setData(preset)
-        self._act_assign_area_springs = QAction("&Area Springs…", self)
-        self._act_assign_edge_springs = QAction("&Edge Springs…", self)
-        self._act_assign_line_springs = QAction("&Line Springs…", self)
 
         # Display (post-processing)
         self._act_select_results = QAction("Show Results &Of…", self)
@@ -982,7 +969,7 @@ class MainWindow(QMainWindow):
         m_define.addAction(self.action("define.mass_source"))
         m_define.addAction(self.action("define.seismic_loads"))
         m_define.addAction(self._act_add_node)
-        m_define.addAction(self._act_create_shell)
+        m_define.addAction(self.action("define.create_shell"))
         m_define.addAction(self._act_frame_wizard)
         m_define.addAction(self._act_truss_wizard)
         m_define.addAction(self._act_warehouse_wizard)
@@ -1055,17 +1042,17 @@ class MainWindow(QMainWindow):
             self.action("assign.hinge"),
             self.action("assign.wall"),
             None,
-            self._act_assign_line_springs,
+            self.action("assign.line_springs"),
             self.action("assign.pile"),
         ]
         self._area_actions: list[QAction | None] = [
-            self._act_shell_formulation,
+            self.action("assign.shell_formulation"),
             None,
             self.action("assign.surface_load"),
             self.action("assign.floor_load"),
             None,
-            self._act_assign_area_springs,
-            self._act_assign_edge_springs,
+            self.action("assign.area_springs"),
+            self.action("assign.edge_springs"),
         ]
         # Joint submenu — operates on selected nodes.
         m_joint = m_assign.addMenu("&Joint")
@@ -1892,8 +1879,6 @@ class MainWindow(QMainWindow):
         self._canvas.lineSelectFinished.connect(lambda: self._act_select_line.setChecked(False))
         self._act_select_line.toggled.connect(self._on_select_line)
         self._act_add_node.triggered.connect(self._on_add_node)
-        self._act_create_shell.triggered.connect(self._on_create_shell)
-        self._act_shell_formulation.triggered.connect(self._on_shell_formulation)
         self._act_frame_wizard.triggered.connect(self._on_frame_wizard)
         self._act_truss_wizard.triggered.connect(self._on_truss_wizard)
         self._act_warehouse_wizard.triggered.connect(self._on_warehouse_wizard)
@@ -1903,9 +1888,6 @@ class MainWindow(QMainWindow):
         for action in self._restraint_actions():
             action.triggered.connect(self._on_quick_restraint)
         self._act_custom_commands.triggered.connect(self._on_custom_commands)
-        self._act_assign_area_springs.triggered.connect(lambda: self._on_assign_springs_of("area"))
-        self._act_assign_edge_springs.triggered.connect(lambda: self._on_assign_springs_of("edge"))
-        self._act_assign_line_springs.triggered.connect(lambda: self._on_assign_springs_of("line"))
 
         # Analyze
         self._act_case_manager.triggered.connect(self._on_case_manager)
@@ -3173,127 +3155,6 @@ class MainWindow(QMainWindow):
             self._log(f"Coordinate/Grid Systems updated: {names}.")
         except Exception as exc:
             QMessageBox.critical(self, "Grid update failed", str(exc))
-
-    def _on_create_shell(self) -> None:
-        """Define → Create Shell: a ShellMITC4 from four selected nodes, a ShellDKGT from three.
-
-        The selection carries no order, so the winding is derived from the
-        nodes' coordinates: a shell built from a scrambled list is inverted or
-        twisted, and the user has no way to express "counter-clockwise" by
-        clicking.
-        """
-        project = self._vm.project
-        if project is None:
-            QMessageBox.information(self, "Create shell", "Open or create a project first.")
-            return
-        selected = [n for n in project.nodes if n.id in self._canvas.selection.nodes]
-        if len(selected) not in (3, 4):
-            QMessageBox.information(
-                self,
-                "Create shell",
-                "Select four nodes (a quadrilateral) or three (a triangle) first "
-                f"(you have {len(selected)}).",
-            )
-            return
-        plate_sections = [s for s in project.sections if isinstance(s, SHELL_SECTION_CLASSES)]
-        if not plate_sections:
-            QMessageBox.information(
-                self,
-                "Create shell",
-                "A shell needs a plate section. Add one from Define → Section Library "
-                "(type 'Plate Section (shell)').",
-            )
-            return
-        if len(plate_sections) == 1:
-            section = plate_sections[0]
-        else:
-            labels = [f"#{s.id} {s.name} (h = {s.h:g})" for s in plate_sections]
-            choice, accepted = QInputDialog.getItem(
-                self, "Create shell", "Plate section:", labels, 0, False
-            )
-            if not accepted:
-                return
-            section = plate_sections[labels.index(choice)]
-        element_id = project.next_element_id()
-        if len(selected) == 3:
-            # Any three points wind one way or the other: keep the selection order.
-            corners = (selected[0].id, selected[1].id, selected[2].id)
-            tri = ShellDKGTElement(id=element_id, nodes=corners, section_id=section.id)
-            self._vm.apply_command(
-                AddElementsCommand(self._vm, [tri], text=f"Add shell {element_id}")
-            )
-            self._log(
-                f"Shell {element_id} (ShellDKGT): nodes {tri.nodes}, plate section {section.id}."
-            )
-            return
-        points = [
-            (float(node.coords[0]), float(node.coords[1]), float(node.coords[2]))
-            for node in selected
-        ]
-        try:
-            order = order_quad_nodes(points)
-        except QuadOrderError as exc:
-            QMessageBox.critical(self, "Cannot build the shell", str(exc))
-            return
-        ordered = [selected[index] for index in order]
-        nodes = (ordered[0].id, ordered[1].id, ordered[2].id, ordered[3].id)
-        try:
-            self._vm.apply_command(
-                AddElementsCommand(
-                    self._vm,
-                    [ShellMITC4Element(id=element_id, nodes=nodes, section_id=section.id)],
-                    text=f"Add shell {element_id}",
-                )
-            )
-        except Exception as exc:
-            QMessageBox.critical(self, "Cannot create the shell", str(exc))
-            return
-        self._log(
-            f"Shell {element_id}: nodes {nodes}, plate section {section.id} "
-            f"(winding ordered counter-clockwise)."
-        )
-
-    def _on_shell_formulation(self) -> None:
-        """Assign → Area → Shell Formulation: MITC4, DKGQ or NLDKGQ (quads), DKGT or NLDKGT."""
-        project = self._vm.project
-        if project is None:
-            return
-        selected = set(self._canvas.selection.elements)
-        shells = [
-            e for e in project.elements if e.id in selected and isinstance(e, SHELL_ELEMENT_CLASSES)
-        ]
-        if not shells:
-            QMessageBox.information(self, "Shell Formulation", "Select one or more shells first.")
-            return
-        quads = [e for e in shells if len(e.nodes) == 4]
-        tris = [e for e in shells if len(e.nodes) == 3]
-        choices: list[tuple[str, str, str]] = [
-            ("MITC4 / DKGT — the default pair", "ShellMITC4", "ShellDKGT"),
-            ("DKGQ / DKGT — thin plates, drilling stiffness", "ShellDKGQ", "ShellDKGT"),
-            ("NLDKGQ / NLDKGT — large displacements", "ShellNLDKGQ", "ShellNLDKGT"),
-        ]
-        labels = [c[0] for c in choices]
-        choice, accepted = QInputDialog.getItem(
-            self,
-            "Shell Formulation",
-            f"{len(quads)} quadrilateral and {len(tris)} triangular shell(s):",
-            labels,
-            0,
-            False,
-        )
-        if not accepted:
-            return
-        _label, quad_kind, tri_kind = choices[labels.index(choice)]
-        replaced = [
-            with_shell_formulation(e, quad_kind if len(e.nodes) == 4 else tri_kind) for e in shells
-        ]
-        replaced = [new for new, old in zip(replaced, shells, strict=True) if new.type != old.type]
-        if not replaced:
-            self._log("Shell formulation: nothing to change.")
-            return
-        self._vm.apply_command(ReplaceElementsCommand(self._vm, replaced))
-        self._log(f"Shell formulation: {len(replaced)} shell(s) are now {choice.split(' — ')[0]}.")
-        self._canvas.render()
 
     def _select_report_row(self, node_ids: Sequence[int], element_ids: Sequence[int]) -> None:
         """Highlight the nodes/elements of a report row so they can be inspected."""
@@ -4571,91 +4432,6 @@ class MainWindow(QMainWindow):
     # ── slots: define ────────────────────────────────────────────────
     # ── slots: assign property ──────────────────────────────────────
     # ── area loads and imposed displacements ─────────────────────────
-    def _on_assign_springs_of(self, kind: str) -> None:
-        """Assign → Area → Area/Edge Springs, Assign → Frame → Line Springs."""
-        from opensees_studio.core.support_springs import AreaSpring, EdgeSpring, LineSpring
-        from opensees_studio.core.units import labels_for
-
-        project = self._vm.project
-        if project is None:
-            return
-        selected = set(self._canvas.selection.elements)
-        joints = set(self._canvas.selection.nodes)
-        targets: list[Any]
-        if kind == "line":
-            targets = [e for e in project.elements if e.id in selected and len(e.nodes) == 2]
-            what = "frame members"
-        else:
-            targets = [
-                e for e in project.elements if e.id in selected and isinstance(e, ShellMITC4Element)
-            ]
-            what = "shells"
-        if not targets:
-            QMessageBox.information(self, "Springs", f"Select one or more {what} first.")
-            return
-        edges: list[tuple[int, int]] = []
-        if kind == "edge":
-            edges = [
-                (e.id, k + 1)
-                for e in targets
-                for k in range(4)
-                if e.nodes[k] in joints and e.nodes[(k + 1) % 4] in joints
-            ]
-            if not edges:
-                QMessageBox.information(
-                    self,
-                    "Edge Springs",
-                    "Select the shells and the joints along the supported edge: an edge whose "
-                    "two joints are selected takes the spring.",
-                )
-                return
-        labels = labels_for(project.meta.units)
-        dlg = SupportSpringDialog(
-            kind,  # type: ignore[arg-type]
-            len(edges) if kind == "edge" else len(targets),
-            length_unit=labels.length,
-            force_unit=labels.force,
-            parent=self,
-        )
-        try:
-            if dlg.exec() != QDialog.DialogCode.Accepted:
-                return
-            values, mode = dlg.values(), dlg.mode()
-        finally:
-            dlg.deleteLater()
-        area, line, edge = (
-            list(project.area_springs),
-            list(project.line_springs),
-            list(project.edge_springs),
-        )
-        ids = {e.id for e in targets}
-        if kind == "area":
-            if mode != "add":
-                area = [s for s in area if s.element_id not in ids]
-            if mode != "delete":
-                area += [AreaSpring(element_id=i, **values) for i in sorted(ids)]  # type: ignore[arg-type]
-        elif kind == "line":
-            if mode != "add":
-                line = [s for s in line if s.element_id not in ids]
-            if mode != "delete":
-                line += [LineSpring(element_id=i, **values) for i in sorted(ids)]  # type: ignore[arg-type]
-        else:
-            chosen = set(edges)
-            if mode != "add":
-                edge = [s for s in edge if (s.element_id, s.edge) not in chosen]
-            if mode != "delete":
-                edge += [EdgeSpring(element_id=i, edge=k, **values) for i, k in edges]  # type: ignore[arg-type]
-        count = len(edges) if kind == "edge" else len(ids)
-        self._vm.apply_command(
-            SetSupportSpringsCommand(
-                self._vm, area, line, edge, f"{mode.capitalize()} {kind} springs on {count}"
-            )
-        )
-        self._canvas.render()
-        self._log(
-            f"{kind.capitalize()} springs: {mode} on {count} {'edge' if kind == 'edge' else 'element'}(s)."
-        )
-
     # ── slots: analyze ──────────────────────────────────────────────
     def _on_check_stability(self) -> None:
         """Analyze → Check Model Stability: look for mechanisms before solving anything."""
@@ -6510,7 +6286,7 @@ class MainWindow(QMainWindow):
         self._act_frame_wizard.setEnabled(has_project)
         self._act_truss_wizard.setEnabled(has_project)
         self._act_warehouse_wizard.setEnabled(has_project)
-        self._act_create_shell.setEnabled(has_project and n_sel in (3, 4))
+        self.action("define.create_shell").setEnabled(has_project and n_sel in (3, 4))
         self._act_table_editing.setEnabled(has_project)
         has_cases = has_project and bool(self._vm.project and self._vm.project.analyses)
         # Without a solver the model is still built, exported and reported; only
@@ -6558,13 +6334,6 @@ class MainWindow(QMainWindow):
         for action in self._restraint_actions():
             action.setEnabled(has_project and has_selected_nodes)
         self._act_custom_commands.setEnabled(has_project)
-        self._act_shell_formulation.setEnabled(has_project and has_selected_elements)
-        for action in (
-            self._act_assign_area_springs,
-            self._act_assign_edge_springs,
-            self._act_assign_line_springs,
-        ):
-            action.setEnabled(has_project and has_selected_elements)
         self.action("assign.floor_load").setEnabled(
             has_project
             and has_selected_nodes

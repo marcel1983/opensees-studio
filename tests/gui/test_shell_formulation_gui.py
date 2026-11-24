@@ -47,7 +47,7 @@ def test_the_formulation_changes_and_undoes(qtbot, monkeypatch) -> None:  # type
         "getItem",
         lambda *a, **k: (a[3][1], True),  # the DKGQ / DKGT pair
     )
-    window._on_shell_formulation()
+    window.areas.shell_formulation()
     assert type(window._vm.project.elements[0]) is ShellDKGQElement
     window._vm.undo_stack.undo()
     assert type(window._vm.project.elements[0]) is ShellMITC4Element
@@ -58,7 +58,7 @@ def test_three_selected_nodes_make_a_triangle(qtbot) -> None:  # type: ignore[no
     window = _window(qtbot)
     for nid in (2, 5, 3):
         window._canvas.selection.select_node(nid, additive=True)
-    window._on_create_shell()
+    window.areas.create_shell()
     tri = window._vm.project.elements[-1]
     assert isinstance(tri, ShellDKGTElement)
     assert set(tri.nodes) == {2, 3, 5}

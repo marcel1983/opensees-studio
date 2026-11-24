@@ -69,6 +69,13 @@ DEFINE_ACTIONS: tuple[ActionSpec, ...] = (
         "Add &Multi-Support Excitation…",
         Needs.PROJECT | Needs.SELECTED_NODES,
     ),
+    # Enabled with three or four joints selected: the window sets it.
+    ActionSpec(
+        "define.create_shell",
+        "Create S&hell from 3 or 4 Nodes…",
+        "areas.create_shell",
+        needs=None,
+    ),
     ActionSpec("define.groups", "&Groups…", "groups.define_groups", needs=Needs.PROJECT),
     ActionSpec(
         "define.section_cuts",
