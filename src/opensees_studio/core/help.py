@@ -7544,9 +7544,11 @@ Joint → Masses always count on top.
 - **Element self mass** — frames and shells whose section has a unit weight,
   lumped half on each end of a frame and by tributary area on a shell's corners.
 - **Load patterns** — tick a pattern and give its factor (the usual D + 0.3 L
-  is DEAD 1.0, LIVE 0.3). Only the **downward** part of its nodal, uniform and
-  point loads counts, plus its self-weight multiplier; element loads go to the
-  element's ends. A node whose total comes out upward gets nothing.
+  is DEAD 1.0, LIVE 0.3). Only the **downward** part of its nodal, uniform,
+  distributed (trapezoidal) and point loads counts, plus its floor panels and
+  its self-weight multiplier; element loads go to the element's ends, a
+  distributed load by its resultant. A node whose total comes out upward gets
+  nothing.
 - **Also on the vertical translation** — by default the mass goes on the
   lateral translations only, so the model has no vertical modes.
 - **Lump at the retained node** — each rigid diaphragm's in-plane mass and its

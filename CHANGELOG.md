@@ -75,8 +75,43 @@ refused instead of silently downgraded).
   by default; accidental torsion is not included. `examples/warehouse_seismic.py`
   builds a warehouse in Managua with it.
 
+- **Parametric building, for scripts.** `core.building.plan_building` makes a
+  regular multi-storey building of a few numbers (bay widths along X and Y,
+  storey heights, steel or concrete frame, fixed or pinned bases): columns and
+  beams both ways in three groups, a grid, a storey per floor and a rigid
+  diaphragm tied to a node at the centre of the floor's mass. The slab is not
+  modelled: its weight and the live load are floor panels, two-way or one-way,
+  in `DEAD`, `LIVE` and `ROOF LIVE`, with the live loads of a use by RNC-07
+  Tabla 1, NSCM Tabla 7.1.1 or ASCE 7-16 Table 4.3-1. The mass source is the
+  dead case plus the live load the code counts (the CVR of RNC-07, 0.15 CV by
+  NSCM 9.6, none by ASCE 7), and the earthquake is the equivalent lateral force
+  of **RNC-07 Art. 32**, **NSCM 8.2.1** or **ASCE 7-16 12.8** on the storeys,
+  with the empirical period of the code (the plateau for RNC-07, which has
+  none) or the one you give. Each direction has two cases, `EQ X +e` and `EQ X
+  -e`: the storey forces at the centre of mass with the torque of the
+  accidental eccentricity (0.1 b by RNC-07 Art. 32 d, 5 % by NSCM 9.8 and ASCE
+  7) to either side. The combinations of the code follow, with the 100 % + 30 %
+  rule between one case of each direction for RNC-07 and NSCM. No dialog yet:
+  `examples/building_office.py` builds a three-storey concrete office building
+  in Managua with it. Not included: wind on the building, cracked stiffness,
+  secondary beams, and the 1.5 amplification of the static eccentricity of
+  RNC-07 Art. 32 d.
+- **Combination generators know which way an earthquake case acts.** Called
+  from a script with the option `earthquake_directions` (`{case id: "X"}`), the
+  100 % + 30 % rule takes the cases of one direction as alternatives: each one
+  at 100 % with one case of every other direction at 30 %, and never `EQ X +e`
+  together with `EQ X -e`. Without the option nothing changes.
+
 ### Changed
 
+- **The mass source counts distributed loads and floor panels.** A load pattern
+  in Define → Mass Source gave mass for its nodal, uniform and point loads and
+  its self weight; a distributed (trapezoidal) load and a floor panel (Assign →
+  Area → Floor Load to Frames) weighed nothing, so a building whose slab was
+  entered as floor panels had no slab mass. Both count now, each member load by
+  its resultant on the member's two ends. A model whose mass source includes a
+  pattern with such loads gets more mass than before; none of the bundled
+  examples had one.
 - **The load cases the Warehouse Wizard creates use the sparse solver
   UmfPack** instead of BandGeneral. On a warehouse (hundreds of pinned members,
   each with its own released rotations) the band solver takes tens of seconds

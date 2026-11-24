@@ -155,6 +155,41 @@ def test_orthogonal_rule_with_spectrum_cases_needs_no_sign_pairs() -> None:
     assert len(mixed) == 4
 
 
+def test_cases_of_one_direction_are_alternatives_in_the_orthogonal_rule() -> None:
+    # 10 and 11 are the earthquake along X with +e and -e, 20 and 21 along Y.
+    directions = {10: "X", 11: "X", 20: "Y", 21: "Y"}
+    variants = lateral_variants([10, 11, 20, 21], orthogonal=True, directions=directions)
+    # Four primaries, two companions each, two signs each: never two of a direction.
+    assert len(variants) == 4 * 2 * 4
+    for variant in variants:
+        assert len(variant) == 2
+        (main, primary), (share, companion) = variant
+        assert abs(main) == 1.0 and abs(share) == 0.3
+        assert directions[primary] != directions[companion]
+    assert ((1.0, 10), (-0.3, 21)) in variants and ((-1.0, 21), (0.3, 11)) in variants
+    # One direction only: nothing to combine, each case both ways.
+    alone = lateral_variants([10, 11], orthogonal=True, directions=directions)
+    assert alone == [((1.0, 10),), ((-1.0, 10),), ((1.0, 11),), ((-1.0, 11),)]
+    # A case without a direction is one of its own, as before.
+    mixed = lateral_variants([10, 11, 30], orthogonal=True, directions={10: "X", 11: "X"})
+    assert ((1.0, 30), (0.3, 10)) in mixed and ((1.0, 10), (0.3, 30)) in mixed
+    assert not any({c for _f, c in v} == {10, 11} for v in mixed)
+
+
+@pytest.mark.parametrize("code", ["asce7_lrfd", "asce7_asd", "rnc07", "nscm", "en1990", "tbdy"])
+def test_every_code_takes_the_earthquake_directions(code: str) -> None:
+    roles = {"D": [D], "E": [10, 11, 20, 21]}
+    directions = {10: "X", 11: "X", 20: "Y", 21: "Y"}
+    generated = generate_for_code(
+        code, roles, options={"orthogonal": True, "earthquake_directions": directions}
+    )
+    with_e = [c for c in generated if any(t.ref_id in directions for t in c.terms)]
+    assert with_e
+    for combination in with_e:
+        used = [directions[t.ref_id] for t in combination.terms if t.ref_id in directions]
+        assert sorted(used) == ["X", "Y"], combination.name
+
+
 def test_orthogonal_option_applies_to_every_code_with_earthquake() -> None:
     roles = {"D": [D], "E": [E, 7]}
     for code in ("asce7_lrfd", "asce7_asd", "en1990", "tbdy"):
