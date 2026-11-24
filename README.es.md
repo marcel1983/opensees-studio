@@ -122,11 +122,13 @@ script o un notebook de Jupyter: la interfaz es una forma de usarlo, no la únic
   paralelo, con tirantes del cordón inferior entre pórticos, con correas y
   largueros a una separación máxima, arriostramiento en X de techo y paredes,
   grupos por tipo de miembro, cargas muerta y viva de techo sobre las correas y
-  las combinaciones de RNC-07, NSCM o ASCE 7-16; columnas y largueros de los
-  muros hastiales, y casos de viento por dirección según RNC-07 Título IV o
-  ASCE 7-16 capítulo 27, con las presiones de la estructura principal sobre
+  las combinaciones de RNC-07, NSCM, ASCE 7-16 o EN 1990; columnas y largueros
+  de los muros hastiales, y casos de viento por dirección según RNC-07 Título
+  IV, ASCE 7-16 capítulo 27 o EN 1991-1-4 con sus zonas de cubierta y de muro,
+  con las presiones de la estructura principal sobre
   correas, largueros y columnas; casos de sismo estático `EQ X` y `EQ Y` según
-  RNC-07 Art. 32, NSCM 8.2.1 o ASCE 7-16 12.8, con el coeficiente de la meseta
+  RNC-07 Art. 32, NSCM 8.2.1, ASCE 7-16 12.8 o EN 1998-1 4.3.3.2, con el
+  coeficiente de la meseta
   del espectro por el peso sísmico (acero, carga muerta de techo y carga viva
   reducida) repartido entre los nudos según peso y altura; carga de ceniza
   volcánica según RNC-07 Art. 14 y NSCM 7.3 (20 kg/m²) o de nieve según ASCE

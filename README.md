@@ -201,13 +201,14 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   braces the rafter only where it has a stabilising angle (fly brace): the wizard
   writes the resulting unbraced lengths for the steel check. The roof dead and
   live loads go on the purlins over their tributary width, with the
-  combinations of RNC-07, NSCM (Managua) or ASCE 7-16. A wind page adds one load
-  case per wind direction, by RNC-07 Título IV or ASCE 7-16 chapter 27 (main
-  structure pressures on the purlins, the girts and the columns), and the end
+  combinations of RNC-07, NSCM (Managua), ASCE 7-16 or EN 1990. A wind page
+  adds the load cases of each wind direction, by RNC-07 Título IV, ASCE 7-16
+  chapter 27 or EN 1991-1-4 with its roof and wall zones (main structure
+  pressures on the purlins, the girts and the columns), and the end
   walls can get their own columns and girts; default sections come
   from the AISC library and a cold-formed lipped channel. An earthquake page
-  adds the static cases `EQ X` and `EQ Y` by RNC-07 Art. 32, NSCM 8.2.1 or
-  ASCE 7-16 12.8: the coefficient of the plateau of the spectrum times the
+  adds the static cases `EQ X` and `EQ Y` by RNC-07 Art. 32, NSCM 8.2.1,
+  ASCE 7-16 12.8 or EN 1998-1 4.3.3.2: the coefficient of the plateau of the spectrum times the
   seismic weight (steel, roof dead load and the reduced roof live load), shared
   between the joints by weight and height. An ash and snow page adds the
   volcanic ash of RNC-07 Art. 14 and NSCM 7.3 (20 kg/m²) or the snow of ASCE

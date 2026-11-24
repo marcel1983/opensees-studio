@@ -205,7 +205,12 @@ These are non-obvious things that are easy to break if you don't know:
   `SteelMemberDesign.length_minor`/`length_ltb`, because `core.design.members`
   would take every member framing in as a brace. Wind (`core.wind`, SI whatever
   the project's units) is a net pressure per surface, positive pushing inwards;
-  `core.warehouse.wind_loads` puts it on the purlins, girts or columns. A wind
+  `core.warehouse.wind_loads` puts it on the purlins, girts or columns. A
+  pressure that depends on two coordinates (the roof zones F to J and the side
+  wall zones A to C of EN 1991-1-4) is a `wind.Surface` in `RoofLoad.zones` or
+  `WindCase.wall_zones`, and wins over the one-coordinate profile. Several
+  naves stand under **one** roof (one ridge over the whole width): wind and
+  snow take `spec.width`, never `spec.span` per nave. A wind
   case carries its direction and its suctions, so the plan passes the wind
   cases as `peak_cases` to the combination generator: one sign each, never
   reversed. A warehouse without end wall columns must keep its node and element

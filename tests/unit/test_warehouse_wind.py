@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 import math
 
 import numpy as np
@@ -33,7 +34,12 @@ from opensees_studio.core.warehouse import (
     warehouse_wind_cases,
     wind_loads,
 )
-from opensees_studio.core.wind import KGF, asce7_velocity_pressure
+from opensees_studio.core.wind import (
+    KGF,
+    asce7_velocity_pressure,
+    en1991_peak_pressure,
+    en1991_wall_cp,
+)
 
 SECTIONS = {"column": 1, "rafter": 2, "purlin": 3, "girt": 4, "brace": 5, "end_column": 6}
 SI = UnitSystem.SI_M_N
@@ -372,7 +378,7 @@ def test_wind_settings_are_checked() -> None:
             WarehouseWind(**fields)  # type: ignore[arg-type]
     with pytest.raises(WarehouseError, match="roughness"):
         warehouse_wind_cases(_spec(), WarehouseWind(exposure="C"), SI)  # ASCE's, not RNC-07's
-    assert {p.wind_method for p in CODE_PRESETS.values()} == {"rnc07", "asce7"}
+    assert {p.wind_method for p in CODE_PRESETS.values()} == {"rnc07", "asce7", "en1991"}
     assert CODE_PRESETS["nscm"].wind_method == "rnc07"  # NSCM 7.2
 
 
@@ -546,3 +552,133 @@ def test_a_load_has_no_component_that_is_round_off() -> None:
             components = [abs(c) for c in (load.wx, load.wy, load.wz) if c]
             assert min(components) > 1e-6 * max(components)
             assert "-0.0" not in repr((load.wx, load.wy, load.wz))
+
+
+# ───────────────────────────── EN 1991-1-4 ─────────────────────────────
+EN_WIND = WarehouseWind(method="en1991", speed=26.0, exposure="II")
+
+
+def test_en1991_roof_and_wall_zones_reach_the_members() -> None:
+    warehouse = _build(slope=0.2)  # 20 x 30 m, eave 6 m, ridge 8 m
+    qp = en1991_peak_pressure(8.0, 26.0)
+    # Along the ridge: the end walls push, the side walls cancel, the roof lifts.
+    case = _case(warehouse, "WIND +Y A", EN_WIND)
+    loads = wind_loads(warehouse, case, SI)
+    zones = case.roof[0].zones
+    assert zones is not None
+    windward, leeward = en1991_wall_cp(8.0 / 30.0)
+    gable_wall = 20.0 * 6.0 + 20.0 * 2.0 / 2.0
+    uplift = -zones.mean(0.0, 20.0, 0.0, 30.0) * 600.0
+    assert uplift > 0.6 * qp * 600.0  # no zone under -0.5, plus 0.2 inside
+    assert _resultant(warehouse, loads) == pytest.approx(
+        [0.0, qp * (windward - leeward) * gable_wall, uplift], abs=1e-6
+    )
+    # The side walls pull harder near the windward corner: zone A reaches
+    # e/5 = 3.2 m, past the half bay of the first frame; the last frame is in C.
+    by_id = {load.element_id: load for load in loads}
+    columns = dict((frame, i) for i, frame in warehouse.wall_columns["x0"])
+    assert abs(by_id[columns[0]].wz) == pytest.approx(qp * (1.2 + 0.2) * 3.0)
+    assert abs(by_id[columns[5]].wz) == pytest.approx(qp * (0.5 + 0.2) * 3.0)
+    # The second frame's bay, 3 to 9 m: 0.2 m of A, the rest B.
+    assert abs(by_id[columns[1]].wz) == pytest.approx(qp * (1.2 * 0.2 + 0.8 * 5.8 + 0.2 * 6.0))
+    # The purlins of the first bay carry the corner and edge zones, the last bay zone I.
+    nodes = {n.id: n for n in warehouse.nodes}
+    elements = {e.id: e for e in warehouse.elements}
+    station = next(k for k, s in enumerate(warehouse.stations) if 0.0 < s.x < 4.0)
+    along = {
+        min(nodes[n].coords[1] for n in elements[i].nodes): i
+        for i, k in warehouse.purlin_station.items()
+        if k == station
+    }
+    stations = warehouse.stations
+    xa = (stations[station - 1].x + stations[station].x) / 2.0
+    xb = (stations[station].x + stations[station + 1].x) / 2.0
+    tributary = stations[station].tributary_slope
+    for y0 in (0.0, 24.0):
+        assert by_id[along[y0]].wz == pytest.approx(
+            -zones.mean(xa, xb, y0, y0 + 6.0) * tributary, rel=1e-9
+        )
+    assert abs(by_id[along[0.0]].wz) > 1.3 * abs(by_id[along[24.0]].wz)
+
+    # Across the ridge, case C: the windward slope pushed, the leeward one pulled.
+    case = _case(warehouse, "WIND +X C", EN_WIND)
+    zones = case.roof[0].zones
+    assert zones is not None
+    on_windward = zones.mean(0.0, 10.0, 0.0, 30.0)
+    on_leeward = zones.mean(10.0, 20.0, 0.0, 30.0)
+    assert on_windward > 0.0 > on_leeward
+    windward, leeward = en1991_wall_cp(8.0 / 20.0)
+    assert _resultant(warehouse, wind_loads(warehouse, case, SI)) == pytest.approx(
+        [
+            qp * (windward - leeward) * 6.0 * 30.0 + (on_windward - on_leeward) * 2.0 * 30.0,
+            0.0,
+            -(on_windward + on_leeward) * 10.0 * 30.0,
+        ],
+        abs=1e-6,
+    )
+
+
+def test_en1991_girts_follow_the_zones_along_the_wall() -> None:
+    warehouse = _build(slope=0.2, girt_spacing=1.5, end_wall_column_spacing=5.0)
+    qp = en1991_peak_pressure(8.0, 26.0)
+    case = _case(warehouse, "WIND +X A", EN_WIND)
+    by_id = {load.element_id: load for load in wind_loads(warehouse, case, SI)}
+    # The end wall is parallel to the wind: e = min(30, 16) = 16, so zone A
+    # reaches 3.2 m from the windward corner, B 16 m, and C the rest.
+    xs = end_wall_layout(warehouse.spec).xs
+
+    def suction(a: float, b: float) -> float:
+        cuts = [a, *(c for c in (3.2, 16.0) if a < c < b), b]
+        parts = itertools.pairwise(cuts)
+        cp = lambda x: 1.2 if x < 3.2 else 0.8 if x < 16.0 else 0.5  # noqa: E731
+        return sum(cp((lo + hi) / 2.0) * (hi - lo) for lo, hi in parts) / (b - a)
+
+    assert suction(xs[0], xs[1]) > suction(xs[1], xs[2]) == 0.8 > suction(xs[3], xs[4])
+    seen = set()
+    for element_id, (wall, panel, z) in warehouse.wall_girts.items():
+        if wall == "y0" and z == 3.0:
+            seen.add(panel)
+            assert abs(by_id[element_id].wz) == pytest.approx(
+                qp * (suction(xs[panel], xs[panel + 1]) + 0.2) * 1.5
+            )
+    assert seen == {0, 1, 2, 3}
+
+
+def test_the_eurocode_preset_plans_its_wind_snow_and_combinations() -> None:
+    preset = CODE_PRESETS["en1990"]
+    # EN 1991-1-1 Table 6.10, category H: 0.4 kN/m², and no point load with it.
+    assert (preset.roof_live_kpa, preset.midspan_point_kn) == (0.4, 0.0)
+    assert (preset.wind_method, preset.snow_method, preset.seismic_method) == (
+        "en1991", "en1991", "en1998",
+    )  # fmt: skip
+    project = _project()
+    loads = WarehouseLoads(
+        code="en1990",
+        roof_dead=100.0,
+        roof_live=400.0,
+        wind=WarehouseWind(method="en1991", speed=26.0, exposure="II", directions=("+X", "+Y")),
+    )
+    plan = plan_warehouse(project, _spec(slope=0.2), loads=loads)
+    plan.apply(project)
+    assert [c.name for c in project.analyses] == [
+        "DEAD", "ROOF LIVE",
+        "WIND +X A", "WIND +X B", "WIND +X C", "WIND +X D", "WIND +Y A", "WIND +Y B",
+    ]  # fmt: skip
+    names = [c.name for c in project.combinations]
+    wind = [n for n in names if "W:WIND +X A" in n]
+    # The wind leads with and without a favourable permanent action; the roof
+    # imposed load never goes with it (EN 1991-1-1 3.3.2 (1)).
+    assert "ULS 1.35G+1.5W:WIND +X A" in names and "ULS G+1.5W:WIND +X A" in names
+    assert "ULS 1.35G+1.5Qr" in names
+    assert not [n for n in names if "Qr" in n and "W:" in n]
+    assert wind == [
+        "ULS 1.35G+1.5W:WIND +X A",
+        "ULS G+1.5W:WIND +X A",
+        "SLS char G+W:WIND +X A",
+        "SLS freq G+0.2W:WIND +X A",
+    ]
+    wind_ids = {c.id for c in project.analyses if c.name.startswith("WIND")}
+    for combination in project.combinations:
+        assert all(t.factor > 0.0 for t in combination.terms if t.ref_id in wind_ids)
+    assert any("6 wind case(s) by EN 1991-1-4" in note for note in plan.notes)
+    Project.model_validate(project.model_dump())

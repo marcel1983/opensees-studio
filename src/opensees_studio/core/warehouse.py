@@ -121,6 +121,7 @@ from opensees_studio.core.wind import (
     WindCase,
     WindError,
     asce7_wind_cases,
+    en1991_wind_cases,
     rnc07_wind_cases,
 )
 
@@ -1227,6 +1228,7 @@ def midspan_point_loads(warehouse: Warehouse, force: float) -> tuple[list[Any], 
 WIND_METHODS: dict[str, str] = {
     "rnc07": "RNC-07 Título IV",
     "asce7": "ASCE 7-16 chapter 27",
+    "en1991": "EN 1991-1-4",
 }
 
 
@@ -1236,13 +1238,15 @@ class WarehouseWind:
 
     method: str = "rnc07"
     speed: float = 45.0
-    """RNC-07: the regional velocity VR. ASCE 7: the basic wind speed V."""
+    """RNC-07: the regional velocity VR. ASCE 7: the basic wind speed V. EN 1991-1-4:
+    the basic wind velocity vb."""
     exposure: str = "R2"
-    """RNC-07: terrain roughness R1 to R4. ASCE 7: exposure category B, C or D."""
+    """RNC-07: terrain roughness R1 to R4. ASCE 7: exposure category B, C or D.
+    EN 1991-1-4: terrain category 0, I, II, III or IV."""
     topography: str = "T3"
     """RNC-07 only: T1 to T5."""
     topographic_factor: float = 1.0
-    """ASCE 7 only: Kzt."""
+    """Kzt of ASCE 7, or the orography factor co of EN 1991-1-4."""
     openings: str = "closed"
     """``closed``, ``uniform`` (spread over the four walls) or the wall with the openings."""
     directions: tuple[str, ...] = DIRECTIONS
@@ -1286,6 +1290,15 @@ def warehouse_wind_cases(
                 speed=wind.speed,
                 exposure=wind.exposure,
                 kzt=wind.topographic_factor,
+                openings=wind.openings,
+                directions=directions,
+            )
+        if wind.method == "en1991":
+            return en1991_wind_cases(
+                shape,
+                speed=wind.speed,
+                terrain=wind.exposure,
+                orography=wind.topographic_factor,
                 openings=wind.openings,
                 directions=directions,
             )
@@ -1341,6 +1354,13 @@ def wind_loads(warehouse: Warehouse, case: WindCase, units: UnitSystem) -> list[
     def mean(pressure: Any, a: float, b: float) -> float:
         return float(pressure.mean(a * metres, b * metres))
 
+    def on_wall(wall: str, a: float, b: float, lo: float, hi: float) -> float:
+        """Mean pressure on ``wall`` from ``a`` to ``b`` along it, ``lo`` to ``hi`` in height."""
+        zones = case.wall_zones.get(wall)
+        if zones is None:
+            return mean(case.walls[wall], lo, hi)
+        return float(zones.mean(a * metres, b * metres, lo * metres, hi * metres))
+
     # Roof: half strips either side of each purlin line.
     last = len(stations) - 1
     for element_id, k in warehouse.purlin_station.items():
@@ -1354,11 +1374,14 @@ def wind_loads(warehouse: Warehouse, case: WindCase, units: UnitSystem) -> list[
             outward = np.array([-dz, 0.0, dx]) / run * (1.0 if dx > 0.0 else -1.0)
             middle = here.x + dx / 2.0
             load = case.roof_load_at((here.x + middle) / 2.0 * metres)
-            value = (
-                mean(load.profile, here.x, middle)
-                if load.axis == "x"
-                else mean(load.profile, ya, yb)
-            )
+            if load.zones is not None:
+                value = float(
+                    load.zones.mean(here.x * metres, middle * metres, ya * metres, yb * metres)
+                )
+            elif load.axis == "x":
+                value = mean(load.profile, here.x, middle)
+            else:
+                value = mean(load.profile, ya, yb)
             add(element_id, value, run / 2.0, outward)
 
     # Side walls.
@@ -1367,7 +1390,6 @@ def wind_loads(warehouse: Warehouse, case: WindCase, units: UnitSystem) -> list[
         ("x0", 0, np.array([-1.0, 0.0, 0.0])),
         ("x1", last, np.array([1.0, 0.0, 0.0])),
     ):
-        pressure = case.walls[wall]
         levels = [0.0, *girt_zs, stations[station].z]
         if girt_zs:
             for element_id, (girt_wall, _bay, z) in warehouse.wall_girts.items():
@@ -1375,16 +1397,20 @@ def wind_loads(warehouse: Warehouse, case: WindCase, units: UnitSystem) -> list[
                     continue
                 k = levels.index(z)
                 lo, hi = (levels[k - 1] + z) / 2.0, (z + levels[k + 1]) / 2.0
-                add(element_id, mean(pressure, lo, hi), hi - lo, outward)
+                ya, yb = (local(n)[1] for n in elements[element_id].nodes)
+                add(element_id, on_wall(wall, ya, yb, lo, hi), hi - lo, outward)
             lo, hi = (levels[-2] + levels[-1]) / 2.0, levels[-1]
             for element_id, k in warehouse.purlin_station.items():
                 if k == station:
-                    add(element_id, mean(pressure, lo, hi), hi - lo, outward)
+                    ya, yb = (local(n)[1] for n in elements[element_id].nodes)
+                    add(element_id, on_wall(wall, ya, yb, lo, hi), hi - lo, outward)
         else:
             for element_id, frame in warehouse.wall_columns[wall]:
-                width = spec.frame_spacing * (0.5 if frame in (0, spec.n_frames - 1) else 1.0)
+                y = frame * spec.frame_spacing
+                ya = max(0.0, y - spec.frame_spacing / 2.0)
+                yb = min(spec.length, y + spec.frame_spacing / 2.0)
                 za, zb = (local(n)[2] for n in elements[element_id].nodes)
-                add(element_id, mean(pressure, za, zb), width, outward)
+                add(element_id, on_wall(wall, ya, yb, za, zb), yb - ya, outward)
 
     # End walls.
     end_wall = end_wall_layout(spec, stations)
@@ -1393,7 +1419,6 @@ def wind_loads(warehouse: Warehouse, case: WindCase, units: UnitSystem) -> list[
         ("y0", 0, np.array([0.0, -1.0, 0.0])),
         ("y1", spec.n_frames - 1, np.array([0.0, 1.0, 0.0])),
     ):
-        pressure = case.walls[wall]
         if not framed:
             for element_id, vertical in warehouse.wall_columns[wall]:
                 x = end_wall.xs[vertical]
@@ -1404,7 +1429,7 @@ def wind_loads(warehouse: Warehouse, case: WindCase, units: UnitSystem) -> list[
                 # The wall up to the roof line, spread over the column's height.
                 width = end_wall.roof_area(left, right, profile) / end_wall.tops[vertical]
                 za, zb = (local(n)[2] for n in elements[element_id].nodes)
-                add(element_id, mean(pressure, za, zb), width, outward)
+                add(element_id, on_wall(wall, left, right, za, zb), width, outward)
             continue
         top_girt: dict[int, float] = {}
         for vertical in range(len(end_wall.xs) - 1):
@@ -1417,7 +1442,7 @@ def wind_loads(warehouse: Warehouse, case: WindCase, units: UnitSystem) -> list[
                     continue
                 k = levels.index(z)
                 lo, hi = (levels[k - 1] + z) / 2.0, (z + levels[k + 1]) / 2.0
-                add(element_id, mean(pressure, lo, hi), hi - lo, outward)
+                add(element_id, on_wall(wall, a, b, lo, hi), hi - lo, outward)
         # The strip under the roof line hangs from the rafter of the end frame.
         for k, element_id in enumerate(warehouse.rafter_elements[frame]):
             s0, s1 = stations[k], stations[k + 1]
@@ -1426,7 +1451,7 @@ def wind_loads(warehouse: Warehouse, case: WindCase, units: UnitSystem) -> list[
             roof = (s0.z + s1.z) / 2.0
             height = (roof - top_girt[vertical]) / 2.0
             width = height * abs(s1.x - s0.x) / math.hypot(s1.x - s0.x, s1.z - s0.z)
-            add(element_id, mean(pressure, roof - height, roof), width, outward)
+            add(element_id, on_wall(wall, s0.x, s1.x, roof - height, roof), width, outward)
 
     loads: list[Any] = []
     for element_id in sorted(forces):
@@ -1469,13 +1494,20 @@ SEISMIC_METHODS: dict[str, str] = {
     "rnc07": "RNC-07 Art. 32",
     "nscm": "NSCM Managua 8.2.1",
     "asce7": "ASCE 7-16 12.8",
+    "en1998": "EN 1998-1 4.3.3.2",
 }
 
 #: The directions an earthquake case can act in.
 SEISMIC_DIRECTIONS: tuple[str, ...] = ("X", "Y")
 #: Design codes whose combinations take each earthquake direction with 30 % of
-#: the other: RNC-07 Art. 32 f (Efectos bidireccionales) and NSCM.
-ORTHOGONAL_RULE_CODES: tuple[str, ...] = ("rnc07", "nscm")
+#: the other: RNC-07 Art. 32 f (Efectos bidireccionales), NSCM and EN 1998-1
+#: 4.3.3.5.1 (3).
+ORTHOGONAL_RULE_CODES: tuple[str, ...] = ("rnc07", "nscm", "en1990")
+
+#: EN 1998-1 Table 3.2: soil factor S of the Type 1 spectrum per ground type.
+EN1998_SOIL_FACTORS: dict[str, float] = {"A": 1.0, "B": 1.2, "C": 1.15, "D": 1.35, "E": 1.4}
+#: EN 1998-1 4.2.5 (5), Note: recommended importance factor per importance class.
+EN1998_IMPORTANCE: dict[str, float] = {"I": 0.8, "II": 1.0, "III": 1.2, "IV": 1.4}
 
 
 @dataclass(frozen=True)
@@ -1490,13 +1522,15 @@ class WarehouseSeismic:
     method: str = "rnc07"
     """Key of :data:`SEISMIC_METHODS`."""
     a0: float = 0.3
-    """RNC-07 and NSCM: peak ground acceleration, in g (RNC-07 zone C; NSCM Tabla 14.2)."""
+    """RNC-07 and NSCM: peak ground acceleration, in g (RNC-07 zone C; NSCM Tabla 14.2).
+    EN 1998-1: the reference acceleration agR on type A ground, in g."""
     soil: str = "II"
-    """RNC-07 soil type I to III, or NSCM site class A to D."""
+    """RNC-07 soil type I to III, NSCM site class A to D or EN 1998-1 ground type A to E."""
     importance_class: str = ""
-    """RNC-07 group A to C or NSCM risk category I to IV; "" = Group B / category II."""
+    """RNC-07 group A to C, NSCM risk category or EN 1998-1 importance class I to IV;
+    "" = Group B / category II / class II."""
     reduction: float = 2.0
-    """Q of RNC-07, Ro of NSCM or R of ASCE 7."""
+    """Q of RNC-07, Ro of NSCM, R of ASCE 7 or the behaviour factor q of EN 1998-1."""
     regularity: str = "regular"
     """RNC-07 Art. 23 regularity, for Q'."""
     sds: float = 1.0
@@ -1563,6 +1597,21 @@ def seismic_coefficient(seismic: WarehouseSeismic) -> tuple[float, str]:
             _tb, tc, _td = site.corner_periods()
             cs, why = site.seismic_coefficient(tc)
             return cs, f"NSCM {why}"
+        if seismic.method == "en1998":
+            # Expression (3.14), the plateau of the design spectrum, with λ = 1
+            # (4.3.3.2.2: a building of one storey) and ag = γI agR.
+            if seismic.soil not in EN1998_SOIL_FACTORS:
+                raise WarehouseError(
+                    f"EN 1998-1 has ground types A to E, not {seismic.soil!r}: S1 and S2 "
+                    "need a special study."
+                )
+            gamma = EN1998_IMPORTANCE[seismic.importance_class or "II"]
+            soil_factor = EN1998_SOIL_FACTORS[seismic.soil]
+            ag = gamma * seismic.a0
+            return 2.5 * ag * soil_factor / seismic.reduction, (
+                f"EN 1998-1 (3.14): Sd = 2.5 ag S / q, ag = {ag:.4g} g, S = {soil_factor:g}, "
+                f"q = {seismic.reduction:g}"
+            )
         if seismic.sds <= 0.0:
             raise WarehouseError("SDS must be positive.")
         cs, why = asce7_cs(
@@ -1795,6 +1844,11 @@ _KGF = 9.80665e-3  # one kilogram-force in kN
 #: Earthquake: RNC-07 Art. 11 a counts 10 kg/m² of the roof live load as seismic
 #: weight (CVR); NSCM 9.6 b counts 0.3 CV in warehouses (W = CM + 0.3 CV), 3 kg/m²
 #: of that roof; ASCE 7-16 12.7.2 counts no roof live load.
+#: EN 1990: the roof is category H of EN 1991-1-1 (recommended qk = 0.4 kN/m²;
+#: the concentrated Qk = 1 kN does not act with it); ψ2 = 0 for it, so no roof
+#: load counts as seismic mass (EN 1998-1 3.2.4); q = 1.5 is the upper limit of
+#: low dissipative behaviour (EN 1998-1 Table 6.1). The basic wind velocity is
+#: the National Annex's: 26 m/s is only a starting value.
 CODE_PRESETS: dict[str, CodePreset] = {
     preset.key: preset
     for preset in (
@@ -1819,6 +1873,13 @@ CODE_PRESETS: dict[str, CodePreset] = {
             "ASCE 7-16 Table 4.3-1: ordinary roofs, 20 psf (before any reduction).",
             "asce7", 57.0, seismic_method="asce7", seismic_reduction=3.0,
             snow_method="asce7",
+        ),
+        CodePreset(
+            "en1990", "Lr", "ROOF LIVE", 0.4, 0.0, "LRFD",
+            "EN 1991-1-1 Table 6.10: roofs of category H, 0.4 kN/m² (the 1 kN load Qk is a "
+            "separate, local check).",
+            "en1991", 26.0, seismic_method="en1998", seismic_reduction=1.5,
+            snow_method="en1991",
         ),
     )
 }  # fmt: skip
@@ -2287,6 +2348,12 @@ def _plan_loads(
             options[ALTERNATIVE_ROLES] = ("S",)
         if loads.code in ORTHOGONAL_RULE_CODES and len(seismic_case_ids) > 1:
             options["orthogonal"] = True
+        if loads.code == "en1990":
+            # EN 1991-1-1 3.3.2 (1): nobody maintains a roof under snow or in a storm.
+            options["roof_imposed_alone"] = True
+            if wind_case_ids:
+                # The wind lifts a light roof: the permanent action then relieves it.
+                options["favourable_permanent"] = True
         if (
             loads.code == "nscm"
             and loads.seismic is not None
@@ -2343,6 +2410,8 @@ __all__ = [
     "CODE_PRESETS",
     "DEFAULT_AISC_SHAPES",
     "DEFAULT_ROOF_DEAD_KPA",
+    "EN1998_IMPORTANCE",
+    "EN1998_SOIL_FACTORS",
     "GROUPS",
     "GROUP_COLOURS",
     "ORTHOGONAL_RULE_CODES",

@@ -3789,8 +3789,12 @@ run the cases and the steel check, and size the members from them.
 - **Design code** — sets the defaults of the two live loads and the
   combinations: **RNC-07** (Art. 11 a, light roofs: 10 kg/m² plus 200 kg at
   mid-span of the main members; the roof live case is the code's CV),
-  **NSCM Managua** (the same gravity loads, as roof live CVT), or **ASCE 7-16**
-  LRFD or ASD (Table 4.3-1: 20 psf, before any reduction).
+  **NSCM Managua** (the same gravity loads, as roof live CVT), **ASCE 7-16**
+  LRFD or ASD (Table 4.3-1: 20 psf, before any reduction), or **EN 1990**
+  (the Eurocodes: a roof of category H of EN 1991-1-1, 0.4 kN/m²; its 1 kN
+  concentrated load is a separate local check and is not created). The
+  Eurocode values are the recommended ones: check them against the National
+  Annex of the country. The steel check of the app stays AISC 360.
 
 The area loads are applied to the purlins as uniform loads over their tributary
 width, in the purlin's local axes. With **Generate the load combinations of the
@@ -3830,12 +3834,30 @@ four walls and the roof.
   pressure (the largest uplift), **B** the other roof coefficients with
   negative internal pressure (the largest downward load and the largest push on
   the windward wall): `WIND +X A`, `WIND +X B`, …
+- **EN 1991-1-4**, section 7.2, recommended values. **Wind speed** is the
+  basic wind velocity vb of the National Annex, a *10 minute mean* (a 3 second
+  gust such as RNC-07's is about 1.5 times larger). **Exposure** is the terrain
+  category 0 to IV (Table 4.1) and **Topographic factor** the orography factor
+  co. The peak velocity pressure qp = [1 + 7 Iv] ρ vm² / 2 (Expression 4.8) is
+  taken at the height of the ridge for every surface, and w = qp (cpe - cpi).
+  Walls by Table 7.1: windward D and leeward E by h/d, and A, B, C (-1.2, -0.8,
+  -0.5) *along* the walls parallel to the wind, from the windward corner. Roof
+  by Tables 7.2 (under 5°), 7.3 and 7.4: the zones F and G along the windward
+  edge, F at its corners, then H, I and J, so the members near the windward
+  edge and its corners take more than the rest. Where the tables give a
+  negative and a positive value for a slope, each is a case: across the ridge
+  of a duopitch roof **A** (all negative, +0.2 inside), **B** (all positive,
+  -0.3 inside), **C** (windward slope positive, leeward negative) and **D**
+  (the opposite); a direction with one set of values gets **A** and **B**, with
+  +0.2 and -0.3 inside.
 - **Openings** — a closed building has no internal pressure in RNC-07 and
   ±0.18 in ASCE 7. Openings spread over the four walls: -0.3 (RNC-07 Art. 55)
   and ±0.18. Openings mainly in one wall (more than 30 % of it): 0.75 when
   that wall faces the wind, -0.6 when it is to leeward and -0.5 when it is
   parallel to the wind (RNC-07), or ±0.55, a partially enclosed building
-  (ASCE 7).
+  (ASCE 7). EN 1991-1-4 takes +0.2 and -0.3 for a closed building or openings
+  spread over the walls (7.2.9 (6), Note 2), and for a dominant wall 0.90 of
+  the external coefficient at that wall (openings three times the others').
 
 Where the pressures go: the roof to the **purlins**, each taking half the strip
 to its neighbours, normal to the roof. A wall with girts to its **girts**; the
@@ -3850,10 +3872,12 @@ wind. Define → Load Combinations → Generate treats a static wind case as act
 both ways, so delete the reversed ones if you regenerate there.
 
 The wizard's wind is that of the main structure. Purlins, girts and cladding
-also need the local pressures of the code (RNC-07 Art. 58, ASCE 7 chapter 30),
-which are larger near the edges; the envelope procedure of ASCE 7 chapter 28,
-open buildings, the minimum wind load of ASCE 7 27.1.5 and the torsional load
-cases are not created either.
+also need the local pressures of the code (RNC-07 Art. 58, ASCE 7 chapter 30,
+cpe,1 of EN 1991-1-4), which are larger near the edges; the envelope procedure
+of ASCE 7 chapter 28, open buildings, the minimum wind load of ASCE 7 27.1.5
+and the torsional load cases are not created either. For EN 1991-1-4 the
+structural factor cs cd is 1 (a building under 15 m), and neither the 0.85
+factor of 7.2.2 (3) nor friction (7.5) is applied.
 
 # Earthquake
 With **Create the earthquake load cases** (off until you tick it: the ground
@@ -3878,6 +3902,14 @@ the safe side. The summary on the page shows c and the clause it comes from.
   category** I to IV and **Ro**, which cannot be below 1.
 - **ASCE 7-16 12.8** — Cs = SDS / (R / Ie) (Eq. 12.8-2): **SDS**, **R** and
   the **importance factor Ie**.
+- **EN 1998-1 4.3.3.2** — the lateral force method on the plateau of the
+  design spectrum, Sd = 2.5 ag S / q (Expression 3.14) with λ = 1 (one storey):
+  **a0** is the reference acceleration agR of the National Annex, the
+  **importance class** I to IV gives γI (0.8, 1.0, 1.2, 1.4; ag = γI agR),
+  **Soil** the ground type A to E with the soil factor S of the Type 1 spectrum
+  (1.0, 1.2, 1.15, 1.35, 1.4; a region of low seismicity uses the Type 2
+  spectrum, which is not offered) and **Reduction factor** the behaviour
+  factor q (1.5 for low dissipative steel).
 
 The **Reduction factor** is one number for both directions: enter that of the
 lateral system with the least (the frames across, the bracing along). The value
@@ -3887,8 +3919,9 @@ the page starts with is not a recommendation.
 it), the roof dead load, and the **roof live load in the seismic weight**:
 10 kg/m² of horizontal projection by RNC-07 Art. 11 a (the reduced live load of
 light roofs), 0.3 CV by NSCM 9.6 b (warehouses and storage: W = CM + 0.3 CV, so
-3 kg/m² of that roof), none by ASCE 7-16 12.7.2. Wall cladding is not in the model: add
-its weight to the roof dead load if it matters.
+3 kg/m² of that roof), none by ASCE 7-16 12.7.2 nor by EN 1998-1 3.2.4 (ψ2 = 0
+on a roof). Wall cladding is not in the model: add its weight to the roof dead
+load if it matters.
 
 **Where the forces go** — each joint of the warehouse gets
 Fi = c Wi hi ΣW / ΣWi hi, with Wi the weight gathered at the joint and hi its
@@ -3896,8 +3929,9 @@ height above the bases (RNC-07 Art. 32; ASCE 7 Eq. 12.8-12 with k = 1), as
 nodal loads. So the roof takes almost all of it, and a joint half way up a wall
 its smaller part.
 
-In the combinations an earthquake case acts **both ways**. RNC-07 (Art. 32 f)
-and NSCM take each direction with 30 % of the other, in every sign; the ASCE 7
+In the combinations an earthquake case acts **both ways**. RNC-07 (Art. 32 f),
+NSCM and EN 1998-1 (4.3.3.5.1) take each direction with 30 % of the other, in
+every sign; the ASCE 7
 combinations here take the two directions one at a time (12.5 asks for the
 100 % + 30 % rule only in some seismic design categories: Define → Load
 Combinations → Generate has the option). NSCM's vertical component
@@ -4756,7 +4790,9 @@ The overstrength option adds Section 2.4.5:
 The ψ factors are those of Table A1.1: the *imposed load category* (A to H) sets
 them for Live cases, roofs (Lr) are category H, wind is 0.6 / 0.2 / 0, snow is
 0.5 / 0.2 / 0 (0.7 / 0.5 / 0.2 above 1000 m). Rain has no EN 1990 factors and is
-not used.
+not used. With *Roof imposed load without snow or wind* the roof load (Lr),
+when it leads, is not accompanied by the snow or the wind (EN 1991-1-1
+3.3.2 (1)).
 
 ## TS 500 / TBDY 2018
 - 1.4G + 1.6Q

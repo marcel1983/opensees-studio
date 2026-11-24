@@ -14,6 +14,9 @@ from opensees_studio.core.self_weight import weight_per_length
 from opensees_studio.core.units import UnitSystem
 from opensees_studio.core.warehouse import (
     CODE_PRESETS,
+    EN1998_IMPORTANCE,
+    EN1998_SOIL_FACTORS,
+    ORTHOGONAL_RULE_CODES,
     SEISMIC_METHODS,
     WarehouseError,
     WarehouseLoads,
@@ -107,6 +110,24 @@ def test_asce7_takes_sds_over_r_over_ie() -> None:
     assert c == pytest.approx(0.8 * 1.5 / 3.25)
 
 
+def test_en1998_takes_the_plateau_of_the_design_spectrum() -> None:
+    # Expression (3.14): Sd = 2.5 ag S / q, with ag = γI agR and λ = 1 for one storey.
+    c, clause = seismic_coefficient(
+        WarehouseSeismic(method="en1998", a0=0.25, soil="C", reduction=1.5)
+    )
+    assert c == pytest.approx(2.5 * 0.25 * 1.15 / 1.5)
+    assert clause.startswith("EN 1998-1") and "S = 1.15" in clause
+    rock, _ = seismic_coefficient(
+        WarehouseSeismic(method="en1998", a0=0.25, soil="A", importance_class="III", reduction=2.0)
+    )
+    assert rock == pytest.approx(2.5 * 1.2 * 0.25 * 1.0 / 2.0)
+    assert EN1998_SOIL_FACTORS == {"A": 1.0, "B": 1.2, "C": 1.15, "D": 1.35, "E": 1.4}
+    assert EN1998_IMPORTANCE == {"I": 0.8, "II": 1.0, "III": 1.2, "IV": 1.4}
+    assert "en1990" in ORTHOGONAL_RULE_CODES  # EN 1998-1 4.3.3.5.1 (3)
+    # ψ2 = 0 on a roof: no roof load in the seismic mass (EN 1998-1 3.2.4).
+    assert CODE_PRESETS["en1990"].seismic_live_kpa == 0.0
+
+
 @pytest.mark.parametrize(
     ("fields", "message"),
     [
@@ -128,6 +149,7 @@ def test_seismic_settings_are_checked(fields: dict, message: str) -> None:  # ty
         (WarehouseSeismic(method="asce7", sds=0.0), "SDS must be positive"),
         (WarehouseSeismic(method="nscm", soil="C", importance_class="II", reduction=0.5), "Ro"),
         (WarehouseSeismic(soil="IV"), "site-specific"),
+        (WarehouseSeismic(method="en1998", soil="S1"), "ground types A to E"),
     ],
 )
 def test_what_the_code_refuses_is_a_warehouse_error(

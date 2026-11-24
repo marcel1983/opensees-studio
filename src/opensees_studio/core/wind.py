@@ -1,4 +1,4 @@
-"""Wind pressures on a closed rectangular building: RNC-07 and ASCE 7-16.
+"""Wind pressures on a closed rectangular building: RNC-07, ASCE 7-16 and EN 1991-1-4.
 
 The building is a box with a flat, single-pitched or double-pitched roof: X
 runs across the ridge (``width``), Y along it (``length``), Z is up. Everything
@@ -54,9 +54,45 @@ largest suction on the leeward and side walls), **B** the other roof
 coefficients with negative internal pressure (the largest downward load and
 the largest push on the windward wall).
 
-Not covered: components and cladding (ASCE 7 chapter 30, RNC-07 Art. 58), the
-envelope procedure of chapter 28, open buildings, the minimum design wind load
-of 27.1.5, torsional load cases and parapets.
+**EN 1991-1-4:2005** (Eurocode 1, wind actions), recommended values (a National
+Annex may change them):
+
+* Table 4.1 and Expressions (4.3) to (4.5): ``vm(z) = cr(z) co(z) vb`` with
+  ``cr = kr ln(z / z0)``, ``kr = 0.19 (z0 / 0.05)^0.07``, z not below zmin nor
+  above 200 m, per terrain category 0 to IV.
+* Expressions (4.7) and (4.8): ``qp(z) = [1 + 7 Iv(z)] ρ vm(z)² / 2`` with
+  ``Iv = 1 / (co ln(z / z0))`` and ρ = 1.25 kg/m³.
+* Expressions (5.1) and (5.2): ``w = qp(ze) cpe - qp(zi) cpi``, both at the
+  height of the building (the ridge, or the high eave): 7.2.2 allows a lower
+  pressure on the lower part of a windward wall taller than it is wide, which
+  is not taken.
+* Table 7.1: walls, zone D (windward) and E (leeward) by h/d, and A, B, C along
+  the side walls from the windward corner (e/5, e, the rest; e = b or 2h).
+* Tables 7.2 (flat, sharp eaves), 7.3a and 7.3b (monopitch) and 7.4a and 7.4b
+  (duopitch): ``cpe,10`` of the roof zones F, G, H, I and J. A roof below 5° is
+  a flat roof; between two angles the values are interpolated.
+* 7.2.9: internal pressure +0.2 and -0.3 when the openings cannot be told
+  (Note 2 of (6)); with a dominant face, 0.90 of the external coefficient at
+  it (Expression 7.2, its openings three times the others').
+
+The roof zones depend on both plan coordinates (F is at the corners), and the
+side wall zones on the position along the wall: these loads carry a
+:class:`Surface` (``RoofLoad.zones``, ``WindCase.wall_zones``).
+
+Where Table 7.3a or 7.4a gives two values for a slope, EN 1991-1-4 asks for
+each of them, never mixed on one slope. A duopitch roof across the wind then
+has four cases: **A** every value the most negative with +0.2 inside (the
+largest uplift), **B** every value the most positive with -0.3 inside (the
+largest downward load), **C** the windward slope positive and the leeward one
+negative, **D** the opposite. A direction with one set of values has **A** and
+**B**, which differ in the internal pressure only.
+
+Not covered: components and cladding (ASCE 7 chapter 30, RNC-07 Art. 58,
+``cpe,1`` of EN 1991-1-4), the envelope procedure of chapter 28, open
+buildings, the minimum design wind load of 27.1.5, torsional load cases,
+parapets, the structural factor ``cs cd`` (1 for a building under 15 m), the
+0.85 factor for the lack of correlation between the windward and leeward walls
+(EN 1991-1-4 7.2.2 (3)) and friction (7.5).
 """
 
 from __future__ import annotations
@@ -65,7 +101,7 @@ import bisect
 import itertools
 import math
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 #: Newtons in one kilogram-force.
 KGF = 9.80665
@@ -135,6 +171,25 @@ def steps(edges: Sequence[float], values: Sequence[float]) -> Profile:
         return data[min(bisect.bisect_right(inner, s), len(data) - 1)]
 
     return Profile(fn, inner)
+
+
+@dataclass(frozen=True)
+class Surface:
+    """A pressure over two coordinates, smooth between its breaks in each."""
+
+    fn: Callable[[float, float], float]
+    breaks_s: tuple[float, ...] = ()
+    breaks_t: tuple[float, ...] = ()
+
+    def at(self, s: float, t: float) -> float:
+        return float(self.fn(s, t))
+
+    def mean(self, s0: float, s1: float, t0: float, t1: float) -> float:
+        """Average over the rectangle: exact for zones, Gauss points per smooth piece."""
+        fn = self.fn
+        return Profile(
+            lambda s: Profile(lambda t: fn(s, t), self.breaks_t).mean(t0, t1), self.breaks_s
+        ).mean(s0, s1)
 
 
 def _interpolate(x: float, points: Sequence[tuple[float, float]]) -> float:
@@ -218,6 +273,9 @@ class RoofLoad:
     axis: str
     """``"x"`` or ``"y"``: the plan coordinate ``profile`` runs along."""
     profile: Profile
+    zones: Surface | None = None
+    """The pressure against the plan coordinates (x, y) when it depends on both;
+    ``profile`` is then its section half way along the other coordinate."""
 
 
 @dataclass(frozen=True)
@@ -231,6 +289,10 @@ class WindCase:
     roof: tuple[RoofLoad, ...]
     coefficients: dict[str, float]
     """The coefficients used, for the log: surface -> Cp (or GCpi, ``internal``)."""
+    wall_zones: dict[str, Surface] = field(default_factory=dict)
+    """Wall -> net pressure against (the plan coordinate along the wall, the
+    height), for a wall whose pressure changes along it; ``walls`` then has its
+    average along the wall."""
 
     def roof_load_at(self, x: float) -> RoofLoad:
         """The load of the roof plane ``x`` lies on."""
@@ -674,6 +736,334 @@ def asce7_wind_cases(
     return cases
 
 
+# ───────────────────────────── EN 1991-1-4 ─────────────────────────────
+#: Table 4.1: terrain category -> (z0, zmin), metres.
+EN1991_TERRAIN: dict[str, tuple[float, float]] = {
+    "0": (0.003, 1.0),
+    "I": (0.01, 1.0),
+    "II": (0.05, 2.0),
+    "III": (0.3, 5.0),
+    "IV": (1.0, 10.0),
+}
+
+#: 4.3.2: the roughness factor stops growing at this height, metres.
+EN1991_ZMAX = 200.0
+
+#: 4.5 (1), Note 2: recommended air density, kg/m³.
+EN1991_AIR_DENSITY = 1.25
+
+#: 7.2.9 (6), Note 2: internal pressure when the openings cannot be estimated.
+EN1991_INTERNAL_CP: tuple[float, float] = (0.2, -0.3)
+
+#: Expression (7.2): share of the external coefficient at a dominant face.
+EN1991_DOMINANT_FACE = 0.9
+
+#: Table 7.1: zones A, B and C of a wall parallel to the wind.
+EN1991_SIDE_WALL_CP: tuple[float, float, float] = (-1.2, -0.8, -0.5)
+
+#: Table 7.2, sharp eaves: zones F, G and H, and the two values of zone I.
+EN1991_FLAT_ROOF_CP: tuple[float, float, float] = (-1.8, -1.2, -0.7)
+EN1991_FLAT_ROOF_I: tuple[float, float] = (-0.2, 0.2)
+
+#: A roof flatter than this takes the flat roof table (7.2.3 (1)), degrees.
+EN1991_FLAT_BELOW = 5.0
+
+# Table 7.1: h/d -> cpe,10 of zone D (windward) and of zone E (leeward).
+_EN_WINDWARD_WALL = ((0.25, 0.7), (1.0, 0.8), (5.0, 0.8))
+_EN_LEEWARD_WALL = ((0.25, -0.3), (1.0, -0.5), (5.0, -0.7))
+
+_EN_ANGLES = (5.0, 15.0, 30.0, 45.0, 60.0, 75.0)
+_EnTable = dict[float, tuple[float, ...]]
+# Tables 7.3a and 7.4a, θ = 0°: zones F, G, H of the slope facing the wind,
+# the most negative values and the most positive ones.
+_EN_WINDWARD: tuple[_EnTable, _EnTable] = (
+    {
+        5.0: (-1.7, -1.2, -0.6),
+        15.0: (-0.9, -0.8, -0.3),
+        30.0: (-0.5, -0.5, -0.2),
+        45.0: (0.0, 0.0, 0.0),
+        60.0: (0.7, 0.7, 0.7),
+        75.0: (0.8, 0.8, 0.8),
+    },
+    {
+        5.0: (0.0, 0.0, 0.0),
+        15.0: (0.2, 0.2, 0.2),
+        30.0: (0.7, 0.7, 0.4),
+        45.0: (0.7, 0.7, 0.6),
+        60.0: (0.7, 0.7, 0.7),
+        75.0: (0.8, 0.8, 0.8),
+    },
+)
+# Table 7.4a, θ = 0°: zones I and J of the leeward slope, the same two sets.
+_EN_LEEWARD: tuple[_EnTable, _EnTable] = (
+    {
+        5.0: (-0.6, -0.6),
+        15.0: (-0.4, -1.0),
+        30.0: (-0.4, -0.5),
+        45.0: (-0.2, -0.3),
+        60.0: (-0.2, -0.3),
+        75.0: (-0.2, -0.3),
+    },
+    {
+        5.0: (-0.6, 0.2),
+        15.0: (0.0, 0.0),
+        30.0: (0.0, 0.0),
+        45.0: (0.0, 0.0),
+        60.0: (-0.2, -0.3),
+        75.0: (-0.2, -0.3),
+    },
+)
+# Table 7.3a, θ = 180° (the wind on the high eave): zones F, G, H.
+_EN_MONO_HIGH: _EnTable = {
+    5.0: (-2.3, -1.3, -0.8),
+    15.0: (-2.5, -1.3, -0.9),
+    30.0: (-1.1, -0.8, -0.8),
+    45.0: (-0.6, -0.5, -0.7),
+    60.0: (-0.5, -0.5, -0.5),
+    75.0: (-0.5, -0.5, -0.5),
+}
+# Table 7.3b, θ = 90°: zones Fup, Flow, G, H, I.
+_EN_MONO_ALONG: _EnTable = {
+    5.0: (-2.1, -2.1, -1.8, -0.6, -0.5),
+    15.0: (-2.4, -1.6, -1.9, -0.8, -0.7),
+    30.0: (-2.1, -1.3, -1.5, -1.0, -0.8),
+    45.0: (-1.5, -1.3, -1.4, -1.0, -0.9),
+    60.0: (-1.2, -1.2, -1.2, -1.0, -0.7),
+    75.0: (-1.2, -1.2, -1.2, -1.0, -0.5),
+}
+# Table 7.4b, θ = 90°: zones F, G, H, I.
+_EN_DUO_ALONG: _EnTable = {
+    5.0: (-1.6, -1.3, -0.7, -0.6),
+    15.0: (-1.3, -1.3, -0.6, -0.5),
+    30.0: (-1.1, -1.4, -0.8, -0.5),
+    45.0: (-1.1, -1.4, -0.9, -0.5),
+    60.0: (-1.1, -1.2, -0.8, -0.5),
+    75.0: (-1.1, -1.2, -0.8, -0.5),
+}
+
+
+def en1991_peak_pressure(
+    z: float, basic_velocity: float, terrain: str = "II", *, orography: float = 1.0
+) -> float:
+    """qp(z) of Expression (4.8), N/m², from the basic wind velocity vb in m/s."""
+    if terrain not in EN1991_TERRAIN:
+        raise WindError(
+            f"EN 1991-1-4 has terrain categories 0, I, II, III and IV, not {terrain!r}."
+        )
+    z0, zmin = EN1991_TERRAIN[terrain]
+    log = math.log(min(max(z, zmin), EN1991_ZMAX) / z0)
+    roughness = 0.19 * math.pow(z0 / EN1991_TERRAIN["II"][0], 0.07) * log
+    mean_velocity = roughness * orography * basic_velocity
+    turbulence = 1.0 / (orography * log)
+    return (1.0 + 7.0 * turbulence) * 0.5 * EN1991_AIR_DENSITY * mean_velocity**2
+
+
+def en1991_wall_cp(h_over_d: float) -> tuple[float, float]:
+    """Table 7.1: cpe,10 of the windward wall (zone D) and of the leeward one (zone E)."""
+    return _interpolate(h_over_d, _EN_WINDWARD_WALL), _interpolate(h_over_d, _EN_LEEWARD_WALL)
+
+
+def en1991_side_wall_zones(e: float) -> Profile:
+    """Table 7.1 and Figure 7.5: cpe,10 against the distance from the windward corner."""
+    return steps((0.0, e / 5.0, e, math.inf), EN1991_SIDE_WALL_CP)
+
+
+def _en_row(table: _EnTable, angle: float) -> tuple[float, ...]:
+    return tuple(
+        _interpolate(angle, [(a, table[a][i]) for a in _EN_ANGLES])
+        for i in range(len(table[_EN_ANGLES[0]]))
+    )
+
+
+def en1991_roof_cp(roof: str, theta: int, angle: float) -> list[dict[str, float]]:
+    """cpe,10 of the roof zones: one set of values, or the negative and the positive one.
+
+    ``theta`` is the wind direction of the tables: 0 across the ridge (on the
+    low eave of a monopitch roof), 180 on the high eave of a monopitch roof and
+    90 along the ridge. ``angle`` is the pitch in degrees; under 5 the roof is
+    flat whatever its shape.
+    """
+    if roof not in ROOF_SHAPES:
+        raise WindError(f"Unknown roof shape {roof!r}.")
+    if theta not in (0, 90, 180):
+        raise WindError("The tables give the wind directions 0, 90 and 180 degrees.")
+    if roof == "flat" or angle < EN1991_FLAT_BELOW:
+        f, g, h = EN1991_FLAT_ROOF_CP
+        return [{"F": f, "G": g, "H": h, "I": i} for i in EN1991_FLAT_ROOF_I]
+    if theta == 90:
+        if roof == "mono":
+            return [
+                dict(
+                    zip(("Fup", "Flow", "G", "H", "I"), _en_row(_EN_MONO_ALONG, angle), strict=True)
+                )
+            ]
+        return [dict(zip(("F", "G", "H", "I"), _en_row(_EN_DUO_ALONG, angle), strict=True))]
+    if theta == 180:
+        if roof != "mono":
+            raise WindError("Only a monopitch roof has a wind direction of 180 degrees.")
+        return [dict(zip(("F", "G", "H"), _en_row(_EN_MONO_HIGH, angle), strict=True))]
+    sets: list[dict[str, float]] = []
+    for windward, leeward in zip(_EN_WINDWARD, _EN_LEEWARD, strict=True):
+        values = dict(zip(("F", "G", "H"), _en_row(windward, angle), strict=True))
+        if roof == "gable":
+            values.update(zip(("I", "J"), _en_row(leeward, angle), strict=True))
+        if values not in sets:
+            sets.append(values)
+    return sets
+
+
+def en1991_roof_zone(shape: BuildingShape, direction: str, x: float, y: float) -> str:
+    """Figures 7.6 to 7.8: the roof zone the plan point ``(x, y)`` lies in."""
+    across_ridge = direction[1] == "X"
+    along, cross = (shape.width, shape.length) if across_ridge else (shape.length, shape.width)
+    e = min(cross, 2.0 * shape.ridge_height)
+    u = _distance(shape, direction)(x if across_ridge else y)  # from the windward edge
+    side = y if across_ridge else x
+    v = min(side, cross - side)  # from the nearer edge parallel to the wind
+    flat = shape.is_flat or shape.roof_angle < EN1991_FLAT_BELOW
+    if not flat and shape.roof == "gable" and across_ridge and u >= along / 2.0:
+        return "J" if u - along / 2.0 < e / 10.0 else "I"
+    if u < e / 10.0:
+        if v >= e / 4.0:
+            return "G"
+        if not flat and shape.roof == "mono" and not across_ridge:
+            return "Flow" if x < shape.width / 2.0 else "Fup"
+        return "F"
+    if across_ridge and not flat:
+        return "H"
+    return "H" if u < e / 2.0 else "I"
+
+
+def en1991_wind_cases(
+    shape: BuildingShape,
+    *,
+    speed: float,
+    terrain: str = "II",
+    orography: float = 1.0,
+    openings: str = "closed",
+    directions: Sequence[str] = DIRECTIONS,
+) -> list[WindCase]:
+    """The cases of each direction by EN 1991-1-4 section 7.2, recommended values.
+
+    ``speed`` is the basic wind velocity vb (a 10 minute mean at 10 m in terrain
+    II, with its direction and season factors). Closed, or with openings spread
+    over the four walls, the building takes the internal pressures +0.2 and
+    -0.3; a wall named in ``openings`` is a dominant face.
+    """
+    if speed <= 0.0:
+        raise WindError("The basic wind velocity must be positive.")
+    if orography <= 0.0:
+        raise WindError("The wind factors must be positive.")
+    _check(openings, directions)
+    h = shape.ridge_height
+    qp = en1991_peak_pressure(h, speed, terrain, orography=orography)
+    flat = shape.is_flat or shape.roof_angle < EN1991_FLAT_BELOW
+    cases: list[WindCase] = []
+    for direction in directions:
+        windward, leeward, sides = _sides(direction)
+        across_ridge = direction[1] == "X"
+        along, cross = (shape.width, shape.length) if across_ridge else (shape.length, shape.width)
+        e = min(cross, 2.0 * h)
+        distance = _distance(shape, direction)
+        cp_windward, cp_leeward = en1991_wall_cp(h / along)
+        side_zones = en1991_side_wall_zones(e)
+        cp_side = side_zones.mean(0.0, along)
+
+        theta = 0 if across_ridge else 90
+        if across_ridge and shape.roof == "mono" and direction == "-X" and not flat:
+            theta = 180
+        sets = en1991_roof_cp(shape.roof, theta, shape.roof_angle)
+        low, high = sets[0], sets[-1]
+        if not flat and shape.roof == "gable" and across_ridge:
+            # Table 7.4a, Note 1: each set of the windward slope with each of the leeward one.
+            pick = ("F", "G", "H")
+            variants = [
+                (low, 0),
+                (high, 1),
+                ({**low, **{k: high[k] for k in pick}}, 1),
+                ({**high, **{k: low[k] for k in pick}}, 0),
+            ]
+        else:
+            variants = [(low, 0), (high, 1)]
+        if openings in WALLS:
+            at_face = {windward: cp_windward, leeward: cp_leeward}.get(openings, cp_side)
+            internals = [EN1991_DOMINANT_FACE * at_face] * len(variants)
+        else:
+            internals = [EN1991_INTERNAL_CP[i] for _roof, i in variants]
+        distinct: list[tuple[dict[str, float], float]] = []
+        for (roof_cp, _i), cpi in zip(variants, internals, strict=True):
+            if (roof_cp, cpi) not in distinct:
+                distinct.append((roof_cp, cpi))
+
+        thresholds = (e / 10.0, e / 2.0, along / 2.0, along / 2.0 + e / 10.0)
+        breaks_along = tuple(
+            sorted(t if direction[0] == "+" else along - t for t in thresholds if 0.0 < t < along)
+        )
+        breaks_cross = tuple(sorted({e / 4.0, cross - e / 4.0}))
+        wall_breaks = tuple(
+            sorted(t if direction[0] == "+" else along - t for t in (e / 5.0, e) if 0.0 < t < along)
+        )
+        for index, (roof_cp, cpi) in enumerate(distinct):
+            internal = cpi * qp
+
+            def roof_fn(
+                x: float,
+                y: float,
+                roof_cp: dict[str, float] = roof_cp,
+                internal: float = internal,
+                direction: str = direction,
+            ) -> float:
+                return qp * roof_cp[en1991_roof_zone(shape, direction, x, y)] - internal
+
+            def wall_fn(
+                s: float,
+                _z: float,
+                internal: float = internal,
+                side_zones: Profile = side_zones,
+                distance: Callable[[float], float] = distance,
+            ) -> float:
+                return qp * side_zones.at(distance(s)) - internal
+
+            zones = Surface(
+                roof_fn,
+                breaks_along if across_ridge else breaks_cross,
+                breaks_cross if across_ridge else breaks_along,
+            )
+            if across_ridge:
+                section = Profile(
+                    lambda x, fn=roof_fn: fn(x, shape.length / 2.0),  # type: ignore[misc]
+                    breaks_along,
+                )
+            else:
+                section = Profile(
+                    lambda y, fn=roof_fn: fn(shape.width / 2.0, y),  # type: ignore[misc]
+                    breaks_along,
+                )
+            axis = "x" if across_ridge else "y"
+            label = f" {'ABCD'[index]}" if len(distinct) > 1 else ""
+            cases.append(
+                WindCase(
+                    f"WIND {direction}{label}",
+                    direction,
+                    {
+                        windward: constant(qp * cp_windward - internal),
+                        leeward: constant(qp * cp_leeward - internal),
+                        **{side: constant(qp * cp_side - internal) for side in sides},
+                    },
+                    tuple(RoofLoad(plane, axis, section, zones) for plane in shape.planes()),
+                    {
+                        "windward_wall": cp_windward,
+                        "leeward_wall": cp_leeward,
+                        "side_wall": cp_side,
+                        "internal": cpi,
+                        **{f"roof_{zone}": cp for zone, cp in roof_cp.items()},
+                    },
+                    {side: Surface(wall_fn, wall_breaks) for side in sides},
+                )
+            )
+    return cases
+
+
 __all__ = [
     "ASCE7_EXPOSURES",
     "ASCE7_GCPI",
@@ -681,6 +1071,15 @@ __all__ = [
     "ASCE7_KD",
     "ASCE7_ROOF_CP_MAX",
     "DIRECTIONS",
+    "EN1991_AIR_DENSITY",
+    "EN1991_DOMINANT_FACE",
+    "EN1991_FLAT_BELOW",
+    "EN1991_FLAT_ROOF_CP",
+    "EN1991_FLAT_ROOF_I",
+    "EN1991_INTERNAL_CP",
+    "EN1991_SIDE_WALL_CP",
+    "EN1991_TERRAIN",
+    "EN1991_ZMAX",
     "KGF",
     "OPENINGS",
     "RNC07_CP",
@@ -694,6 +1093,7 @@ __all__ = [
     "Profile",
     "RoofLoad",
     "RoofPlane",
+    "Surface",
     "WindCase",
     "WindError",
     "asce7_area_reduction",
@@ -706,6 +1106,12 @@ __all__ = [
     "asce7_wind_cases",
     "asce7_windward_roof_cp",
     "constant",
+    "en1991_peak_pressure",
+    "en1991_roof_cp",
+    "en1991_roof_zone",
+    "en1991_side_wall_zones",
+    "en1991_wall_cp",
+    "en1991_wind_cases",
     "rnc07_design_speed",
     "rnc07_height_factor",
     "rnc07_internal_cp",
