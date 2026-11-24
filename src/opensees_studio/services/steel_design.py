@@ -1489,6 +1489,12 @@ def steel_frame_check(
         auto_x, auto_y, auto_b = _unbraced(
             member, element, m_major, m_minor, _length(project, element)
         )
+        # A positive M2 compresses the +z flange, a positive M3 the -y one.
+        sheeted_side = 0.0
+        if overrides.sheeted_flange and m_major:
+            sheeted_side = (1.0 if overrides.sheeted_flange == "+" else -1.0) * (
+                1.0 if m_major == "M2" else -1.0
+            )
         lx = overrides.length_major or auto_x
         ly = overrides.length_minor or auto_y
         lb = overrides.length_ltb or auto_b
@@ -1551,6 +1557,13 @@ def steel_frame_check(
                         shear_major=0.0,
                         shear_minor=float(values["V2"][k]),
                     )
+                extra: dict[str, Any] = {}
+                if cold is not None and sheeted_side and m_major and about_major:
+                    # True when this station's moment compresses the sheeted flange.
+                    extra = {
+                        "sheeted": sheeted_side * demand.moment_major >= 0.0,
+                        "inch": length_scale(SOURCE_UNITS, units),
+                    }
                 check = (check_member if cold is None else aisi_s100.check_member)(
                     shape,
                     steel,
@@ -1564,6 +1577,7 @@ def steel_frame_check(
                     net_area=overrides.net_area,
                     shear_lag=overrides.shear_lag,
                     p_delta=settings.p_delta or direct,
+                    **extra,
                 )
                 if member_seismic != "none":
                     ca_value = ca(
@@ -1794,9 +1808,9 @@ def steel_frame_check(
         report.notes.append(
             f"Cold-formed members are checked by {aisi_s100.SPECIFICATION} with the Direct Strength "
             "Method: the local and distortional buckling loads come from the finite strip "
-            "signature curve of each section. Web crippling, the bracing a roof or wall "
-            "sheeting gives a purlin or girt, and the R factor of a purlin under uplift "
-            "(I6.2.1) are not counted: set the unbraced lengths of the members."
+            "signature curve of each section. A sheeting braces a member only where its "
+            "flange is set in the member overrides (the R factor of I6.2.1 then covers "
+            "uplift, within its limits); web crippling is not checked."
         )
     if settings.seismic_system == "SMF":
         report.joints = _strong_column_weak_beam(

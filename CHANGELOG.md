@@ -157,10 +157,23 @@ refused instead of silently downgraded).
   and Fu are those of the section's material (A653 SS Gr. 33 or Gr. 50 in the
   default library). The 9CS2.5x059 flexure example of the AISI DSM Design Guide
   is reproduced within 1 %. **Not covered yet**: web crippling, hats, angles
-  and the built-up pairs, and the bracing a sheeting gives a purlin (with the
-  R factor of I6.2.1 under uplift): a purlin is checked with the unbraced
-  lengths of the model, so the default purlin of the Warehouse Wizard, unbraced
-  over a 6 m bay, does not pass until its Lb is set to what really holds it.
+  and the built-up pairs.
+- **Sheeting and sag rods of purlins and girts.** A cold-formed member can
+  have a **sheeting screwed to one flange** (Design → Steel Frame Check →
+  member overrides → Sheeting on the flange). Where the moment compresses that
+  flange (gravity on a purlin, pressure on a girt) the member is braced against
+  lateral-torsional buckling; where it stretches it (uplift, suction) the
+  strength is `R Mnlo` of AISI S100-16 I6.2.1 when the section is within the
+  limits of that clause, and never less than lateral-torsional buckling over
+  Lb. The Warehouse Wizard has **Sheeting screwed to the purlins and girts**
+  (on by default) and **Sag rod lines per bay** for purlins (1 by default) and
+  girts: the rods are not modelled, they set the minor-axis and
+  lateral-torsional lengths of the steel check. With them the default purlin
+  of `warehouse_gable` goes from 2.6 (bare, unbraced over its 6 m bay) to 0.48.
+  Sheeting is not taken to hold a member under axial compression (I6.2.3), and
+  the span, panels and fasteners of I6.2.1 are the designer's to check.
+  `.osmodel`: an optional `sheeted_flange` (`"+"` or `"-"`) on a member's
+  design overrides, left out when there is none.
 
 ### Changed
 
@@ -170,6 +183,11 @@ refused instead of silently downgraded).
   example). The wizard now writes each one's bay as its major-axis length. The
   six warehouse examples were regenerated: only their design overrides gained
   entries, and their pinned results did not move.
+- **Apply in the Steel Frame Check dialog keeps what it does not show.**
+  Applying overrides to the selected members replaced each member's whole
+  record, so a role, a grade or the major- and minor-axis lengths written by a
+  wizard were lost. They stay now; the fields of the dialog are applied as
+  before.
 - **Spanish: *cercha* in place of *celosía*.** A truss is a *cercha* everywhere
   in the Spanish interface: the truss element (Dibujar barra de cercha), the
   Truss Wizard (Asistente de cerchas), New 2D Truss and the roof trusses of the

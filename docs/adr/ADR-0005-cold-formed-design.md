@@ -132,6 +132,25 @@ follow.
 - **Moved to phase 4.** The built-up pairs (the finite strip model of the box
   and the I, and I1.2), `Lt`/`Kt` overrides and the signature-curve panel. Hats
   and angles are reported as not checked.
-- **Next.** The bracing a through-fastened sheeting gives a purlin, with the R
-  factor of I6.2.1 under uplift, and sag-rod lines in the Warehouse Wizard: as
-  modelled, a purlin is unbraced over its whole bay and the default one fails.
+
+**2026-11-24: sheeting and sag rods (from phase 4).**
+`SteelMemberDesign.sheeted_flange` names the flange a sheeting is screwed to,
+by the side of the local axis the member bends along. The check evaluates each
+station with the sign of its own moment: with that flange in compression the
+member is braced against lateral-torsional buckling (local and distortional
+buckling stay); with it in tension the strength is `R Mnlo` of I6.2.1 where the
+section is within the clause's limits (edge-stiffened flanges, depth, depth to
+thickness, depth to flange width, flange width, flat width to thickness), and
+never less than lateral-torsional buckling over `Lb`. The Warehouse Wizard
+writes the flange from the outward normal of the roof or wall, and the sag rod
+lines as design lengths.
+
+- **Not applied.** I6.2.3 (compression of a member with one flange fastened to
+  sheeting): the minor-axis length is what the sag rods give. The rotational
+  restraint of the sheeting on distortional buckling. Continuous (lapped)
+  purlins: the wizard's are simple spans. The span, panel, fastener and
+  insulation limits of I6.2.1 are stated in the member note, not checked.
+- **Source.** The R values and the limits of I6.2.1 were also written without
+  the specification at hand.
+- **Found on the examples.** The 50 mm flange of the wizard's default purlin
+  is below the 2.125 in of I6.2.1, so under uplift it counts on its sag rods.

@@ -504,8 +504,11 @@ script or Jupyter notebook — the GUI is one frontend, not the only one.
   distortional buckling loads come from the program's own finite strip
   analysis of the section, then tension (D), compression (E2–E4), flexure
   (F2–F4), shear (G2.1) and the H1.2 and H2 interactions, with Fy and Fu of the
-  section's material. Sheeting is not counted as a brace and web crippling is
-  not checked. A **seismic system**
+  section's material. A purlin or girt with a **sheeting screwed to one
+  flange** is braced where that flange is in compression, and takes the R
+  factor of I6.2.1 (within its limits) or its sag rods where it is in tension;
+  the Warehouse Wizard sets both. Web crippling is not checked. A **seismic
+  system**
   (AISC 341-22) adds the Table D1.1 width-to-thickness check with `Ry` and
   `Ca`, the SMF joint checks (E3.4a, panel zone J10.6 and continuity plates
   E3.6f), the SCBF F2.3 capacity design and F2.5b brace limits, and the OCBF

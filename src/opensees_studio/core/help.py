@@ -2276,13 +2276,27 @@ material without Fy takes the dialog's values, and the member note says so.
 The factors are φ = 0.90 / Ω = 1.67 in tension and flexure, 0.85 / 1.80 in
 compression, 0.95 / 1.60 in shear and 0.75 / 2.00 in rupture.
 
+**Sheeting.** A purlin or girt with a sheeting screwed to one flange gets
+**Sheeting on the flange** in the member overrides: the + or the - side of the
+local axis the member bends along about its major axis (local z in a 3D model;
+View → Show Local Axes draws it, z in blue). Where the moment puts that flange in
+compression (gravity on a purlin, pressure on a girt) the member is braced
+against lateral-torsional buckling along its length. Where it puts it in
+tension (uplift, suction) the free flange is the one in compression: the
+strength is `R Mnlo` of **I6.2.1** (R = 0.70, 0.65, or 0.40 for a channel and
+0.50 for a zee, by depth, simple span) when the section is within the limits of
+that clause, and never less than lateral-torsional buckling over Lb; outside
+them it is lateral-torsional buckling over Lb, and the member note says which
+limit is not met. The span (33 ft), the panels, their fasteners and the
+insulation of I6.2.1 are not checked. Sheeting does not hold a member under
+**axial compression** here (I6.2.3 is not applied): the minor-axis length is
+what the sag rods or the model give. Without the setting, a sheeting is not a
+brace. The Warehouse Wizard sets the flange and the sag rod lengths of its
+purlins and girts, and gives each one its own span as the major-axis length.
+
 **Not checked**: web crippling (G5, H3), holes, the inelastic reserve, and the
 seismic provisions (the Seismic system field does not act on a cold-formed
-member). **A roof or wall sheeting is not counted as a brace**: a purlin is
-checked with the unbraced lengths of the model, its whole span unless you enter
-Lb for it, and the R factor of a purlin under uplift (I6.2.1) is not applied.
-The Warehouse Wizard gives its purlins and girts their own span as the
-major-axis buckling length.
+member).
 
 # Where the demands come from
 The dialog uses the results of the cases already **run in this session**; it runs
@@ -2315,7 +2329,10 @@ checked with its whole unbraced length, not a quarter of it.
   unbraced length of the compression flange Lb (0 = between the lateral bracing
   points), Cb (0 = from the diagram), the net area An (0 = D2-2 rupture
   unchecked) and the shear-lag factor U in `Ae = U An`. The buckling lengths are
-  the unbraced lengths times K.
+  the unbraced lengths times K. **Sheeting on the flange** is for cold-formed
+  members (see below); **Unchanged** leaves each member's as it is. Apply keeps
+  what the dialog does not show: a member's role, its grade and the major- and
+  minor-axis lengths a wizard wrote.
 - **Amplify P-δ (B1)**: multiplies the moments of members in compression by
   `B1 = 1 / (1 - α Pr / Pe1) >= 1` (AISC 360-16 C2.1b; A-8-3 in the 2022
   edition) with the conservative `Cm = 1.0` and `Pe1` on `0.8 τb EI` (C2.3).
@@ -3779,6 +3796,18 @@ chord meets it.
   (bay 1 is between the first two frames; empty means the first and the last).
   A roof slope is cut into panels about as long as the bay, on purlin lines.
 - **Stabilising angle every** — see below.
+- **Sag rod lines per bay**, for the purlins and for the girts: lines of rods
+  that hold every purlin (or girt) sideways, 1 at mid-span, 2 at the third
+  points. They are not modelled: with **Set the unbraced lengths of the steel
+  check** ticked, each purlin and girt gets the distance between them as its
+  minor-axis and lateral-torsional lengths.
+- **Sheeting screwed to the purlins and girts** — a through-fastened roof and
+  wall sheeting braces the flange it sits on. The steel check (AISI S100-16)
+  then takes a purlin under gravity, or a girt under pressure, as braced along
+  its length; under uplift or suction the free flange is in compression and
+  the member counts on its sag rods, or on the R factor of I6.2.1 where the
+  section is within its limits. Untick it for a standing seam roof. See
+  Design → Steel Frame Check.
 
 # A purlin does not brace the rafter by itself
 A purlin sits on the rafter's top flange. It holds that flange, but not the

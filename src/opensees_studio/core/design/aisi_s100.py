@@ -758,6 +758,128 @@ def flexure_local_only(member: ColdFormedMember, steel: Steel, method: Method) -
     return _available(_local(my, member.bending_x.local)[1], "flexure", method)
 
 
+# ───────────────────────────── sheeting ─────────────────────────────
+#: I6.2.1 limits that are lengths, in inches.
+_R_MAX_DEPTH = 12.0
+_R_MIN_FLANGE = 2.125
+#: I6.2.1, simple span: the largest depth (inches) of each R, channel then zee.
+_R_SIMPLE: tuple[tuple[float, float, float], ...] = (
+    (6.5, 0.70, 0.70),
+    (8.5, 0.65, 0.65),
+    (12.0, 0.40, 0.50),
+)
+#: I6.2.1, continuous span: channel, zee.
+_R_CONTINUOUS = (0.60, 0.70)
+
+
+def uplift_r_factor(
+    member: ColdFormedMember, *, inch: float, continuous: bool = False
+) -> tuple[float | None, tuple[str, ...]]:
+    """I6.2.1: the R of a channel or zee with its tension flange screwed to sheeting.
+
+    ``inch`` is one inch in the member's length unit. Returns ``(R, ())``, or
+    ``(None, reasons)`` when the section is outside the limits the factor was
+    tested for. Only the limits on the section are checked here: the span
+    (33 ft), the sheeting, its fasteners and the insulation are the designer's.
+    """
+    shape = member.shape
+    depth = member.d / inch
+    flange = member.bf / inch
+    reasons: list[str] = []
+    if shape.profile not in LIPPED_PROFILES:
+        reasons.append("the flanges have no edge stiffener")
+    if depth > _R_MAX_DEPTH:
+        reasons.append(f"depth {depth:.2f} in > 12 in")
+    slenderness = member.d / member.t
+    if not 60.0 <= slenderness <= 170.0:
+        reasons.append(f"depth/thickness = {slenderness:.0f} outside 60 to 170")
+    aspect = member.d / member.bf
+    if not 2.8 <= aspect <= 5.5:
+        reasons.append(f"depth/flange width = {aspect:.2f} outside 2.8 to 5.5")
+    if flange < _R_MIN_FLANGE:
+        reasons.append(f"flange width {flange:.2f} in < 2.125 in")
+    flat = member.flange_flat / member.t
+    if not 16.0 <= flat <= 43.0:
+        reasons.append(f"flange flat width/thickness = {flat:.1f} outside 16 to 43")
+    if reasons:
+        return None, tuple(reasons)
+    zee = shape.profile == "ZS"
+    if continuous:
+        return _R_CONTINUOUS[1 if zee else 0], ()
+    for limit, channel, zed in _R_SIMPLE:
+        if depth <= limit:
+            return (zed if zee else channel), ()
+    return None, (f"depth {depth:.2f} in > 12 in",)  # pragma: no cover - checked above
+
+
+def flexure_uplift(member: ColdFormedMember, steel: Steel, method: Method, *, r: float) -> Strength:
+    """I6.2.1: ``Mn = R Mnlo``, the tension flange through-fastened to sheeting."""
+    my = steel.Fy * member.Sx
+    lam_l, mnlo = _local(my, member.bending_x.local)
+    nominal = r * mnlo
+    steps = (
+        _step("Yield moment", "My = Sf Fy", my),
+        _step("Local buckling moment (finite strips)", "Mcrl", member.bending_x.local),
+        _step("F3.2.1 local slenderness", "lambda_l = sqrt(My / Mcrl)", lam_l),
+        _step("Globally braced strength", "Mnlo", mnlo),
+        _step("I6.2.1 reduction factor", "R", r),
+        _step("Nominal strength", "Mn = R Mnlo", nominal),
+    )
+    return Strength(
+        nominal,
+        _available(nominal, "flexure", method),
+        f"{SPECIFICATION} I6.2.1 R = {r:g}",
+        (
+            "Major flexure: the sheeting is on the tension flange (I6.2.1); its span, "
+            "panels, fasteners and insulation are taken within the limits of I6.2.1.",
+        ),
+        steps,
+    )
+
+
+def flexure_sheeted(
+    member: ColdFormedMember,
+    steel: Steel,
+    method: Method,
+    *,
+    in_compression: bool,
+    unbraced: float,
+    cb: float = 1.0,
+    inch: float = 1.0,
+    continuous: bool = False,
+) -> Strength:
+    """Major-axis flexure of a member with one flange screwed to sheeting.
+
+    With the sheeted flange in compression the member is braced against
+    lateral-torsional buckling along its length. With it in tension (a purlin
+    under uplift, a girt under suction) the strength is ``R Mnlo`` of I6.2.1
+    when the section is within its limits, and never less than what the
+    discrete braces give over ``unbraced``.
+    """
+    if in_compression:
+        braced = flexure_major(member, steel, method, unbraced=0.0)
+        note = "Major flexure: the sheeting braces the compression flange (Lb = 0)."
+        return Strength(
+            braced.nominal, braced.available, braced.equation, (note, *braced.notes), braced.steps
+        )
+    discrete = flexure_major(member, steel, method, unbraced=unbraced, cb=cb)
+    r, reasons = uplift_r_factor(member, inch=inch, continuous=continuous)
+    if r is None:
+        note = (
+            "Major flexure: the sheeting is on the tension flange and I6.2.1 does not "
+            f"apply ({'; '.join(reasons)}): lateral-torsional buckling over Lb."
+        )
+        return Strength(
+            discrete.nominal,
+            discrete.available,
+            discrete.equation,
+            (note, *discrete.notes),
+            discrete.steps,
+        )
+    uplift = flexure_uplift(member, steel, method, r=r)
+    return uplift if uplift.nominal >= discrete.nominal else discrete
+
+
 # ───────────────────────────── shear ─────────────────────────────
 def _shear(
     flat: float, count: int, t: float, steel: Steel, nu: float
@@ -836,12 +958,19 @@ def check_member(
     net_area: float | None = None,
     shear_lag: float = 1.0,
     p_delta: bool = False,
+    sheeted: bool | None = None,
+    inch: float = 1.0,
 ) -> MemberCheck:
     """Ratios of axial force, flexure, shear and the H1 and H2 interactions for one demand.
 
     With ``p_delta``, a member in compression gets its moments amplified by
     ``B1 = 1 / (1 - α P / Pe1)`` (C1.2.1.1, ``Cm = 1``) with ``Pe1`` on
     ``0.90 τb EI``.
+
+    ``sheeted`` is for a member with a sheeting screwed to one flange: True
+    when this demand's major moment compresses that flange, False when it
+    stretches it (:func:`flexure_sheeted`), None without sheeting. ``inch`` is
+    one inch in the member's length unit, for the limits of I6.2.1.
     """
     check = MemberCheck()
     mrx = demand.moment_major
@@ -866,7 +995,18 @@ def check_member(
             member, steel, method, length_x=length_x, length_y=length_y, k_x=k_x, k_y=k_y
         )
         label = "Compression"
-    major = flexure_major(member, steel, method, unbraced=length_ltb, cb=demand.cb)
+    if sheeted is None:
+        major = flexure_major(member, steel, method, unbraced=length_ltb, cb=demand.cb)
+    else:
+        major = flexure_sheeted(
+            member,
+            steel,
+            method,
+            in_compression=sheeted,
+            unbraced=length_ltb,
+            cb=demand.cb,
+            inch=inch,
+        )
     minor = flexure_minor(member, steel, method, unbraced=length_ltb)
     v_major = shear_major(member, steel, method)
     v_minor = shear_minor(member, steel, method)
@@ -949,8 +1089,11 @@ __all__ = [
     "flexure_local_only",
     "flexure_major",
     "flexure_minor",
+    "flexure_sheeted",
+    "flexure_uplift",
     "global_column_stress",
     "shear_major",
     "shear_minor",
     "tension",
+    "uplift_r_factor",
 ]

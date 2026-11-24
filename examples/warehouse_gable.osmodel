@@ -11521,423 +11521,678 @@
       },
       {
         "element_id": 133,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 134,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 135,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 136,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 137,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 138,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 139,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 140,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 141,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 142,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 143,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 144,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 145,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 146,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 147,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 148,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "sheeted_flange": "-"
       },
       {
         "element_id": 149,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "sheeted_flange": "-"
       },
       {
         "element_id": 150,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "sheeted_flange": "-"
       },
       {
         "element_id": 151,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "sheeted_flange": "-"
       },
       {
         "element_id": 152,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "sheeted_flange": "-"
       },
       {
         "element_id": 153,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "sheeted_flange": "-"
       },
       {
         "element_id": 154,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 155,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 156,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 157,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 158,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 159,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 160,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 161,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 162,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 163,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 164,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 165,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 166,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 167,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 168,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 169,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "sheeted_flange": "-"
       },
       {
         "element_id": 170,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "sheeted_flange": "-"
       },
       {
         "element_id": 171,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "sheeted_flange": "-"
       },
       {
         "element_id": 172,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "sheeted_flange": "-"
       },
       {
         "element_id": 173,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "sheeted_flange": "-"
       },
       {
         "element_id": 174,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "sheeted_flange": "-"
       },
       {
         "element_id": 175,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 176,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 177,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 178,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 179,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 180,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 181,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 182,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 183,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 184,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 185,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 186,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 187,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 188,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 189,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 190,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "sheeted_flange": "-"
       },
       {
         "element_id": 191,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "sheeted_flange": "-"
       },
       {
         "element_id": 192,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "sheeted_flange": "-"
       },
       {
         "element_id": 193,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "sheeted_flange": "-"
       },
       {
         "element_id": 194,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "sheeted_flange": "-"
       },
       {
         "element_id": 195,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "sheeted_flange": "-"
       },
       {
         "element_id": 196,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 197,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 198,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 199,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 200,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 201,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 202,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 203,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 204,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 205,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 206,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 207,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 208,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 209,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 210,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 211,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "sheeted_flange": "-"
       },
       {
         "element_id": 212,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "sheeted_flange": "-"
       },
       {
         "element_id": 213,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "sheeted_flange": "-"
       },
       {
         "element_id": 214,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "sheeted_flange": "-"
       },
       {
         "element_id": 215,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "sheeted_flange": "-"
       },
       {
         "element_id": 216,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "sheeted_flange": "-"
       },
       {
         "element_id": 217,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 218,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 219,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 220,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 221,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 222,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 223,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 224,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 225,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 226,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 227,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 228,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 229,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 230,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 231,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "length_minor": 3.0,
+        "length_ltb": 3.0,
+        "sheeted_flange": "+"
       },
       {
         "element_id": 232,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "sheeted_flange": "-"
       },
       {
         "element_id": 233,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "sheeted_flange": "-"
       },
       {
         "element_id": 234,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "sheeted_flange": "-"
       },
       {
         "element_id": 235,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "sheeted_flange": "-"
       },
       {
         "element_id": 236,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "sheeted_flange": "-"
       },
       {
         "element_id": 237,
-        "length_major": 6.0
+        "length_major": 6.0,
+        "sheeted_flange": "-"
       }
     ]
   }
