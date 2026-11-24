@@ -25,11 +25,11 @@ pytest.importorskip("pyvistaqt")
 from opensees_studio.commands import SetCoordSystemsCommand
 from opensees_studio.core import CoordinateGridSystem, GridSystem, make_grid_lines
 
-#: (slot name on MainWindow, tool name shown in the prompt)
+#: (method of ``window.drawing``, tool name shown in the prompt)
 DRAW_TOOLS = [
-    ("_on_draw_node_tool", "Draw Node"),
-    ("_on_draw_frame_tool", "Draw Frame"),
-    ("_on_draw_truss_tool", "Draw Truss"),
+    ("draw_node", "Draw Node"),
+    ("draw_frame", "Draw Frame"),
+    ("draw_truss", "Draw Truss"),
 ]
 
 
@@ -68,9 +68,9 @@ def _give_it_a_grid(window) -> None:  # type: ignore[no-untyped-def]
 def test_a_draw_tool_arms_without_a_grid_and_says_what_clicks_do(  # type: ignore[no-untyped-def]
     qtbot, window, slot, tool_name
 ) -> None:
-    assert not window._has_grid_lines()
+    assert not window.drawing.has_grid_lines()
 
-    getattr(window, slot)()
+    getattr(window.drawing, slot)()
 
     # It arms: an empty grid is no longer a reason to refuse.
     assert window._tool_controller.active is not None
@@ -85,7 +85,7 @@ def test_a_draw_tool_arms_without_a_grid_and_says_what_clicks_do(  # type: ignor
 def test_a_project_with_a_grid_says_nothing_about_grids(qtbot, window) -> None:  # type: ignore[no-untyped-def]
     _give_it_a_grid(window)
 
-    window._on_draw_node_tool()
+    window.drawing.draw_node()
 
     assert window._tool_controller.active is not None
     assert "No grid defined" not in window.statusBar().currentMessage()
@@ -103,7 +103,7 @@ def test_a_hidden_grid_counts_as_no_grid_for_the_hint(qtbot, window) -> None:  #
         )
     )
 
-    window._on_draw_node_tool()
+    window.drawing.draw_node()
 
     assert "No grid defined" in window.statusBar().currentMessage()
     assert window._tool_controller.active is not None  # still armed
@@ -123,7 +123,7 @@ def test_arming_a_tool_does_not_move_the_camera(  # type: ignore[no-untyped-def]
         np.asarray(canvas.camera.up, dtype=float).copy(),
     )
 
-    getattr(window, slot)()
+    getattr(window.drawing, slot)()
 
     assert window._tool_controller.active is not None
     after = (
@@ -140,7 +140,7 @@ def test_an_off_grid_click_still_creates_a_node(qtbot, window) -> None:  # type:
     """The other half of the report: nothing was ever drawn."""
     _give_it_a_grid(window)
     project = window._vm.project
-    window._on_draw_node_tool()
+    window.drawing.draw_node()
     tool = window._tool_controller.active
 
     # The canvas reports an unsnapped point (no intersection within tolerance).
@@ -155,7 +155,7 @@ def test_an_off_grid_click_still_creates_a_node(qtbot, window) -> None:  # type:
 @pytest.mark.gui
 def test_a_snapped_click_says_it_landed_on_the_grid(qtbot, window) -> None:  # type: ignore[no-untyped-def]
     _give_it_a_grid(window)
-    window._on_draw_node_tool()
+    window.drawing.draw_node()
     tool = window._tool_controller.active
 
     tool.on_empty_clicked(5.0, 0.0, 3.0, True)

@@ -52,7 +52,6 @@ from PySide6.QtWidgets import (
 from opensees_studio import __version__
 from opensees_studio.commands import (
     AddNodesCommand,
-    AddSectionsCommand,
     DeleteElementsCommand,
     DeleteNodesCommand,
     MeshCommand,
@@ -72,7 +71,6 @@ from opensees_studio.core import (
     frame_grid,
     labels_for,
     make_default_section,
-    make_default_slab_section,
     make_default_truss_material,
     shortcut_profiles,
 )
@@ -144,6 +142,7 @@ from opensees_studio.views.controllers import Shell
 from opensees_studio.views.controllers.areas import AreasController
 from opensees_studio.views.controllers.building import BuildingController
 from opensees_studio.views.controllers.design import DesignController
+from opensees_studio.views.controllers.drawing import DrawingController
 from opensees_studio.views.controllers.exports import ExportsController
 from opensees_studio.views.controllers.groups import GroupsController
 from opensees_studio.views.controllers.imports import ImportsController
@@ -205,11 +204,6 @@ from opensees_studio.views.run_status import RunStatusWidget
 from opensees_studio.views.start_page import RecentFiles, StartPage
 from opensees_studio.views.theme import apply_theme, viewport_style
 from opensees_studio.views.tools import (
-    DrawFrameTool,
-    DrawNodeTool,
-    DrawShellTool,
-    DrawTrussTool,
-    MeasureDistanceTool,
     SelectTool,
     ToolController,
 )
@@ -361,13 +355,6 @@ class MainWindow(QMainWindow):
         self._build_central_canvas()
         self._tool_controller = ToolController(self._canvas, self._vm, self)
         self._select_tool = SelectTool(self._canvas, self._vm, self)
-        self._draw_frame_tool: DrawFrameTool | None = None  # lazy-created on activation
-        self._draw_node_tool: DrawNodeTool | None = None
-        self._draw_truss_tool: DrawTrussTool | None = None
-        self._quick_frame_tool: DrawFrameTool | None = None
-        self._quick_shell_tool: DrawShellTool | None = None
-        self._draw_shell_tool: DrawShellTool | None = None
-        self._measure_tool: MeasureDistanceTool | None = None
 
         shell = Shell(
             window=self,
@@ -376,11 +363,19 @@ class MainWindow(QMainWindow):
             log=self._log,
             refresh_actions=self._refresh_action_enablement,
         )
+        #: The draw tools, Measure Distance and the Section boxes of the Tools bar.
+        self.drawing = DrawingController(
+            shell,
+            tools=self._tool_controller,
+            check_select=lambda: self._act_tool_select.setChecked(True),
+            check_measure=lambda: self._act_tool_measure.setChecked(True),
+            offset_dialog=lambda: self.transforms.offset_dialog,
+        )
         #: Edit → Copy, Paste, Move, Replicate, Mirror, Extrude.
         self.transforms = TransformsController(
             shell,
-            arm_measure=self._arm_measure_tool,
-            release_measure=self._release_measure_tool,
+            arm_measure=lambda: self.drawing.arm_measure(),
+            release_measure=lambda: self.drawing.release_measure(),
         )
 
         #: Storeys, mass source, seismic loads, diaphragms, rigid links.
@@ -1328,22 +1323,13 @@ class MainWindow(QMainWindow):
         tb.addAction(self._act_tool_quick_shell)
         tb.addAction(self._act_tool_measure)
         # The plate section Draw Shell gives its shells; shown while it is armed.
-        self._draw_shell_section_combo = QComboBox()
-        self._draw_shell_section_combo.setMinimumWidth(110)
-        self._draw_shell_section_combo.setToolTip("Plate section of the shells Draw Shell creates.")
-        self._draw_shell_section_combo.currentIndexChanged.connect(self._on_shell_section_changed)
-        self._draw_shell_section_action = tb.addWidget(self._draw_shell_section_combo)
-        self._draw_shell_section_action.setVisible(False)
+        shell_sections = tb.addWidget(self.drawing.shell_section_combo)
+        shell_sections.setVisible(False)
+        self.drawing.shell_section_action = shell_sections
         # The section Draw Frame gives its frames; shown while it is armed.
-        self._draw_section_combo = QComboBox()
-        self._draw_section_combo.setMinimumWidth(110)
-        self._draw_section_combo.setToolTip(
-            "Section of the frames Draw Frame creates. A fibre section draws "
-            "force-based frames; the others elastic ones."
-        )
-        self._draw_section_combo.currentIndexChanged.connect(self._on_draw_section_changed)
-        self._draw_section_action = tb.addWidget(self._draw_section_combo)
-        self._draw_section_action.setVisible(False)
+        sections = tb.addWidget(self.drawing.section_combo)
+        sections.setVisible(False)
+        self.drawing.section_action = sections
 
     def _build_snap_toolbar(self) -> None:
         """The left-hand object-snap icon bar (midpoint / perpendicular / on member)."""
@@ -1768,15 +1754,14 @@ class MainWindow(QMainWindow):
         self._act_table_editing.triggered.connect(self._on_table_editing)
 
         # Tools
-        self._act_tool_select.triggered.connect(self._on_select_tool)
-        self._act_tool_draw_node.triggered.connect(self._on_draw_node_tool)
-        self._act_tool_draw_frame.triggered.connect(self._on_draw_frame_tool)
-        self._act_tool_draw_truss.triggered.connect(self._on_draw_truss_tool)
-        self._act_tool_quick_frame.triggered.connect(self._on_quick_frame_tool)
-        self._act_tool_quick_shell.triggered.connect(self._on_quick_shell_tool)
-        self._act_tool_draw_shell.triggered.connect(self._on_draw_shell_tool)
-        self._act_tool_measure.triggered.connect(self._on_measure_tool)
-        self._tool_controller.toolChanged.connect(self._on_tool_changed)
+        self._act_tool_select.triggered.connect(self.drawing.select)
+        self._act_tool_draw_node.triggered.connect(self.drawing.draw_node)
+        self._act_tool_draw_frame.triggered.connect(self.drawing.draw_frame)
+        self._act_tool_draw_truss.triggered.connect(self.drawing.draw_truss)
+        self._act_tool_quick_frame.triggered.connect(self.drawing.quick_frame)
+        self._act_tool_quick_shell.triggered.connect(self.drawing.quick_shell)
+        self._act_tool_draw_shell.triggered.connect(self.drawing.draw_shell)
+        self._act_tool_measure.triggered.connect(self.drawing.measure)
         for action in self._snap_actions.values():
             action.toggled.connect(self._on_snap_mode_toggled)
 
@@ -2391,187 +2376,6 @@ class MainWindow(QMainWindow):
         self._act_zoom_window.setChecked(False)
 
     # ── slots: tools ────────────────────────────────────────────────
-    def _on_select_tool(self) -> None:
-        self._tool_controller.set_active(None)
-
-    def _has_grid_lines(self) -> bool:
-        """True when some visible coordinate system carries grid lines."""
-        project = self._vm.project
-        if project is None:
-            return False
-        return any(cs.grid.shown for cs in project.coord_systems)
-
-    def _abort_tool_activation(self) -> None:
-        """Fall back to Select when a draw tool refused to arm."""
-        self._act_tool_select.setChecked(True)
-        self._tool_controller.set_active(None)
-
-    def _on_draw_frame_tool(self) -> None:
-        if self._vm.project is None:
-            self._abort_tool_activation()
-            return
-        if self._draw_frame_tool is None or self._draw_frame_tool.canvas is not self._canvas:
-            self._draw_frame_tool = DrawFrameTool(self._canvas, self._vm, self)
-            self._draw_frame_tool.statusChanged.connect(
-                lambda msg: self.statusBar().showMessage(msg)
-            )
-        self._tool_controller.set_active(self._draw_frame_tool)
-
-    def _on_draw_node_tool(self) -> None:
-        if self._vm.project is None:
-            self._abort_tool_activation()
-            return
-        if self._draw_node_tool is None or self._draw_node_tool.canvas is not self._canvas:
-            self._draw_node_tool = DrawNodeTool(self._canvas, self._vm, self)
-            self._draw_node_tool.statusChanged.connect(
-                lambda msg: self.statusBar().showMessage(msg)
-            )
-        self._tool_controller.set_active(self._draw_node_tool)
-
-    def _on_draw_truss_tool(self) -> None:
-        if self._vm.project is None:
-            self._abort_tool_activation()
-            return
-        if self._draw_truss_tool is None or self._draw_truss_tool.canvas is not self._canvas:
-            self._draw_truss_tool = DrawTrussTool(self._canvas, self._vm, self)
-            self._draw_truss_tool.statusChanged.connect(
-                lambda msg: self.statusBar().showMessage(msg)
-            )
-        self._tool_controller.set_active(self._draw_truss_tool)
-
-    def _on_quick_frame_tool(self) -> None:
-        """Tools → Quick Draw Frame: a click on a grid line draws the member there."""
-        from opensees_studio.views.tools.quick_draw import QuickDrawFrameTool
-
-        if self._vm.project is None:
-            self._abort_tool_activation()
-            return
-        if not self._has_grid_lines():
-            self._abort_tool_activation()
-            QMessageBox.information(
-                self,
-                "Quick Draw Frame",
-                "Quick Draw Frame draws on grid lines, and this project has none. "
-                "Define them in Define → Coordinate System/Grids.",
-            )
-            return
-        if self._quick_frame_tool is None or self._quick_frame_tool.canvas is not self._canvas:
-            self._quick_frame_tool = QuickDrawFrameTool(self._canvas, self._vm, self)
-            self._quick_frame_tool.statusChanged.connect(
-                lambda msg: self.statusBar().showMessage(msg)
-            )
-        self._tool_controller.set_active(self._quick_frame_tool)
-
-    def _on_quick_shell_tool(self) -> None:
-        """Tools → Quick Draw Shell: a click inside a grid bay draws the shell there."""
-        from opensees_studio.views.tools.draw_shell import shell_sections
-        from opensees_studio.views.tools.quick_draw import QuickDrawShellTool
-
-        project = self._vm.project
-        if project is None:
-            self._abort_tool_activation()
-            return
-        if not self._has_grid_lines():
-            self._abort_tool_activation()
-            QMessageBox.information(
-                self,
-                "Quick Draw Shell",
-                "Quick Draw Shell needs grid lines. Define them in "
-                "Define → Coordinate System/Grids.",
-            )
-            return
-        if not shell_sections(project):
-            self._add_default_slab()
-        if self._quick_shell_tool is None or self._quick_shell_tool.canvas is not self._canvas:
-            self._quick_shell_tool = QuickDrawShellTool(self._canvas, self._vm, self)
-            self._quick_shell_tool.statusChanged.connect(
-                lambda msg: self.statusBar().showMessage(msg)
-            )
-        self._tool_controller.set_active(self._quick_shell_tool)
-
-    def _on_draw_shell_tool(self) -> None:
-        """Tools → Draw Shell: needs a plate section, as Create Shell does."""
-        from opensees_studio.views.tools.draw_shell import shell_sections
-
-        project = self._vm.project
-        if project is None:
-            self._abort_tool_activation()
-            return
-        if not shell_sections(project):
-            self._add_default_slab()
-        if self._draw_shell_tool is None or self._draw_shell_tool.canvas is not self._canvas:
-            self._draw_shell_tool = DrawShellTool(self._canvas, self._vm, self)
-            self._draw_shell_tool.statusChanged.connect(
-                lambda msg: self.statusBar().showMessage(msg)
-            )
-        self._tool_controller.set_active(self._draw_shell_tool)
-
-    def _add_default_slab(self) -> None:
-        """Give a project with no plate section the default 20 cm concrete slab (undoable).
-
-        The values live in ``core.defaults`` (shared with headless callers), as
-        Draw Frame's default section does; this only owns the insert.
-        """
-        project = self._vm.project
-        assert project is not None
-        section = make_default_slab_section(project.next_section_id(), project)
-        self._vm.apply_command(AddSectionsCommand(self._vm, [section]))
-        self._log(f"Added the default slab section '{section.name}' for the shells.")
-
-    def _fill_shell_sections(self) -> None:
-        """List the plate sections in the shell Section box, keeping the current choice."""
-        from opensees_studio.views.tools.draw_shell import shell_sections
-
-        combo = self._draw_shell_section_combo
-        chosen = combo.currentData()
-        combo.blockSignals(True)
-        combo.clear()
-        for section_id, name in shell_sections(self._vm.project):
-            combo.addItem(name, section_id)
-        combo.setCurrentIndex(max(combo.findData(chosen), 0))
-        combo.blockSignals(False)
-        self._on_shell_section_changed()
-
-    def _on_shell_section_changed(self, _index: int = 0) -> None:
-        data = self._draw_shell_section_combo.currentData()
-        # Draw Shell and Quick Draw Shell share the box, and so the choice.
-        for tool in (self._draw_shell_tool, self._quick_shell_tool):
-            if tool is not None:
-                tool.section_id = None if data is None else int(data)
-
-    def _on_measure_tool(self) -> None:
-        if self._vm.project is None:
-            self._abort_tool_activation()
-            return
-        if self._measure_tool is None or self._measure_tool.canvas is not self._canvas:
-            self._measure_tool = MeasureDistanceTool(self._canvas, self._vm, self)
-            self._measure_tool.statusChanged.connect(lambda msg: self.statusBar().showMessage(msg))
-        dialog = self.transforms.offset_dialog
-        if dialog is not None and dialog.isVisible():
-            # Measure is being used from the open Move/Replicate window: its
-            # fields are the destination of the vector between the two joints.
-            target = "Move" if isinstance(dialog, MoveDialog) else "Replicate"
-            self._measure_tool.measure_for(target, dialog.set_measurement)
-        else:
-            self._measure_tool.stop_measuring_for()
-        self._tool_controller.set_active(self._measure_tool)
-
-    def _arm_measure_tool(self) -> None:
-        """Switch to Measure Distance on behalf of the open Move/Replicate window."""
-        self._act_tool_measure.setChecked(True)
-        self._on_measure_tool()
-
-    def _release_measure_tool(self) -> None:
-        """That window closed: Measure has no target, and the tool goes back to Select.
-
-        A stray click after the window closed must not pick points for nothing.
-        """
-        if self._measure_tool is not None:
-            self._measure_tool.stop_measuring_for()
-            if self._tool_controller.active is self._measure_tool:
-                self._act_tool_select.setChecked(True)
-                self._tool_controller.set_active(None)
-
     @property
     def _offset_dialog(self) -> MoveDialog | ReplicateDialog | None:
         """The open Move/Replicate window (now the transforms controller's)."""
@@ -2580,46 +2384,6 @@ class MainWindow(QMainWindow):
     @property
     def _paste_offset(self) -> tuple[float, float, float]:
         return self.transforms.paste_offset
-
-    def _on_tool_changed(self, tool) -> None:  # type: ignore[no-untyped-def]
-        drawing_shells = isinstance(tool, DrawShellTool)
-        if drawing_shells:
-            self._fill_shell_sections()
-        self._draw_shell_section_action.setVisible(drawing_shells)
-        drawing_frames = isinstance(tool, DrawFrameTool)
-        if drawing_frames:
-            self._fill_draw_sections()
-        self._draw_section_action.setVisible(drawing_frames)
-        if tool is None:
-            self._act_tool_select.setChecked(True)
-            self.statusBar().showMessage("Select tool active.", 3000)
-        else:
-            self.statusBar().showMessage(tool.prompt())
-
-    def _fill_draw_sections(self) -> None:
-        """List the frame sections in the Section box, keeping the current choice."""
-        from opensees_studio.views.tools.draw_frame import frame_sections
-
-        combo = self._draw_section_combo
-        chosen = combo.currentData()
-        combo.blockSignals(True)
-        combo.clear()
-        sections = frame_sections(self._vm.project)
-        for section_id, name in sections:
-            combo.addItem(name, section_id)
-        if not sections:
-            combo.addItem(tr("Default Section"), None)
-        index = combo.findData(chosen)
-        combo.setCurrentIndex(max(index, 0))
-        combo.blockSignals(False)
-        self._on_draw_section_changed()
-
-    def _on_draw_section_changed(self, _index: int = 0) -> None:
-        data = self._draw_section_combo.currentData()
-        # Draw Frame and Quick Draw Frame share the box, and so the choice.
-        for tool in (self._draw_frame_tool, self._quick_frame_tool):
-            if tool is not None:
-                tool.section_id = None if data is None else int(data)
 
     # ── slots: define ────────────────────────────────────────────────
     def _on_grid_system(self) -> None:
@@ -5105,8 +4869,7 @@ class MainWindow(QMainWindow):
             self._canvas.render()
         self._sync_grid_actions()
         self._refresh_tree(self._vm.project)
-        if self._draw_section_action.isVisible():
-            self._fill_draw_sections()  # a section may have been added or renamed
+        self.drawing.model_changed()
         # Update the property editor with the (possibly new) entity values
         # at the current selection.
         self._props.update_for_selection(

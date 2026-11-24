@@ -81,9 +81,9 @@ def test_plain_select_click_after_ctrl_click_with_a_tool(qtbot) -> None:  # type
     first = _node_point(canvas, window._vm.project, 1)
     second = _node_point(canvas, window._vm.project, 2)
 
-    window._on_measure_tool()
+    window.drawing.measure()
     QTest.mouseClick(canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.ControlModifier, first)
-    window._on_select_tool()
+    window.drawing.select()
     canvas.selection.clear()
 
     QTest.mouseClick(canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, second)
@@ -121,14 +121,14 @@ def test_measure_works_in_a_secondary_view(qtbot) -> None:  # type: ignore[no-un
     second = _node_point(canvas, window._vm.project, 2)
 
     QGuiApplication.clipboard().setText("")
-    window._on_measure_tool()
+    window.drawing.measure()
 
     QTest.mouseClick(canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, first)
     QTest.mouseClick(canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, second)
 
     assert window._tool_controller._canvas is canvas
-    assert window._measure_tool is not None
-    assert window._measure_tool.canvas is canvas
+    assert window.drawing.measure_tool is not None
+    assert window.drawing.measure_tool.canvas is canvas
     assert QGuiApplication.clipboard().text() == "10"
 
 
@@ -160,7 +160,7 @@ def test_measure_between_joints_in_3d_is_three_dimensional(qtbot) -> None:  # ty
     second = _node_point(canvas, window._vm.project, 2)
 
     QGuiApplication.clipboard().setText("")
-    window._on_measure_tool()
+    window.drawing.measure()
     QTest.mouseClick(canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, first)
     QTest.mouseClick(canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, second)
 
@@ -201,7 +201,7 @@ def test_measure_between_grid_intersections(qtbot) -> None:  # type: ignore[no-u
     second = _world_point(canvas, (10.0, 10.0, 0.0))
 
     QGuiApplication.clipboard().setText("")
-    window._on_measure_tool()
+    window.drawing.measure()
     QTest.mouseClick(canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, first)
     assert canvas._renderer._measure_anchor_actor is not None
 
@@ -227,7 +227,7 @@ def test_measure_highlights_the_joint_under_the_pointer(qtbot) -> None:  # type:
     seen: list[object] = []
     canvas.cursorMoved.connect(seen.append)
 
-    window._on_measure_tool()
+    window.drawing.measure()
     _move_pointer(canvas, second)
     qtbot.wait(50)
 
@@ -247,7 +247,7 @@ def test_measure_previews_and_clears_the_dashed_guide(qtbot) -> None:  # type: i
     first = _node_point(canvas, project, 1)
     second = _node_point(canvas, project, 2)
 
-    window._on_measure_tool()
+    window.drawing.measure()
     QTest.mouseClick(canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, first)
     assert canvas._renderer._measure_anchor_actor is not None
 

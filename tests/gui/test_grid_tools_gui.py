@@ -127,10 +127,10 @@ def test_hide_grids_from_view_menu_is_undoable(qtbot) -> None:  # type: ignore[n
         CoordinateGridSystem(name="B", grid=GridSystem(x_grid_lines=make_grid_lines("X", [1.0]))),
     ]
     project.coord_systems = systems
-    assert mw._has_grid_lines()
+    assert mw.drawing.has_grid_lines()
     mw._act_show_grids.trigger()
     assert all(cs.grid.hide_all for cs in mw._vm.project.coord_systems)
-    assert not mw._has_grid_lines()  # hidden grids do not snap either
+    assert not mw.drawing.has_grid_lines()  # hidden grids do not snap either
     assert not mw._act_show_grids.isChecked()
     mw._vm.undo_stack.undo()
     assert not any(cs.grid.hide_all for cs in mw._vm.project.coord_systems)

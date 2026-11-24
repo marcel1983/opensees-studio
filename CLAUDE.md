@@ -218,7 +218,11 @@ These are non-obvious things that are easy to break if you don't know:
   dock calls back with an edit (its `on_…` callbacks are set to its methods).
   `ViewportController` (camera, working plane and Level list, grid line view,
   hide and isolate) owns the Level combo box the window puts in its toolbar;
-  Spin and Parallel projection stay hand-built because they listen to `toggled`. A controller's attribute must not be the name of a `QMainWindow`
+  Spin and Parallel projection stay hand-built because they listen to `toggled`.
+  `DrawingController` (the draw tools, Measure Distance, the Section boxes of
+  the Tools bar) gets the window's `ToolController` as `tools`; the tool
+  buttons stay an exclusive group of the window, which it ticks through
+  `check_select` and `check_measure`. A controller's attribute must not be the name of a `QMainWindow`
   method (`window.geometry` would replace `QWidget.geometry()`):
   `tests/gui/test_action_registry.py` checks it, hence `model_tools`.
   The rest of the window is being moved out the same way.

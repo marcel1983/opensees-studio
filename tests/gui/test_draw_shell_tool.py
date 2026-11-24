@@ -119,12 +119,12 @@ def test_a_project_without_a_plate_section_gets_the_default_slab(qtbot) -> None:
     window._vm.new_project()
     try:
         window._act_tool_draw_shell.trigger()
-        assert window._tool_controller.active is window._draw_shell_tool
+        assert window._tool_controller.active is window.drawing.shell_tool
         project = window._vm.project
         assert [s.name for s in project.sections] == [DEFAULT_SLAB_NAME]
         assert project.sections[0].h == pytest.approx(0.2)
-        assert window._draw_shell_section_action.isVisible()
-        assert window._draw_shell_section_combo.currentText() == DEFAULT_SLAB_NAME
+        assert window.drawing.shell_section_action.isVisible()
+        assert window.drawing.shell_section_combo.currentText() == DEFAULT_SLAB_NAME
         window._act_tool_select.trigger()
         window._vm.apply_command(
             AddSectionsCommand(

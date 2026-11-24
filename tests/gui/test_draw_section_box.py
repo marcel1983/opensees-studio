@@ -39,23 +39,23 @@ def test_the_box_lists_frame_sections_only_while_drawing_frames(window) -> None:
             ],
         )
     )
-    assert not window._draw_section_action.isVisible()
+    assert not window.drawing.section_action.isVisible()
     window._act_tool_draw_frame.trigger()
-    combo = window._draw_section_combo
-    assert window._draw_section_action.isVisible()
+    combo = window.drawing.section_combo
+    assert window.drawing.section_action.isVisible()
     assert [combo.itemText(i) for i in range(combo.count())] == ["W10X12", "W14X30"]
     combo.setCurrentIndex(1)
-    assert window._draw_frame_tool.section_id == 2
+    assert window.drawing.frame_tool.section_id == 2
 
     window._act_tool_select.trigger()
-    assert not window._draw_section_action.isVisible()
+    assert not window.drawing.section_action.isVisible()
     window._act_tool_draw_frame.trigger()
-    assert window._draw_frame_tool.section_id == 2  # the choice is kept
+    assert window.drawing.frame_tool.section_id == 2  # the choice is kept
 
 
 def test_a_project_without_sections_draws_with_the_default(window) -> None:
     window._act_tool_draw_frame.trigger()
-    combo = window._draw_section_combo
+    combo = window.drawing.section_combo
     assert combo.count() == 1
     assert combo.currentData() is None
-    assert window._draw_frame_tool.section_id is None
+    assert window.drawing.frame_tool.section_id is None
