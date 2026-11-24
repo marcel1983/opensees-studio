@@ -1,9 +1,9 @@
 """Warehouse wizard: a 3D steel warehouse from a few numbers.
 
-Four pages, in the order the questions come up: how big the building is, what
-runs between the frames (purlins, girts, bracing), what the members are made
-of, and what the roof carries under which design code. A wireframe preview on
-the side follows every field.
+Five pages, in the order the questions come up: how big the building is, what
+runs between the frames (purlins, girts, bracing, end wall columns), what the
+members are made of, what the roof carries under which design code, and the
+wind. A wireframe preview on the side follows every field.
 
 Everything it builds comes from :mod:`opensees_studio.core.warehouse`; the
 wizard is fields, the preview and their translation into a
@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFormLayout,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QSpinBox,
@@ -41,15 +42,23 @@ from opensees_studio.core.warehouse import (
     GROUP_COLOURS,
     GROUPS,
     SECTION_KEYS,
+    WIND_METHODS,
     Warehouse,
     WarehouseError,
     WarehouseLoads,
     WarehouseSpec,
+    WarehouseWind,
     build_warehouse,
     default_section_name,
     force_from_kn,
     length_from_m,
     pressure_from_kpa,
+    warehouse_wind_cases,
+)
+from opensees_studio.core.wind import (
+    DIRECTIONS,
+    OPENINGS,
+    RNC07_REGIONAL_SPEEDS,
 )
 from opensees_studio.views.dialogs.frame_wizard import (
     ROOF_CHOICES,
@@ -64,6 +73,42 @@ from opensees_studio.views.screen_fit import fit_to_available_screen
 CREATE_DEFAULT = -1
 
 _COS30 = math.cos(math.radians(30.0))
+
+#: Exposure choices per wind procedure: (key, label).
+WIND_EXPOSURES: dict[str, tuple[tuple[str, str], ...]] = {
+    "rnc07": (
+        ("R1", "R1: open country, few or no obstructions"),
+        ("R2", "R2: flat or rolling terrain with few obstructions"),
+        ("R3", "R3: urban and suburban area"),
+        ("R4", "R4: dense area of tall buildings"),
+    ),
+    "asce7": (
+        ("B", "B: urban, suburban or wooded terrain"),
+        ("C", "C: open terrain with scattered obstructions"),
+        ("D", "D: flat, unobstructed terrain facing open water"),
+    ),
+}
+#: The exposure each procedure starts with.
+DEFAULT_EXPOSURE: dict[str, str] = {"rnc07": "R2", "asce7": "C"}
+
+#: RNC-07 Tabla 7: (key, label).
+WIND_TOPOGRAPHIES: tuple[tuple[str, str], ...] = (
+    ("T1", "T1: sheltered base of a hill, leeward side"),
+    ("T2", "T2: closed valley"),
+    ("T3", "T3: flat terrain, slopes below 5 % (normal)"),
+    ("T4", "T4: slopes between 5 and 10 %"),
+    ("T5", "T5: hilltops, slopes above 10 %"),
+)
+
+#: Labels of :data:`opensees_studio.core.wind.OPENINGS`, in its order.
+WIND_OPENINGS: tuple[str, ...] = (
+    "Closed building",
+    "Openings spread over the four walls",
+    "Openings mainly in the side wall at the smallest X",
+    "Openings mainly in the side wall at the largest X",
+    "Openings mainly in the end wall at the smallest Y",
+    "Openings mainly in the end wall at the largest Y",
+)
 
 
 class WarehousePreview(QWidget):
@@ -160,13 +205,20 @@ class WarehouseWizard(QWizard):
         self._build_secondary_page()
         self._build_sections_page()
         self._build_loads_page()
+        self._build_wind_page()
         for index, page in enumerate(
-            (self._page_geometry, self._page_secondary, self._page_sections, self._page_loads)
+            (
+                self._page_geometry,
+                self._page_secondary,
+                self._page_sections,
+                self._page_loads,
+                self._page_wind,
+            )
         ):
             self.setPage(index, page)
         self._on_code_changed()
         self._refresh()
-        self.resize(860, 600)
+        self.resize(880, 640)
 
     def showEvent(self, event: QShowEvent) -> None:
         super().showEvent(event)
@@ -259,6 +311,13 @@ class WarehouseWizard(QWizard):
             "As for the purlins: a girt braces the column only where it has a stabilising "
             "angle to the inner flange."
         )
+        self._end_wall_spacing = self._length(5.0)
+        self._end_wall_spacing.setToolTip(
+            "Largest distance between the columns of the two end walls; 0 builds none. Each "
+            "nave is divided into equal parts and each column stands under the nearest "
+            "purlin line, pinned at both ends. With end wall columns the end walls also get "
+            "girts, at the girt spacing."
+        )
         self._roof_bracing = QCheckBox("X bracing in the roof")
         self._roof_bracing.setChecked(True)
         self._wall_bracing = QCheckBox("X bracing in the side walls")
@@ -274,6 +333,7 @@ class WarehouseWizard(QWizard):
         form.addRow("Stabilising angle every (purlins):", self._rafter_fly)
         form.addRow("Girt spacing:", self._girt_spacing)
         form.addRow("Stabilising angle every (girts):", self._column_fly)
+        form.addRow("End wall column spacing:", self._end_wall_spacing)
         form.addRow(self._roof_bracing)
         form.addRow(self._wall_bracing)
         form.addRow("Braced bays:", self._braced_bays)
@@ -288,7 +348,7 @@ class WarehouseWizard(QWizard):
         self._secondary_summary.setWordWrap(True)
         form.addRow(self._secondary_summary)
 
-        for field in (self._purlin_spacing, self._girt_spacing):
+        for field in (self._purlin_spacing, self._girt_spacing, self._end_wall_spacing):
             field.valueChanged.connect(self._refresh)
         for spin in (self._rafter_fly, self._column_fly):
             spin.valueChanged.connect(self._refresh)
@@ -316,7 +376,8 @@ class WarehouseWizard(QWizard):
         note = QLabel(
             "<i>The sections that do not exist yet are created with the warehouse, as the "
             "same undoable step: columns, rafters and braces from the AISC library, purlins "
-            "and girts as a cold-formed lipped channel.</i>"
+            "and girts as a cold-formed lipped channel. The end wall column section is used "
+            "only when the warehouse has end wall columns.</i>"
         )
         note.setWordWrap(True)
         form.addRow(note)
@@ -366,12 +427,108 @@ class WarehouseWizard(QWizard):
         form.addRow(self._code_note)
         note = QLabel(
             "<i>The loads are applied to the purlins, as uniform loads over their "
-            "tributary width. Wind and earthquake cases are not created here.</i>"
+            "tributary width. The wind is on the next page; earthquake cases are not "
+            "created here.</i>"
         )
         note.setWordWrap(True)
         form.addRow(note)
         self._code.currentIndexChanged.connect(self._on_code_changed)
         self._page_loads = page
+
+    def _build_wind_page(self) -> None:
+        page = _CompletablePage()
+        page.complete_check = lambda: not self._wind_error
+        page.setTitle("Wind")
+        page.setSubTitle("The wind cases on the walls and the roof, one or two per direction.")
+        form = QFormLayout(page)
+        self._wind_error = ""
+
+        self._wind_on = QCheckBox("Create the wind load cases")
+        self._wind_on.setChecked(True)
+        self._wind_method = QComboBox()
+        for key, label in WIND_METHODS.items():
+            self._wind_method.addItem(tr(label), userData=key)
+        self._wind_zone = QComboBox()
+        for zone, speeds in RNC07_REGIONAL_SPEEDS.items():
+            for group, speed in zip(("B", "A"), speeds, strict=True):
+                self._wind_zone.addItem(
+                    tr("Zone {zone}, Group {group}: {speed} m/s").format(
+                        zone=zone, group=group, speed=f"{speed:g}"
+                    ),
+                    userData=speed,
+                )
+        self._wind_zone.addItem(tr("Other velocity"), userData=None)
+        self._wind_zone.setToolTip(
+            "RNC-07 Tabla 5: regional velocity per wind zone (Figura 7), 50 years of return "
+            "period for Group B and 200 years for Group A."
+        )
+        self._wind_speed = _field(45.0, minimum=0.0, maximum=200.0, step=1.0, suffix="m/s")
+        self._wind_exposure = QComboBox()
+        self._wind_topography = QComboBox()
+        for key, label in WIND_TOPOGRAPHIES:
+            self._wind_topography.addItem(tr(label), userData=key)
+        self._wind_topography.setCurrentIndex(2)
+        self._wind_kzt = _field(1.0, minimum=0.0, maximum=10.0, step=0.1)
+        self._wind_kzt.setToolTip("ASCE 7-16 26.8: 1 on flat terrain.")
+        self._wind_openings = QComboBox()
+        for label in WIND_OPENINGS:
+            self._wind_openings.addItem(tr(label))
+        self._wind_openings.setToolTip(
+            "RNC-07 Art. 55 adds internal pressure when the openings of a wall exceed 30 % "
+            "of it. ASCE 7-16 takes ±0.18 for an enclosed building and ±0.55 with a "
+            "dominant opening in one wall (partially enclosed)."
+        )
+        self._wind_directions: dict[str, QCheckBox] = {}
+        directions = QHBoxLayout()
+        for direction in DIRECTIONS:
+            box = QCheckBox(direction)
+            box.setChecked(True)
+            box.toggled.connect(self._refresh_wind)
+            self._wind_directions[direction] = box
+            directions.addWidget(box)
+        directions.addStretch(1)
+
+        for combo in (
+            self._wind_method,
+            self._wind_zone,
+            self._wind_exposure,
+            self._wind_topography,
+            self._wind_openings,
+        ):
+            # A long description must not widen the page past the wizard.
+            combo.setSizeAdjustPolicy(
+                QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+            )
+            combo.setMinimumContentsLength(24)
+        form.addRow(self._wind_on)
+        form.addRow("Procedure:", self._wind_method)
+        form.addRow("Wind zone:", self._wind_zone)
+        form.addRow("Wind speed:", self._wind_speed)
+        form.addRow("Exposure:", self._wind_exposure)
+        form.addRow("Topography:", self._wind_topography)
+        form.addRow("Topographic factor Kzt:", self._wind_kzt)
+        form.addRow("Openings:", self._wind_openings)
+        form.addRow("Wind towards:", directions)
+        self._wind_summary = QLabel()
+        self._wind_summary.setWordWrap(True)
+        form.addRow(self._wind_summary)
+        note = QLabel(
+            "<i>The pressures are those of the main structure, applied to the purlins, the "
+            "girts and the columns. Purlins, girts and cladding also need the local "
+            "pressures of the code, which are not created here.</i>"
+        )
+        note.setWordWrap(True)
+        form.addRow(note)
+
+        self._wind_on.toggled.connect(self._refresh_wind)
+        self._wind_method.currentIndexChanged.connect(self._on_wind_method_changed)
+        self._wind_zone.currentIndexChanged.connect(self._on_wind_zone_changed)
+        self._wind_speed.valueChanged.connect(self._on_wind_speed_edited)
+        self._wind_kzt.valueChanged.connect(self._refresh_wind)
+        for combo in (self._wind_exposure, self._wind_topography, self._wind_openings):
+            combo.currentIndexChanged.connect(self._refresh_wind)
+        self._page_wind = page
+        self._on_wind_method_changed()
 
     # ── live state ──────────────────────────────────────────────────
     def _on_code_changed(self, _index: int = 0) -> None:
@@ -382,6 +539,119 @@ class WarehouseWizard(QWizard):
             tr("Live load per area of horizontal projection.") + "\n" + tr(preset.source)
         )
         self._code_note.setText("<i>" + tr(preset.source) + "</i>")
+        index = self._wind_method.findData(preset.wind_method)
+        if index != self._wind_method.currentIndex():
+            self._wind_method.setCurrentIndex(index)
+        else:
+            self._on_wind_method_changed()
+
+    def _on_wind_method_changed(self, _index: int = 0) -> None:
+        method = str(self._wind_method.currentData())
+        rnc = method == "rnc07"
+        self._wind_exposure.blockSignals(True)
+        self._wind_exposure.clear()
+        for key, label in WIND_EXPOSURES[method]:
+            self._wind_exposure.addItem(tr(label), userData=key)
+        self._wind_exposure.setCurrentIndex(self._wind_exposure.findData(DEFAULT_EXPOSURE[method]))
+        self._wind_exposure.blockSignals(False)
+        self._wind_zone.setEnabled(rnc)
+        self._wind_topography.setEnabled(rnc)
+        self._wind_kzt.setEnabled(not rnc)
+        preset = CODE_PRESETS[self._code.currentData()]
+        if rnc:
+            self._wind_speed.setToolTip(
+                "RNC-07 Art. 50: the regional velocity VR, a 3 second gust at 10 m with 50 "
+                "years of return period (200 for Group A)."
+            )
+            self._wind_zone.setCurrentIndex(2)
+            self._on_wind_zone_changed()
+        else:
+            self._wind_speed.setToolTip(
+                "ASCE 7-16 26.5: the basic wind speed V of the building's risk category. It "
+                "is an ultimate speed: a 50 year velocity, such as RNC-07's, is multiplied by "
+                "1.26 (the square root of 1.6) before it is entered here."
+            )
+            self._wind_speed.setValue(preset.wind_speed if preset.wind_method == "asce7" else 57.0)
+        self._refresh_wind()
+
+    def _on_wind_zone_changed(self, _index: int = 0) -> None:
+        speed = self._wind_zone.currentData()
+        if speed is not None and self._wind_zone.isEnabled():
+            self._wind_speed.blockSignals(True)
+            self._wind_speed.setValue(float(speed))
+            self._wind_speed.blockSignals(False)
+        self._refresh_wind()
+
+    def _on_wind_speed_edited(self, *_args: object) -> None:
+        """A typed velocity that is not the zone's moves the zone to "Other velocity"."""
+        if self._wind_zone.isEnabled():
+            index = self._wind_zone.findData(self._wind_speed.value())
+            self._wind_zone.blockSignals(True)
+            self._wind_zone.setCurrentIndex(index if index >= 0 else self._wind_zone.count() - 1)
+            self._wind_zone.blockSignals(False)
+        self._refresh_wind()
+
+    def wind(self) -> WarehouseWind | None:
+        """The wind the fields describe; None when no wind cases are wanted.
+
+        Raises:
+            WarehouseError: if they do not describe one.
+        """
+        if not self._wind_on.isChecked():
+            return None
+        return WarehouseWind(
+            method=str(self._wind_method.currentData()),
+            speed=self._wind_speed.value(),
+            exposure=str(self._wind_exposure.currentData()),
+            topography=str(self._wind_topography.currentData()),
+            topographic_factor=self._wind_kzt.value(),
+            openings=OPENINGS[self._wind_openings.currentIndex()],
+            directions=tuple(d for d, box in self._wind_directions.items() if box.isChecked()),
+        )
+
+    def _refresh_wind(self, *_args: object) -> None:
+        if not hasattr(self, "_page_wind"):
+            return
+        on = self._wind_on.isChecked()
+        rnc = self._wind_method.currentData() == "rnc07"
+        for widget, enabled in (
+            (self._wind_method, True),
+            (self._wind_zone, rnc),
+            (self._wind_speed, True),
+            (self._wind_exposure, True),
+            (self._wind_topography, rnc),
+            (self._wind_kzt, not rnc),
+            (self._wind_openings, True),
+            *((box, True) for box in self._wind_directions.values()),
+        ):
+            widget.setEnabled(on and enabled)
+        self._wind_error = ""
+        text = ""
+        try:
+            wind = self.wind()
+            if wind is not None and not self._error:
+                spec = self.spec()
+                cases = warehouse_wind_cases(spec, wind, self._units)
+                metres = length_from_m(1.0, self._units)
+                eave = spec.eave_height / metres
+                windward = cases[0].walls[
+                    {"+X": "x0", "-X": "x1", "+Y": "y0", "-Y": "y1"}[cases[0].direction]
+                ]
+                pressure = pressure_from_kpa(windward.at(eave) / 1e3, self._units)
+                text = tr(
+                    "<b>{cases}</b> wind cases. Net pressure on the windward wall at the "
+                    "eave, {name}: <b>{pressure} {unit}</b>."
+                ).format(
+                    cases=len(cases),
+                    name=cases[0].name,
+                    pressure=f"{pressure:.4g}",
+                    unit=self._pressure,
+                )
+        except WarehouseError as exc:
+            self._wind_error = str(exc)
+            text = "<b>" + tr("Check the numbers:") + f"</b> {tr(self._wind_error)}"
+        self._wind_summary.setText(text)
+        self._page_wind.completeChanged.emit()
 
     def _bays(self) -> tuple[int, ...] | None:
         text = self._braced_bays.text().strip()
@@ -419,6 +689,7 @@ class WarehouseWizard(QWizard):
             roof_bracing=self._roof_bracing.isChecked(),
             wall_bracing=self._wall_bracing.isChecked(),
             braced_bays=self._bays(),
+            end_wall_column_spacing=self._end_wall_spacing.value(),
         )
 
     def _refresh(self, *_args: object) -> None:
@@ -465,6 +736,7 @@ class WarehouseWizard(QWizard):
             )
         for page in (self._page_geometry, self._page_secondary):
             page.completeChanged.emit()
+        self._refresh_wind()
 
     # ── results ─────────────────────────────────────────────────────
     def section_choice(self) -> dict[str, int | None]:
@@ -484,6 +756,7 @@ class WarehouseWizard(QWizard):
             midspan_point=self._point.value(),
             combinations=self._combinations.isChecked(),
             design_lengths=self._design_lengths.isChecked(),
+            wind=self.wind(),
         )
 
 

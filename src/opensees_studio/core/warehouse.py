@@ -11,6 +11,11 @@ members:
   and the interior column lines, never further apart than the spacing asked
   for. The eave and ridge purlins double as the eave strut and the ridge tie.
 * **Girts** on the two side walls (the walls along Y), the same way.
+* **End wall columns** under the rafter of the first and of the last frame,
+  when a spacing is given, with the girts of the end walls between them. An end
+  wall column is pinned at both ends, its web along Y to span against the wind,
+  and it stands under a purlin line, so its top reaction goes straight into a
+  purlin and from there into the roof bracing.
 * **X bracing** of the roof and of the side walls in the braced bays (by
   default the first and the last).
 
@@ -32,6 +37,12 @@ Three rules that are easy to get wrong, and that the tests pin:
   uniform load per length on each purlin element (its tributary width times the
   pressure), in the element's local axes — a purlin's web stands normal to the
   roof, so gravity has a component along both of them.
+* **Wind acts on what the cladding hangs from.** A wind case
+  (:mod:`opensees_studio.core.wind`) is a net pressure per surface;
+  :func:`wind_loads` turns it into uniform loads on the purlins (roof), on the
+  girts and the eave purlin (a wall with girts) or on the columns (a wall
+  without), normal to the surface. The lower half of the lowest wall strip goes
+  straight into the ground and is not applied.
 
 The module is pure (no Qt, no OpenSees): :func:`build_warehouse` returns the
 geometry, :func:`plan_warehouse` everything a project needs to become that
@@ -44,7 +55,7 @@ from __future__ import annotations
 
 import itertools
 import math
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -68,6 +79,15 @@ from opensees_studio.core.geometry.grid import (
 from opensees_studio.core.geometry.local_axes import frame_local_axes
 from opensees_studio.core.geometry.node import Node, Restraint6
 from opensees_studio.core.units import UnitSystem, force_scale, length_scale
+from opensees_studio.core.wind import (
+    DIRECTIONS,
+    OPENINGS,
+    BuildingShape,
+    WindCase,
+    WindError,
+    asce7_wind_cases,
+    rnc07_wind_cases,
+)
 
 if TYPE_CHECKING:
     from opensees_studio.core.project import Project
@@ -83,6 +103,7 @@ GROUPS: dict[str, str] = {
     "girts": "Girts",
     "roof_bracing": "Roof bracing",
     "wall_bracing": "Wall bracing",
+    "end_columns": "End wall columns",
 }
 
 #: Display colour of each group (#rrggbb).
@@ -93,6 +114,7 @@ GROUP_COLOURS: dict[str, str] = {
     "girts": "#469990",
     "roof_bracing": "#f58231",
     "wall_bracing": "#911eb4",
+    "end_columns": "#9a6324",
 }
 
 #: The section each kind of member takes: section key -> the groups it serves.
@@ -102,6 +124,7 @@ SECTION_KEYS: dict[str, str] = {
     "purlin": "Purlins",
     "girt": "Girts",
     "brace": "Bracing",
+    "end_column": "End wall columns",
 }
 
 #: AISC shape created for a section key when the caller chooses none.
@@ -109,6 +132,7 @@ DEFAULT_AISC_SHAPES: dict[str, str] = {
     "column": "W14X48",
     "rafter": "W16X40",
     "brace": "L3X3X1_4",
+    "end_column": "W8X31",
 }
 
 #: Default purlin and girt: a lipped channel 150 x 50 x 15 x 2.38 mm (a 2" x 6"
@@ -121,6 +145,11 @@ _PINNED_FREE_TORSION = EndRelease(released=("T", "M2", "M3"))
 BRACE_RELEASES = FrameReleases(i=_PINNED, j=_PINNED)
 #: A purlin or girt: simply supported, torsion held at one end only.
 SECONDARY_RELEASES = FrameReleases(i=_PINNED, j=_PINNED_FREE_TORSION)
+#: The top of an end wall column: it leans on the rafter, it does not frame into it.
+POST_TOP_RELEASES = FrameReleases(j=_PINNED)
+
+#: A girt line of an end wall stays this share of the girt spacing below the rafter.
+END_GIRT_CLEARANCE = 0.25
 
 
 class WarehouseError(ValueError):
@@ -154,6 +183,11 @@ class WarehouseSpec:
     braced_bays: tuple[int, ...] | None = None
     """Bays (0-based, between frame ``b`` and ``b + 1``) with X bracing; None = first and last."""
     origin: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    end_wall_column_spacing: float = 0.0
+    """Largest distance between the columns of an end wall; 0 = no end wall columns.
+
+    With end wall columns the end walls also get girts, at the girt spacing.
+    """
 
     def __post_init__(self) -> None:
         if self.span <= 0.0:
@@ -172,6 +206,8 @@ class WarehouseSpec:
             raise WarehouseError("The purlin spacing must be positive.")
         if self.girt_spacing < 0.0:
             raise WarehouseError("The girt spacing cannot be negative.")
+        if self.end_wall_column_spacing < 0.0:
+            raise WarehouseError("The end wall column spacing cannot be negative.")
         if self.rafter_fly_brace_every < 0 or self.column_fly_brace_every < 0:
             raise WarehouseError("A stabilising angle interval cannot be negative.")
         if len(self.origin) != 3:
@@ -243,6 +279,16 @@ class WarehouseSpec:
         n = max(1, math.ceil(self.eave_height / self.girt_spacing - 1e-9))
         return [k * self.eave_height / n for k in range(1, n)]
 
+    def end_wall_levels(self) -> list[float]:
+        """Elevation of each girt line of an end wall: the side wall's, carried up to the ridge."""
+        if self.girt_spacing <= 0.0 or self.end_wall_column_spacing <= 0.0:
+            return []
+        n = max(1, math.ceil(self.eave_height / self.girt_spacing - 1e-9))
+        step = self.eave_height / n
+        count = math.floor(self.ridge_height / step + 1e-9)
+        levels = [k * self.eave_height / n for k in range(1, count + 1)]
+        return [z for z in levels if z < self.ridge_height - END_GIRT_CLEARANCE * step]
+
 
 def _distinct(values: Iterable[float]) -> list[float]:
     out: list[float] = []
@@ -304,6 +350,15 @@ class Warehouse:
     unbraced: dict[int, float] = field(default_factory=dict)
     """Rafter and side-column element id -> unbraced length of its compression flange."""
     base_node_ids: list[int] = field(default_factory=list)
+    wall_girts: dict[int, tuple[str, int, float]] = field(default_factory=dict)
+    """Girt element id -> ``(wall, panel, level)``.
+
+    ``wall`` is a key of :data:`opensees_studio.core.wind.WALLS`; ``panel`` is
+    the bay on a side wall and the left vertical on an end wall.
+    """
+    wall_columns: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
+    """Wall -> ``(column element id, vertical)``: the frame on a side wall, the
+    vertical of :func:`end_wall_layout` on an end wall. A corner column is in two walls."""
 
     def summary(self) -> str:
         """One line for the log: what was created."""
@@ -315,7 +370,8 @@ class Warehouse:
             f"{spec.eave_height:g}, ridge {spec.ridge_height:g} ({roof}, "
             f"{spec.slope * 100:g} %) - {len(self.members['columns'])} column, "
             f"{len(self.members['rafters'])} rafter, {len(self.members['purlins'])} purlin, "
-            f"{len(self.members['girts'])} girt and "
+            f"{len(self.members['girts'])} girt, "
+            f"{len(self.members['end_columns'])} end wall column and "
             f"{len(self.members['roof_bracing']) + len(self.members['wall_bracing'])} bracing "
             f"elements, {len(self.nodes)} nodes."
         )
@@ -371,6 +427,101 @@ def roof_stations(spec: WarehouseSpec) -> list[RoofStation]:
     return stations
 
 
+@dataclass(frozen=True)
+class EndWall:
+    """The verticals of an end wall, left to right, and the girt lines each carries."""
+
+    xs: tuple[float, ...]
+    tops: tuple[float, ...]
+    posts: dict[int, int]
+    """Vertical index -> roof station index, for the end wall columns (not the frame's own)."""
+    levels: tuple[tuple[float, ...], ...]
+    """Per vertical: the elevation of each girt line that reaches it."""
+
+    def panel_levels(self, vertical: int) -> list[float]:
+        """Girt lines of the panel between ``vertical`` and the next one."""
+        return [z for z in self.levels[vertical] if z in self.levels[vertical + 1]]
+
+    def roof_area(self, a: float, b: float, profile: PortalFrameSpec) -> float:
+        """Wall area between ``a`` and ``b``, from the base to the roof line."""
+        cuts = [a, *[x for x in self.xs if a < x < b], b]
+        ridge = profile.span / 2.0
+        if profile.roof is RoofType.GABLE and a < ridge < b:
+            cuts = sorted({*cuts, ridge})
+        return sum(
+            (x1 - x0) * 0.5 * (profile.roof_height(x0) + profile.roof_height(x1))
+            for x0, x1 in itertools.pairwise(cuts)
+        )
+
+
+def end_wall_layout(spec: WarehouseSpec, stations: list[RoofStation] | None = None) -> EndWall:
+    """Where the verticals of an end wall stand and which girt lines reach them.
+
+    The frame's own columns always are verticals. Each nave is divided into
+    equal parts no longer than the end wall column spacing, and each end wall
+    column goes under the purlin line nearest to its place. A girt line exists
+    between two verticals when both reach it with some clearance below the
+    rafter.
+    """
+    stations = roof_stations(spec) if stations is None else stations
+    profile = spec.profile
+    column_xs = spec.column_lines()
+    post_station: dict[float, int] = {}
+    if spec.end_wall_column_spacing > 0.0:
+        for a, b in itertools.pairwise(column_xs):
+            count = max(1, math.ceil((b - a) / spec.end_wall_column_spacing - 1e-9))
+            inside = [
+                k for k, s in enumerate(stations) if a + GRID_TOLERANCE < s.x < b - GRID_TOLERANCE
+            ]
+            for j in range(1, count):
+                if not inside:
+                    break
+                ideal = a + j * (b - a) / count
+                centre = (a + b) / 2.0
+                # Nearest purlin line; of two as near, the one towards mid-nave,
+                # so a symmetric nave gets symmetric columns.
+                k = min(
+                    inside,
+                    key=lambda i: (
+                        round(abs(stations[i].x - ideal), 9),
+                        abs(stations[i].x - centre),
+                    ),
+                )
+                post_station[stations[k].x] = k
+    xs = _distinct([*column_xs, *post_station])
+    tops = [profile.roof_height(x) for x in xs]
+    posts = {
+        v: k
+        for v, x in enumerate(xs)
+        for px, k in post_station.items()
+        if abs(px - x) <= GRID_TOLERANCE
+    }
+    all_levels = spec.end_wall_levels()
+    side = spec.girt_heights()
+    clearance = END_GIRT_CLEARANCE * (side[0] if side else spec.eave_height)
+    last = len(xs) - 1
+
+    def reaches(v: int, z: float) -> bool:
+        return 0 <= v <= last and z <= tops[v] - clearance + 1e-9
+
+    levels: list[tuple[float, ...]] = []
+    for v in range(len(xs)):
+        if not all_levels:
+            levels.append(())
+        elif v in (0, last):
+            # A corner column carries the side wall's girt lines, all of them.
+            levels.append(tuple(side))
+        else:
+            levels.append(
+                tuple(
+                    z
+                    for z in all_levels
+                    if reaches(v, z) and (reaches(v - 1, z) or reaches(v + 1, z))
+                )
+            )
+    return EndWall(xs=tuple(xs), tops=tuple(tops), posts=posts, levels=tuple(levels))
+
+
 def _base_restraint(support: SupportCondition) -> Restraint6:
     fixed = support is SupportCondition.FIXED
     return (True, True, True, fixed, fixed, fixed)
@@ -391,7 +542,12 @@ def build_warehouse(
     ``sections`` maps every key of :data:`SECTION_KEYS` to a section id. Ids are
     allocated from ``first_node_id`` / ``first_element_id`` upwards.
     """
-    missing = [key for key in SECTION_KEYS if int(sections.get(key, 0) or 0) < 1]
+    missing = [
+        key
+        for key in SECTION_KEYS
+        if int(sections.get(key, 0) or 0) < 1
+        and (key != "end_column" or spec.end_wall_column_spacing > 0.0)
+    ]
     if missing:
         raise WarehouseError("No section for: " + ", ".join(missing) + ".")
     ox, oy, oz = spec.origin
@@ -447,10 +603,38 @@ def build_warehouse(
     rafter_lengths = _unbraced_lengths(
         _cumulative([(s.x, s.z) for s in stations]), [s.fly_braced for s in stations]
     )
-    column_stations = [0.0, *girt_zs, spec.eave_height]
-    column_lengths = _unbraced_lengths(
-        column_stations, _fly_braced(len(girt_zs) + 1, spec.column_fly_brace_every)
-    )
+    end_wall = end_wall_layout(spec, stations)
+    end_frames = (0, spec.n_frames - 1)
+    end_vertical = {
+        line: next(v for v, ex in enumerate(end_wall.xs) if abs(ex - x) <= GRID_TOLERANCE)
+        for line, x in enumerate(column_xs)
+    }
+    end_chains: dict[tuple[int, int], list[int]] = {}  # (frame, vertical) -> base, girts..., top
+    for wall in ("x0", "x1", "y0", "y1"):
+        warehouse.wall_columns[wall] = []
+
+    def add_vertical(
+        group: str,
+        section: str,
+        chain: list[int],
+        levels: Sequence[float],
+        top: float,
+        *,
+        angle: float = 0.0,
+        top_releases: FrameReleases | None = None,
+    ) -> list[int]:
+        """The elements of a column along ``chain``, with their unbraced lengths."""
+        lengths = _unbraced_lengths(
+            [0.0, *levels, top], _fly_braced(len(levels) + 1, spec.column_fly_brace_every)
+        )
+        ids: list[int] = []
+        for k, (a, b) in enumerate(itertools.pairwise(chain)):
+            releases = top_releases if k == len(chain) - 2 else None
+            element_id = add_element(group, a, b, section, releases=releases, angle=angle)
+            if levels:
+                warehouse.unbraced[element_id] = lengths[k]
+            ids.append(element_id)
+        return ids
 
     for frame in range(spec.n_frames):
         y = frame * spec.frame_spacing
@@ -460,17 +644,22 @@ def build_warehouse(
         for line, x in enumerate(column_xs):
             base = add_node(x, y, 0.0, _base_restraint(spec.support))
             warehouse.base_node_ids.append(base)
-            top = tops[station_at(x)]
-            chain = [base]
+            at = station_at(x)
+            levels: Sequence[float] = ()
             if line in side_lines:
-                chain += [add_node(x, y, z) for z in girt_zs]
-            chain.append(top)
-            for k, (a, b) in enumerate(itertools.pairwise(chain)):
-                element_id = add_element("columns", a, b, "column")
-                if line in side_lines and girt_zs:
-                    warehouse.unbraced[element_id] = column_lengths[k]
+                levels = girt_zs
+            elif frame in end_frames:
+                levels = end_wall.levels[end_vertical[line]]
+            chain = [base, *[add_node(x, y, z) for z in levels], tops[at]]
+            ids = add_vertical("columns", "column", chain, levels, stations[at].z)
             if line in side_lines:
                 walls[line] = chain
+                wall = "x0" if line == side_lines[0] else "x1"
+                warehouse.wall_columns[wall] += [(i, frame) for i in ids]
+            if frame in end_frames:
+                end_chains[(frame, end_vertical[line])] = chain
+                wall = "y0" if frame == 0 else "y1"
+                warehouse.wall_columns[wall] += [(i, end_vertical[line]) for i in ids]
         wall_nodes.append(walls)
         rafters: list[int] = []
         for k, (a, b) in enumerate(itertools.pairwise(tops)):
@@ -491,7 +680,7 @@ def build_warehouse(
             # A girt's web lies flat, to span the wall against the wind.
             angle = 90.0 if side == 0 else -90.0
             for level in range(1, len(girt_zs) + 1):
-                add_element(
+                element_id = add_element(
                     "girts",
                     wall_nodes[bay][line][level],
                     wall_nodes[bay + 1][line][level],
@@ -499,6 +688,9 @@ def build_warehouse(
                     releases=SECONDARY_RELEASES,
                     angle=angle,
                 )
+                warehouse.wall_girts[element_id] = (
+                    "x0" if side == 0 else "x1", bay, girt_zs[level - 1]
+                )  # fmt: skip
 
     for bay in spec.bracing_bays():
         if spec.roof_bracing:
@@ -515,6 +707,34 @@ def build_warehouse(
                 add_element(
                     "wall_bracing", near_wall[-1], far_wall[0], "brace", releases=BRACE_RELEASES
                 )
+
+    # End walls last, so a warehouse without them keeps the ids it always had.
+    pinned_base: Restraint6 = (True, True, True, False, False, False)
+    for frame in dict.fromkeys(end_frames):
+        y = frame * spec.frame_spacing
+        wall = "y0" if frame == 0 else "y1"
+        for vertical, under in end_wall.posts.items():
+            x, levels = end_wall.xs[vertical], end_wall.levels[vertical]
+            base = add_node(x, y, 0.0, pinned_base)
+            warehouse.base_node_ids.append(base)
+            chain = [base, *[add_node(x, y, z) for z in levels], roof_nodes[frame][under]]
+            # The web along Y, to span the wall against the wind.
+            ids = add_vertical(
+                "end_columns", "end_column", chain, levels, end_wall.tops[vertical],
+                angle=90.0, top_releases=POST_TOP_RELEASES,
+            )  # fmt: skip
+            end_chains[(frame, vertical)] = chain
+            warehouse.wall_columns[wall] += [(i, vertical) for i in ids]
+        for vertical in range(len(end_wall.xs) - 1):
+            for z in end_wall.panel_levels(vertical):
+                left = end_chains[(frame, vertical)][end_wall.levels[vertical].index(z) + 1]
+                right = end_chains[(frame, vertical + 1)][
+                    end_wall.levels[vertical + 1].index(z) + 1
+                ]
+                element_id = add_element(
+                    "girts", left, right, "girt", releases=SECONDARY_RELEASES, angle=90.0
+                )
+                warehouse.wall_girts[element_id] = (wall, vertical, z)
     return warehouse
 
 
@@ -640,6 +860,229 @@ def midspan_point_loads(warehouse: Warehouse, force: float) -> tuple[list[Any], 
     return nodal, inside
 
 
+# ─────────────────────────────── wind ───────────────────────────────
+#: The wind procedures the wizard offers.
+WIND_METHODS: dict[str, str] = {
+    "rnc07": "RNC-07 Título IV",
+    "asce7": "ASCE 7-16 chapter 27",
+}
+
+
+@dataclass(frozen=True)
+class WarehouseWind:
+    """The wind on the warehouse. Speeds are in m/s whatever the project's units."""
+
+    method: str = "rnc07"
+    speed: float = 45.0
+    """RNC-07: the regional velocity VR. ASCE 7: the basic wind speed V."""
+    exposure: str = "R2"
+    """RNC-07: terrain roughness R1 to R4. ASCE 7: exposure category B, C or D."""
+    topography: str = "T3"
+    """RNC-07 only: T1 to T5."""
+    topographic_factor: float = 1.0
+    """ASCE 7 only: Kzt."""
+    openings: str = "closed"
+    """``closed``, ``uniform`` (spread over the four walls) or the wall with the openings."""
+    directions: tuple[str, ...] = DIRECTIONS
+
+    def __post_init__(self) -> None:
+        if self.method not in WIND_METHODS:
+            raise WarehouseError(f"Unknown wind procedure {self.method!r}.")
+        if self.speed <= 0.0:
+            raise WarehouseError("The wind speed must be positive.")
+        if self.topographic_factor <= 0.0:
+            raise WarehouseError("The topographic factor must be positive.")
+        if self.openings not in OPENINGS:
+            raise WarehouseError(f"Unknown openings {self.openings!r}.")
+        if not self.directions or any(d not in DIRECTIONS for d in self.directions):
+            raise WarehouseError("Choose at least one wind direction: +X, -X, +Y or -Y.")
+
+
+def building_shape(spec: WarehouseSpec, units: UnitSystem) -> BuildingShape:
+    """``spec`` as the box the wind sees, in metres."""
+    metres = length_scale(units, UnitSystem.SI_M_N)
+    roof = {RoofType.MONO_PITCH: "mono", RoofType.GABLE: "gable"}.get(spec.roof, "flat")
+    return BuildingShape(
+        width=spec.width * metres,
+        length=spec.length * metres,
+        eave_height=spec.eave_height * metres,
+        roof=roof,
+        slope=spec.slope,
+    )
+
+
+def warehouse_wind_cases(
+    spec: WarehouseSpec, wind: WarehouseWind, units: UnitSystem
+) -> list[WindCase]:
+    """The wind cases of ``wind`` on ``spec``: net pressures in N/m² against metres."""
+    shape = building_shape(spec, units)
+    directions = [d for d in DIRECTIONS if d in wind.directions]
+    try:
+        if wind.method == "asce7":
+            return asce7_wind_cases(
+                shape,
+                speed=wind.speed,
+                exposure=wind.exposure,
+                kzt=wind.topographic_factor,
+                openings=wind.openings,
+                directions=directions,
+            )
+        return rnc07_wind_cases(
+            shape,
+            regional_speed=wind.speed,
+            roughness=wind.exposure,
+            topography=wind.topography,
+            openings=wind.openings,
+            directions=directions,
+        )
+    except WindError as exc:
+        raise WarehouseError(str(exc)) from exc
+
+
+def wind_loads(warehouse: Warehouse, case: WindCase, units: UnitSystem) -> list[Any]:
+    """One wind case as uniform loads on the members the cladding hangs from.
+
+    * Roof: each purlin takes half the strip to each neighbour, normal to that
+      strip of roof.
+    * A wall with girts: each girt takes half the strip to the line below and
+      above; the top half strip goes to the eave purlin (side walls) or to the
+      rafter (end walls), the bottom half strip into the ground.
+    * A wall without girts: each column takes the wall half way to its
+      neighbours, over its whole height.
+
+    A positive pressure of ``case`` pushes the surface inwards. The loads are in
+    each element's local axes and in the project's units; an element loaded
+    from two surfaces (a corner column, the ridge purlin) gets one load.
+    """
+    from opensees_studio.core.loads import UniformElementLoad
+
+    spec = warehouse.spec
+    stations = warehouse.stations
+    profile = spec.profile
+    metres = length_scale(units, UnitSystem.SI_M_N)
+    pascal = pressure_from_kpa(1e-3, units)
+    origin = np.array(spec.origin, dtype=float)
+    nodes = {n.id: n for n in warehouse.nodes}
+    elements = {e.id: e for e in warehouse.elements}
+    forces: dict[int, np.ndarray] = {}
+
+    def local(node_id: int) -> np.ndarray:
+        out: np.ndarray = np.array(nodes[node_id].coords, dtype=float) - origin
+        return out
+
+    def add(element_id: int, pressure: float, width: float, outward: np.ndarray) -> None:
+        """``pressure`` (N/m²) over ``width`` of surface per length of the element."""
+        forces[element_id] = forces.get(element_id, np.zeros(3)) - (
+            pressure * pascal * width * outward
+        )
+
+    def mean(pressure: Any, a: float, b: float) -> float:
+        return float(pressure.mean(a * metres, b * metres))
+
+    # Roof: half strips either side of each purlin line.
+    last = len(stations) - 1
+    for element_id, k in warehouse.purlin_station.items():
+        here = stations[k]
+        ya, yb = (local(n)[1] for n in elements[element_id].nodes)
+        for other in (k - 1, k + 1):
+            if not 0 <= other <= last:
+                continue
+            dx, dz = stations[other].x - here.x, stations[other].z - here.z
+            run = math.hypot(dx, dz)
+            outward = np.array([-dz, 0.0, dx]) / run * (1.0 if dx > 0.0 else -1.0)
+            middle = here.x + dx / 2.0
+            load = case.roof_load_at((here.x + middle) / 2.0 * metres)
+            value = (
+                mean(load.profile, here.x, middle)
+                if load.axis == "x"
+                else mean(load.profile, ya, yb)
+            )
+            add(element_id, value, run / 2.0, outward)
+
+    # Side walls.
+    girt_zs = spec.girt_heights()
+    for wall, station, outward in (
+        ("x0", 0, np.array([-1.0, 0.0, 0.0])),
+        ("x1", last, np.array([1.0, 0.0, 0.0])),
+    ):
+        pressure = case.walls[wall]
+        levels = [0.0, *girt_zs, stations[station].z]
+        if girt_zs:
+            for element_id, (girt_wall, _bay, z) in warehouse.wall_girts.items():
+                if girt_wall != wall:
+                    continue
+                k = levels.index(z)
+                lo, hi = (levels[k - 1] + z) / 2.0, (z + levels[k + 1]) / 2.0
+                add(element_id, mean(pressure, lo, hi), hi - lo, outward)
+            lo, hi = (levels[-2] + levels[-1]) / 2.0, levels[-1]
+            for element_id, k in warehouse.purlin_station.items():
+                if k == station:
+                    add(element_id, mean(pressure, lo, hi), hi - lo, outward)
+        else:
+            for element_id, frame in warehouse.wall_columns[wall]:
+                width = spec.frame_spacing * (0.5 if frame in (0, spec.n_frames - 1) else 1.0)
+                za, zb = (local(n)[2] for n in elements[element_id].nodes)
+                add(element_id, mean(pressure, za, zb), width, outward)
+
+    # End walls.
+    end_wall = end_wall_layout(spec, stations)
+    framed = any(end_wall.levels)
+    for wall, frame, outward in (
+        ("y0", 0, np.array([0.0, -1.0, 0.0])),
+        ("y1", spec.n_frames - 1, np.array([0.0, 1.0, 0.0])),
+    ):
+        pressure = case.walls[wall]
+        if not framed:
+            for element_id, vertical in warehouse.wall_columns[wall]:
+                x = end_wall.xs[vertical]
+                left = (end_wall.xs[vertical - 1] + x) / 2.0 if vertical else x
+                right = (
+                    (x + end_wall.xs[vertical + 1]) / 2.0 if vertical < len(end_wall.xs) - 1 else x
+                )
+                # The wall up to the roof line, spread over the column's height.
+                width = end_wall.roof_area(left, right, profile) / end_wall.tops[vertical]
+                za, zb = (local(n)[2] for n in elements[element_id].nodes)
+                add(element_id, mean(pressure, za, zb), width, outward)
+            continue
+        top_girt: dict[int, float] = {}
+        for vertical in range(len(end_wall.xs) - 1):
+            a, b = end_wall.xs[vertical], end_wall.xs[vertical + 1]
+            roof = end_wall.roof_area(a, b, profile) / (b - a)
+            levels = [0.0, *end_wall.panel_levels(vertical), roof]
+            top_girt[vertical] = levels[-2]
+            for element_id, (girt_wall, panel, z) in warehouse.wall_girts.items():
+                if girt_wall != wall or panel != vertical:
+                    continue
+                k = levels.index(z)
+                lo, hi = (levels[k - 1] + z) / 2.0, (z + levels[k + 1]) / 2.0
+                add(element_id, mean(pressure, lo, hi), hi - lo, outward)
+        # The strip under the roof line hangs from the rafter of the end frame.
+        for k, element_id in enumerate(warehouse.rafter_elements[frame]):
+            s0, s1 = stations[k], stations[k + 1]
+            middle = (s0.x + s1.x) / 2.0
+            vertical = max(v for v, x in enumerate(end_wall.xs[:-1]) if x <= middle)
+            roof = (s0.z + s1.z) / 2.0
+            height = (roof - top_girt[vertical]) / 2.0
+            width = height * abs(s1.x - s0.x) / math.hypot(s1.x - s0.x, s1.z - s0.z)
+            add(element_id, mean(pressure, roof - height, roof), width, outward)
+
+    loads: list[Any] = []
+    for element_id in sorted(forces):
+        element = elements[element_id]
+        axes = frame_local_axes(
+            3,
+            nodes[element.nodes[0]].coords,
+            nodes[element.nodes[1]].coords,
+            element.local_axis_angle,
+        )
+        assert axes is not None  # a warehouse has no zero-length member
+        wx, wy, wz = (float(axis @ forces[element_id]) for axis in axes)
+        if max(abs(wx), abs(wy), abs(wz)) == 0.0:
+            continue
+        loads.append(UniformElementLoad(element_id=element_id, wx=wx, wy=wy, wz=wz))
+    return loads
+
+
 # ─────────────────────────── design lengths ───────────────────────────
 def member_design_overrides(warehouse: Warehouse) -> list[Any]:
     """Unbraced lengths of the rafters and side columns for the steel check.
@@ -673,6 +1116,10 @@ class CodePreset:
     design_method: str
     source: str
     """Where the two defaults come from, for the wizard's tool tip."""
+    wind_method: str = "rnc07"
+    """Key of :data:`WIND_METHODS`: the wind procedure that goes with the code."""
+    wind_speed: float = 45.0
+    """Default wind speed, m/s (see :class:`WarehouseWind`)."""
 
 
 _KGF = 9.80665e-3  # one kilogram-force in kN
@@ -680,6 +1127,9 @@ _KGF = 9.80665e-3  # one kilogram-force in kN
 #: The codes the wizard offers, in order. RNC-07 Art. 11 a (light roofs): main
 #: members carry 10 kg/m² plus 200 kg at mid-span; NSCM is the seismic code of
 #: Managua and keeps RNC-07's gravity loads. ASCE 7-16 Table 4.3-1: 20 psf.
+#: Wind: NSCM 7.2 sends the wind loads to RNC-07 Título IV, whose regional
+#: velocity is a 50-year one (45 m/s in zone 2); the basic wind speed of ASCE
+#: 7-16 is an ultimate one, about sqrt(1.6) times that, hence 57 m/s.
 CODE_PRESETS: dict[str, CodePreset] = {
     preset.key: preset
     for preset in (
@@ -694,10 +1144,12 @@ CODE_PRESETS: dict[str, CodePreset] = {
         CodePreset(
             "asce7_lrfd", "Lr", "ROOF LIVE", 0.9576, 0.0, "LRFD",
             "ASCE 7-16 Table 4.3-1: ordinary roofs, 20 psf (before any reduction).",
+            "asce7", 57.0,
         ),
         CodePreset(
             "asce7_asd", "Lr", "ROOF LIVE", 0.9576, 0.0, "ASD",
             "ASCE 7-16 Table 4.3-1: ordinary roofs, 20 psf (before any reduction).",
+            "asce7", 57.0,
         ),
     )
 }  # fmt: skip
@@ -737,6 +1189,8 @@ class WarehouseLoads:
     """Concentrated live load at mid-span of each nave of each frame."""
     combinations: bool = True
     design_lengths: bool = True
+    wind: WarehouseWind | None = None
+    """Wind cases to create, one or two per direction; None for no wind."""
 
     def __post_init__(self) -> None:
         if self.code not in CODE_PRESETS:
@@ -885,6 +1339,8 @@ def plan_warehouse(
     new_sections: list[Any] = []
     created: dict[str, int] = {}
     for key in SECTION_KEYS:
+        if key == "end_column" and spec.end_wall_column_spacing <= 0.0:
+            continue
         section_id = chosen.get(key)
         if section_id is not None:
             if section_id not in existing:
@@ -1005,12 +1461,45 @@ def _plan_loads(
             if items:
                 plan.pattern_loads.append((live.id, list_name, items))
 
+    wind_case_ids: list[int] = []
+    if loads.wind is not None:
+        units = project.meta.units
+        wind_cases = warehouse_wind_cases(warehouse.spec, loads.wind, units)
+        taken = {p.name for p in project.load_patterns} | {c.name for c in project.analyses}
+        names: list[str] = []
+        for wind_case in wind_cases:
+            name, n = wind_case.name, 2
+            while name in taken:
+                name, n = f"{wind_case.name} ({n})", n + 1
+            taken.add(name)
+            names.append(name)
+        series, patterns, cases = make_load_cases(scratch, names)
+        for wind_case, one_series, pattern, case in zip(
+            wind_cases, series, patterns, cases, strict=True
+        ):
+            add_case(one_series, pattern, case)
+            wind_case_ids.append(case.id)
+            plan.pattern_loads.append(
+                (pattern.id, "element_loads", wind_loads(warehouse, wind_case, units))
+            )
+        plan.notes.append(
+            f"{len(wind_cases)} wind case(s) by {WIND_METHODS[loads.wind.method]}: the pressures "
+            "of the main structure. Purlins, girts and cladding also need the local "
+            "pressures of the code."
+        )
+
     if loads.combinations:
         roles: dict[str, list[int]] = {"D": _static_cases_of(scratch, dead.id)}
         if live is not None:
             roles[preset.roof_live_role] = _static_cases_of(scratch, live.id)
+        if wind_case_ids:
+            roles["W"] = wind_case_ids
         case_names = {c.id: c.name or str(c.id) for c in scratch.analyses}
-        generated = generate_for_code(loads.code, roles, case_names=case_names)
+        # A wind case has its direction and its suctions in it: reversing it is
+        # not another wind, so each one enters the combinations with one sign.
+        generated = generate_for_code(
+            loads.code, roles, case_names=case_names, peak_cases=wind_case_ids
+        )
         used = {c.name for c in project.combinations}
         fresh = [g for g in generated if g.name not in used]
         if len(fresh) < len(generated):
@@ -1056,16 +1545,21 @@ __all__ = [
     "SECONDARY_RELEASES",
     "SECTION_KEYS",
     "WAREHOUSE_NDF",
+    "WIND_METHODS",
     "CodePreset",
+    "EndWall",
     "RoofStation",
     "Warehouse",
     "WarehouseError",
     "WarehouseLoads",
     "WarehousePlan",
     "WarehouseSpec",
+    "WarehouseWind",
     "build_warehouse",
+    "building_shape",
     "default_section",
     "default_section_name",
+    "end_wall_layout",
     "envelope_name",
     "force_from_kn",
     "length_from_m",
@@ -1076,4 +1570,6 @@ __all__ = [
     "roof_pressure_loads",
     "roof_stations",
     "warehouse_grid",
+    "warehouse_wind_cases",
+    "wind_loads",
 ]
