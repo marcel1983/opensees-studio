@@ -140,7 +140,12 @@ def test_a_warehouse_with_tension_only_braces_holds_each_x_with_one_diagonal() -
     project.materials.extend(default_materials(project.next_material_id(), units))
     ensure_dead_load_case(project)
     spec = WarehouseSpec(
-        span=12.0, eave_height=5.0, frame_spacing=6.0, n_frames=3, tension_only_braces=True
+        span=12.0,
+        eave_height=5.0,
+        frame_spacing=6.0,
+        n_frames=3,
+        roof_tension_only=True,
+        wall_tension_only=True,
     )
     preset = CODE_PRESETS["rnc07"]
     loads = WarehouseLoads(

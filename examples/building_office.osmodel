@@ -6238,7 +6238,7 @@
   "groups": [
     {
       "id": 1,
-      "name": "Building columns",
+      "name": "Building columns COL 500x500",
       "node_ids": [],
       "element_ids": [
         1,
@@ -6294,7 +6294,7 @@
     },
     {
       "id": 2,
-      "name": "Beams along X",
+      "name": "Beams along X BEAM 300x600",
       "node_ids": [],
       "element_ids": [
         17,
@@ -6338,7 +6338,7 @@
     },
     {
       "id": 3,
-      "name": "Beams along Y",
+      "name": "Beams along Y BEAM 300x600",
       "node_ids": [],
       "element_ids": [
         29,

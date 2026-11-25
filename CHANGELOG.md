@@ -21,14 +21,22 @@ refused instead of silently downgraded).
   its section and next to no stiffness in compression, its self weight goes to
   its joints, and a static case of such a model is solved by Newton iteration.
   Saved as `"tension_only": true` on the element (left out when false).
-- **The warehouse wizard asks whether the braces work in tension only**
-  (ticked by default). They then become tension-only members, and since which
+- **The warehouse wizard asks whether the roof braces and the wall braces work
+  in tension only**, each on its own (both ticked by default). They then become tension-only members, and since which
   diagonal of an X works depends on the whole load, **each combination is
   analysed as a case of its own** ("Comb: " and its name, its patterns with
   their factors, Newton): the combinations keep their names and read that
   case, so envelopes and the steel check work as before.
   `core.combination_cases.analysed_combinations` does it for any set of
   combinations of static cases.
+- **A Bracing page in the warehouse wizard.** The roof and the side walls are
+  braced in bays of their own (the whole roof, and only two bays of each wall),
+  and the roof takes the number of X panels per slope (automatic: about as long
+  as the bay). `WarehouseSpec` gains `wall_braced_bays`, `roof_bracing_panels`,
+  `roof_tension_only` and `wall_tension_only`.
+- **The warehouse and building wizards group the members by kind and section**
+  ("Columns W14X48", "Purlins C150X50X15X2.38"); a kind with two sections gets
+  two groups. The examples' groups are renamed so; results do not change.
 
 ### Fixed
 

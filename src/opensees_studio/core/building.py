@@ -770,7 +770,7 @@ def plan_building(
         BuildingError: when the project is not a 3D frame model, or the numbers
             do not describe a building.
     """
-    from opensees_studio.core.groups import Group
+    from opensees_studio.core.member_groups import section_groups
     from opensees_studio.core.storeys import Storey, elevation_tolerance
 
     if (project.ndm, project.ndf) != BUILDING_NDF:
@@ -811,17 +811,17 @@ def plan_building(
     scratch.nodes.extend(building.nodes)
     scratch.elements.extend(building.elements)
 
-    names = {**GROUPS, **(group_names or {})}
-    taken = {g.name for g in project.groups}
-    for key in GROUPS:
-        group = Group(
-            id=scratch.next_group_id(),
-            name=_unique(names[key], taken),
-            element_ids=building.members[key],
-            colour=GROUP_COLOURS[key],
-        )
-        scratch.groups.append(group)
-        plan.groups.append(group)
+    groups = section_groups(
+        building.members,
+        elements=building.elements,
+        sections=scratch.sections,
+        names={**GROUPS, **(group_names or {})},
+        colours=GROUP_COLOURS,
+        taken={g.name for g in project.groups},
+        first_id=scratch.next_group_id(),
+    )
+    scratch.groups.extend(groups)
+    plan.groups.extend(groups)
     if with_grid:
         plan.grid = building_grid(
             spec, name=_unique("Building", {c.name for c in project.coord_systems})

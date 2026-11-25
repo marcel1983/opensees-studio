@@ -242,7 +242,7 @@ def test_the_menu_builds_the_building_in_one_undo_step(qtbot, monkeypatch) -> No
     assert mw._vm.undo_stack.index() == index + 1  # one step
     assert mw._vm.undo_stack.undoText() == "Create building"
     assert len(project.elements) == 26  # 12 columns, 8 beams along X and 6 along Y
-    assert [g.name for g in project.groups] == list(GROUPS.values())
+    assert [g.name.rsplit(" ", 1)[0] for g in project.groups] == list(GROUPS.values())
     grouped = {eid for g in project.groups for eid in g.element_ids}
     assert grouped == {e.id for e in project.elements}
     assert {s.name for s in project.sections} >= {"W14X90", "W18X50"}

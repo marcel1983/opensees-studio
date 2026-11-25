@@ -11179,7 +11179,7 @@
   "groups": [
     {
       "id": 1,
-      "name": "Columns",
+      "name": "Columns W14X48",
       "node_ids": [],
       "element_ids": [
         1,
@@ -11235,7 +11235,7 @@
     },
     {
       "id": 2,
-      "name": "Rafters",
+      "name": "Rafters W16X40",
       "node_ids": [],
       "element_ids": [
         9,
@@ -11327,7 +11327,7 @@
     },
     {
       "id": 3,
-      "name": "Purlins",
+      "name": "Purlins C150X50X15X2.38",
       "node_ids": [],
       "element_ids": [
         133,
@@ -11410,7 +11410,7 @@
     },
     {
       "id": 4,
-      "name": "Girts",
+      "name": "Girts C150X50X15X2.38",
       "node_ids": [],
       "element_ids": [
         148,
@@ -11448,7 +11448,7 @@
     },
     {
       "id": 5,
-      "name": "Roof bracing",
+      "name": "Roof bracing L3X3X1_4",
       "node_ids": [],
       "element_ids": [
         238,
@@ -11472,7 +11472,7 @@
     },
     {
       "id": 6,
-      "name": "Wall bracing",
+      "name": "Wall bracing L3X3X1_4",
       "node_ids": [],
       "element_ids": [
         246,

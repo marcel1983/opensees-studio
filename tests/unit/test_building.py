@@ -246,7 +246,13 @@ def test_the_plan_changes_nothing_until_it_is_applied() -> None:
     project.validate_references()
     assert len(project.nodes) == 60 + 4
     assert len(project.elements) == 116
-    assert [g.name for g in project.groups] == list(GROUPS.values())
+    # One group per kind and section: "Building columns W14X90" ...
+    assert [g.name.rsplit(" ", 1)[0] for g in project.groups] == list(GROUPS.values())
+    section_of = {s.id: s.name for s in project.sections}
+    by_id = {e.id: e for e in project.elements}
+    for group in project.groups:
+        (shape,) = {section_of[by_id[i].section_id] for i in group.element_ids}
+        assert group.name.endswith(f" {shape}")
     assert {len(g.element_ids) for g in project.groups} == {48, 36, 32}
     assert [c.name for c in project.coord_systems][-1] == "Building"
     # Each panel is on its pattern once (not once from the plan and once from its pattern).

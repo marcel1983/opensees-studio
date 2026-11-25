@@ -74,8 +74,12 @@ def test_the_fields_reach_the_spec(qtbot) -> None:  # type: ignore[no-untyped-de
     wizard._girt_rods.setValue(1)
     wizard._sheeting.setChecked(False)
     wizard._end_wall_spacing.setValue(4.0)
-    wizard._wall_bracing.setChecked(False)
-    wizard._braced_bays.setText("1, 4; 7")
+    bracing = wizard._bracing
+    assert bracing.wall_tension_only.isEnabled()
+    bracing.wall.setChecked(False)
+    assert not bracing.wall_tension_only.isEnabled() and not bracing.wall_bays.isEnabled()
+    bracing.roof_bays.setText("1, 4; 7")
+    bracing.roof_panels.setValue(3)
 
     spec = wizard.spec()
     assert spec == WarehouseSpec(
@@ -97,13 +101,19 @@ def test_the_fields_reach_the_spec(qtbot) -> None:  # type: ignore[no-untyped-de
         sheeting=False,
         purlin_sag_rods=2,
         girt_sag_rods=1,
-        tension_only_braces=True,  # asked, and ticked unless told otherwise
+        roof_bracing_panels=3,
+        roof_tension_only=True,  # asked, and ticked unless told otherwise
+        wall_tension_only=False,  # no wall bracing, nothing in tension only
     )
-    wizard._roof_bracing.setChecked(False)
-    assert not wizard._tension_only.isEnabled()  # no bracing, nothing to ask
-    wizard._roof_bracing.setChecked(True)
-    wizard._tension_only.setChecked(False)
-    assert not wizard.spec().tension_only_braces
+    bracing.roof.setChecked(False)
+    assert not bracing.roof_tension_only.isEnabled()  # no bracing, nothing to ask
+    bracing.roof.setChecked(True)
+    bracing.wall.setChecked(True)
+    bracing.roof_tension_only.setChecked(False)
+    bracing.wall_bays.setText("4")
+    spec = wizard.spec()
+    assert not spec.roof_tension_only and spec.wall_tension_only
+    assert spec.bracing_bays() == (0, 3, 6) and spec.wall_bracing_bays() == (3,)
     assert wizard.section_choice() == dict.fromkeys(
         ("column", "rafter", "purlin", "girt", "brace", "end_column")
     )
@@ -167,12 +177,14 @@ def test_the_preview_follows_the_fields_and_bad_numbers_block_next(qtbot) -> Non
     assert wizard._preview.line_count() == 0
     assert "must be positive" in wizard._geometry_summary.text()
     wizard._span.setValue(20.0)
-    wizard._braced_bays.setText("two")
-    assert not wizard._page_secondary.isComplete()
-    wizard._braced_bays.setText("99")
-    assert not wizard._page_secondary.isComplete()
-    wizard._braced_bays.setText("")
-    assert wizard._page_secondary.isComplete()
+    for field in (wizard._bracing.roof_bays, wizard._bracing.wall_bays):
+        field.setText("two")
+        assert not wizard._page_bracing.isComplete()
+        assert "numbers separated by commas" in wizard._bracing_summary.text()
+        field.setText("99")
+        assert not wizard._page_bracing.isComplete()
+        field.setText("")
+        assert wizard._page_bracing.isComplete()
     wizard.grab()  # the preview paints
 
 
@@ -207,7 +219,8 @@ def test_the_menu_builds_the_warehouse_in_one_undo_step(qtbot, monkeypatch) -> N
 
     assert mw._vm.undo_stack.index() == index + 1  # one step
     assert len({n.coords[1] for n in project.nodes}) == 3
-    assert [g.name for g in project.groups] == [
+    # A group per kind and section of member: "Columns W14X48" ...
+    assert [g.name.rsplit(" ", 1)[0] for g in project.groups] == [
         name for key, name in GROUPS.items() if key not in TRUSS_GROUPS
     ]
     grouped = {eid for g in project.groups for eid in g.element_ids}
@@ -313,7 +326,7 @@ def test_the_wizard_builds_with_a_section_defined_from_it(qtbot, monkeypatch) ->
     _accept(monkeypatch, _setup)
     mw._act_warehouse_wizard.trigger()
 
-    columns = next(g for g in project.groups if g.name == GROUPS["columns"])
+    columns = next(g for g in project.groups if g.name.startswith(GROUPS["columns"] + " "))
     sections = {e.id: e.section_id for e in project.elements}
     assert {sections[eid] for eid in columns.element_ids} == {new_id}
     assert [s.name for s in project.sections].count("W14X48") == 0  # no default column
@@ -469,7 +482,7 @@ def test_the_menu_builds_a_trussed_warehouse_in_one_undo_step(qtbot, monkeypatch
     mw._act_warehouse_wizard.trigger()
 
     assert mw._vm.undo_stack.index() == index + 1
-    names = [g.name for g in project.groups]
+    names = [g.name.rsplit(" ", 1)[0] for g in project.groups]
     assert GROUPS["rafters"] not in names
     assert names[-len(TRUSS_GROUPS) :] == [GROUPS[key] for key in TRUSS_GROUPS]
     grouped = {eid for g in project.groups for eid in g.element_ids}

@@ -8,7 +8,8 @@ order: 940
 
 Builds a regular multi-storey building into the open 3D frame model as one
 undoable step: a column at every grid intersection and beams both ways on every
-floor, the supports, a group per kind of member, a grid on the column lines and
+floor, the supports, a group per kind of member and section ("Building columns
+W14X90"), a grid on the column lines and
 the floor levels, a storey and a rigid diaphragm per floor, the slab loads, the
 mass source, the earthquake cases and the load combinations of a design code.
 File → New Model → **Building** starts a new model with it. The preview on the

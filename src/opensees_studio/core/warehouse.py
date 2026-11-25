@@ -297,7 +297,12 @@ class WarehouseSpec:
     roof_bracing: bool = True
     wall_bracing: bool = True
     braced_bays: tuple[int, ...] | None = None
-    """Bays (0-based, between frame ``b`` and ``b + 1``) with X bracing; None = first and last."""
+    """Bays (0-based, between frame ``b`` and ``b + 1``) with roof X bracing; None = first and last."""
+    wall_braced_bays: tuple[int, ...] | None = None
+    """Bays with wall X bracing; None = the roof's braced bays."""
+    roof_bracing_panels: int = 0
+    """X panels across each slope of roof (between two roof breaks), at most one
+    per purlin space; 0 = panels about as long as the bay."""
     origin: tuple[float, float, float] = (0.0, 0.0, 0.0)
     end_wall_column_spacing: float = 0.0
     """Largest distance between the columns of an end wall; 0 = no end wall columns.
@@ -324,10 +329,13 @@ class WarehouseSpec:
     """Lines of sag rods (tensores) per bay: each one holds every purlin sideways."""
     girt_sag_rods: int = 0
     """Lines of sag rods per bay of wall, holding the girts."""
-    tension_only_braces: bool = False
-    """The X braces work in tension only (rods, slender angles): each is a
-    tension-only member, and with loads the plan analyses every combination as a
-    case of its own (:mod:`opensees_studio.core.combination_cases`)."""
+    roof_tension_only: bool = False
+    """The roof X braces (and the sway bracing of a truss) work in tension only
+    (rods, slender angles): each is a tension-only member, and with loads the plan
+    analyses every combination as a case of its own
+    (:mod:`opensees_studio.core.combination_cases`)."""
+    wall_tension_only: bool = False
+    """The wall X braces work in tension only."""
 
     def __post_init__(self) -> None:
         if self.span <= 0.0:
@@ -370,7 +378,9 @@ class WarehouseSpec:
                 raise WarehouseError("The truss depth must be less than the eave height.")
             if self.bottom_chord_tie_every < 0:
                 raise WarehouseError("The bottom chord tie interval cannot be negative.")
-        for bay in self.braced_bays or ():
+        if self.roof_bracing_panels < 0:
+            raise WarehouseError("The number of roof bracing panels cannot be negative.")
+        for bay in (*(self.braced_bays or ()), *(self.wall_braced_bays or ())):
             if not 0 <= bay < self.n_frames - 1:
                 raise WarehouseError(
                     f"Braced bay {bay + 1} does not exist: there are {self.n_frames - 1} bay(s)."
@@ -432,10 +442,22 @@ class WarehouseSpec:
         return [key for key in SECTION_KEYS if key not in skip]
 
     def bracing_bays(self) -> tuple[int, ...]:
-        """The braced bays, sorted; the first and the last when none were chosen."""
+        """The bays with roof bracing, sorted; the first and the last when none were chosen."""
         if self.braced_bays is None:
             return tuple(sorted({0, self.n_bays - 1}))
         return tuple(sorted(set(self.braced_bays)))
+
+    def wall_bracing_bays(self) -> tuple[int, ...]:
+        """The bays with wall bracing, sorted; the roof's when none were chosen."""
+        if self.wall_braced_bays is None:
+            return self.bracing_bays()
+        return tuple(sorted(set(self.wall_braced_bays)))
+
+    def tension_only(self, group: str) -> bool:
+        """The members of bracing group ``group`` work in tension only."""
+        if group == "wall_bracing":
+            return self.wall_tension_only
+        return group in BRACING_GROUPS and self.roof_tension_only
 
     def column_lines(self) -> list[float]:
         """X of every column line, from the left eave."""
@@ -826,7 +848,7 @@ def build_warehouse(
             extra["local_axis_angle"] = angle
         if group in WHOLE_MEMBERS:
             extra["auto_mesh"] = False
-        if spec.tension_only_braces and group in BRACING_GROUPS:
+        if spec.tension_only(group):
             extra["tension_only"] = True
         elements.append(
             ElasticBeamColumn(
@@ -1011,13 +1033,15 @@ def build_warehouse(
                     "x0" if side == 0 else "x1", bay, girt_zs[level - 1]
                 )  # fmt: skip
 
-    for bay in spec.bracing_bays():
-        if spec.roof_bracing:
+    roof_bays = set(spec.bracing_bays()) if spec.roof_bracing else set()
+    wall_bays = set(spec.wall_bracing_bays()) if spec.wall_bracing else set()
+    for bay in sorted(roof_bays | wall_bays):  # bay by bay: the ids a warehouse always had
+        if bay in roof_bays:
             for a, b in _bracing_panels(spec, stations):
                 near, far = roof_nodes[bay], roof_nodes[bay + 1]
                 add_element("roof_bracing", near[a], far[b], "brace", releases=BRACE_RELEASES)
                 add_element("roof_bracing", near[b], far[a], "brace", releases=BRACE_RELEASES)
-        if spec.wall_bracing:
+        if bay in wall_bays:
             for line in dict.fromkeys(side_lines):
                 near_wall, far_wall = wall_nodes[bay][line], wall_nodes[bay + 1][line]
                 add_element(
@@ -1142,8 +1166,9 @@ def _cumulative(points: list[tuple[float, float]]) -> list[float]:
 def _bracing_panels(spec: WarehouseSpec, stations: list[RoofStation]) -> list[tuple[int, int]]:
     """Station index pairs ``(a, b)`` of each roof bracing panel.
 
-    Each stretch of roof between two breaks is cut into panels about as long as
-    the bay, on purlin lines, so the diagonals stay near 45 degrees.
+    Each stretch of roof between two breaks is cut into panels on purlin lines:
+    ``spec.roof_bracing_panels`` of them, or about as long as the bay so the
+    diagonals stay near 45 degrees.
     """
     breaks = spec.roof_breaks()
     index = {
@@ -1154,7 +1179,10 @@ def _bracing_panels(spec: WarehouseSpec, stations: list[RoofStation]) -> list[tu
     for a, b in itertools.pairwise(breaks):
         first, last = index[a], index[b]
         count = last - first
-        wanted = max(1, min(count, round((along[last] - along[first]) / spec.frame_spacing)))
+        wanted = spec.roof_bracing_panels or round(
+            (along[last] - along[first]) / spec.frame_spacing
+        )
+        wanted = max(1, min(count, wanted))
         cuts = sorted({first + round(j * count / wanted) for j in range(wanted + 1)})
         panels += list(itertools.pairwise(cuts))
     return panels
@@ -2139,7 +2167,7 @@ def plan_warehouse(
         WarehouseError: when the project is not a 3D frame model, or the numbers
             do not describe a warehouse.
     """
-    from opensees_studio.core.groups import Group
+    from opensees_studio.core.member_groups import section_groups
 
     if (project.ndm, project.ndf) != WAREHOUSE_NDF:
         raise WarehouseError(
@@ -2179,21 +2207,17 @@ def plan_warehouse(
     scratch.nodes.extend(warehouse.nodes)
     scratch.elements.extend(warehouse.elements)
 
-    names = {**GROUPS, **(group_names or {})}
-    taken = {g.name for g in project.groups}
-    for key in GROUPS:
-        ids = warehouse.members[key]
-        if not ids:
-            continue
-        name, n = names[key], 2
-        while name in taken:
-            name, n = f"{names[key]} {n}", n + 1
-        taken.add(name)
-        group = Group(
-            id=scratch.next_group_id(), name=name, element_ids=ids, colour=GROUP_COLOURS[key]
-        )
-        scratch.groups.append(group)
-        plan.groups.append(group)
+    groups = section_groups(
+        warehouse.members,
+        elements=warehouse.elements,
+        sections=scratch.sections,
+        names={**GROUPS, **(group_names or {})},
+        colours=GROUP_COLOURS,
+        taken={g.name for g in project.groups},
+        first_id=scratch.next_group_id(),
+    )
+    scratch.groups.extend(groups)
+    plan.groups.extend(groups)
     if with_grid:
         grid_name, n = "Warehouse", 2
         while any(c.name == grid_name for c in project.coord_systems):
