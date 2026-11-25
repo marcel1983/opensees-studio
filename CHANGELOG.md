@@ -41,6 +41,13 @@ refused instead of silently downgraded).
   roof's mass reach it; under wind it takes the roof's pressure on top and the
   wall's underneath. `WarehouseSpec` gains `overhang` and `overhang_sides`; a
   warehouse without overhangs keeps its ids.
+- **The warehouse wizard can leave the purlins or the girts out of the model**
+  (Model the roof purlins, Model the wall girts, each on its own). Without
+  purlins the roof loads, snow, ash, wind and the roof's mass go on the rafters
+  (top chords, overhangs) of each frame, half the bay to either side, and roof
+  struts tie the frames at the eaves, the ridge, the column lines and the nodes
+  of the roof bracing; without girts the wind on the walls goes on the columns.
+  `WarehouseSpec` gains `model_purlins` and `model_girts`.
 - **The warehouse and building wizards group the members by kind and section**
   ("Columns W14X48", "Purlins C150X50X15X2.38"); a kind with two sections gets
   two groups. The examples' groups are renamed so; results do not change.

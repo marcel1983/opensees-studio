@@ -2497,5 +2497,10 @@
  "Right side wall": "Pared lateral derecha",
  "Overhangs": "Aleros",
  "The overhang cannot be negative.": "El alero no puede ser negativo.",
- "Eave overhang (alero): a cantilever at each frame that carries the roof past the side wall, on the slope of the roof, with purlins on it at the purlin spacing. Measured in plan from the wall; 0 builds none. It has its own section on the Sections page.": "Alero: un voladizo en cada pórtico que lleva el techo más allá de la pared lateral, con la pendiente del techo y correas a la separación de correas. Se mide en planta desde la pared; 0 no crea ninguno. Tiene su propia sección en la página Secciones."
+ "Eave overhang (alero): a cantilever at each frame that carries the roof past the side wall, on the slope of the roof, with purlins on it at the purlin spacing. Measured in plan from the wall; 0 builds none. It has its own section on the Sections page.": "Alero: un voladizo en cada pórtico que lleva el techo más allá de la pared lateral, con la pendiente del techo y correas a la separación de correas. Se mide en planta desde la pared; 0 no crea ninguno. Tiene su propia sección en la página Secciones.",
+ "Model the roof purlins": "Modelar las correas de techo",
+ "Model the wall girts": "Modelar los largueros de pared",
+ "Untick to leave the purlins out of the model: the roof loads then go on the rafters (or top chords) of each frame, half the bay to either side, and only struts tie the frames where the roof bracing meets them and at the eaves, the ridge and the column lines. The purlin spacing still places the nodes of the rafter.": "Destildalo para no modelar las correas: las cargas de techo van entonces a las vigas de techo (o cordones superiores) de cada pórtico, medio vano a cada lado, y solo puntales unen los pórticos donde llega el arriostre de techo y en los aleros, la cumbrera y las líneas de columnas. La separación de correas sigue ubicando los nodos de la viga.",
+ "Untick to leave the girts out of the model: the wind on the walls then goes on the columns, half the way to their neighbours to either side.": "Destildalo para no modelar los largueros: el viento sobre las paredes va entonces a las columnas, hasta la mitad del camino a sus vecinas a cada lado.",
+ "Roof struts": "Puntales de techo"
 }

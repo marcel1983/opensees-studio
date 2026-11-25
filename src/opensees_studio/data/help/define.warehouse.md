@@ -72,6 +72,16 @@ between tie lines as its unbraced length. A column is braced where the bottom
 chord meets it.
 
 # Purlins, girts and bracing
+- **Model the roof purlins** and **Model the wall girts** — untick either to
+  leave those members out of the model, each on its own. Without purlins the
+  roof loads (cladding, live load, snow and ash, wind, the roof's mass) go on
+  the rafters (or the top chords, and the overhangs) of each frame as a
+  distributed load, half the bay to either side; only **roof struts** tie the
+  frames, at the eaves, the ridge, the column lines and wherever the roof
+  bracing meets the rafters, so the bracing still has its load path. The purlin
+  spacing still places the nodes of the rafter (the panel points of a truss),
+  and the rafter counts as unbraced from the eave to the ridge. Without girts
+  the wind on the walls goes on the columns, half the way to their neighbours.
 - **Purlin spacing** — the largest distance between purlin lines, on the roof
   surface. Each stretch of roof between a column line and the next (or the
   ridge) is divided into equal parts no longer than it. The eave and ridge
@@ -170,7 +180,8 @@ project's default steels. A roof truss takes **HSS6X6X1/4** chords,
 the page lists only the members the roof structure has. Change them afterwards
 with Assign → Frame → Section on the groups the wizard creates, one per kind of
 member and section, named after both ("Columns W14X48"): Columns, Rafters,
-Purlins, Girts, Roof bracing, Wall bracing, End wall columns, Overhangs; with trusses also
+Purlins, Girts, Roof bracing, Wall bracing, End wall columns, Overhangs, Roof
+struts; with trusses also
 Truss top chords, Truss bottom chords, Truss web members, Bottom chord ties and
 Truss sway bracing. A purlin's web stands normal to the
 roof and a girt's lies flat. The defaults are a starting point, not a design:

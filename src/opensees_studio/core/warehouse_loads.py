@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -48,6 +49,69 @@ def _gravity_components(nodes: Mapping[int, Node], element: ElasticBeamColumn) -
     return np.array([-float(axis[2]) for axis in axes])
 
 
+@dataclass(frozen=True)
+class RoofMember:
+    """A rafter (top chord, overhang) that carries the roof itself: no purlins."""
+
+    element_id: int
+    x0: float
+    z0: float
+    x1: float
+    z1: float
+    ya: float
+    yb: float
+    """The strip of roof along the building it carries: half the bay to either side."""
+    overhang: str | None
+    """The side wall under it when it is an overhang (``"x0"``, ``"x1"``), else None."""
+
+    @property
+    def length(self) -> float:
+        return math.hypot(self.x1 - self.x0, self.z1 - self.z0)
+
+    @property
+    def plan(self) -> float:
+        return abs(self.x1 - self.x0)
+
+    @property
+    def normal(self) -> np.ndarray:
+        """Upward normal of the roof it carries."""
+        dx, dz = self.x1 - self.x0, self.z1 - self.z0
+        out: np.ndarray = np.array([-dz, 0.0, dx]) / self.length * (1.0 if dx > 0.0 else -1.0)
+        return out
+
+
+def roof_members(warehouse: Warehouse) -> list[RoofMember]:
+    """The members that carry the roof of a warehouse without purlins; none with them."""
+    spec = warehouse.spec
+    if spec.model_purlins:
+        return []
+    origin = np.asarray(spec.origin, dtype=float)
+    coords = {n.id: np.asarray(n.coords, dtype=float) - origin for n in warehouse.nodes}
+    elements = {e.id: e for e in warehouse.elements}
+    overhangs = set(warehouse.members.get("overhangs", ()))
+    width = spec.width
+    out: list[RoofMember] = []
+    for element_id in [*(i for frame in warehouse.rafter_elements for i in frame), *overhangs]:
+        a, b = (coords[n] for n in elements[element_id].nodes)
+        y = float(a[1])
+        wall = None
+        if element_id in overhangs:
+            wall = "x0" if min(a[0], b[0]) < 0.5 * width else "x1"
+        out.append(
+            RoofMember(
+                element_id=element_id,
+                x0=float(a[0]),
+                z0=float(a[2]),
+                x1=float(b[0]),
+                z1=float(b[2]),
+                ya=max(0.0, y - spec.frame_spacing / 2.0),
+                yb=min(spec.length, y + spec.frame_spacing / 2.0),
+                overhang=wall,
+            )
+        )
+    return out
+
+
 def _purlin_widths(warehouse: Warehouse, *, projected: bool) -> dict[int, float]:
     """Purlin element id -> width of roof it carries, the overhangs' included."""
     widths: dict[int, float] = {}
@@ -77,6 +141,15 @@ def roof_pressure_loads(warehouse: Warehouse, pressure: float, *, projected: boo
             _gravity_components(nodes, purlins[element_id]) * pressure * width
         )
         loads.append(UniformElementLoad(element_id=element_id, wy=wy, wz=wz))
+    for member in roof_members(warehouse):
+        per_length = pressure * (member.yb - member.ya)
+        if projected:
+            per_length *= member.plan / member.length
+        # A sloped rafter takes the share of the load along it too.
+        wx, wy, wz = _components(
+            _gravity_components(nodes, purlins[member.element_id]) * per_length
+        )
+        loads.append(UniformElementLoad(element_id=member.element_id, wx=wx, wy=wy, wz=wz))
     return loads
 
 
@@ -209,6 +282,27 @@ def wind_loads(warehouse: Warehouse, case: WindCase, units: UnitSystem) -> list[
         under = on_wall(strip.wall, ya, yb, eave, eave)
         add(strip.element_id, top - under, strip.slope_width, np.array(strip.normal))
 
+    # Without purlins: each rafter (and overhang) takes its strip of roof itself.
+    for member in roof_members(warehouse):
+        ya, yb = member.ya, member.yb
+        x = 0.5 * (member.x0 + member.x1)
+        if member.overhang is not None:
+            x = 0.0 if member.overhang == "x0" else spec.width
+            a = b = x
+        else:
+            a, b = sorted((member.x0, member.x1))
+        load = case.roof_load_at(x * metres)
+        if load.zones is not None:
+            value = float(load.zones.mean(a * metres, b * metres, ya * metres, yb * metres))
+        elif load.axis == "x":
+            value = mean(load.profile, a, b)
+        else:
+            value = mean(load.profile, ya, yb)
+        if member.overhang is not None:
+            eave = stations[0 if member.overhang == "x0" else last].z
+            value -= on_wall(member.overhang, ya, yb, eave, eave)
+        add(member.element_id, value, yb - ya, member.normal)
+
     # Side walls.
     girt_zs = spec.girt_heights()
     for wall, station, outward in (
@@ -225,7 +319,7 @@ def wind_loads(warehouse: Warehouse, case: WindCase, units: UnitSystem) -> list[
                 ya, yb = (local(n)[1] for n in elements[element_id].nodes)
                 add(element_id, on_wall(wall, ya, yb, lo, hi), hi - lo, outward)
             lo, hi = (levels[-2] + levels[-1]) / 2.0, levels[-1]
-            for element_id, k in warehouse.purlin_station.items():
+            for element_id, k in (warehouse.purlin_station | warehouse.strut_station).items():
                 if k == station:
                     ya, yb = (local(n)[1] for n in elements[element_id].nodes)
                     add(element_id, on_wall(wall, ya, yb, lo, hi), hi - lo, outward)
@@ -307,6 +401,12 @@ def roof_weights(warehouse: Warehouse, pressure: float, *, projected: bool) -> d
         half = 0.5 * pressure * width * float(np.linalg.norm(nodes[j] - nodes[i]))
         out[i] = out.get(i, 0.0) + half
         out[j] = out.get(j, 0.0) + half
+    for member in roof_members(warehouse):
+        i, j = elements[member.element_id].nodes
+        surface = member.plan if projected else member.length
+        half = 0.5 * pressure * (member.yb - member.ya) * surface
+        out[i] = out.get(i, 0.0) + half
+        out[j] = out.get(j, 0.0) + half
     return out
 
 
@@ -336,12 +436,22 @@ def snow_loads(warehouse: Warehouse, case: SnowCase) -> list[Any]:
     for strip in overhang_strips(warehouse):
         load = case.mean(strip.eave_x, strip.eave_x) * strip.plan_width
         loads_per_length[strip.element_id] = loads_per_length.get(strip.element_id, 0.0) + load
+    # Without purlins each rafter takes its strip of plan, half the bay to either side.
+    for member in roof_members(warehouse):
+        if member.overhang is None:
+            pressure = case.mean(member.x0, member.x1)
+        else:
+            eave = 0.0 if member.overhang == "x0" else warehouse.spec.width
+            pressure = case.mean(eave, eave)
+        loads_per_length[member.element_id] = (
+            pressure * (member.yb - member.ya) * member.plan / member.length
+        )
     loads: list[Any] = []
     for element_id, per_length in loads_per_length.items():
         if per_length == 0.0:
             continue
-        _wx, wy, wz = _components(_gravity_components(nodes, purlins[element_id]) * per_length)
-        loads.append(UniformElementLoad(element_id=element_id, wy=wy, wz=wz))
+        wx, wy, wz = _components(_gravity_components(nodes, purlins[element_id]) * per_length)
+        loads.append(UniformElementLoad(element_id=element_id, wx=wx, wy=wy, wz=wz))
     return loads
 
 

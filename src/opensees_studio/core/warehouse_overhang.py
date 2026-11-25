@@ -127,6 +127,8 @@ def build_overhangs(
                 # the purlins on its top flange do not hold it: braced only at the eave.
                 warehouse.unbraced[element_id] = portable(overhang.length)
             lines.append(chain[1:])
+        if not spec.model_purlins:
+            continue  # the cantilever takes its roof itself
         for bay in range(spec.n_bays):
             for k in range(len(overhang.xs)):
                 element_id = add_element(

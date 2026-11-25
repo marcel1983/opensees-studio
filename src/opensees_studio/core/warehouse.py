@@ -160,6 +160,7 @@ GROUPS: dict[str, str] = {
     "chord_ties": "Bottom chord ties",
     "sway_bracing": "Truss sway bracing",
     "overhangs": "Overhangs",
+    "roof_struts": "Roof struts",
 }
 
 #: Display colour of each group (#rrggbb).
@@ -177,6 +178,7 @@ GROUP_COLOURS: dict[str, str] = {
     "chord_ties": "#000075",
     "sway_bracing": "#f032e6",
     "overhangs": "#42d4f4",
+    "roof_struts": "#a9a9a9",
 }
 
 #: The section each kind of member takes: section key -> the groups it serves.
@@ -274,7 +276,7 @@ BRACING_GROUPS: tuple[str, ...] = ("roof_bracing", "wall_bracing", "sway_bracing
 #: supports, a brace from corner to corner. Without it the two diagonals of an
 #: X are cut where they cross, and the purlins and girts where a diagonal
 #: passes over them, joining members that are not joined.
-WHOLE_MEMBERS: tuple[str, ...] = (*SECONDARY_MEMBERS, *BRACING_GROUPS, "chord_ties")
+WHOLE_MEMBERS: tuple[str, ...] = (*SECONDARY_MEMBERS, *BRACING_GROUPS, "chord_ties", "roof_struts")
 
 #: A girt line of an end wall stays this share of the girt spacing below the rafter.
 END_GIRT_CLEARANCE = 0.25
@@ -348,6 +350,13 @@ class WarehouseSpec:
     (:mod:`opensees_studio.core.combination_cases`)."""
     wall_tension_only: bool = False
     """The wall X braces work in tension only."""
+    model_purlins: bool = True
+    """False: the roof purlins are not modelled. The roof loads go on the rafters
+    (or top chords) of each frame, half the bay to either side, and only struts
+    tie the frames on the lines the roof bracing meets (and at the eaves, the
+    ridge and the column lines). The purlin spacing still places the rafter's nodes."""
+    model_girts: bool = True
+    """False: the wall girts are not modelled; the wind on the walls goes on the columns."""
     overhang: float = 0.0
     """Eave overhang (alero) past the side walls, in plan; 0 = none
     (:mod:`opensees_studio.core.warehouse_overhang`)."""
@@ -495,14 +504,14 @@ class WarehouseSpec:
 
     def girt_heights(self) -> list[float]:
         """Elevation of each girt line above the base (none at the base or the eave)."""
-        if self.girt_spacing <= 0.0:
+        if self.girt_spacing <= 0.0 or not self.model_girts:
             return []
         n = max(1, math.ceil(self.eave_height / self.girt_spacing - 1e-9))
         return [k * self.eave_height / n for k in range(1, n)]
 
     def end_wall_levels(self) -> list[float]:
         """Elevation of each girt line of an end wall: the side wall's, carried up to the ridge."""
-        if self.girt_spacing <= 0.0 or self.end_wall_column_spacing <= 0.0:
+        if self.girt_spacing <= 0.0 or self.end_wall_column_spacing <= 0.0 or not self.model_girts:
             return []
         n = max(1, math.ceil(self.eave_height / self.girt_spacing - 1e-9))
         step = self.eave_height / n
@@ -632,6 +641,8 @@ class Warehouse:
     ``wall`` is a key of :data:`opensees_studio.core.wind.WALLS`; ``panel`` is
     the bay on a side wall and the left vertical on an end wall.
     """
+    strut_station: dict[int, int] = field(default_factory=dict)
+    """Roof strut element id (a warehouse without purlins) -> index of its roof station."""
     overhang_purlins: dict[int, tuple[str, int]] = field(default_factory=dict)
     """Purlin element id on an overhang -> ``(wall, purlin line out from the eave)``."""
     wall_columns: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
@@ -683,7 +694,7 @@ def roof_stations(spec: WarehouseSpec) -> list[RoofStation]:
     for a, b in itertools.pairwise(breaks):
         length = math.hypot(b - a, profile.roof_height(b) - profile.roof_height(a))
         count = max(1, math.ceil(length / spec.purlin_spacing - 1e-9))
-        flags = _fly_braced(count, spec.rafter_fly_brace_every)
+        flags = _fly_braced(count, spec.rafter_fly_brace_every if spec.model_purlins else 0)
         for k in range(1, count + 1):
             xs.append(b if k == count else a + k * (b - a) / count)
             braced.append(flags[k])
@@ -1034,14 +1045,19 @@ def build_warehouse(
             a, b = (bottoms[k], tops[k + 1]) if rising else (tops[k], bottoms[k + 1])
             add_element("truss_webs", a, b, "truss_web", releases=BRACE_RELEASES)
 
+    struts = set() if spec.model_purlins else roof_strut_stations(spec, stations)
     for bay in range(spec.n_bays):
         near, far = roof_nodes[bay], roof_nodes[bay + 1]
         for k, station in enumerate(stations):
+            if not spec.model_purlins and k not in struts:
+                continue
             element_id = add_element(
-                "purlins", near[k], far[k], "purlin",
+                "purlins" if spec.model_purlins else "roof_struts", near[k], far[k], "purlin",
                 releases=SECONDARY_RELEASES, angle=station.angle,
             )  # fmt: skip
-            warehouse.purlin_station[element_id] = k
+            (warehouse.purlin_station if spec.model_purlins else warehouse.strut_station)[
+                element_id
+            ] = k
         for side, line in enumerate(side_lines):
             # A girt's web lies flat, to span the wall against the wind.
             angle = 90.0 if side == 0 else -90.0
@@ -1195,6 +1211,23 @@ def _cumulative(points: list[tuple[float, float]]) -> list[float]:
     for (x0, z0), (x1, z1) in itertools.pairwise(points):
         out.append(out[-1] + math.hypot(x1 - x0, z1 - z0))
     return out
+
+
+def roof_strut_stations(spec: WarehouseSpec, stations: list[RoofStation]) -> set[int]:
+    """Stations a roof without purlins still ties from frame to frame.
+
+    The eaves, the ridge and the column lines, and where the roof bracing meets
+    the rafters: without them the frames out of the braced bays would stand on
+    nothing along the building.
+    """
+    cuts = {
+        k
+        for k, s in enumerate(stations)
+        if any(abs(s.x - b) <= GRID_TOLERANCE for b in spec.roof_breaks())
+    }
+    if spec.roof_bracing:
+        cuts |= {k for panel in _bracing_panels(spec, stations) for k in panel}
+    return cuts
 
 
 def _bracing_panels(spec: WarehouseSpec, stations: list[RoofStation]) -> list[tuple[int, int]]:

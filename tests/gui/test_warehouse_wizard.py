@@ -221,7 +221,9 @@ def test_the_menu_builds_the_warehouse_in_one_undo_step(qtbot, monkeypatch) -> N
     assert len({n.coords[1] for n in project.nodes}) == 3
     # A group per kind and section of member: "Columns W14X48" ...
     assert [g.name.rsplit(" ", 1)[0] for g in project.groups] == [
-        name for key, name in GROUPS.items() if key not in (*TRUSS_GROUPS, "overhangs")
+        name
+        for key, name in GROUPS.items()
+        if key not in (*TRUSS_GROUPS, "overhangs", "roof_struts")
     ]
     grouped = {eid for g in project.groups for eid in g.element_ids}
     assert grouped == {e.id for e in project.elements}
@@ -691,3 +693,19 @@ def test_the_overhang_fields_reach_the_spec_and_show_its_section(qtbot) -> None:
     spec = wizard.spec()
     assert (spec.overhang, spec.overhang_sides) == (1.5, "x1")
     assert wizard._preview.line_count() > before
+
+
+@pytest.mark.gui
+def test_purlins_and_girts_can_be_left_out_of_the_model(qtbot) -> None:  # type: ignore[no-untyped-def]
+    wizard = WarehouseWizard([])
+    qtbot.addWidget(wizard)
+    spec = wizard.spec()
+    assert spec.model_purlins and spec.model_girts
+    wizard._model_purlins.setChecked(False)
+    assert not wizard._rafter_fly.isEnabled() and not wizard._purlin_rods.isEnabled()
+    assert wizard._girt_spacing.isEnabled() and wizard._sheeting.isEnabled()
+    wizard._model_girts.setChecked(False)
+    assert not wizard._girt_spacing.isEnabled() and not wizard._sheeting.isEnabled()
+    spec = wizard.spec()
+    assert not spec.model_purlins and not spec.model_girts
+    assert wizard._page_secondary.isComplete()
