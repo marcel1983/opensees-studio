@@ -16,7 +16,8 @@
 <p align="center">
   <a href="https://github.com/marcel1983/opensees-studio/releases/latest"><strong>Descargar</strong></a> ·
   <a href="#participar">Participar</a> ·
-  <a href="https://github.com/marcel1983/opensees-studio/issues/new/choose">Reportar un problema</a>
+  <a href="https://github.com/marcel1983/opensees-studio/issues/new/choose">Reportar un problema</a> ·
+  <a href="https://marcel1983.github.io/#guia">Guía paso a paso</a>
 </p>
 
 <p align="center">

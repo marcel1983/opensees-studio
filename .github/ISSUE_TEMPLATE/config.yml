@@ -3,6 +3,9 @@ contact_links:
 - name: Questions and help (Discussions) / Preguntas y ayuda (Discussions)
   url: https://github.com/marcel1983/opensees-studio/discussions
   about: Questions on how to use it, or ideas not yet shaped? Ask in Discussions. / ¿Dudas de uso o ideas aún sin forma? Pregunta en Discussions.
+- name: Step-by-step guide / Guía paso a paso
+  url: https://marcel1983.github.io/#guia
+  about: 'How to download, install and report, no programming needed. / Cómo descargar, instalar y reportar, sin saber programar.'
 - name: User guide / Manual de usuario
   url: https://github.com/marcel1983/opensees-studio/tree/main/docs/tutorials
   about: Installation, workflow and limitations. / Instalación, flujo de trabajo y limitaciones.
