@@ -24,7 +24,6 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QSpinBox,
     QWidget,
     QWizard,
@@ -81,6 +80,7 @@ from opensees_studio.views.dialogs.frame_wizard import (
     _CompletablePage,
     _field,
 )
+from opensees_studio.views.dialogs.warehouse_bracing import BracingFields
 from opensees_studio.views.dialogs.wireframe_preview import WireframePreview
 from opensees_studio.views.dialogs.wizard_sections import (
     CREATE_DEFAULT,
@@ -227,6 +227,7 @@ class WarehouseWizard(QWizard):
 
         self._build_geometry_page()
         self._build_secondary_page()
+        self._build_bracing_page()
         self._build_sections_page()
         self._build_loads_page()
         self._build_wind_page()
@@ -236,6 +237,7 @@ class WarehouseWizard(QWizard):
             (
                 self._page_geometry,
                 self._page_secondary,
+                self._page_bracing,
                 self._page_sections,
                 self._page_loads,
                 self._page_wind,
@@ -421,25 +423,6 @@ class WarehouseWizard(QWizard):
             "takes the bottom chord's unbraced length between tie lines: it is the chord "
             "in compression when the wind lifts the roof."
         )
-        self._roof_bracing = QCheckBox("X bracing in the roof")
-        self._roof_bracing.setChecked(True)
-        self._wall_bracing = QCheckBox("X bracing in the side walls")
-        self._wall_bracing.setChecked(True)
-        self._tension_only = QCheckBox("Braces work in tension only")
-        self._tension_only.setChecked(True)
-        self._tension_only.setToolTip(
-            "Rods and slender angles buckle at once in compression: each X then holds with "
-            "the diagonal the load stretches. The braces become tension-only members, and "
-            "each load combination is analysed as a case of its own (Newton iteration), "
-            "because which diagonal works depends on the whole load. Untick for braces "
-            "that also take compression."
-        )
-        self._braced_bays = QLineEdit()
-        self._braced_bays.setPlaceholderText("First and last bay")
-        self._braced_bays.setToolTip(
-            "Bay numbers with bracing, separated by commas (bay 1 is between the first two "
-            "frames). Leave empty for the first and the last bay."
-        )
 
         form.addRow("Purlin spacing:", self._purlin_spacing)
         form.addRow("Stabilising angle every (purlins):", self._rafter_fly)
@@ -450,10 +433,6 @@ class WarehouseWizard(QWizard):
         form.addRow(self._sheeting)
         form.addRow("End wall column spacing:", self._end_wall_spacing)
         form.addRow("Bottom chord tie every (panel points):", self._chord_ties)
-        form.addRow(self._roof_bracing)
-        form.addRow(self._wall_bracing)
-        form.addRow(self._tension_only)
-        form.addRow("Braced bays:", self._braced_bays)
 
         note = QLabel(
             "<i>Purlins, girts and braces are pinned at both ends: they carry their load "
@@ -475,10 +454,22 @@ class WarehouseWizard(QWizard):
             self._girt_rods,
         ):
             spin.valueChanged.connect(self._refresh)
-        for box in (self._roof_bracing, self._wall_bracing, self._sheeting, self._tension_only):
-            box.toggled.connect(self._refresh)
-        self._braced_bays.textChanged.connect(self._refresh)
+        self._sheeting.toggled.connect(self._refresh)
         self._page_secondary = page
+
+    def _build_bracing_page(self) -> None:
+        page = _CompletablePage()
+        page.complete_check = lambda: not self._error
+        page.setTitle("Bracing")
+        page.setSubTitle("The X braces of the roof and of the side walls, each in its own bays.")
+        form = QFormLayout(page)
+        self._bracing = BracingFields(page)
+        self._bracing.add_to(form)
+        self._bracing_summary = QLabel()
+        self._bracing_summary.setWordWrap(True)
+        form.addRow(self._bracing_summary)
+        self._bracing.changed.connect(self._refresh)
+        self._page_bracing = page
 
     def _build_sections_page(self) -> None:
         page = QWizardPage()
@@ -1154,19 +1145,6 @@ class WarehouseWizard(QWizard):
         """The member kind ``key`` exists with the roof structure chosen."""
         return key != "rafter" if self._has_truss() else key not in TRUSS_SECTION_KEYS
 
-    def _bays(self) -> tuple[int, ...] | None:
-        text = self._braced_bays.text().strip()
-        if not text:
-            return None
-        try:
-            return tuple(
-                int(part) - 1 for part in text.replace(";", ",").split(",") if part.strip()
-            )
-        except ValueError:
-            raise WarehouseError(
-                "The braced bays are numbers separated by commas, for example 1, 6."
-            ) from None
-
     def spec(self) -> WarehouseSpec:
         """The warehouse the fields describe.
 
@@ -1196,14 +1174,11 @@ class WarehouseWizard(QWizard):
             girt_spacing=self._girt_spacing.value(),
             rafter_fly_brace_every=self._rafter_fly.value(),
             column_fly_brace_every=self._column_fly.value(),
-            roof_bracing=self._roof_bracing.isChecked(),
-            wall_bracing=self._wall_bracing.isChecked(),
-            braced_bays=self._bays(),
             end_wall_column_spacing=self._end_wall_spacing.value(),
             sheeting=self._sheeting.isChecked(),
-            tension_only_braces=self._tension_only.isChecked(),
             purlin_sag_rods=self._purlin_rods.value(),
             girt_sag_rods=self._girt_rods.value(),
+            **self._bracing.spec_fields(),
             **truss,
         )
 
@@ -1212,9 +1187,6 @@ class WarehouseWizard(QWizard):
         for widget in (self._truss_type, self._truss_bottom, self._truss_depth, self._chord_ties):
             widget.setEnabled(truss)
         self._rafter_fly.setEnabled(not truss)
-        self._tension_only.setEnabled(
-            self._roof_bracing.isChecked() or self._wall_bracing.isChecked()
-        )
         for key, combo in self._section_combos.items():
             self._sections_form.setRowVisible(combo, self._uses_section(key))
         try:
@@ -1227,6 +1199,7 @@ class WarehouseWizard(QWizard):
             message = "<b>" + tr("Check the numbers:") + f"</b> {tr(self._error)}"
             self._geometry_summary.setText(message)
             self._secondary_summary.setText(message)
+            self._bracing_summary.setText(message)
             self._preview.set_warehouse(None)
         else:
             self._error = ""
@@ -1268,7 +1241,7 @@ class WarehouseWizard(QWizard):
                     elements=len(warehouse.elements),
                 )
             )
-        for page in (self._page_geometry, self._page_secondary):
+        for page in (self._page_geometry, self._page_secondary, self._page_bracing):
             page.completeChanged.emit()
         self._refresh_wind()
         self._refresh_snow()

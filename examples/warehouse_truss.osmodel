@@ -44963,7 +44963,7 @@
   "groups": [
     {
       "id": 1,
-      "name": "Columns",
+      "name": "Columns W14X48",
       "node_ids": [],
       "element_ids": [
         1,
@@ -45055,7 +45055,7 @@
     },
     {
       "id": 2,
-      "name": "Purlins",
+      "name": "Purlins C150X50X15X2.38",
       "node_ids": [],
       "element_ids": [
         686,
@@ -45201,7 +45201,7 @@
     },
     {
       "id": 3,
-      "name": "Girts",
+      "name": "Girts C150X50X15X2.38",
       "node_ids": [],
       "element_ids": [
         709,
@@ -45303,7 +45303,7 @@
     },
     {
       "id": 4,
-      "name": "Roof bracing",
+      "name": "Roof bracing L3X3X1_4",
       "node_ids": [],
       "element_ids": [
         872,
@@ -45335,7 +45335,7 @@
     },
     {
       "id": 5,
-      "name": "Wall bracing",
+      "name": "Wall bracing L3X3X1_4",
       "node_ids": [],
       "element_ids": [
         884,
@@ -45351,7 +45351,7 @@
     },
     {
       "id": 6,
-      "name": "End wall columns",
+      "name": "End wall columns W8X31",
       "node_ids": [],
       "element_ids": [
         966,
@@ -45415,7 +45415,7 @@
     },
     {
       "id": 7,
-      "name": "Truss top chords",
+      "name": "Truss top chords HSS6X6X1_4",
       "node_ids": [],
       "element_ids": [
         13,
@@ -45577,7 +45577,7 @@
     },
     {
       "id": 8,
-      "name": "Truss bottom chords",
+      "name": "Truss bottom chords HSS6X6X1_4",
       "node_ids": [],
       "element_ids": [
         35,
@@ -45739,7 +45739,7 @@
     },
     {
       "id": 9,
-      "name": "Truss web members",
+      "name": "Truss web members HSS3X3X3_16",
       "node_ids": [],
       "element_ids": [
         57,
@@ -46040,7 +46040,7 @@
     },
     {
       "id": 10,
-      "name": "Bottom chord ties",
+      "name": "Bottom chord ties HSS4X4X3_16",
       "node_ids": [],
       "element_ids": [
         904,
@@ -46090,7 +46090,7 @@
     },
     {
       "id": 11,
-      "name": "Truss sway bracing",
+      "name": "Truss sway bracing L3X3X1_4",
       "node_ids": [],
       "element_ids": [
         946,

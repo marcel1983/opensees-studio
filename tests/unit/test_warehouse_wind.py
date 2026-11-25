@@ -394,7 +394,7 @@ def test_the_plan_adds_one_case_per_wind_and_combines_each_with_one_sign() -> No
         "DEAD", "LIVE", "WIND +X", "WIND -X", "WIND +Y", "WIND -Y",
     ]  # fmt: skip
     assert "W8X31" in [s.name for s in plan.sections]
-    assert project.groups[-1].name == "End wall columns"
+    assert project.groups[-1].name == "End wall columns W8X31"
     patterns = {p.name: p for p in project.load_patterns}
     for name in ("WIND +X", "WIND -X", "WIND +Y", "WIND -Y"):
         pattern = patterns[name]

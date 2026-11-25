@@ -104,7 +104,9 @@ def test_the_wind_cases_are_stable_and_mirror_each_other(solved) -> None:  # typ
 
 def test_an_end_wall_column_spans_from_its_base_to_the_roof(solved) -> None:  # type: ignore[no-untyped-def]
     project, results = solved
-    posts = set(next(g for g in project.groups if g.name == "End wall columns").element_ids)
+    posts = set(
+        next(g for g in project.groups if g.name.startswith("End wall columns ")).element_ids
+    )
     elements = {e.id: e for e in project.elements}
     nodes = {n.id: n for n in project.nodes}
     bases = {
@@ -134,7 +136,9 @@ def test_the_steel_check_reads_the_end_wall_columns_bracing(solved) -> None:  # 
     project, results = solved
     by_id = {c.id: results[c.name] for c in project.analyses}
     report = steel_frame_check(project, by_id, project.design)
-    posts = set(next(g for g in project.groups if g.name == "End wall columns").element_ids)
+    posts = set(
+        next(g for g in project.groups if g.name.startswith("End wall columns ")).element_ids
+    )
     checked = [m for m in report.members if m.element_id in posts]
     assert len(checked) == len(posts)
     assert {m.shape for m in checked} == {"W8X31"}

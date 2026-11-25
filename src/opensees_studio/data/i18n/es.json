@@ -2480,5 +2480,14 @@
  "{n} member(s)": "{n} barra(s)",
  "Select one or more elastic frame elements first": "Seleccione primero una o más barras elásticas",
  "Frame member (tension and compression)": "Barra (tensión y compresión)",
- "Tension only (a truss that goes slack in compression)": "Solo tensión (una barra articulada que se afloja en compresión)"
+ "Tension only (a truss that goes slack in compression)": "Solo tensión (una barra articulada que se afloja en compresión)",
+ "The X braces of the roof and of the side walls, each in its own bays.": "Las X de arriostre del techo y de las paredes laterales, cada una en sus propios vanos.",
+ "Roof braces work in tension only": "Los arriostres de techo trabajan solo a tensión",
+ "Wall braces work in tension only": "Los arriostres de pared trabajan solo a tensión",
+ "X panels per roof slope": "Paneles en X por faldón de techo",
+ "About as long as the bay": "Automático (tan largos como el vano)",
+ "Same bays as the roof": "Los mismos vanos que el techo",
+ "Bay numbers with roof bracing, separated by commas (bay 1 is between the first two frames). Leave empty for the first and the last bay.": "Números de los vanos con arriostre de techo, separados por comas (el vano 1 está entre los dos primeros pórticos). Dejalo vacío para el primero y el último.",
+ "Bay numbers with wall bracing, separated by commas. Leave empty for the bays the roof has.": "Números de los vanos con arriostre de pared, separados por comas. Dejalo vacío para usar los vanos del techo.",
+ "How many X each slope of roof has across the building, in each braced bay: the slope is cut on purlin lines, so there are at most as many as purlin spaces. Automatic makes each panel about as long as the bay, so the diagonals stay near 45 degrees.": "Cuántas X tiene cada faldón de techo a lo ancho de la nave, en cada vano arriostrado: el faldón se divide en líneas de correas, así que hay como máximo tantas como espacios entre correas. Automático hace cada panel tan largo como el vano, para que las diagonales queden cerca de 45 grados."
 }

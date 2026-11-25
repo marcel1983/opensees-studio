@@ -79,7 +79,10 @@ def test_the_purlins_and_girts_are_checked_by_aisi_s100(solved) -> None:  # type
     project, results = solved
     report = steel_frame_check(project, results, project.design)
     secondary = {
-        eid for g in project.groups if g.name in ("Purlins", "Girts") for eid in g.element_ids
+        eid
+        for g in project.groups
+        if g.name.startswith(("Purlins ", "Girts "))
+        for eid in g.element_ids
     }
     rows = [m for m in report.members if m.element_id in secondary]
     assert len(rows) == 105
@@ -89,7 +92,7 @@ def test_the_purlins_and_girts_are_checked_by_aisi_s100(solved) -> None:  # type
     # Fy and Fu of the section's material, the sheet steel of the default library.
     assert {m.grade for m in rows} == {"A653SSGr50"}
     # Held at every frame; a line of sag rods at mid-bay holds the purlins sideways.
-    purlins = set(next(g for g in project.groups if g.name == "Purlins").element_ids)
+    purlins = set(next(g for g in project.groups if g.name.startswith("Purlins ")).element_ids)
     lengths = {
         kind: {
             tuple(round(x, 9) for x in m.unbraced)
@@ -109,7 +112,7 @@ def test_the_purlins_and_girts_are_checked_by_aisi_s100(solved) -> None:  # type
 def test_the_sheeting_and_the_sag_rods_carry_the_purlins(solved) -> None:  # type: ignore[no-untyped-def]
     """Gravity compresses the sheeted flange; bare and unbraced over 6 m the channel fails."""
     project, results = solved
-    purlins = set(next(g for g in project.groups if g.name == "Purlins").element_ids)
+    purlins = set(next(g for g in project.groups if g.name.startswith("Purlins ")).element_ids)
     as_built = steel_frame_check(project, results, project.design)
     rows = [m for m in as_built.members if m.element_id in purlins]
     assert {m.status for m in rows} == {"OK"}
@@ -164,11 +167,11 @@ def test_the_wind_puts_the_free_flange_of_purlins_and_leeward_girts_in_compressi
             found.add("braced" if braced else "free")
         return found
 
-    purlin_ids = next(g for g in project.groups if g.name == "Purlins").element_ids
+    purlin_ids = next(g for g in project.groups if g.name.startswith("Purlins ")).element_ids
     # The roof is in suction over its whole width for this wind: every purlin lifts.
     interior = [e for e in purlin_ids if 1.0 < nodes[elements[e].nodes[0]][0] < 23.0]
     assert interior and sides(interior) == {"free"}
-    girt_ids = next(g for g in project.groups if g.name == "Girts").element_ids
+    girt_ids = next(g for g in project.groups if g.name.startswith("Girts ")).element_ids
     windward = [e for e in girt_ids if all(nodes[n][0] == 0.0 for n in elements[e].nodes)]
     leeward = [e for e in girt_ids if all(nodes[n][0] == 24.0 for n in elements[e].nodes)]
     assert windward and sides(windward) == {"braced"}
@@ -188,7 +191,7 @@ def test_the_calculation_memory_prints_the_aisi_steps(solved) -> None:  # type: 
 
 def test_the_steel_check_takes_the_stabilised_purlins_not_every_purlin(solved) -> None:  # type: ignore[no-untyped-def]
     project, results = solved
-    rafters = set(next(g for g in project.groups if g.name == "Rafters").element_ids)
+    rafters = set(next(g for g in project.groups if g.name.startswith("Rafters ")).element_ids)
     purlin_gap = SLOPE_LENGTH / 7
     # As modelled, every purlin frames into the rafter and would count as a brace.
     automatic = {
@@ -209,7 +212,7 @@ def test_the_steel_check_takes_the_stabilised_purlins_not_every_purlin(solved) -
     assert max(m.unbraced[2] for m in checked.values()) == pytest.approx(2 * purlin_gap)
     assert all(m.ratio > 0.0 for m in checked.values())
 
-    columns = set(next(g for g in project.groups if g.name == "Columns").element_ids)
+    columns = set(next(g for g in project.groups if g.name.startswith("Columns ")).element_ids)
     side = [m for m in report.members if m.element_id in columns]
     assert {round(m.unbraced[2], 9) for m in side} == {6.0}  # girts without angles
 

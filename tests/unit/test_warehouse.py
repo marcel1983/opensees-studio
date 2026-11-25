@@ -67,6 +67,8 @@ def _project(units: UnitSystem = UnitSystem.SI_M_N) -> Project:
         {"girt_spacing": -1.0},
         {"rafter_fly_brace_every": -1},
         {"braced_bays": (3,)},
+        {"wall_braced_bays": (0, 3)},
+        {"roof_bracing_panels": -1},
     ],
 )
 def test_numbers_that_describe_no_warehouse_are_refused(fields: dict) -> None:  # type: ignore[type-arg]
@@ -80,6 +82,14 @@ def test_the_braced_bays_default_to_the_first_and_the_last() -> None:
     assert spec.bracing_bays() == (0, 4)
     two = WarehouseSpec(span=20.0, eave_height=6.0, frame_spacing=6.0, n_frames=2)
     assert two.bracing_bays() == (0,)
+    # The walls take the roof's bays unless told otherwise.
+    assert spec.wall_bracing_bays() == (0, 4)
+    walls = WarehouseSpec(
+        span=20.0, eave_height=6.0, frame_spacing=6.0, n_frames=6,
+        braced_bays=(0, 1, 2, 3, 4), wall_braced_bays=(4, 0),
+    )  # fmt: skip
+    assert walls.bracing_bays() == (0, 1, 2, 3, 4)
+    assert walls.wall_bracing_bays() == (0, 4)
 
 
 # ───────────────────────────── purlin lines ─────────────────────────────
@@ -199,6 +209,47 @@ def test_a_girt_lies_flat_and_bracing_spans_the_chosen_bays() -> None:
         for element_id in warehouse.members[group]:
             ys = sorted(nodes[n].coords[1] for n in by_id[element_id].nodes)
             assert ys == [6.0, 12.0]  # bay 2, between the second and third frames
+
+
+def test_the_whole_roof_can_be_braced_and_only_some_wall_bays() -> None:
+    warehouse = _build(braced_bays=(0, 1, 2), wall_braced_bays=(1,))
+    by_id = {e.id: e for e in warehouse.elements}
+    nodes = {n.id: n for n in warehouse.nodes}
+
+    def bays(group: str) -> set[float]:
+        return {min(nodes[n].coords[1] for n in by_id[i].nodes) for i in warehouse.members[group]}
+
+    assert bays("roof_bracing") == {0.0, 6.0, 12.0}
+    assert bays("wall_bracing") == {6.0}
+    assert len(warehouse.members["wall_bracing"]) == 4  # an X on each side wall
+    # The ids stay those of a warehouse braced in the same bays of roof and walls.
+    same = _build(braced_bays=(1,))
+    assert sorted(same.members["roof_bracing"] + same.members["wall_bracing"]) == list(
+        range(min(same.members["roof_bracing"]), max(same.members["wall_bracing"]) + 1)
+    )
+
+
+def test_the_number_of_x_panels_per_roof_slope_can_be_chosen() -> None:
+    automatic = _build(purlin_spacing=1.0)
+    chosen = _build(purlin_spacing=1.0, roof_bracing_panels=3)
+    many = _build(purlin_spacing=1.0, roof_bracing_panels=99)
+    per_bay = len(automatic.stations) - 1  # purlin spaces across the roof
+    braced_bays = 2
+    # bays × slopes × diagonals × panels: two panels on a 10 m slope with 6 m bays
+    assert len(automatic.members["roof_bracing"]) == braced_bays * 2 * 2 * 2
+    assert len(chosen.members["roof_bracing"]) == braced_bays * 2 * 2 * 3
+    assert len(many.members["roof_bracing"]) == braced_bays * 2 * per_bay  # one per purlin space
+
+
+def test_roof_and_wall_braces_are_tension_only_on_their_own() -> None:
+    roof_only = _build(roof_tension_only=True)
+    by_id = {e.id: e for e in roof_only.elements}
+    assert all(by_id[i].tension_only for i in roof_only.members["roof_bracing"])
+    assert not any(by_id[i].tension_only for i in roof_only.members["wall_bracing"])
+    wall_only = _build(wall_tension_only=True)
+    by_id = {e.id: e for e in wall_only.elements}
+    assert not any(by_id[i].tension_only for i in wall_only.members["roof_bracing"])
+    assert all(by_id[i].tension_only for i in wall_only.members["wall_bracing"])
 
 
 def test_roof_bracing_panels_stay_near_square() -> None:
@@ -417,7 +468,12 @@ def test_planning_does_not_touch_the_project_and_applying_builds_it() -> None:
     plan.apply(project)
     assert [s.name for s in plan.sections] == ["W14X48", "W16X40", "C150X50X15X2.38", "L3X3X1_4"]
     assert [g.name for g in project.groups] == [
-        name for key, name in GROUPS.items() if key not in ("end_columns", *TRUSS_GROUPS)
+        "Columns W14X48",
+        "Rafters W16X40",
+        "Purlins C150X50X15X2.38",
+        "Girts C150X50X15X2.38",
+        "Roof bracing L3X3X1_4",
+        "Wall bracing L3X3X1_4",
     ]
     assert project.coord_systems[-1].name == "Warehouse"
     assert [c.name for c in project.analyses] == ["DEAD", "LIVE"]
@@ -559,10 +615,17 @@ def test_tension_only_braces_analyse_each_combination_as_a_case() -> None:
 
     project = _project()
     spec = WarehouseSpec(
-        span=12.0, eave_height=5.0, frame_spacing=6.0, n_frames=3, tension_only_braces=True
+        span=12.0,
+        eave_height=5.0,
+        frame_spacing=6.0,
+        n_frames=3,
+        roof_tension_only=True,
+        wall_tension_only=True,
     )
     linear = plan_warehouse(
-        project, dataclasses.replace(spec, tension_only_braces=False), loads=_loads(project)
+        project,
+        dataclasses.replace(spec, roof_tension_only=False, wall_tension_only=False),
+        loads=_loads(project),
     )
     plan = plan_warehouse(project, spec, loads=_loads(project))
 

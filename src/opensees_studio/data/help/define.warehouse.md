@@ -9,7 +9,7 @@ order: 930
 Builds a warehouse (bodega, nave industrial) into the open 3D frame model as one
 undoable step: portal frames in X-Z planes repeated along Y, with rafters or
 with roof trusses, the purlins, girts and X bracing between them, the end wall columns, the supports, a group per kind
-of member, a grid on the column lines, the roof loads, the wind and earthquake
+of member and section, a grid on the column lines, the roof loads, the wind and earthquake
 cases and the load combinations of a design code.
 File → New Model → **Warehouse** starts a new model with it. The preview on the
 left follows every field.
@@ -73,9 +73,6 @@ chord meets it.
   and at the rafter, with its web along Y to span against the wind; it also
   props the end rafter. With end wall columns the end walls get girts too, at
   the girt spacing, up to the roof line.
-- **X bracing** in the roof and in the side walls, in the **braced bays**
-  (bay 1 is between the first two frames; empty means the first and the last).
-  A roof slope is cut into panels about as long as the bay, on purlin lines.
 - **Stabilising angle every** — see below.
 - **Sag rod lines per bay**, for the purlins and for the girts: lines of rods
   that hold every purlin (or girt) sideways, 1 at mid-span, 2 at the third
@@ -117,7 +114,25 @@ Mesh), so Run does not cut the two diagonals of an X where they cross, nor a
 purlin or girt where a diagonal passes over it. A purlin spans from rafter to
 rafter and a brace from corner to corner.
 
-**Braces work in tension only** (ticked by default) is for rods and slender
+# Bracing
+The roof and the side walls are braced on their own page, each with its own
+bays, so the whole roof can be braced and only two bays of each wall.
+
+- **X bracing in the roof** and its **braced bays** (bay numbers separated by
+  commas; bay 1 is between the first two frames; empty means the first and the
+  last).
+- **X panels per roof slope** — how many X each slope of roof has across the
+  building in a braced bay (a slope is the roof between a column line and the
+  ridge, or the next column line). The panels end on purlin lines, so there are
+  at most as many as purlin spaces. **Automatic** makes each panel about as
+  long as the bay, so the diagonals stay near 45 degrees.
+- **X bracing in the side walls** and its **braced bays**; empty means the
+  bays the roof has.
+- **Roof braces work in tension only** and **Wall braces work in tension
+  only**, each on its own (both ticked by default). With roof trusses the
+  sway bracing between the chords follows the roof.
+
+**Work in tension only** is for rods and slender
 angles, which buckle as soon as they are pushed: each X then holds with the
 diagonal the load stretches. The braces become tension-only members (Assign →
 Frame → Tension Only), and since which diagonal works depends on the whole load,
@@ -142,10 +157,11 @@ lipped channel **C 150 × 50 × 15 × 2.38 mm** for purlins and girts, of the
 project's default steels. A roof truss takes **HSS6X6X1/4** chords,
 **HSS3X3X3/16** verticals and diagonals and **HSS4X4X3/16** bottom chord ties;
 the page lists only the members the roof structure has. Change them afterwards
-with Assign → Frame → Section on the groups the wizard creates (Columns,
-Rafters, Purlins, Girts, Roof bracing, Wall bracing, End wall columns; with
-trusses also Truss top chords, Truss bottom chords, Truss web members, Bottom
-chord ties and Truss sway bracing). A purlin's web stands normal to the
+with Assign → Frame → Section on the groups the wizard creates, one per kind of
+member and section, named after both ("Columns W14X48"): Columns, Rafters,
+Purlins, Girts, Roof bracing, Wall bracing, End wall columns; with trusses also
+Truss top chords, Truss bottom chords, Truss web members, Bottom chord ties and
+Truss sway bracing. A purlin's web stands normal to the
 roof and a girt's lies flat. The defaults are a starting point, not a design:
 run the cases and the steel check, and size the members from them.
 

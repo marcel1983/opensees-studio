@@ -301,7 +301,8 @@ These are non-obvious things that are easy to break if you don't know:
   portal frame, the truss, the New Model templates and the warehouse
   (`core.warehouse.plan_warehouse` → `WarehousePlan` →
   `commands.warehouse.insert_warehouse_plan`) all go through it: a new wizard
-  does not open its own `beginMacro`; it is a method of `GeneratorsController`. In a
+  does not open its own `beginMacro`; it is a method of `GeneratorsController`. Its groups
+  are one per kind of member and section (`core.member_groups.section_groups`). In a
   generated warehouse a purlin or girt is pinned and is **not** a bracing point
   of the rafter or column unless it has a stabilising angle: the plan writes
   `SteelMemberDesign.length_minor`/`length_ltb`, because `core.design.members`

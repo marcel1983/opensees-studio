@@ -400,7 +400,7 @@ def test_the_plan_creates_the_truss_sections_and_groups() -> None:
     ]  # fmt: skip
     plan.apply(project)
     project.validate_references()
-    names = [g.name for g in project.groups]
+    names = [g.name.rsplit(" ", 1)[0] for g in project.groups]
     assert "Rafters" not in names
     assert [GROUPS[key] for key in TRUSS_GROUPS] == names[-5:]
     section_of = {s.id: s.name for s in project.sections}

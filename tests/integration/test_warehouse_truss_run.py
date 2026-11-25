@@ -68,7 +68,7 @@ def _applied(project: Project, case_name: str) -> np.ndarray:
 
 
 def _group(project: Project, name: str) -> list[int]:
-    return list(next(g for g in project.groups if g.name == name).element_ids)
+    return list(next(g for g in project.groups if g.name.startswith(f"{name} ")).element_ids)
 
 
 @pytest.fixture(scope="module")
