@@ -167,6 +167,8 @@ def test_every_member_is_in_one_group_with_its_section() -> None:
     assert warehouse.members.pop("end_columns") == []  # none asked for
     assert warehouse.members.pop("overhangs") == []
     assert warehouse.members.pop("roof_struts") == []  # the purlins tie the frames
+    for group in ("roof_stiffeners", "stiffener_webs", "wall_struts", "wall_beams"):
+        assert warehouse.members.pop(group) == []  # none asked for
     for group in TRUSS_GROUPS:
         assert warehouse.members.pop(group) == []  # the roof is on rafters
     for group, ids in warehouse.members.items():
@@ -572,7 +574,8 @@ def test_the_default_sections_follow_the_project_units() -> None:
         assert pytest.approx(section.A * 1e6) == b[name].A
     assert a["C150X50X15X2.38"].shape.d == pytest.approx(0.150)
     assert set(SECTION_KEYS) == {
-        "column", "rafter", "purlin", "girt", "brace", "end_column", *TRUSS_SECTION_KEYS, "overhang"
+        "column", "rafter", "purlin", "girt", "brace", "end_column", *TRUSS_SECTION_KEYS, "overhang",
+        "stiffener", "stiffener_chord", "stiffener_web", "wall_strut", "wall_beam",
     }  # fmt: skip
     assert "W8X31" not in a  # the end wall column section only with end wall columns
     assert "W8X18" not in a  # the overhang section only with overhangs

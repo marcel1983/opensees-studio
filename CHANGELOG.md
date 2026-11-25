@@ -48,6 +48,14 @@ refused instead of silently downgraded).
   struts tie the frames at the eaves, the ridge, the column lines and the nodes
   of the roof bracing; without girts the wind on the walls goes on the columns.
   `WarehouseSpec` gains `model_purlins` and `model_girts`.
+- **Roof stiffeners and more kinds of wall bracing in the warehouse wizard**
+  (Bracing page). Stiffening beams or trusses run along the building at
+  mid-span of each nave and on more lines towards the columns, framed into the
+  rafters, in place of the purlin on their line; the roof X braces are then cut
+  at their lines. A braced bay of a side wall takes one X, a double X with a
+  strut at mid-height, or a moment frame (its eave beam framed into the
+  columns). `WarehouseSpec` gains `roof_stiffeners`, `stiffener_lines`,
+  `stiffener_depth` and `wall_bracing_type`.
 - **The warehouse and building wizards group the members by kind and section**
   ("Columns W14X48", "Purlins C150X50X15X2.38"); a kind with two sections gets
   two groups. The examples' groups are renamed so; results do not change.

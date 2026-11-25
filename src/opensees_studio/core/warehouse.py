@@ -128,6 +128,16 @@ from opensees_studio.core.warehouse_loads import (
     wind_loads,
 )
 from opensees_studio.core.warehouse_overhang import OVERHANG_SIDES, build_overhangs
+from opensees_studio.core.warehouse_stiffeners import (
+    STIFFENER_SECTION_SHAPES,
+    add_wall_bracing,
+    build_stiffener_truss,
+    check_stiffeners,
+    double_x_level,
+    roof_line_member,
+    stiffener_section_keys,
+    stiffener_stations,
+)
 from opensees_studio.core.wind import (
     DIRECTIONS,
     OPENINGS,
@@ -161,6 +171,10 @@ GROUPS: dict[str, str] = {
     "sway_bracing": "Truss sway bracing",
     "overhangs": "Overhangs",
     "roof_struts": "Roof struts",
+    "roof_stiffeners": "Roof stiffeners",
+    "stiffener_webs": "Stiffening truss web members",
+    "wall_struts": "Wall bracing struts",
+    "wall_beams": "Wall moment frame beams",
 }
 
 #: Display colour of each group (#rrggbb).
@@ -179,6 +193,10 @@ GROUP_COLOURS: dict[str, str] = {
     "sway_bracing": "#f032e6",
     "overhangs": "#42d4f4",
     "roof_struts": "#a9a9a9",
+    "roof_stiffeners": "#bfef45",
+    "stiffener_webs": "#aaffc3",
+    "wall_struts": "#dcbeff",
+    "wall_beams": "#ffd8b1",
 }
 
 #: The section each kind of member takes: section key -> the groups it serves.
@@ -194,6 +212,11 @@ SECTION_KEYS: dict[str, str] = {
     "truss_web": "Truss web members",
     "chord_tie": "Bottom chord ties",
     "overhang": "Overhangs",
+    "stiffener": "Roof stiffeners",
+    "stiffener_chord": "Stiffening truss chords",
+    "stiffener_web": "Stiffening truss web members",
+    "wall_strut": "Wall bracing struts",
+    "wall_beam": "Wall moment frame beams",
 }
 
 #: What carries the roof of each frame.
@@ -223,6 +246,7 @@ DEFAULT_AISC_SHAPES: dict[str, str] = {
     "truss_web": "HSS3X3X3_16",
     "chord_tie": "HSS4X4X3_16",
     "overhang": "W8X18",
+    **STIFFENER_SECTION_SHAPES,
 }
 
 #: Default purlin and girt: a lipped channel 150 x 50 x 15 x 2.38 mm (a 2" x 6"
@@ -276,7 +300,9 @@ BRACING_GROUPS: tuple[str, ...] = ("roof_bracing", "wall_bracing", "sway_bracing
 #: supports, a brace from corner to corner. Without it the two diagonals of an
 #: X are cut where they cross, and the purlins and girts where a diagonal
 #: passes over them, joining members that are not joined.
-WHOLE_MEMBERS: tuple[str, ...] = (*SECONDARY_MEMBERS, *BRACING_GROUPS, "chord_ties", "roof_struts")
+WHOLE_MEMBERS: tuple[str, ...] = (
+    *SECONDARY_MEMBERS, *BRACING_GROUPS, "chord_ties", "roof_struts", "wall_struts"
+)  # fmt: skip
 
 #: A girt line of an end wall stays this share of the girt spacing below the rafter.
 END_GIRT_CLEARANCE = 0.25
@@ -357,6 +383,15 @@ class WarehouseSpec:
     ridge and the column lines). The purlin spacing still places the rafter's nodes."""
     model_girts: bool = True
     """False: the wall girts are not modelled; the wind on the walls goes on the columns."""
+    roof_stiffeners: str = "none"
+    """``"none"``, ``"beam"`` or ``"truss"``: longitudinal stiffeners of the roof
+    (:mod:`opensees_studio.core.warehouse_stiffeners`)."""
+    stiffener_lines: int = 0
+    """Stiffener lines on each side of the one at mid-span of each nave."""
+    stiffener_depth: float = 0.0
+    """Depth of a stiffening truss, from the roof line down to its bottom chord."""
+    wall_bracing_type: str = "x"
+    """Bracing of a braced bay of a side wall: ``"x"``, ``"double_x"`` or ``"moment_frame"``."""
     overhang: float = 0.0
     """Eave overhang (alero) past the side walls, in plan; 0 = none
     (:mod:`opensees_studio.core.warehouse_overhang`)."""
@@ -404,6 +439,9 @@ class WarehouseSpec:
                 raise WarehouseError("The truss depth must be less than the eave height.")
             if self.bottom_chord_tie_every < 0:
                 raise WarehouseError("The bottom chord tie interval cannot be negative.")
+        problem = check_stiffeners(self)
+        if problem:
+            raise WarehouseError(problem)
         if self.overhang < 0.0:
             raise WarehouseError("The overhang cannot be negative.")
         if self.overhang_sides not in OVERHANG_SIDES:
@@ -471,6 +509,7 @@ class WarehouseSpec:
             skip.add("end_column")
         if self.overhang <= 0.0:
             skip.add("overhang")
+        skip |= stiffener_section_keys(self)
         return [key for key in SECTION_KEYS if key not in skip]
 
     def bracing_bays(self) -> tuple[int, ...]:
@@ -981,6 +1020,7 @@ def build_warehouse(
         return ids, girt_chain, chord_node
 
     post_stations = set(end_wall.posts.values())
+    strut_z = double_x_level(spec, girt_zs)  # the strut between the two X of a double X
     for frame in range(spec.n_frames):
         y = frame * spec.frame_spacing
         tops = [add_node(s.x, y, s.z) for s in stations]
@@ -991,7 +1031,7 @@ def build_warehouse(
             at = station_at(x)
             levels: Sequence[float] = ()
             if line in side_lines:
-                levels = girt_zs
+                levels = girt_zs or ([] if strut_z is None else [strut_z])
             elif frame in end_frames:
                 levels = end_wall.levels[end_vertical[line]]
             ids, chain, chord_node = add_vertical(
@@ -1045,15 +1085,24 @@ def build_warehouse(
             a, b = (bottoms[k], tops[k + 1]) if rising else (tops[k], bottoms[k + 1])
             add_element("truss_webs", a, b, "truss_web", releases=BRACE_RELEASES)
 
+    roof_bays = set(spec.bracing_bays()) if spec.roof_bracing else set()
+    wall_bays = set(spec.wall_bracing_bays()) if spec.wall_bracing else set()
+    stiffeners = stiffener_stations(spec, stations)
     struts = set() if spec.model_purlins else roof_strut_stations(spec, stations)
+    eaves = (station_at(column_xs[side_lines[0]]), station_at(column_xs[side_lines[1]]))
     for bay in range(spec.n_bays):
         near, far = roof_nodes[bay], roof_nodes[bay + 1]
         for k, station in enumerate(stations):
-            if not spec.model_purlins and k not in struts:
+            framed = roof_line_member(spec, k, bay, set(stiffeners), eaves, wall_bays)
+            if not spec.model_purlins and k not in struts and framed is None:
                 continue
+            group, section = framed or (
+                "purlins" if spec.model_purlins else "roof_struts",
+                "purlin",
+            )
             element_id = add_element(
-                "purlins" if spec.model_purlins else "roof_struts", near[k], far[k], "purlin",
-                releases=SECONDARY_RELEASES, angle=station.angle,
+                group, near[k], far[k], section,
+                releases=None if framed else SECONDARY_RELEASES, angle=station.angle,
             )  # fmt: skip
             (warehouse.purlin_station if spec.model_purlins else warehouse.strut_station)[
                 element_id
@@ -1062,20 +1111,20 @@ def build_warehouse(
             # A girt's web lies flat, to span the wall against the wind.
             angle = 90.0 if side == 0 else -90.0
             for level in range(1, len(girt_zs) + 1):
+                # In a bay with a double X the girt at its middle is the strut.
+                strut = bay in wall_bays and girt_zs[level - 1] == strut_z
                 element_id = add_element(
-                    "girts",
+                    "wall_struts" if strut else "girts",
                     wall_nodes[bay][line][level],
                     wall_nodes[bay + 1][line][level],
-                    "girt",
-                    releases=SECONDARY_RELEASES,
+                    "wall_strut" if strut else "girt",
+                    releases=BRACE_RELEASES if strut else SECONDARY_RELEASES,
                     angle=angle,
                 )
                 warehouse.wall_girts[element_id] = (
                     "x0" if side == 0 else "x1", bay, girt_zs[level - 1]
                 )  # fmt: skip
 
-    roof_bays = set(spec.bracing_bays()) if spec.roof_bracing else set()
-    wall_bays = set(spec.wall_bracing_bays()) if spec.wall_bracing else set()
     for bay in sorted(roof_bays | wall_bays):  # bay by bay: the ids a warehouse always had
         if bay in roof_bays:
             for a, b in _bracing_panels(spec, stations):
@@ -1084,12 +1133,15 @@ def build_warehouse(
                 add_element("roof_bracing", near[b], far[a], "brace", releases=BRACE_RELEASES)
         if bay in wall_bays:
             for line in dict.fromkeys(side_lines):
-                near_wall, far_wall = wall_nodes[bay][line], wall_nodes[bay + 1][line]
-                add_element(
-                    "wall_bracing", near_wall[0], far_wall[-1], "brace", releases=BRACE_RELEASES
-                )
-                add_element(
-                    "wall_bracing", near_wall[-1], far_wall[0], "brace", releases=BRACE_RELEASES
+                near_wall = wall_nodes[bay][line]
+                add_wall_bracing(
+                    spec,
+                    near_wall,
+                    wall_nodes[bay + 1][line],
+                    None if strut_z is None else [0.0, *girt_zs].index(strut_z) if girt_zs else 1,
+                    add_element,
+                    brace_releases=BRACE_RELEASES,
+                    strut_needed=not girt_zs,
                 )
 
     if truss:
@@ -1168,6 +1220,9 @@ def build_warehouse(
                     "girts", left, right, "girt", releases=SECONDARY_RELEASES, angle=90.0
                 )
                 warehouse.wall_girts[element_id] = (wall, vertical, z)
+    build_stiffener_truss(
+        warehouse, roof_nodes, stiffeners, add_node, add_element, brace_releases=BRACE_RELEASES
+    )
     # Overhangs after the end walls: a warehouse without them keeps its ids.
     build_overhangs(
         warehouse,
@@ -1237,7 +1292,10 @@ def _bracing_panels(spec: WarehouseSpec, stations: list[RoofStation]) -> list[tu
     ``spec.roof_bracing_panels`` of them, or about as long as the bay so the
     diagonals stay near 45 degrees.
     """
-    breaks = spec.roof_breaks()
+    # Stiffener lines cut the roof too: each X lies within a space between two.
+    breaks = sorted(
+        {*spec.roof_breaks(), *(stations[k].x for k in stiffener_stations(spec, stations))}
+    )
     index = {
         b: next(k for k, s in enumerate(stations) if abs(s.x - b) <= GRID_TOLERANCE) for b in breaks
     }

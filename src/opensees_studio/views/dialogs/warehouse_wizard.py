@@ -503,7 +503,7 @@ class WarehouseWizard(QWizard):
         page.setTitle("Bracing")
         page.setSubTitle("The X braces of the roof and of the side walls, each in its own bays.")
         form = QFormLayout(page)
-        self._bracing = BracingFields(page)
+        self._bracing = BracingFields(self._length, page)
         self._bracing.add_to(form)
         self._bracing_summary = QLabel()
         self._bracing_summary.setWordWrap(True)
@@ -1182,10 +1182,11 @@ class WarehouseWizard(QWizard):
         return ROOF_STRUCTURES[self._roof_structure.currentIndex()] == "truss"
 
     def _uses_section(self, key: str) -> bool:
-        """The member kind ``key`` exists with the roof structure chosen."""
-        if key == "overhang":
-            return bool(self._overhang.value() > 0.0)
-        return key != "rafter" if self._has_truss() else key not in TRUSS_SECTION_KEYS
+        """The member kind ``key`` exists in the warehouse the fields describe."""
+        try:
+            return key in self.spec().section_keys()
+        except WarehouseError:  # the fields do not describe one yet: go by the roof
+            return key != "rafter" if self._has_truss() else key not in TRUSS_SECTION_KEYS
 
     def spec(self) -> WarehouseSpec:
         """The warehouse the fields describe.
