@@ -69,6 +69,7 @@ from opensees_studio.core.warehouse import (
     warehouse_snow_cases,
     warehouse_wind_cases,
 )
+from opensees_studio.core.warehouse_overhang import OVERHANG_SIDES
 from opensees_studio.core.wind import (
     DIRECTIONS,
     OPENINGS,
@@ -92,6 +93,13 @@ from opensees_studio.views.dialogs.wizard_sections import (
 )
 from opensees_studio.views.i18n import tr
 from opensees_studio.views.screen_fit import fit_to_available_screen
+
+#: Labels of :data:`opensees_studio.core.warehouse_overhang.OVERHANG_SIDES`, in its order.
+OVERHANG_SIDE_LABELS: tuple[str, ...] = (
+    "Both side walls",
+    "Left side wall (X = 0)",
+    "Right side wall",
+)
 
 #: Labels of :data:`opensees_studio.core.warehouse.ROOF_STRUCTURES`, in its order.
 ROOF_STRUCTURE_LABELS: tuple[str, ...] = ("Rafters", "Roof trusses")
@@ -312,6 +320,16 @@ class WarehouseWizard(QWizard):
             "roof line, so the clear height under the truss is the eave height less this "
             "depth."
         )
+        self._overhang = self._length(0.0)
+        self._overhang.setToolTip(
+            "Eave overhang (alero): a cantilever at each frame that carries the roof past "
+            "the side wall, on the slope of the roof, with purlins on it at the purlin "
+            "spacing. Measured in plan from the wall; 0 builds none. It has its own "
+            "section on the Sections page."
+        )
+        self._overhang_sides = QComboBox()
+        for label in OVERHANG_SIDE_LABELS:
+            self._overhang_sides.addItem(tr(label))
 
         form.addRow("Roof:", self._roof)
         form.addRow("Nave span:", self._span)
@@ -325,6 +343,8 @@ class WarehouseWizard(QWizard):
         form.addRow("Truss web:", self._truss_type)
         form.addRow("Bottom chord:", self._truss_bottom)
         form.addRow("Truss depth:", self._truss_depth)
+        form.addRow("Eave overhang:", self._overhang)
+        form.addRow("Overhang on:", self._overhang_sides)
 
         self._geometry_summary = QLabel()
         self._geometry_summary.setWordWrap(True)
@@ -336,6 +356,7 @@ class WarehouseWizard(QWizard):
             self._eave_height,
             self._slope,
             self._truss_depth,
+            self._overhang,
         ):
             field.valueChanged.connect(self._refresh)
         for spin in (self._n_naves, self._n_frames):
@@ -346,6 +367,7 @@ class WarehouseWizard(QWizard):
             self._roof_structure,
             self._truss_type,
             self._truss_bottom,
+            self._overhang_sides,
         ):
             combo.currentIndexChanged.connect(self._refresh)
         self._page_geometry = page
@@ -357,6 +379,21 @@ class WarehouseWizard(QWizard):
         page.setSubTitle("The members between the frames, and which of them brace the frames.")
         form = QFormLayout(page)
 
+        self._model_purlins = QCheckBox("Model the roof purlins")
+        self._model_purlins.setChecked(True)
+        self._model_purlins.setToolTip(
+            "Untick to leave the purlins out of the model: the roof loads then go on the "
+            "rafters (or top chords) of each frame, half the bay to either side, and only "
+            "struts tie the frames where the roof bracing meets them and at the eaves, "
+            "the ridge and the column lines. The purlin spacing still places the nodes "
+            "of the rafter."
+        )
+        self._model_girts = QCheckBox("Model the wall girts")
+        self._model_girts.setChecked(True)
+        self._model_girts.setToolTip(
+            "Untick to leave the girts out of the model: the wind on the walls then goes "
+            "on the columns, half the way to their neighbours to either side."
+        )
         self._purlin_spacing = self._length(1.5)
         self._purlin_spacing.setToolTip(
             "Largest distance between purlin lines, on the roof surface. Each roof slope "
@@ -424,6 +461,8 @@ class WarehouseWizard(QWizard):
             "in compression when the wind lifts the roof."
         )
 
+        form.addRow(self._model_purlins)
+        form.addRow(self._model_girts)
         form.addRow("Purlin spacing:", self._purlin_spacing)
         form.addRow("Stabilising angle every (purlins):", self._rafter_fly)
         form.addRow("Girt spacing:", self._girt_spacing)
@@ -454,7 +493,8 @@ class WarehouseWizard(QWizard):
             self._girt_rods,
         ):
             spin.valueChanged.connect(self._refresh)
-        self._sheeting.toggled.connect(self._refresh)
+        for box in (self._sheeting, self._model_purlins, self._model_girts):
+            box.toggled.connect(self._refresh)
         self._page_secondary = page
 
     def _build_bracing_page(self) -> None:
@@ -1143,6 +1183,8 @@ class WarehouseWizard(QWizard):
 
     def _uses_section(self, key: str) -> bool:
         """The member kind ``key`` exists with the roof structure chosen."""
+        if key == "overhang":
+            return bool(self._overhang.value() > 0.0)
         return key != "rafter" if self._has_truss() else key not in TRUSS_SECTION_KEYS
 
     def spec(self) -> WarehouseSpec:
@@ -1178,6 +1220,10 @@ class WarehouseWizard(QWizard):
             sheeting=self._sheeting.isChecked(),
             purlin_sag_rods=self._purlin_rods.value(),
             girt_sag_rods=self._girt_rods.value(),
+            model_purlins=self._model_purlins.isChecked(),
+            model_girts=self._model_girts.isChecked(),
+            overhang=self._overhang.value(),
+            overhang_sides=OVERHANG_SIDES[self._overhang_sides.currentIndex()],
             **self._bracing.spec_fields(),
             **truss,
         )
@@ -1186,7 +1232,13 @@ class WarehouseWizard(QWizard):
         truss = self._has_truss()
         for widget in (self._truss_type, self._truss_bottom, self._truss_depth, self._chord_ties):
             widget.setEnabled(truss)
-        self._rafter_fly.setEnabled(not truss)
+        purlins, girts = self._model_purlins.isChecked(), self._model_girts.isChecked()
+        self._rafter_fly.setEnabled(not truss and purlins)
+        self._purlin_rods.setEnabled(purlins)
+        for widget in (self._girt_spacing, self._column_fly, self._girt_rods):
+            widget.setEnabled(girts)
+        self._sheeting.setEnabled(purlins or girts)
+        self._overhang_sides.setEnabled(self._overhang.value() > 0.0)
         for key, combo in self._section_combos.items():
             self._sections_form.setRowVisible(combo, self._uses_section(key))
         try:

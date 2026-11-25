@@ -23,6 +23,17 @@ left follows every field.
   is their product, less one bay.
 - **Eave height** and **column bases** (fixed or pinned).
 - **Roof structure** — rafters, or roof trusses (see below).
+- **Eave overhang** (alero) and **Overhang on** — how far the roof goes on past
+  the side walls, measured in plan from the wall, over both side walls or one;
+  0 builds none. At each frame a cantilever goes on from the eave along the
+  slope of the roof (down on a gable, up past the high wall of one slope), with
+  its own section, and purlins on it at the purlin spacing, the last one at the
+  tip. The roof loads, snow and ash take it as roof (the snow at the eave's
+  value), and so does the roof's mass. Under wind it takes the roof's pressure
+  at the eave on top and the pressure of the wall below on its underside
+  (EN 1991-1-4 7.2.1 (3)): the wind against a wall lifts its overhang. The
+  steel check takes the cantilever as unbraced along its whole length (its
+  bottom flange is in compression and the purlins hold the top one).
 
 # Roof trusses
 With **Roof trusses** each frame carries the roof on a truss instead of a
@@ -61,6 +72,16 @@ between tie lines as its unbraced length. A column is braced where the bottom
 chord meets it.
 
 # Purlins, girts and bracing
+- **Model the roof purlins** and **Model the wall girts** — untick either to
+  leave those members out of the model, each on its own. Without purlins the
+  roof loads (cladding, live load, snow and ash, wind, the roof's mass) go on
+  the rafters (or the top chords, and the overhangs) of each frame as a
+  distributed load, half the bay to either side; only **roof struts** tie the
+  frames, at the eaves, the ridge, the column lines and wherever the roof
+  bracing meets the rafters, so the bracing still has its load path. The purlin
+  spacing still places the nodes of the rafter (the panel points of a truss),
+  and the rafter counts as unbraced from the eave to the ridge. Without girts
+  the wind on the walls goes on the columns, half the way to their neighbours.
 - **Purlin spacing** — the largest distance between purlin lines, on the roof
   surface. Each stretch of roof between a column line and the next (or the
   ridge) is divided into equal parts no longer than it. The eave and ridge
@@ -152,14 +173,15 @@ new sections are in every list of the page. Each one is added as its own
 undoable step, so it stays in the project even if you cancel the wizard.
 
 The defaults are **W14X48** columns, **W16X40** rafters, **L3X3X1/4**
-braces and **W8X31** end wall columns from the AISC library, and a cold-formed
+braces, **W8X31** end wall columns and **W8X18** overhangs from the AISC library, and a cold-formed
 lipped channel **C 150 × 50 × 15 × 2.38 mm** for purlins and girts, of the
 project's default steels. A roof truss takes **HSS6X6X1/4** chords,
 **HSS3X3X3/16** verticals and diagonals and **HSS4X4X3/16** bottom chord ties;
 the page lists only the members the roof structure has. Change them afterwards
 with Assign → Frame → Section on the groups the wizard creates, one per kind of
 member and section, named after both ("Columns W14X48"): Columns, Rafters,
-Purlins, Girts, Roof bracing, Wall bracing, End wall columns; with trusses also
+Purlins, Girts, Roof bracing, Wall bracing, End wall columns, Overhangs, Roof
+struts; with trusses also
 Truss top chords, Truss bottom chords, Truss web members, Bottom chord ties and
 Truss sway bracing. A purlin's web stands normal to the
 roof and a girt's lies flat. The defaults are a starting point, not a design:
