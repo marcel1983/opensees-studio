@@ -87,6 +87,7 @@ from opensees_studio.views.dialogs.frame_wizard import (
 )
 from opensees_studio.views.dialogs.warehouse_bracing import BracingFields
 from opensees_studio.views.dialogs.warehouse_combinations_page import CombinationsPage
+from opensees_studio.views.dialogs.warehouse_design_fields import DesignFields
 from opensees_studio.views.dialogs.warehouse_seismic_fields import SeismicDirectionFields
 from opensees_studio.views.dialogs.wireframe_preview import WireframePreview
 from opensees_studio.views.dialogs.wizard_sections import (
@@ -595,6 +596,8 @@ class WarehouseWizard(QWizard):
         form.addRow("Live load at mid-span:", self._point)
         form.addRow(self._combinations)
         form.addRow(self._design_lengths)
+        self._design = DesignFields(page)
+        self._design.add_to(form)
         self._code_note = QLabel()
         self._code_note.setWordWrap(True)
         form.addRow(self._code_note)
@@ -908,6 +911,7 @@ class WarehouseWizard(QWizard):
             tr("Live load per area of horizontal projection.") + "\n" + tr(preset.source)
         )
         self._code_note.setText("<i>" + tr(preset.source) + "</i>")
+        self._design.follow_code(preset.design_method)
         index = self._wind_method.findData(preset.wind_method)
         if index != self._wind_method.currentIndex():
             self._wind_method.setCurrentIndex(index)
@@ -1354,6 +1358,7 @@ class WarehouseWizard(QWizard):
             seismic=self.seismic(),
             snow=self.snow(),
             edited_combinations=self._page_combinations.edited(),
+            **self._design.loads_fields(),
         )
 
     def _preview_plan(self) -> Any | None:

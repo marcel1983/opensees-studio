@@ -2552,5 +2552,12 @@
  "Add Combination": "Agregar combinación",
  "Restore the Code's Combinations": "Restaurar las combinaciones de la norma",
  "Set": "Conjunto",
- "The combinations of the code on these load cases: change a factor, untick a combination or add one.": "Las combinaciones de la norma con estos casos de carga: cambie un factor, desmarque una combinación o agregue una."
+ "The combinations of the code on these load cases: change a factor, untick a combination or add one.": "Las combinaciones de la norma con estos casos de carga: cambie un factor, desmarque una combinación o agregue una.",
+ "Direct analysis method (AISC 360 Chapter C)": "Método de análisis directo (AISC 360 Capítulo C)",
+ "Every combination is solved to second order under its factored loads (P-Delta, Newton), with the stiffness times 0.8 and the notional loads of C2.2b: 0.002 Yi in each direction of the gravity-only combinations, and 0.001 Yi in every one for τb = 1. The steel check then takes K = 1. LRFD codes only.": "Cada combinación se resuelve en segundo orden bajo sus cargas mayoradas (P-Delta, Newton), con la rigidez por 0.8 y las cargas nocionales de C2.2b: 0.002 Yi en cada dirección de las combinaciones solo gravitacionales, y 0.001 Yi en todas para τb = 1. La verificación de acero toma entonces K = 1. Solo normas LRFD.",
+ "Same as across": "Igual que en el sentido transversal",
+ "The AISC 341 system of the portal frames, across the building: the steel check adds its width-to-thickness and capacity design checks. None leaves the AISC 360 check alone.": "El sistema AISC 341 de los pórticos, en el sentido transversal de la bodega: la verificación de acero agrega sus límites de esbeltez local y sus verificaciones por capacidad. Ninguno deja solo la verificación AISC 360.",
+ "The AISC 341 system along the building, usually the wall bracing (an ordinary or special concentrically braced frame).": "El sistema AISC 341 a lo largo de la bodega, normalmente el arriostramiento de las paredes (un marco arriostrado concéntrico ordinario o especial).",
+ "AISC 341 system across (X)": "Sistema AISC 341 transversal (X)",
+ "AISC 341 system along (Y)": "Sistema AISC 341 longitudinal (Y)"
 }

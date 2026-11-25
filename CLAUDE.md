@@ -335,7 +335,10 @@ These are non-obvious things that are easy to break if you don't know:
   lumped on each joint (`seismic_loads`); its cases go to the generator as role
   `E`, both signs, never as `peak_cases`. The wizard's Load combinations page
   edits the code's combinations by case *name*
-  (`WarehouseLoads.edited_combinations`, `WarehousePlan.code_combinations`).
+  (`WarehouseLoads.edited_combinations`, `WarehousePlan.code_combinations`);
+  with `direct_analysis` every combination becomes second-order cases
+  (`core.warehouse_direct`), which replaces the tension-only per-combination
+  cases.
   Ash and snow (`core.snow`, a load per area of plan against the position
   across the roof) go on the purlins through `snow_loads`; the balanced and the
   drifted cases are alternatives, so the plan passes `ALTERNATIVE_ROLES` to the

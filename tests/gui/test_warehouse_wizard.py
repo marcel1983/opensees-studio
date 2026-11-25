@@ -821,3 +821,34 @@ def test_the_combinations_page_shows_and_edits_the_code_combinations(qtbot) -> N
     wizard._combinations.setChecked(False)
     page.refresh()
     assert not editor.isEnabled() and wizard.loads().edited_combinations is None
+
+
+@pytest.mark.gui
+def test_the_loads_page_asks_for_the_direct_analysis_and_the_aisc_341_systems(qtbot) -> None:  # type: ignore[no-untyped-def]
+    wizard = WarehouseWizard([])
+    qtbot.addWidget(wizard)
+    design = wizard._design
+    loads = wizard.loads()
+    assert not loads.direct_analysis and loads.seismic_system_x == "none"
+    assert loads.seismic_system_y == ""
+    design.direct.setChecked(True)
+    design.system_x.setCurrentIndex(design.system_x.findData("OMF"))
+    design.system_y.setCurrentIndex(design.system_y.findData("OCBF"))
+    loads = wizard.loads()
+    assert loads.direct_analysis
+    assert (loads.seismic_system_x, loads.seismic_system_y) == ("OMF", "OCBF")
+    # ASD: no direct analysis (C2.1(e) would need 1.6 times the combinations).
+    wizard._code.setCurrentIndex(wizard._code.findData("asce7_asd"))
+    assert not design.direct.isEnabled() and not wizard.loads().direct_analysis
+    wizard._code.setCurrentIndex(wizard._code.findData("asce7_lrfd"))
+    assert design.direct.isEnabled() and not design.direct.isChecked()
+    design.direct.setChecked(True)
+    # The combinations page lists the load cases, not the cases of the method.
+    wizard._wind_on.setChecked(False)
+    wizard._page_combinations.refresh()
+    editor = wizard._page_combinations.editor
+    headers = [
+        editor.table.horizontalHeaderItem(c).text() for c in range(editor.table.columnCount())
+    ]
+    assert not any(h.startswith("DAM ") for h in headers)
+    assert editor.table.rowCount() > 0

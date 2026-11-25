@@ -339,6 +339,23 @@ def test_analysis_model_switches_to_p_delta_and_scales_elastic_stiffness() -> No
     assert project.elements[3].material_id == 5
 
 
+def test_a_section_made_of_a_material_keeps_its_reduced_stiffness() -> None:
+    from opensees_studio.core.materials import ElasticIsotropic
+    from opensees_studio.core.section_materials import linked, sync_material_links
+
+    project = _portal()
+    steel = ElasticIsotropic(id=7, E=29000.0, nu=0.3, rho=0.0)
+    project.materials = [steel]
+    project.sections = [linked(s, steel, project.meta.units) for s in project.sections]
+    model, _notes = analysis_model(project, p_delta=False, stiffness_factor=0.8)
+    # The model is built after its sections are synced with their materials:
+    # the reduction must survive it.
+    sync_material_links(model)
+    assert [s.E for s in model.sections] == [pytest.approx(23200.0)] * 2
+    assert {s.material_id for s in model.sections} == {None}
+    assert {s.material_id for s in project.sections} == {7}
+
+
 # ─────────────────────────── Δ2/Δ1 ───────────────────────────
 def test_drift_ratios_compare_storey_drifts_along_the_case_direction() -> None:
     project = _portal()
