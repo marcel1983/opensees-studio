@@ -221,10 +221,12 @@ def test_the_menu_builds_the_warehouse_in_one_undo_step(qtbot, monkeypatch) -> N
     assert len({n.coords[1] for n in project.nodes}) == 3
     # A group per kind and section of member: "Columns W14X48" ...
     assert [g.name.rsplit(" ", 1)[0] for g in project.groups] == [
-        name
-        for key, name in GROUPS.items()
-        if key not in (*TRUSS_GROUPS, "overhangs", "roof_struts")
-    ]
+        GROUPS[key]
+        for key in (
+            "columns", "rafters", "purlins", "girts", "roof_bracing", "wall_bracing",
+            "end_columns",
+        )
+    ]  # fmt: skip
     grouped = {eid for g in project.groups for eid in g.element_ids}
     assert grouped == {e.id for e in project.elements}
     assert {s.name for s in project.sections} >= {
@@ -709,3 +711,26 @@ def test_purlins_and_girts_can_be_left_out_of_the_model(qtbot) -> None:  # type:
     spec = wizard.spec()
     assert not spec.model_purlins and not spec.model_girts
     assert wizard._page_secondary.isComplete()
+
+
+@pytest.mark.gui
+def test_the_stiffeners_and_the_wall_bracing_type_reach_the_spec(qtbot) -> None:  # type: ignore[no-untyped-def]
+    wizard = WarehouseWizard([])
+    qtbot.addWidget(wizard)
+    bracing = wizard._bracing
+    assert not bracing.stiffener_lines.isEnabled() and not bracing.stiffener_depth.isEnabled()
+    bracing.stiffeners.setCurrentIndex(2)  # trusses
+    bracing.stiffener_lines.setValue(2)
+    bracing.stiffener_depth.setValue(0.9)
+    bracing.wall_type.setCurrentIndex(2)  # moment frame
+    assert not bracing.wall_tension_only.isEnabled()  # a frame has no X
+    spec = wizard.spec()
+    assert (spec.roof_stiffeners, spec.stiffener_lines, spec.stiffener_depth) == ("truss", 2, 0.9)
+    assert spec.wall_bracing_type == "moment_frame" and not spec.wall_tension_only
+    combos = wizard._section_combos
+    for key in ("stiffener_chord", "stiffener_web", "wall_beam"):
+        assert wizard._sections_form.isRowVisible(combos[key]), key
+    for key in ("stiffener", "wall_strut"):
+        assert not wizard._sections_form.isRowVisible(combos[key]), key
+    bracing.stiffeners.setCurrentIndex(1)  # beams: no depth
+    assert wizard.spec().stiffener_depth == 0.0

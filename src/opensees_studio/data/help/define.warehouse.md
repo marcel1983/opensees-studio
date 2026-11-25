@@ -152,6 +152,21 @@ bays, so the whole roof can be braced and only two bays of each wall.
 - **Roof braces work in tension only** and **Wall braces work in tension
   only**, each on its own (both ticked by default). With roof trusses the
   sway bracing between the chords follows the roof.
+- **Roof stiffeners** — *beams* or *trusses* along the building, from frame to
+  frame and framed into the rafters: one at mid-span of each nave and
+  **Stiffener lines each side of mid-span** more, evenly between it and the
+  columns, each on the nearest purlin line. Each takes the place of the purlin
+  on its line, and its load. A stiffening truss has that beam as its top chord,
+  a bottom chord **Stiffening truss depth** below it, a vertical at every frame
+  and one diagonal per bay (only on a roof with rafters). With stiffeners the
+  roof X braces are cut at their lines: each X lies within a space between two
+  of them, and **X panels per roof slope** then counts the panels of each space.
+- **Bracing of a braced bay** of the side walls — one **X from the base to the
+  eave**; a **double X with a strut at mid-height** (two X one above the other;
+  the strut is the girt line nearest mid-height when the wall has girts, which
+  then has the strut's section and keeps its wind); or a **moment frame**, whose
+  eave member in that bay is a beam framed into the two columns, which hold the
+  wall along the building by bending about their minor axis.
 
 **Work in tension only** is for rods and slender
 angles, which buckle as soon as they are pushed: each X then holds with the
@@ -173,7 +188,9 @@ new sections are in every list of the page. Each one is added as its own
 undoable step, so it stays in the project even if you cancel the wizard.
 
 The defaults are **W14X48** columns, **W16X40** rafters, **L3X3X1/4**
-braces, **W8X31** end wall columns and **W8X18** overhangs from the AISC library, and a cold-formed
+braces, **W8X31** end wall columns, **W8X18** overhangs and stiffener beams,
+**HSS4X4X1/4** stiffening truss chords and wall struts, **HSS3X3X3/16**
+stiffening truss webs and **W12X26** wall moment frame beams from the AISC library, and a cold-formed
 lipped channel **C 150 × 50 × 15 × 2.38 mm** for purlins and girts, of the
 project's default steels. A roof truss takes **HSS6X6X1/4** chords,
 **HSS3X3X3/16** verticals and diagonals and **HSS4X4X3/16** bottom chord ties;
@@ -181,7 +198,8 @@ the page lists only the members the roof structure has. Change them afterwards
 with Assign → Frame → Section on the groups the wizard creates, one per kind of
 member and section, named after both ("Columns W14X48"): Columns, Rafters,
 Purlins, Girts, Roof bracing, Wall bracing, End wall columns, Overhangs, Roof
-struts; with trusses also
+struts, Roof stiffeners, Stiffening truss web members, Wall bracing struts, Wall
+moment frame beams; with trusses also
 Truss top chords, Truss bottom chords, Truss web members, Bottom chord ties and
 Truss sway bracing. A purlin's web stands normal to the
 roof and a girt's lies flat. The defaults are a starting point, not a design:

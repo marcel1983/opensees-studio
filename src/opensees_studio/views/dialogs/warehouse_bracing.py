@@ -9,12 +9,22 @@ of X panels per slope, and each says whether its braces work in tension only.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from PySide6.QtCore import QObject, Signal
-from PySide6.QtWidgets import QCheckBox, QFormLayout, QGroupBox, QLineEdit, QSpinBox, QWidget
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QFormLayout,
+    QGroupBox,
+    QLineEdit,
+    QSpinBox,
+    QWidget,
+)
 
 from opensees_studio.core.warehouse import WarehouseError
+from opensees_studio.core.warehouse_stiffeners import ROOF_STIFFENERS, WALL_BRACING_TYPES
 from opensees_studio.views.i18n import tr
 
 _TENSION_ONLY_TIP = (
@@ -23,6 +33,16 @@ _TENSION_ONLY_TIP = (
     "each load combination is analysed as a case of its own (Newton iteration), "
     "because which diagonal works depends on the whole load. Untick for braces "
     "that also take compression."
+)
+
+
+#: Labels of :data:`ROOF_STIFFENERS`, in its order.
+STIFFENER_LABELS: tuple[str, ...] = ("None", "Beams", "Trusses")
+#: Labels of :data:`WALL_BRACING_TYPES`, in its order.
+WALL_BRACING_LABELS: tuple[str, ...] = (
+    "X from the base to the eave",
+    "Double X with a strut at mid-height",
+    "Moment frame (eave beam framed into the columns)",
 )
 
 
@@ -44,7 +64,8 @@ class BracingFields(QObject):
 
     changed = Signal()
 
-    def __init__(self, parent: QObject | None = None) -> None:
+    def __init__(self, length: Callable[[float], Any], parent: QObject | None = None) -> None:
+        """``length(metres)`` makes a length field in the project's units."""
         super().__init__(parent)
         self.roof = QCheckBox("X bracing in the roof")
         self.roof.setChecked(True)
@@ -79,6 +100,38 @@ class BracingFields(QObject):
         self.wall_tension_only.setChecked(True)
         self.wall_tension_only.setToolTip(_TENSION_ONLY_TIP)
 
+        self.wall_type = QComboBox()
+        for label in WALL_BRACING_LABELS:
+            self.wall_type.addItem(tr(label))
+        self.wall_type.setToolTip(
+            "What holds a braced bay of a side wall along the building: one X from the "
+            "base to the eave; two X one above the other, with a strut between the two "
+            "columns at mid-height (the girt line nearest it, when the wall has girts); "
+            "or a moment frame, whose eave beam is framed into the two columns."
+        )
+        self.stiffeners = QComboBox()
+        for label in STIFFENER_LABELS:
+            self.stiffeners.addItem(tr(label))
+        self.stiffeners.setToolTip(
+            "Longitudinal beams or trusses from frame to frame, framed into the rafters at "
+            "mid-span of each nave and on more lines towards the columns. Each takes the "
+            "place of the purlin on its line, and the roof X braces are cut at their "
+            "lines, so each X lies within a space between two of them."
+        )
+        self.stiffener_lines = QSpinBox()
+        self.stiffener_lines.setRange(0, 20)
+        self.stiffener_lines.setToolTip(
+            "Stiffener lines on each side of the one at mid-span, evenly between it and "
+            "the columns, each on the nearest purlin line."
+        )
+        self.stiffener_depth = length(0.6)
+        self.stiffener_depth.setToolTip(
+            "Depth of a stiffening truss, from the roof line down to its bottom chord."
+        )
+        self.stiffeners.currentIndexChanged.connect(self._on_changed)
+        self.wall_type.currentIndexChanged.connect(self._on_changed)
+        self.stiffener_lines.valueChanged.connect(self._on_changed)
+        self.stiffener_depth.valueChanged.connect(self._on_changed)
         for box in (self.roof, self.wall, self.roof_tension_only, self.wall_tension_only):
             box.toggled.connect(self._on_changed)
         for edit in (self.roof_bays, self.wall_bays):
@@ -94,10 +147,14 @@ class BracingFields(QObject):
         roof_form.addRow("Braced bays:", self.roof_bays)
         roof_form.addRow("X panels per roof slope:", self.roof_panels)
         roof_form.addRow(self.roof_tension_only)
+        roof_form.addRow("Roof stiffeners:", self.stiffeners)
+        roof_form.addRow("Stiffener lines each side of mid-span:", self.stiffener_lines)
+        roof_form.addRow("Stiffening truss depth:", self.stiffener_depth)
         wall = QGroupBox("Wall bracing")
         wall_form = QFormLayout(wall)
         wall_form.addRow(self.wall)
         wall_form.addRow("Braced bays:", self.wall_bays)
+        wall_form.addRow("Bracing of a braced bay:", self.wall_type)
         wall_form.addRow(self.wall_tension_only)
         form.addRow(roof)
         form.addRow(wall)
@@ -110,7 +167,11 @@ class BracingFields(QObject):
             self.roof_tension_only,
             self.wall,
             self.wall_bays,
+            self.wall_type,
             self.wall_tension_only,
+            self.stiffeners,
+            self.stiffener_lines,
+            self.stiffener_depth,
         ]
 
     def spec_fields(self) -> dict[str, Any]:
@@ -126,15 +187,27 @@ class BracingFields(QObject):
             "wall_braced_bays": parse_bays(self.wall_bays.text()),
             "roof_bracing_panels": self.roof_panels.value(),
             "roof_tension_only": self.roof.isChecked() and self.roof_tension_only.isChecked(),
-            "wall_tension_only": self.wall.isChecked() and self.wall_tension_only.isChecked(),
+            "wall_tension_only": self.wall_tension_only.isEnabled()
+            and self.wall_tension_only.isChecked(),
+            "wall_bracing_type": WALL_BRACING_TYPES[self.wall_type.currentIndex()],
+            "roof_stiffeners": ROOF_STIFFENERS[self.stiffeners.currentIndex()],
+            "stiffener_lines": self.stiffener_lines.value(),
+            "stiffener_depth": (
+                self.stiffener_depth.value() if self.stiffeners.currentIndex() == 2 else 0.0
+            ),
         }
 
     def _enable(self) -> None:
         roof, wall = self.roof.isChecked(), self.wall.isChecked()
         for widget in (self.roof_bays, self.roof_panels, self.roof_tension_only):
             widget.setEnabled(roof)
-        for widget in (self.wall_bays, self.wall_tension_only):
-            widget.setEnabled(wall)
+        frame = WALL_BRACING_TYPES[self.wall_type.currentIndex()] == "moment_frame"
+        self.wall_bays.setEnabled(wall)
+        self.wall_type.setEnabled(wall)
+        self.wall_tension_only.setEnabled(wall and not frame)
+        stiffened = self.stiffeners.currentIndex() > 0
+        self.stiffener_lines.setEnabled(stiffened)
+        self.stiffener_depth.setEnabled(self.stiffeners.currentIndex() == 2)
 
     def _on_changed(self, *_args: object) -> None:
         self._enable()
