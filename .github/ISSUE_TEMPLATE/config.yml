@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+- name: Questions and help (Discussions) / Preguntas y ayuda (Discussions)
+  url: https://github.com/marcel1983/opensees-studio/discussions
+  about: Questions on how to use it, or ideas not yet shaped? Ask in Discussions. / ¿Dudas de uso o ideas aún sin forma? Pregunta en Discussions.
+- name: User guide / Manual de usuario
+  url: https://github.com/marcel1983/opensees-studio/tree/main/docs/tutorials
+  about: Installation, workflow and limitations. / Instalación, flujo de trabajo y limitaciones.
+- name: Verification / Validación
+  url: https://github.com/marcel1983/opensees-studio/blob/main/docs/verification-manual.md
+  about: Cases already compared with published examples. / Casos ya comparados con ejemplos publicados.
+- name: Contributing code / Contribuir con código
+  url: https://github.com/marcel1983/opensees-studio/blob/main/CONTRIBUTING.md
+  about: Development setup, tests and pull request rules. / Entorno de desarrollo, pruebas y reglas para pull requests.

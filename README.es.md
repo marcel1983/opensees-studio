@@ -14,6 +14,12 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/marcel1983/opensees-studio/releases/latest"><strong>Descargar</strong></a> ·
+  <a href="#participar">Participar</a> ·
+  <a href="https://github.com/marcel1983/opensees-studio/issues/new/choose">Reportar un problema</a>
+</p>
+
+<p align="center">
   <a href="README.md">English</a> · <strong>Español</strong> ·
   <a href="README.tr.md">Türkçe</a> ·
   <a href="docs/tutorials/README.es.md">Tutoriales</a> ·
@@ -350,8 +356,11 @@ así que se conserva al reemplazar el AppImage por uno más nuevo.
 
 ## Instalación (desarrollo)
 
-OpenSees Studio se desarrolla en este repositorio, que nació como fork de
-[ogunc/opensees-studio](https://github.com/ogunc/opensees-studio). En Windows usa
+Este repositorio es la línea de desarrollo de OpenSees Studio: las funciones
+nuevas llegan aquí primero, se prueban en las versiones publicadas aquí y después
+se integran en el repositorio principal,
+[ogunc/opensees-studio](https://github.com/ogunc/opensees-studio), abierto a
+todos. En Windows usa
 Python 3.12: la rueda de OpenSeesPy 3.8.0.0 no carga en otra versión, y
 Opciones → Solver lo indica si la aplicación corre en otra.
 
@@ -446,6 +455,30 @@ chequeo del estado inicial, no un factor de pandeo ni una garantía para una
 historia no lineal. Hay familias reproducibles con
 `python tools/stability_bench.py --family frame --size 12` (o
 `--family truss --mechanism`).
+
+## Participar
+
+No hace falta programar para ayudar. Desde
+[Issues](https://github.com/marcel1983/opensees-studio/issues/new/choose)
+(plantillas en inglés y español) puedes:
+
+- aportar un **caso de validación**: un ejemplo con resultado conocido (un
+  libro, un artículo, un cálculo a mano o tu propio script de OpenSees) que se
+  convierte en prueba automática;
+- reportar un **error de cálculo** (un número o una verificación de diseño
+  incorrecta) o un **fallo** del programa;
+- **solicitar una característica**.
+
+Las preguntas van a
+[Discussions](https://github.com/marcel1983/opensees-studio/discussions). Para
+aportar código, ver [CONTRIBUTING.md](CONTRIBUTING.md).
+
+**¿En qué repositorio?** Este es la línea de desarrollo: aquí están las funciones
+y versiones más nuevas, que después se integran en el repositorio principal,
+[ogunc/opensees-studio](https://github.com/ogunc/opensees-studio). Los issues y
+pull requests son bienvenidos en ambos; ábrelos aquí cuando se refieran a una
+versión descargada de aquí o a una función que el repositorio principal todavía
+no tiene.
 
 ## Licencia
 

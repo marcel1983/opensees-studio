@@ -1,0 +1,77 @@
+name: Calculation error / Error de cálculo
+description: A numerical result or a code check is wrong. / Un resultado numérico o una verificación de norma es incorrecta.
+title: '[Calculation]: '
+labels:
+- bug
+- calculation
+body:
+- type: markdown
+  attributes:
+    value: |
+      Calculation errors get **top priority**. Thank you for reporting it. If you can, attach a minimal `.osmodel` file that shows the problem. If the result is right and you want to contribute it as an example, use the **Validation case** template instead.
+
+      ---
+
+      Los errores de cálculo tienen **la máxima prioridad**. Gracias por reportarlo. Si puedes, adjunta un archivo `.osmodel` mínimo que muestre el problema. Si el resultado es correcto pero quieres aportarlo como ejemplo, usa la plantilla **Caso de validación**.
+- type: dropdown
+  id: analysis
+  attributes:
+    label: Analysis or calculation / Tipo de análisis o cálculo
+    options:
+    - Static (linear) / Estático lineal
+    - Nonlinear static, pushover / Estático no lineal, pushover
+    - Modal / Modal
+    - Response spectrum / Espectro de respuesta
+    - Time history / Tiempo-historia
+    - Section properties, fiber sections / Propiedades de sección
+    - Design check (AISC 360, AISI S100) / Verificación de diseño
+    - Loads, wind, seismic generators / Cargas y generadores
+    - Other / Otro
+  validations:
+    required: true
+- type: input
+  id: obtained
+  attributes:
+    label: Result obtained / Resultado obtenido
+    placeholder: 152.3 kN
+  validations:
+    required: true
+- type: input
+  id: expected
+  attributes:
+    label: Expected result / Resultado esperado
+    placeholder: 138.9 kN
+  validations:
+    required: true
+- type: textarea
+  id: reference
+  attributes:
+    label: Source of the expected value / Fuente del valor esperado
+    description: Code clause, book, hand calculation or another program and its version. Explain the reasoning briefly. / Cláusula de la norma, libro, cálculo a mano u otro programa con su versión. Explica brevemente el razonamiento.
+  validations:
+    required: true
+- type: textarea
+  id: files
+  attributes:
+    label: Model file / Archivo del modelo
+    description: Drag the .osmodel file here (zip it if GitHub refuses the extension) and your calculation, if you have one. / Arrastra aquí el archivo .osmodel (comprímelo en .zip si GitHub no acepta la extensión) y, si lo tienes, tu cálculo.
+  validations:
+    required: false
+- type: input
+  id: version
+  attributes:
+    label: OpenSees Studio version / Versión de OpenSees Studio
+    description: Shown in Help › About, or in the name of the downloaded file. / Aparece en Ayuda › Acerca de, o en el nombre del archivo descargado.
+    placeholder: 0.3.0
+  validations:
+    required: true
+- type: dropdown
+  id: os
+  attributes:
+    label: Operating system / Sistema operativo
+    options:
+    - Windows
+    - Linux
+    - macOS
+  validations:
+    required: true

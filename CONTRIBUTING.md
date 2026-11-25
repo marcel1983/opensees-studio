@@ -4,6 +4,33 @@ Thanks for your interest. This project is in an early phase; the bar for
 incoming changes is on architecture cleanliness rather than feature
 breadth.
 
+## Contributing without code
+
+Most of what helps is not code. Open an issue from a
+[template](https://github.com/marcel1983/opensees-studio/issues/new/choose):
+
+| I want to… | Template |
+|---|---|
+| Contribute an example with a known answer (textbook, paper, hand calculation, an OpenSees script, another program) | **Validation case** |
+| Report that a number or a design check is wrong | **Calculation error** |
+| Report a crash or something that does not work | **Bug report** |
+| Ask for a new feature | **Feature request** |
+
+Questions go to
+[Discussions](https://github.com/marcel1983/opensees-studio/discussions).
+Translations (`data/i18n/`), help pages (`data/help/`), tutorials and testing
+new releases on your system help too. The templates are in English and
+Spanish; write in either.
+
+## Where to contribute
+
+This repository is the development lane of OpenSees Studio: new features land
+here first and are released from here, then merged into the main repository,
+[ogunc/opensees-studio](https://github.com/ogunc/opensees-studio), which is open
+to everyone. Issues and pull requests are welcome in either; open them here when
+they concern a release downloaded from this repository or a feature that is not
+in the main repository yet.
+
 ## Branches and pull request target
 
 - `main` is the integration branch. Ordinary feature and fix pull requests

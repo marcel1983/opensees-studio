@@ -1,31 +1,60 @@
-name: Feature request
-description: Propose a new feature or improvement
-labels: ["enhancement"]
+name: Feature request / Solicitar una característica
+description: Propose a new feature or an improvement. / Propón una función nueva o una mejora.
+title: '[Feature]: '
+labels:
+- enhancement
 body:
-  - type: textarea
-    id: motivation
-    attributes:
-      label: Motivation
-      description: What engineering problem does this solve?
-    validations:
-      required: true
-  - type: textarea
-    id: proposal
-    attributes:
-      label: Proposed solution
-    validations:
-      required: true
-  - type: dropdown
-    id: phase
-    attributes:
-      label: Roadmap phase this fits into
-      options:
-        - "Phase 1 — Core Model"
-        - "Phase 2 — OpenSees Service"
-        - "Phase 3 — 3D Viewport"
-        - "Phase 4 — Modeling Tools"
-        - "Phase 5 — Properties"
-        - "Phase 6 — Analysis Pipeline"
-        - "Phase 7 — Post-processing"
-        - "Phase 8 — Earthquake Engineering"
-        - "Out of scope / new"
+- type: markdown
+  attributes:
+    value: |
+      Start with **the engineering problem** you want to solve; we can work out the solution together.
+
+      ---
+
+      Cuéntanos primero **el problema de ingeniería** que quieres resolver; la solución la podemos discutir juntos.
+- type: textarea
+  id: problem
+  attributes:
+    label: Problem or need / Problema o necesidad
+    description: What are you trying to do, and what stops you today? / ¿Qué trabajo intentas hacer y qué te lo impide hoy?
+  validations:
+    required: true
+- type: textarea
+  id: proposal
+  attributes:
+    label: Proposal / Propuesta
+    description: 'How you picture it: screens, inputs, outputs, examples. / Cómo te imaginas la función: pantallas, datos de entrada, resultados, ejemplos.'
+  validations:
+    required: true
+- type: dropdown
+  id: phase
+  attributes:
+    label: Roadmap phase this fits into / Fase del plan de desarrollo
+    options:
+    - Phase 1 — Core Model
+    - Phase 2 — OpenSees Service
+    - Phase 3 — 3D Viewport
+    - Phase 4 — Modeling Tools
+    - Phase 5 — Properties
+    - Phase 6 — Analysis Pipeline
+    - Phase 7 — Post-processing
+    - Phase 8 — Earthquake Engineering
+    - Out of scope / new — Fuera del plan / nuevo
+  validations:
+    required: false
+- type: textarea
+  id: reference
+  attributes:
+    label: Codes or references / Normas o referencias
+    description: Clauses, books, papers or other programs that already do it. / Cláusulas, libros, artículos u otros programas que lo resuelven.
+  validations:
+    required: false
+- type: checkboxes
+  id: help
+  attributes:
+    label: Can you help? / ¿Puedes ayudar?
+    options:
+    - label: I can provide examples with known answers to validate it / Puedo aportar ejemplos con resultado conocido para validarla
+    - label: I can test development builds / Puedo probar las versiones de desarrollo
+    - label: I can help with documentation or translation / Puedo ayudar con la documentación o la traducción
+    - label: I can implement it (with guidance) / Puedo programarla (con orientación)

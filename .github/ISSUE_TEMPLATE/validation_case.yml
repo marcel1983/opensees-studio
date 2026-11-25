@@ -1,0 +1,75 @@
+name: Validation case / Caso de validación
+description: Contribute an example with a known answer to check OpenSees Studio. No programming needed. / Aporta un ejemplo con resultado conocido para comprobar OpenSees Studio. No requiere programar.
+title: '[Validation]: '
+labels:
+- validation
+body:
+- type: markdown
+  attributes:
+    value: |
+      **A validation case is an example with a known answer** (a published example, a hand calculation or another program) that shows whether OpenSees Studio gets it right. No programming needed: with the data and the source, the maintainers turn it into an automated test that runs on every change.
+
+      Cite the source and give only the **numbers**; do not paste text, tables or figures from copyrighted codes or books.
+
+      ---
+
+      **Un caso de validación es un ejemplo con resultado conocido** (un ejemplo publicado, un cálculo a mano u otro programa) que permite comprobar que OpenSees Studio calcula bien. No hace falta programar: con los datos y la fuente, el equipo lo convierte en una prueba automática que se ejecuta en cada cambio.
+
+      Cita la fuente y copia solo los **datos numéricos**; no pegues texto, tablas ni figuras de normas o libros protegidos.
+- type: dropdown
+  id: source_type
+  attributes:
+    label: Kind of reference / Tipo de referencia
+    options:
+    - Published example (book, design guide, manual) / Ejemplo publicado (libro, guía de diseño, manual)
+    - Hand calculation / Cálculo a mano
+    - Another program (name and version) / Otro programa (indicar cuál y su versión)
+    - Laboratory test / Ensayo de laboratorio
+    - Other / Otra
+  validations:
+    required: true
+- type: textarea
+  id: reference
+  attributes:
+    label: Source / Fuente
+    description: Author, title, edition, page or example number. For another program, its name and version. / Autor, título, edición, página o número de ejemplo. Si es otro programa, nombre y versión.
+    placeholder: Chopra, Dynamics of Structures, 5th ed., Example N
+  validations:
+    required: true
+- type: textarea
+  id: inputs
+  attributes:
+    label: Input data / Datos de entrada
+    description: 'Geometry, materials, loads and units: what it takes to reproduce the case. / Geometría, materiales, cargas y unidades. Basta con lo necesario para reproducir el caso.'
+  validations:
+    required: true
+- type: textarea
+  id: expected
+  attributes:
+    label: Reference results / Resultados de referencia
+    description: Values with units, as the source gives them. / Valores con unidades, tal como los da la fuente.
+  validations:
+    required: true
+- type: textarea
+  id: obtained
+  attributes:
+    label: OpenSees Studio results (if you already ran it) / Resultados de OpenSees Studio (si ya lo probaste)
+    description: Version used and values obtained. If they differ, give the difference in percent. / Versión usada y valores obtenidos. Si no coinciden, indica la diferencia en porcentaje.
+  validations:
+    required: false
+- type: textarea
+  id: files
+  attributes:
+    label: Files / Archivos
+    description: Drag the .osmodel file, a spreadsheet or a PDF of your calculation here (zip it if GitHub refuses the extension). / Arrastra aquí el archivo .osmodel, una hoja de cálculo o un PDF con tu cálculo (comprímelo en .zip si GitHub no acepta la extensión).
+  validations:
+    required: false
+- type: checkboxes
+  id: consent
+  attributes:
+    label: Permissions / Permisos
+    options:
+    - label: I agree that this case may be added to the project's tests and documentation under its license. / Acepto que este caso se incluya en las pruebas y la documentación del proyecto bajo su licencia.
+      required: true
+    - label: I included only numbers and the citation; no copyrighted text, tables or figures. / Solo incluí datos numéricos y la cita; no copié texto, tablas ni figuras protegidas.
+      required: true
