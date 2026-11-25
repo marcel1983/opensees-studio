@@ -20,7 +20,7 @@ services/opensees_runner.py                  2700
 views/main_window.py                         2650
 services/steel_design.py                     2750
 views/canvas3d/model_renderer.py             2750
-core/warehouse.py                            2490
+core/warehouse.py                            2350
 services/ifc_import.py                       2600
 services/tcl_import.py                       2100
 views/canvas3d/model_canvas.py               1650

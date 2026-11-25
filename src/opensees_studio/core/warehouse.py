@@ -128,6 +128,19 @@ from opensees_studio.core.warehouse_loads import (
     wind_loads,
 )
 from opensees_studio.core.warehouse_overhang import OVERHANG_SIDES, build_overhangs
+from opensees_studio.core.warehouse_seismic import (
+    EN1998_IMPORTANCE,
+    EN1998_SOIL_FACTORS,
+    ORTHOGONAL_RULE_CODES,
+    PERIOD_METHODS,
+    SEISMIC_DIRECTIONS,
+    SEISMIC_METHODS,
+    WarehouseSeismic,
+    nscm_a0_fas,
+    seismic_coefficient,
+    seismic_height,
+    seismic_loads,
+)
 from opensees_studio.core.warehouse_stiffeners import (
     STIFFENER_SECTION_SHAPES,
     add_wall_bracing,
@@ -1487,197 +1500,6 @@ def member_design_overrides(warehouse: Warehouse) -> list[Any]:
     return overrides
 
 
-# ───────────────────────────── earthquake ─────────────────────────────
-#: The static methods the wizard offers.
-SEISMIC_METHODS: dict[str, str] = {
-    "rnc07": "RNC-07 Art. 32",
-    "nscm": "NSCM Managua 8.2.1",
-    "asce7": "ASCE 7-16 12.8",
-    "en1998": "EN 1998-1 4.3.3.2",
-}
-
-#: The directions an earthquake case can act in.
-SEISMIC_DIRECTIONS: tuple[str, ...] = ("X", "Y")
-#: Design codes whose combinations take each earthquake direction with 30 % of
-#: the other: RNC-07 Art. 32 f (Efectos bidireccionales), NSCM and EN 1998-1
-#: 4.3.3.5.1 (3).
-ORTHOGONAL_RULE_CODES: tuple[str, ...] = ("rnc07", "nscm", "en1990")
-
-#: EN 1998-1 Table 3.2: soil factor S of the Type 1 spectrum per ground type.
-EN1998_SOIL_FACTORS: dict[str, float] = {"A": 1.0, "B": 1.2, "C": 1.15, "D": 1.35, "E": 1.4}
-#: EN 1998-1 4.2.5 (5), Note: recommended importance factor per importance class.
-EN1998_IMPORTANCE: dict[str, float] = {"I": 0.8, "II": 1.0, "III": 1.2, "IV": 1.4}
-
-
-@dataclass(frozen=True)
-class WarehouseSeismic:
-    """The earthquake on a warehouse by the static method of a code.
-
-    The coefficient is that of the plateau of the design spectrum: the period
-    of the building is not used, which is on the safe side and what a
-    single-storey building of this height takes anyway.
-    """
-
-    method: str = "rnc07"
-    """Key of :data:`SEISMIC_METHODS`."""
-    a0: float = 0.3
-    """RNC-07 and NSCM: peak ground acceleration, in g (RNC-07 zone C; NSCM Tabla 14.2).
-    EN 1998-1: the reference acceleration agR on type A ground, in g."""
-    soil: str = "II"
-    """RNC-07 soil type I to III, NSCM site class A to D or EN 1998-1 ground type A to E."""
-    importance_class: str = ""
-    """RNC-07 group A to C, NSCM risk category or EN 1998-1 importance class I to IV;
-    "" = Group B / category II / class II."""
-    reduction: float = 2.0
-    """Q of RNC-07, Ro of NSCM, R of ASCE 7 or the behaviour factor q of EN 1998-1."""
-    regularity: str = "regular"
-    """RNC-07 Art. 23 regularity, for Q'."""
-    sds: float = 1.0
-    """ASCE 7: design spectral acceleration at short periods, g."""
-    importance: float = 1.0
-    """ASCE 7: importance factor Ie."""
-    roof_live: float = 0.0
-    """Roof live load that counts as seismic weight, per area of horizontal
-    projection, in project units (the CVR of RNC-07)."""
-    directions: tuple[str, ...] = SEISMIC_DIRECTIONS
-
-    def __post_init__(self) -> None:
-        if self.method not in SEISMIC_METHODS:
-            raise WarehouseError(f"Unknown seismic method {self.method!r}.")
-        if self.reduction <= 0.0:
-            raise WarehouseError("The seismic reduction factor must be positive.")
-        if self.roof_live < 0.0:
-            raise WarehouseError("Loads are entered as positive, downward values.")
-        if not self.directions:
-            raise WarehouseError("Choose at least one earthquake direction.")
-        for direction in self.directions:
-            if direction not in SEISMIC_DIRECTIONS:
-                raise WarehouseError(f"Unknown earthquake direction {direction!r}.")
-
-
-def seismic_coefficient(seismic: WarehouseSeismic) -> tuple[float, str]:
-    """``c = V / W`` of the static method, and the clause it comes from.
-
-    Raises:
-        WarehouseError: when the code refuses the values (a soil that needs a
-            site study, an Ro below 1, ...).
-    """
-    from opensees_studio.core import nscm
-    from opensees_studio.core.equivalent_lateral import (
-        ElfError,
-        ElfParameters,
-        asce7_cs,
-        rnc07_coefficient,
-    )
-
-    try:
-        if seismic.method == "rnc07":
-            found = rnc07_coefficient(
-                ElfParameters(
-                    code="rnc07",
-                    period=0.0,
-                    sds=0.0,
-                    sd1=0.0,
-                    r=seismic.reduction,
-                    a0=seismic.a0,
-                    soil=seismic.soil,
-                    importance_class=seismic.importance_class,
-                    regularity=seismic.regularity,
-                )
-            )
-            return found.c, f"RNC-07 {found.why}"
-        if seismic.method == "nscm":
-            site = nscm.NscmSite(
-                a0=seismic.a0,
-                site_class=seismic.soil,
-                risk_category=seismic.importance_class or "II",
-                r0=seismic.reduction,
-            )
-            _tb, tc, _td = site.corner_periods()
-            cs, why = site.seismic_coefficient(tc)
-            return cs, f"NSCM {why}"
-        if seismic.method == "en1998":
-            # Expression (3.14), the plateau of the design spectrum, with λ = 1
-            # (4.3.3.2.2: a building of one storey) and ag = γI agR.
-            if seismic.soil not in EN1998_SOIL_FACTORS:
-                raise WarehouseError(
-                    f"EN 1998-1 has ground types A to E, not {seismic.soil!r}: S1 and S2 "
-                    "need a special study."
-                )
-            gamma = EN1998_IMPORTANCE[seismic.importance_class or "II"]
-            soil_factor = EN1998_SOIL_FACTORS[seismic.soil]
-            ag = gamma * seismic.a0
-            return 2.5 * ag * soil_factor / seismic.reduction, (
-                f"EN 1998-1 (3.14): Sd = 2.5 ag S / q, ag = {ag:.4g} g, S = {soil_factor:g}, "
-                f"q = {seismic.reduction:g}"
-            )
-        if seismic.sds <= 0.0:
-            raise WarehouseError("SDS must be positive.")
-        cs, why = asce7_cs(
-            ElfParameters(
-                code="asce7_16",
-                period=0.0,
-                sds=seismic.sds,
-                sd1=0.0,
-                r=seismic.reduction,
-                importance=seismic.importance,
-            )
-        )
-        return cs, f"ASCE 7-16 {why}"
-    except (ElfError, nscm.NscmError, KeyError) as exc:
-        raise WarehouseError(str(exc)) from exc
-
-
-def nscm_a0_fas(seismic: WarehouseSeismic) -> float:
-    """``a0 Fas`` of the NSCM site (Tabla 6.4.1), which sets the vertical component Ev.
-
-    Raises:
-        WarehouseError: when the site class needs a site response study.
-    """
-    from opensees_studio.core import nscm
-
-    try:
-        site = nscm.NscmSite(
-            a0=seismic.a0,
-            site_class=seismic.soil,
-            risk_category=seismic.importance_class or "II",
-            r0=seismic.reduction,
-        )
-        return float(site.a0 * site.fas)
-    except (nscm.NscmError, KeyError, ValueError) as exc:
-        raise WarehouseError(str(exc)) from exc
-
-
-def seismic_loads(
-    warehouse: Warehouse, weights: Mapping[int, float], coefficient: float, direction: str
-) -> list[Any]:
-    """The static earthquake forces along ``direction`` ("X" or "Y"), one per node.
-
-    ``weights`` is the seismic weight lumped on each node of the warehouse. The
-    base shear ``coefficient × ΣW`` is shared in proportion to weight times
-    height above the base, ``Fi = c Wi hi ΣW / ΣWi hi`` (RNC-07 Art. 32, ASCE 7
-    Eq. 12.8-12 with k = 1), so the roof takes almost all of it and a joint
-    half way up a wall its smaller part.
-    """
-    from opensees_studio.core.loads import NodalLoad
-
-    axis = SEISMIC_DIRECTIONS.index(direction)
-    base = warehouse.spec.origin[2]
-    heights = {n.id: n.coords[2] - base for n in warehouse.nodes}
-    total = sum(weights.get(n, 0.0) for n in heights)
-    moment = sum(weights.get(n, 0.0) * h for n, h in heights.items())
-    if total <= 0.0 or moment <= 0.0:
-        return []
-    loads: list[Any] = []
-    for node_id in sorted(heights):
-        force = coefficient * weights.get(node_id, 0.0) * heights[node_id] * total / moment
-        if force == 0.0:
-            continue
-        fx, fy = (force, 0.0) if axis == 0 else (0.0, force)
-        loads.append(NodalLoad(node_id=node_id, forces=(fx, fy, 0.0, 0.0, 0.0, 0.0)))
-    return loads
-
-
 # ───────────────────────────── snow and ash ─────────────────────────────
 #: What can settle on the roof, by the rule that gives its load.
 SNOW_METHODS: dict[str, str] = {
@@ -2234,7 +2056,8 @@ def _plan_loads(
     seismic_case_ids: list[int] = []
     if loads.seismic is not None:
         seismic = loads.seismic
-        coefficient, clause = seismic_coefficient(seismic)
+        height_m = seismic_height(warehouse.spec, project.meta.units)
+        coefficients = {d: seismic_coefficient(seismic, d, height_m) for d in seismic.directions}
         own = {n.id for n in warehouse.nodes}
         weights = {
             n: w for n, w in self_weight_per_node(scratch, dead.self_weight).items() if n in own
@@ -2263,15 +2086,23 @@ def _plan_loads(
                 (
                     pattern.id,
                     "nodal_loads",
-                    seismic_loads(warehouse, weights, coefficient, direction),
+                    seismic_loads(warehouse, weights, coefficients[direction][0], direction),
                 )
             )
         total = sum(weights.values())
+        each = "; ".join(
+            f"{d}: c = {c:.4g} ({clause}), base shear {c * total:.6g}"
+            for d, (c, clause) in coefficients.items()
+        )
         plan.notes.append(
-            f"{len(names)} earthquake case(s) by {SEISMIC_METHODS[seismic.method]}: "
-            f"c = {coefficient:.4g} ({clause}), seismic weight {total:.6g}, base shear "
-            f"{coefficient * total:.6g}. The period is not used, and the accidental torsion "
-            "is not included."
+            f"{len(names)} earthquake case(s) by {SEISMIC_METHODS[seismic.method]}, seismic "
+            f"weight {total:.6g}. {each}. "
+            + (
+                "The period is not used. "
+                if seismic.period_method == "plateau"
+                else f"Mean roof height {height_m:.4g} m. "
+            )
+            + "The accidental torsion is not included."
         )
 
     if loads.combinations:
@@ -2385,6 +2216,7 @@ __all__ = [
     "GROUPS",
     "GROUP_COLOURS",
     "ORTHOGONAL_RULE_CODES",
+    "PERIOD_METHODS",
     "ROOF_STRUCTURES",
     "ROOF_TRUSS_TYPES",
     "SECONDARY_RELEASES",
@@ -2428,6 +2260,7 @@ __all__ = [
     "roof_stations",
     "roof_weights",
     "seismic_coefficient",
+    "seismic_height",
     "seismic_loads",
     "snow_loads",
     "warehouse_grid",

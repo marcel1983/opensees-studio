@@ -311,10 +311,25 @@ structure) the wizard adds one static load case per direction ticked under
 **Earthquake along**: `EQ X`, across the ridge, on the frames, and `EQ Y`,
 along the building, on the bracing.
 
-The base shear is **V = c W**. The coefficient **c** is that of the *plateau*
-of the design spectrum: the period of the building is not computed and not
-used, which is the simplification the codes allow for a low building and is on
-the safe side. The summary on the page shows c and the clause it comes from.
+The base shear is **V = c W**, and each direction has its own coefficient
+**c**. **Seismic coefficient from** says where it is read:
+
+- **Plateau of the spectrum (no period)** — the plateau of the design
+  spectrum: the period of the building is not computed and not used, which is
+  the simplification the codes allow for a low building and is on the safe side.
+- **Spectrum at the period of each direction** — the design spectrum at the
+  period of that direction. **Period along X** and **Period along Y** take the
+  period you have (from a modal case, say); left at *Empirical*, the code's
+  empirical period of the **System along X** or **Y** at the mean roof height
+  (half way between the eaves and the ridge): Ta = Ct hn^x of ASCE 7-16
+  Eq. 12.8-7 (NSCM too), T1 = Ct H^(3/4) of EN 1998-1 Expression (4.6). The
+  system starts as a steel moment frame across (the portal frames) and as all
+  other systems along (the bracing). ASCE 7 and NSCM cap the period at Cu Ta
+  (Table 12.8-1, Tabla 8.2.1), and ASCE 7 needs **SD1** for the descending
+  branch, Cs = SD1 / (T R / Ie) (Eq. 12.8-3). RNC-07 gives no empirical
+  period: type the period of each direction (Art. 32 b, Ec. 13).
+
+The summary on the page shows c of each direction and the clause it comes from.
 
 - **RNC-07 Art. 32** — c = S (2.7 a0) / (Q' Ω), not less than S a0 (Ec. 3),
   times 1.5 for Group A. **a0** is the ground acceleration of Art. 24 (zone A
@@ -327,18 +342,22 @@ the safe side. The summary on the page shows c and the clause it comes from.
   category** I to IV and **Ro**, which cannot be below 1.
 - **ASCE 7-16 12.8** — Cs = SDS / (R / Ie) (Eq. 12.8-2): **SDS**, **R** and
   the **importance factor Ie**.
-- **EN 1998-1 4.3.3.2** — the lateral force method on the plateau of the
-  design spectrum, Sd = 2.5 ag S / q (Expression 3.14) with λ = 1 (one storey):
+- **EN 1998-1 4.3.3.2** — the lateral force method on the design spectrum of
+  Expressions (3.13) to (3.16), the plateau Sd = 2.5 ag S / q (3.14) without a
+  period, with λ = 1 (one storey) and β = 0.2:
   **a0** is the reference acceleration agR of the National Annex, the
   **importance class** I to IV gives γI (0.8, 1.0, 1.2, 1.4; ag = γI agR),
   **Soil** the ground type A to E with the soil factor S of the Type 1 spectrum
-  (1.0, 1.2, 1.15, 1.35, 1.4; a region of low seismicity uses the Type 2
-  spectrum, which is not offered) and **Reduction factor** the behaviour
-  factor q (1.5 for low dissipative steel).
+  (1.0, 1.2, 1.15, 1.35, 1.4) and the corner periods TB, TC, TD of Table 3.2
+  (a region of low seismicity uses the Type 2 spectrum, which is not offered),
+  and **Reduction factor** the behaviour factor q (1.5 for low dissipative
+  steel).
 
-The **Reduction factor** is one number for both directions: enter that of the
-lateral system with the least (the frames across, the bracing along). The value
-the page starts with is not a recommendation.
+Each direction has its own lateral system, so its own reduction factor: the
+**Reduction factor along X** is that of the portal frames across the building,
+the **Reduction factor along Y** that of the bracing along it (*Same as along
+X* when you leave it at 0). The values the page starts with are not a
+recommendation.
 
 **Seismic weight W** — the self weight of the steel (as the dead case counts
 it), the roof dead load, and the **roof live load in the seismic weight**:
@@ -366,8 +385,8 @@ not included, nor the vertical component, the redundancy factor ρ and the
 overstrength combinations of ASCE 7. Check the drifts with the rules of the
 code: the displacements of these cases are those of the reduced forces.
 
-For the period, a response spectrum or other buildings use Define → Seismic
-Loads (Equivalent Lateral Force) and the response spectrum cases.
+For a response spectrum or other buildings use Define → Seismic Loads
+(Equivalent Lateral Force) and the response spectrum cases.
 
 # Ash and snow
 With **Create the ash or snow load cases** (off until you tick it) the wizard

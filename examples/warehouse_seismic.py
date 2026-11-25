@@ -23,8 +23,10 @@ loads of the last three pages of Define → Create Warehouse:
   ``1.295CM ± Eh:EQ X ± 0.3Eh:EQ Y`` and ``0.805CM ± ...``.
 
 ``Ro = 2`` is the wizard's starting value, not a recommendation: enter the one
-of the lateral system of your building in the direction that has the least.
-Accidental torsion is not included.
+of the lateral system of your building in each direction (the portal frames
+across, the bracing along; ``reduction_y``), and with ``period_method="period"``
+each direction reads the spectrum at its own period. Accidental torsion is not
+included.
 
 Open it and run the cases: ``EQ X`` sways the portal frames, ``EQ Y`` goes
 down the roof and wall bracing of the end bays.

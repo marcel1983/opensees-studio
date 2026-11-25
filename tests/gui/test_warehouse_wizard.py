@@ -29,6 +29,7 @@ from opensees_studio.core.warehouse import (
     WarehouseSpec,
     WarehouseWind,
     plan_warehouse,
+    seismic_coefficient,
 )
 from opensees_studio.core.wind import KGF
 from opensees_studio.views.dialogs.frame_wizard import ROOF_CHOICES
@@ -559,6 +560,43 @@ def test_the_earthquake_page_follows_the_code_and_reaches_the_loads(qtbot) -> No
     assert not wizard._page_seismic.isComplete()  # an earthquake with no direction
     wizard._seismic_on.setChecked(False)
     assert wizard._page_seismic.isComplete() and wizard.loads().seismic is None
+
+
+@pytest.mark.gui
+def test_each_earthquake_direction_has_its_reduction_factor_and_period(qtbot) -> None:  # type: ignore[no-untyped-def]
+    wizard = WarehouseWizard([])
+    qtbot.addWidget(wizard)
+    axes = wizard._seismic_axes
+    wizard._seismic_on.setChecked(True)
+    assert axes.reduction_y.isEnabled() and not axes.period_x.isEnabled()
+    wizard._seismic_reduction.setValue(1.0)
+    axes.reduction_y.setValue(2.0)
+    seismic = wizard.loads().seismic
+    assert seismic is not None and seismic.reduction_of("Y") == 2.0
+    cx, cy = (seismic_coefficient(seismic, d)[0] for d in ("X", "Y"))
+    assert cx > cy
+    text = wizard._seismic_summary.text()
+    assert f"Along X: <b>c = {cx:.4g}</b>" in text and f"Along Y: <b>c = {cy:.4g}</b>" in text
+
+    axes.period_method.setCurrentIndex(axes.period_method.findData("period"))
+    # RNC-07 has no empirical period: the page asks for one.
+    assert axes.period_x.isEnabled() and not axes.system_x.isEnabled()
+    assert not wizard._page_seismic.isComplete()
+    assert "type the period along X" in wizard._seismic_summary.text()
+    axes.period_x.setValue(0.4)
+    axes.period_y.setValue(0.2)
+    assert wizard._page_seismic.isComplete()
+    seismic = wizard.loads().seismic
+    assert seismic is not None and (seismic.period_x, seismic.period_y) == (0.4, 0.2)
+    assert "T = 0.4 s" in wizard._seismic_summary.text()
+
+    wizard._code.setCurrentIndex(wizard._code.findData("asce7_lrfd"))
+    axes.period_x.setValue(0.0)
+    assert axes.system_x.isEnabled() and axes.sd1.isEnabled()
+    assert axes.system_x.currentData() == "steel_mrf" and axes.system_y.currentData() == "other"
+    assert "Ta = " in wizard._seismic_summary.text()
+    wizard._seismic_directions["Y"].setChecked(False)
+    assert not axes.reduction_y.isEnabled() and not axes.period_y.isEnabled()
 
 
 @pytest.mark.gui

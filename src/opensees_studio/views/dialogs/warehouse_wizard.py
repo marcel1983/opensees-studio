@@ -66,6 +66,7 @@ from opensees_studio.core.warehouse import (
     length_from_m,
     pressure_from_kpa,
     seismic_coefficient,
+    seismic_height,
     warehouse_snow_cases,
     warehouse_wind_cases,
 )
@@ -82,6 +83,7 @@ from opensees_studio.views.dialogs.frame_wizard import (
     _field,
 )
 from opensees_studio.views.dialogs.warehouse_bracing import BracingFields
+from opensees_studio.views.dialogs.warehouse_seismic_fields import SeismicDirectionFields
 from opensees_studio.views.dialogs.wireframe_preview import WireframePreview
 from opensees_studio.views.dialogs.wizard_sections import (
     CREATE_DEFAULT,
@@ -729,9 +731,10 @@ class WarehouseWizard(QWizard):
         self._seismic_reduction = _field(2.0, minimum=0.01, maximum=20.0, step=0.5)
         self._seismic_reduction.setToolTip(
             "Q of RNC-07 Art. 21, Ro of NSCM (Ec. 6.6-1), R of ASCE 7-16 Table 12.2-1 or the "
-            "behaviour factor q of EN 1998-1 6.3.2, for the lateral system of the warehouse "
-            "in the direction that has the least."
+            "behaviour factor q of EN 1998-1 6.3.2, for the lateral system across the "
+            "building: the portal frames."
         )
+        self._seismic_axes = SeismicDirectionFields(page)
         self._seismic_regularity = QComboBox()
         for key, label in RNC07_REGULARITY_LABELS.items():
             self._seismic_regularity.addItem(tr(label), userData=key)
@@ -771,7 +774,8 @@ class WarehouseWizard(QWizard):
         form.addRow("Ground acceleration a0:", self._seismic_a0)
         form.addRow("Soil:", self._seismic_soil)
         form.addRow("Group or risk category:", self._seismic_class)
-        form.addRow("Reduction factor (Q, Ro, R or q):", self._seismic_reduction)
+        form.addRow("Reduction factor along X (Q, Ro, R or q):", self._seismic_reduction)
+        self._seismic_axes.add_to(form)
         form.addRow("Regularity:", self._seismic_regularity)
         form.addRow("SDS:", self._seismic_sds)
         form.addRow("Importance factor Ie:", self._seismic_ie)
@@ -783,8 +787,9 @@ class WarehouseWizard(QWizard):
         note = QLabel(
             "<i>The base shear is the coefficient times the weight of the steel, the roof "
             "dead load and this part of the roof live load, shared between the joints by "
-            "weight and height. The coefficient is that of the plateau of the spectrum: the "
-            "period is not used. Accidental torsion is not included.</i>"
+            "weight and height. Each direction has its own coefficient, from the plateau of "
+            "the spectrum or from the spectrum at its period. Accidental torsion is not "
+            "included.</i>"
         )
         note.setWordWrap(True)
         form.addRow(note)
@@ -801,6 +806,7 @@ class WarehouseWizard(QWizard):
             field.valueChanged.connect(self._refresh_seismic)
         for combo in (self._seismic_soil, self._seismic_class, self._seismic_regularity):
             combo.currentIndexChanged.connect(self._refresh_seismic)
+        self._seismic_axes.changed.connect(self._refresh_seismic)
         self._page_seismic = page
         self._on_seismic_method_changed()
 
@@ -1027,6 +1033,7 @@ class WarehouseWizard(QWizard):
             importance=self._seismic_ie.value(),
             roof_live=self._seismic_live.value(),
             directions=tuple(d for d, box in self._seismic_directions.items() if box.isChecked()),
+            **self._seismic_axes.seismic_fields(),
         )
 
     def _refresh_seismic(self, *_args: object) -> None:
@@ -1048,16 +1055,31 @@ class WarehouseWizard(QWizard):
             *((box, True) for box in self._seismic_directions.values()),
         ):
             widget.setEnabled(on and enabled)
+        self._seismic_axes.refresh(
+            on,
+            str(method),
+            {d for d, box in self._seismic_directions.items() if box.isChecked()},
+        )
         self._seismic_error = ""
         text = ""
         try:
             seismic = self.seismic()
             if seismic is not None:
-                coefficient, clause = seismic_coefficient(seismic)
-                text = tr(
-                    "<b>{cases}</b> earthquake cases. Seismic coefficient "
-                    "<b>c = {c}</b> of the weight ({clause})."
-                ).format(cases=len(seismic.directions), c=f"{coefficient:.4g}", clause=clause)
+                height = (
+                    seismic_height(self.spec(), self._units)
+                    if seismic.period_method == "period"
+                    else 0.0
+                )
+                lines = []
+                for direction in seismic.directions:
+                    coefficient, clause = seismic_coefficient(seismic, direction, height)
+                    lines.append(
+                        tr("Along {d}: <b>c = {c}</b> of the weight ({clause}).").format(
+                            d=direction, c=f"{coefficient:.4g}", clause=clause
+                        )
+                    )
+                cases = tr("<b>{cases}</b> earthquake cases.").format(cases=len(seismic.directions))
+                text = "<br>".join([cases, *lines])
         except WarehouseError as exc:
             self._seismic_error = str(exc)
             text = "<b>" + tr("Check the numbers:") + f"</b> {tr(self._seismic_error)}"
@@ -1298,6 +1320,7 @@ class WarehouseWizard(QWizard):
             page.completeChanged.emit()
         self._refresh_wind()
         self._refresh_snow()
+        self._refresh_seismic()
 
     # ── results ─────────────────────────────────────────────────────
     def section_choice(self) -> dict[str, int | None]:

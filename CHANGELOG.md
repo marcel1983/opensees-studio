@@ -56,6 +56,17 @@ refused instead of silently downgraded).
   strut at mid-height, or a moment frame (its eave beam framed into the
   columns). `WarehouseSpec` gains `roof_stiffeners`, `stiffener_lines`,
   `stiffener_depth` and `wall_bracing_type`.
+- **The earthquake of the warehouse wizard goes direction by direction.** Each
+  direction has its own reduction factor (Q, Ro, R or q: Reduction factor
+  along Y, the same as along X when left at 0), so its own seismic coefficient,
+  and the coefficient can come from the design spectrum at the period of each
+  direction (Seismic coefficient from): a period you type, or the code's
+  empirical period of the system of that direction at the mean roof height
+  (ASCE 7 and NSCM Ta, capped at Cu Ta; EN 1998-1 T1 = Ct H^(3/4) with the
+  whole Type 1 spectrum; RNC-07 takes a typed period, Ec. 13). The plateau
+  stays the default. `WarehouseSeismic` gains `reduction_y`, `period_method`,
+  `period_x`, `period_y`, `system_x`, `system_y` and `sd1`; the earthquake
+  lives in `core.warehouse_seismic`.
 - **The warehouse and building wizards group the members by kind and section**
   ("Columns W14X48", "Purlins C150X50X15X2.38"); a kind with two sections gets
   two groups. The examples' groups are renamed so; results do not change.
