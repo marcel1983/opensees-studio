@@ -1,56 +1,73 @@
-name: Bug report
-description: Report a defect in OpenSees Studio
-labels: ["bug"]
+name: Bug report / Reportar un fallo
+description: The program crashes, shows an error or does not do what it should (not a calculation result). / El programa se cierra, muestra un error o no hace lo que debería (no un resultado de cálculo).
+title: '[Bug]: '
+labels:
+- bug
 body:
-  - type: textarea
-    id: what-happened
-    attributes:
-      label: What happened?
-      description: A clear and concise description of the bug.
-    validations:
-      required: true
-  - type: textarea
-    id: reproduce
-    attributes:
-      label: Steps to reproduce
-      placeholder: |
-        1. Open a new project
-        2. Click 'Draw Frame'
-        3. ...
-    validations:
-      required: true
-  - type: textarea
-    id: expected
-    attributes:
-      label: Expected behavior
-    validations:
-      required: true
-  - type: input
-    id: version
-    attributes:
-      label: OpenSees Studio version
-      placeholder: 0.0.1
-    validations:
-      required: true
-  - type: input
-    id: python
-    attributes:
-      label: Python version
-      placeholder: 3.11.7
-    validations:
-      required: true
-  - type: dropdown
-    id: os
-    attributes:
-      label: Operating System
-      options:
-        - Windows
-        - macOS
-        - Linux
-    validations:
-      required: true
-  - type: textarea
-    id: logs
-    attributes:
-      label: Console output / traceback
-      render: shell
+- type: markdown
+  attributes:
+    value: |
+      Thanks for helping. Before sending, check whether an issue with the same problem already exists. If what is wrong is **a number or a check**, use the **Calculation error** template.
+
+      ---
+
+      Gracias por ayudar a mejorar el programa. Antes de enviarlo, busca si ya existe un issue con el mismo problema. Si lo que está mal es **un número o una verificación**, usa la plantilla **Error de cálculo**.
+- type: textarea
+  id: what
+  attributes:
+    label: What happened? / ¿Qué pasó?
+  validations:
+    required: true
+- type: textarea
+  id: steps
+  attributes:
+    label: Steps to reproduce / Pasos para reproducirlo
+    placeholder: |
+      1. Open the example file ...
+      2. Click ...
+      3. The error appears ... / 1. Abrir el archivo de ejemplo ...
+      2. Hacer clic en ...
+      3. Aparece el error ...
+  validations:
+    required: true
+- type: textarea
+  id: expected
+  attributes:
+    label: What did you expect? / ¿Qué esperabas que pasara?
+  validations:
+    required: true
+- type: dropdown
+  id: install
+  attributes:
+    label: How did you install it? / ¿Cómo lo instalaste?
+    options:
+    - Installer or executable from Releases / Instalador o ejecutable descargado de Releases
+    - From source (pip install -e) / Desde el código (pip install -e)
+  validations:
+    required: true
+- type: input
+  id: version
+  attributes:
+    label: OpenSees Studio version / Versión de OpenSees Studio
+    description: Shown in Help › About, or in the name of the downloaded file. / Aparece en Ayuda › Acerca de, o en el nombre del archivo descargado.
+    placeholder: 0.3.0
+  validations:
+    required: true
+- type: dropdown
+  id: os
+  attributes:
+    label: Operating system / Sistema operativo
+    options:
+    - Windows
+    - Linux
+    - macOS
+  validations:
+    required: true
+- type: textarea
+  id: logs
+  attributes:
+    label: Error message or log / Mensaje de error o registro
+    description: Paste the error text. You can drag screenshots or the .osmodel file here. / Pega el texto del error. Puedes arrastrar capturas de pantalla o el archivo .osmodel.
+    render: shell
+  validations:
+    required: false

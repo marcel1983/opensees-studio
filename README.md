@@ -14,6 +14,13 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/marcel1983/opensees-studio/releases/latest"><strong>Download</strong></a> ·
+  <a href="#were-looking-for-collaborators">Get involved</a> ·
+  <a href="https://github.com/marcel1983/opensees-studio/issues/new/choose">Report a problem</a> ·
+  <a href="https://marcel1983.github.io/en/#guide">Step-by-step guide</a>
+</p>
+
+<p align="center">
   <strong>English</strong> · <a href="README.es.md">Español</a> ·
   <a href="README.tr.md">Türkçe</a> ·
   <a href="docs/tutorials/README.md">Tutorials</a> ·
@@ -762,8 +769,10 @@ traps in it.
 
 ## Install (development)
 
-This repository is where OpenSees Studio is developed; it started as a fork of
-[ogunc/opensees-studio](https://github.com/ogunc/opensees-studio). On Windows use
+This repository is the development lane of OpenSees Studio: new features land
+here first, are tested in the releases published here, and are then merged into
+the main repository, [ogunc/opensees-studio](https://github.com/ogunc/opensees-studio),
+which is open to everyone. On Windows use
 Python 3.12: the OpenSeesPy 3.8.0.0 wheel loads on no other version, and
 Options → Solver says so when the application runs on another one.
 
@@ -1203,7 +1212,23 @@ say hi:
   toolbar icons, and overall visual language.
 
 Open issues, bug reports, and reproducible test cases are just as
-valuable as code. Pull requests target `main`; `develop` is the
+valuable as code, and none of them needs programming. The
+[issue templates](https://github.com/marcel1983/opensees-studio/issues/new/choose)
+(in English and Spanish) cover each one:
+
+- **Validation case**: an example with a known answer (a textbook, a paper, a
+  hand calculation or your own OpenSees script) that becomes an automated test.
+- **Calculation error**: a number or a design check that is wrong.
+- **Bug report** and **Feature request**.
+
+Questions go to
+[Discussions](https://github.com/marcel1983/opensees-studio/discussions).
+
+**Which repository?** This one is the development lane: the newest features and
+releases are here, and they are merged into the main repository,
+[ogunc/opensees-studio](https://github.com/ogunc/opensees-studio). Issues and
+pull requests are welcome in either; open them here when they concern a release
+downloaded from here or a feature the main repository does not have yet. Pull requests target `main`; `develop` is the
 maintainer's experimental branch, not the integration target. See
 [`CONTRIBUTING.md`](CONTRIBUTING.md) for the dev setup and the architectural
 rules enforced in review.
