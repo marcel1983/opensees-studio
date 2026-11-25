@@ -93,6 +93,18 @@ def test_the_frames_sway_and_the_bracing_holds_the_long_direction(solved) -> Non
                 method="nscm", a0=0.3, soil="B", importance_class="III", directions=("Y",)
             ),
         ),
+        (
+            {},
+            WarehouseSeismic(
+                method="en1998",
+                a0=0.2,
+                soil="B",
+                reduction=1.5,
+                reduction_y=2.5,
+                period_method="period",
+                period_y=0.6,
+            ),
+        ),
     ],
 )
 def test_other_warehouses_are_in_equilibrium(fields: dict, seismic: WarehouseSeismic) -> None:  # type: ignore[type-arg]
@@ -115,4 +127,24 @@ def test_other_warehouses_are_in_equilibrium(fields: dict, seismic: WarehouseSei
         applied = np.sum([load.forces[:3] for load in pattern.nodal_loads], axis=0)  # type: ignore[attr-defined]
         assert np.linalg.norm(applied) > 1e3
         assert -_reaction(results) == pytest.approx(applied, rel=1e-8, abs=1e-4)
+        assert np.abs(_displacements(results)[:, :3]).max() < 0.5
+
+
+def test_each_direction_has_the_base_shear_of_its_own_coefficient() -> None:
+    project = Project(ndm=3, ndf=6)
+    spec = WarehouseSpec(span=16.0, eave_height=6.0, frame_spacing=5.0, n_frames=4, slope=0.1)
+    seismic = WarehouseSeismic(
+        method="asce7", sds=1.0, sd1=0.4, reduction=3.5, reduction_y=3.25,
+        period_method="period",
+    )  # fmt: skip
+    plan = plan_warehouse(project, spec, loads=WarehouseLoads(roof_dead=120.0, seismic=seismic))
+    plan.apply(project)
+    weight = _steel_weight(project) + 120.0 * 2 * float(np.hypot(8.0, 0.8)) * 15.0
+    height = 6.0 + 0.4  # the mean roof height
+    for axis, direction in enumerate(("X", "Y")):
+        case = next(c for c in project.analyses if c.name == f"EQ {direction}")
+        expected = np.zeros(3)
+        expected[axis] = seismic_coefficient(seismic, direction, height)[0] * weight
+        results = OpenSeesRunner(project).run(case)
+        assert -_reaction(results) == pytest.approx(expected, rel=1e-8, abs=1e-3)
         assert np.abs(_displacements(results)[:, :3]).max() < 0.5
