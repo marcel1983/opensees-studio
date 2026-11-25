@@ -74,12 +74,28 @@ refused instead of silently downgraded).
   envelopes are made over what is ticked. `WarehouseLoads` gains
   `edited_combinations` and `WarehousePlan` `code_combinations`
   (`core.warehouse_combinations.PlannedCombination`).
+- **The AISC 360 direct analysis method in the warehouse wizard** (Loads
+  page): every combination solved to second order under its factored loads
+  (P-Delta, Newton), stiffness × 0.8 and the notional loads of C2.2b, 0.002 Yi
+  in each direction of the gravity-only combinations (four `DAM … N±X/±Y`
+  cases and their envelope) and 0.001 Yi for τb = 1 in every one; the steel
+  check then takes K = 1. The **AISC 341 system across and along** the
+  building goes to the design settings. `WarehouseLoads` gains
+  `direct_analysis`, `seismic_system_x` and `seismic_system_y`
+  (`core.warehouse_direct`).
 - **The warehouse and building wizards group the members by kind and section**
   ("Columns W14X48", "Purlins C150X50X15X2.38"); a kind with two sections gets
   two groups. The examples' groups are renamed so; results do not change.
 
 ### Fixed
 
+- **The direct analysis cases reduce the stiffness of sections made of a
+  material.** The 0.8 of AISC 360 C2.3 was undone when the model was built,
+  because such a section takes its E and G from its material again: every
+  section linked to a material (the default ones, the sections of the
+  generated warehouses and buildings) ran with its full stiffness. The copy a
+  case runs on now keeps the reduced numbers. Results of direct analysis cases
+  on such models change; no example has them.
 - **Purlins, girts and braces of a generated warehouse stay one piece when Run
   auto-meshes the model.** The two diagonals of each X were cut where they
   cross, and the purlins and girts where a diagonal passes over them, joining

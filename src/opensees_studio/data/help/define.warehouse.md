@@ -227,6 +227,28 @@ code** the combinations of the gravity, wind and earthquake cases the wizard
 creates are added with their envelope; the **Load combinations** page, the
 last one, shows them before Finish.
 
+**Direct analysis method (AISC 360 Chapter C)** — ticked, every combination
+(the code's, or those of the Load combinations page) is solved to second
+order under its factored loads together, since a P-Delta analysis does not
+superpose: P-Delta in every frame and Newton iteration in 10 steps, the
+stiffness times 0.8 (C2.3; τb = 1 with the extra notional load 0.001 Yi of
+C2.3(c) in every combination) and the notional loads 0.002 Yi of C2.2b,
+Yi being the factored gravity load at each level. A gravity-only combination
+becomes four cases, `DAM <name> N+X`, `N-X`, `N+Y` and `N-Y`, and the
+combination the envelope of the four; a combination with wind or earthquake
+is one case, `DAM <name>`, its notional load along its main lateral load. The
+combinations keep their names, and the steel check takes these cases with
+K = 1 (Design → Design Basis gets the direct analysis method). This holds
+while the second- to first-order drift ratio stays at or below 1.7
+(C2.2b(d)): check it, or use Design → Direct Analysis Method, which adds the
+first-order twins. LRFD codes only; it replaces the per-combination cases of
+tension-only braces, which it covers.
+
+**AISC 341 system across (X)** and **along (Y)** — the lateral system of the
+portal frames and of the bracing, written to Design → Design Basis: an AISC
+341 system the steel check covers adds its width-to-thickness and capacity
+design checks; *None* leaves the AISC 360 check alone.
+
 The load cases the wizard creates use the sparse solver **UmfPack** (Define →
 Load Cases → System). A warehouse has hundreds of pinned members, each with its
 own released rotations, and the band solver a new case has by default takes

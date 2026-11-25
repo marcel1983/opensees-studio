@@ -1709,10 +1709,28 @@ class WarehouseLoads:
     edited_combinations: tuple[PlannedCombination, ...] | None = None
     """The combinations to make instead of the code's (the wizard's
     Combinations page); None makes the code's."""
+    direct_analysis: bool = False
+    """AISC 360-16 Chapter C: every combination solved to second order, with the
+    reduced stiffness and the notional loads (``core.warehouse_direct``)."""
+    seismic_system_x: str = "none"
+    """The AISC 341 lateral system across the building, for the steel check
+    (a key of ``SEISMIC_SYSTEM_LABELS``)."""
+    seismic_system_y: str = ""
+    """The one along the building; "" = the same as across."""
 
     def __post_init__(self) -> None:
+        from opensees_studio.core.design.settings import SEISMIC_SYSTEM_LABELS
+
         if self.code not in CODE_PRESETS:
             raise WarehouseError(f"Unknown design code {self.code!r}.")
+        if self.direct_analysis and CODE_PRESETS[self.code].design_method != "LRFD":
+            raise WarehouseError(
+                "The direct analysis method is made for LRFD combinations: in ASD, AISC 360 "
+                "C2.1(e) analyses 1.6 times them. Choose an LRFD code."
+            )
+        for system in (self.seismic_system_x, self.seismic_system_y or "none"):
+            if system not in SEISMIC_SYSTEM_LABELS:
+                raise WarehouseError(f"Unknown AISC 341 system {system!r}.")
         if min(self.roof_dead, self.roof_live, self.midspan_point) < 0.0:
             raise WarehouseError("Loads are entered as positive, downward values.")
 
@@ -1999,6 +2017,8 @@ def _plan_loads(
                 plan.pattern_loads.append((live.id, list_name, items))
 
     wind_case_ids: list[int] = []
+    #: Case id → axis and sign of the lateral load of a wind or earthquake case.
+    lateral: dict[int, tuple[str, float]] = {}
     if loads.wind is not None:
         units = project.meta.units
         wind_cases = warehouse_wind_cases(warehouse.spec, loads.wind, units)
@@ -2016,6 +2036,10 @@ def _plan_loads(
         ):
             add_case(one_series, pattern, case)
             wind_case_ids.append(case.id)
+            lateral[case.id] = (
+                wind_case.direction[-1],
+                -1.0 if wind_case.direction[0] == "-" else 1.0,
+            )
             plan.pattern_loads.append(
                 (pattern.id, "element_loads", wind_loads(warehouse, wind_case, units))
             )
@@ -2092,6 +2116,7 @@ def _plan_loads(
         ):
             add_case(one_series, pattern, case)
             seismic_case_ids.append(plan.cases[-1].id)
+            lateral[plan.cases[-1].id] = (direction, 1.0)
             plan.pattern_loads.append(
                 (
                     pattern.id,
@@ -2192,7 +2217,21 @@ def _plan_loads(
                     )
                 )
         tension_only = any(getattr(e, "tension_only", False) for e in plan.warehouse.elements)
-        if tension_only and plan.combinations:
+        if loads.direct_analysis and plan.combinations:
+            from opensees_studio.core.warehouse_direct import direct_analysis_combinations
+
+            direct = direct_analysis_combinations(
+                scratch.analyses,
+                plan.combinations,
+                lateral,
+                first_case_id=scratch.next_analysis_id(),
+                options={"system": CASE_SYSTEM},
+            )
+            plan.cases.extend(direct.cases)
+            scratch.analyses.extend(direct.cases)
+            plan.combinations[:] = direct.combinations
+            plan.notes.extend(direct.notes)
+        elif tension_only and plan.combinations:
             # Which diagonal of an X works depends on the whole load: each
             # combination is solved under its factored loads together.
             from opensees_studio.core.combination_cases import analysed_combinations
@@ -2212,13 +2251,18 @@ def _plan_loads(
                 "are analysed each as a case of its own."
             )
 
-    if loads.design_lengths:
-        overrides = member_design_overrides(warehouse)
-        if overrides:
-            base = project.design
-            if base is None:
-                base = DesignSettings(method=preset.design_method)  # type: ignore[arg-type]
-            plan.design = base.model_copy(update={"members": [*base.members, *overrides]})
+    update: dict[str, Any] = {}
+    overrides = member_design_overrides(warehouse) if loads.design_lengths else []
+    if overrides:
+        update["members"] = [*(project.design.members if project.design else []), *overrides]
+    if loads.direct_analysis:
+        update["stability_method"] = "direct"
+    if loads.seismic_system_x != "none" or loads.seismic_system_y not in ("", "none"):
+        update["seismic_system"] = loads.seismic_system_x
+        update["seismic_system_y"] = loads.seismic_system_y or None
+    if update:
+        base = project.design or DesignSettings(method=preset.design_method)  # type: ignore[arg-type]
+        plan.design = base.model_copy(update=update)
 
 
 __all__ = [

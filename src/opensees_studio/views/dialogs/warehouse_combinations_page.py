@@ -239,7 +239,8 @@ class CombinationsPage(_CompletablePage):
                         cases.append(name)
             for case in plan.cases:
                 name = case.name or str(case.id)
-                if name not in cases and not name.startswith("Comb: "):
+                derived = name.startswith("Comb: ") or getattr(case, "direct_analysis", None)
+                if name not in cases and not derived:
                     cases.append(name)
             self.editor.show_code(plan.code_combinations, cases)
         self._check()

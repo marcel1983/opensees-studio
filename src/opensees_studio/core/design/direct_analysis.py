@@ -58,6 +58,7 @@ from opensees_studio.core.geometry.elements import (
 from opensees_studio.core.geometry.local_axes import frame_local_axes
 from opensees_studio.core.loads import NodalLoad, PlainLoadPattern
 from opensees_studio.core.materials import ElasticUniaxial
+from opensees_studio.core.section_materials import sync_material_links
 from opensees_studio.core.sections import ElasticSection
 from opensees_studio.core.storeys import base_elevation
 
@@ -109,6 +110,10 @@ def analysis_model(
         return model, notes
 
     f = float(stiffness_factor)
+    # A section made of a material takes its E and G from it when the model is
+    # built: the copy keeps the material's numbers and is no longer linked, or
+    # the reduction would be undone.
+    sync_material_links(model)
     sections = {s.id: s for s in model.sections}
     scaled_sections: set[int] = set()
     unscaled: list[int] = []
@@ -121,6 +126,7 @@ def analysis_model(
         section = sections.get(getattr(el, "section_id", -1))
         if isinstance(section, ElasticSection):
             if section.id not in scaled_sections:
+                section.material_id = None
                 section.E = section.E * f
                 if section.G is not None:
                     section.G = section.G * f
