@@ -224,7 +224,8 @@ run the cases and the steel check, and size the members from them.
 The area loads are applied to the purlins as uniform loads over their tributary
 width, in the purlin's local axes. With **Generate the load combinations of the
 code** the combinations of the gravity, wind and earthquake cases the wizard
-creates are added with their envelope.
+creates are added with their envelope; the **Load combinations** page, the
+last one, shows them before Finish.
 
 The load cases the wizard creates use the sparse solver **UmfPack** (Define →
 Load Cases → System). A warehouse has hundreds of pinned members, each with its
@@ -426,6 +427,26 @@ Not included: the build-up against a parapet or a taller wall, the snow that
 slides onto a lower roof, the ash that gathers in valleys and gutters (both
 Nicaraguan codes ask you to estimate it), rain on snow, ponding, and the part
 of the snow that ASCE 7-16 12.7.2 counts as seismic weight.
+
+# Load combinations
+The last page plans the warehouse as the other pages describe it and shows the
+combinations of the code on the load cases it creates: one row per combination,
+one column per case, the factor of that case in the cell (empty is 0). The
+**Set** is the group whose envelope takes the combination.
+
+- Change a factor: double-click the cell. A negative factor reverses the case.
+- Untick a combination to leave it out, or double-click its name to rename it.
+- **Add Combination** adds one after the selected row, in its set; give it its
+  factors.
+- **Restore the Code's Combinations** takes back every edit.
+
+The page says when the combinations differ from the code's, and Finish waits
+while a factor is not a number, two combinations share a name or a ticked one
+has no factor. When an earlier page changes the load cases (another code, the
+wind turned on) the table starts again from the code's combinations. An
+envelope is made over the ticked combinations of each set, and with the braces
+in tension only each one is analysed as a case of its own, as before. Without
+**Generate the load combinations of the code** the page has nothing to show.
 
 # Not included yet
 Haunches, and trusses with a Warren web without
