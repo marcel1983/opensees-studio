@@ -166,6 +166,7 @@ def test_every_member_is_in_one_group_with_its_section() -> None:
     }  # fmt: skip
     assert warehouse.members.pop("end_columns") == []  # none asked for
     assert warehouse.members.pop("overhangs") == []
+    assert warehouse.members.pop("roof_struts") == []  # the purlins tie the frames
     for group in TRUSS_GROUPS:
         assert warehouse.members.pop(group) == []  # the roof is on rafters
     for group, ids in warehouse.members.items():
