@@ -15,6 +15,8 @@ behind.
 
 from __future__ import annotations
 
+import dataclasses
+from collections.abc import Callable
 from typing import Any
 
 from PySide6.QtGui import QShowEvent
@@ -64,6 +66,7 @@ from opensees_studio.core.warehouse import (
     default_section_name,
     force_from_kn,
     length_from_m,
+    plan_warehouse,
     pressure_from_kpa,
     seismic_coefficient,
     seismic_height,
@@ -83,6 +86,7 @@ from opensees_studio.views.dialogs.frame_wizard import (
     _field,
 )
 from opensees_studio.views.dialogs.warehouse_bracing import BracingFields
+from opensees_studio.views.dialogs.warehouse_combinations_page import CombinationsPage
 from opensees_studio.views.dialogs.warehouse_seismic_fields import SeismicDirectionFields
 from opensees_studio.views.dialogs.wireframe_preview import WireframePreview
 from opensees_studio.views.dialogs.wizard_sections import (
@@ -216,10 +220,12 @@ class WarehouseWizard(QWizard):
         *,
         units: UnitSystem = UnitSystem.SI_M_N,
         define_sections: DefineSections | None = None,
+        planner: Planner | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._sections = sections
+        self._planner = planner
         self._define_sections = define_sections
         self._units = units
         labels = labels_for(units)
@@ -243,6 +249,7 @@ class WarehouseWizard(QWizard):
         self._build_wind_page()
         self._build_seismic_page()
         self._build_snow_page()
+        self._page_combinations = CombinationsPage(self._preview_plan)
         for index, page in enumerate(
             (
                 self._page_geometry,
@@ -253,9 +260,11 @@ class WarehouseWizard(QWizard):
                 self._page_wind,
                 self._page_seismic,
                 self._page_snow,
+                self._page_combinations,
             )
         ):
             self.setPage(index, page)
+        self.currentIdChanged.connect(self._on_page_changed)
         self._on_code_changed()
         self._refresh()
         self.resize(880, 640)
@@ -1344,7 +1353,40 @@ class WarehouseWizard(QWizard):
             wind=self.wind(),
             seismic=self.seismic(),
             snow=self.snow(),
+            edited_combinations=self._page_combinations.edited(),
         )
+
+    def _preview_plan(self) -> Any | None:
+        """The warehouse planned as the pages describe it, without edited combinations."""
+        if not self._combinations.isChecked():
+            return None
+        loads = dataclasses.replace(self.loads(), edited_combinations=None)
+        planner = self._planner or _blank_planner(self._units)
+        return planner(self.spec(), self.section_choice(), loads)
+
+    def _on_page_changed(self, page_id: int) -> None:
+        if self.page(page_id) is self._page_combinations:
+            self._page_combinations.refresh()
+
+
+#: Plans a warehouse into the project: spec, section choice, loads → WarehousePlan.
+Planner = Callable[[WarehouseSpec, dict[str, int | None], WarehouseLoads], Any]
+
+
+def _blank_planner(units: UnitSystem) -> Planner:
+    """A planner on an empty project in ``units``, for a wizard opened without one."""
+    from opensees_studio.core.default_materials import default_materials
+    from opensees_studio.core.defaults import ensure_dead_load_case
+    from opensees_studio.core.project import Project
+
+    def plan(spec: WarehouseSpec, _sections: dict[str, int | None], loads: WarehouseLoads) -> Any:
+        project = Project(ndm=3, ndf=6)
+        project.meta.units = units
+        project.materials.extend(default_materials(project.next_material_id(), units))
+        ensure_dead_load_case(project)
+        return plan_warehouse(project, spec, sections={}, loads=loads)
+
+    return plan
 
 
 __all__ = ["CREATE_DEFAULT", "WarehousePreview", "WarehouseWizard"]

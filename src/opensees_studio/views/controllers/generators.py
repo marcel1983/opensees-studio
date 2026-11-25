@@ -396,6 +396,9 @@ class GeneratorsController(QObject):
             self._frame_sections(),
             units=project.meta.units,
             define_sections=self._define_sections,
+            planner=lambda spec, sections, loads: plan_warehouse(
+                project, spec, sections=sections, loads=loads
+            ),
             parent=self._window,
         )
         if wizard.exec() != QDialog.DialogCode.Accepted:

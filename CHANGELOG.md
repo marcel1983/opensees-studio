@@ -67,6 +67,13 @@ refused instead of silently downgraded).
   stays the default. `WarehouseSeismic` gains `reduction_y`, `period_method`,
   `period_x`, `period_y`, `system_x`, `system_y` and `sd1`; the earthquake
   lives in `core.warehouse_seismic`.
+- **A Load combinations page in the warehouse wizard**, the last one: the
+  combinations of the code on the load cases the warehouse gets, a column per
+  case, before Finish. A factor can be changed, a combination unticked, renamed
+  or added, and Restore the Code's Combinations takes the edits back; the
+  envelopes are made over what is ticked. `WarehouseLoads` gains
+  `edited_combinations` and `WarehousePlan` `code_combinations`
+  (`core.warehouse_combinations.PlannedCombination`).
 - **The warehouse and building wizards group the members by kind and section**
   ("Columns W14X48", "Purlins C150X50X15X2.38"); a kind with two sections gets
   two groups. The examples' groups are renamed so; results do not change.

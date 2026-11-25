@@ -2538,5 +2538,19 @@
  "<b>{cases}</b> earthquake cases.": "<b>{cases}</b> casos de sismo.",
  "Q of RNC-07 Art. 21, Ro of NSCM (Ec. 6.6-1), R of ASCE 7-16 Table 12.2-1 or the behaviour factor q of EN 1998-1 6.3.2, for the lateral system across the building: the portal frames.": "Q del RNC-07 Art. 21, Ro de la NSCM (Ec. 6.6-1), R de ASCE 7-16 Tabla 12.2-1 o el factor de comportamiento q de EN 1998-1 6.3.2, para el sistema lateral en el sentido transversal de la bodega: los pórticos.",
  "Reduction factor along X (Q, Ro, R or q)": "Factor de reducción en X (Q, Ro, R o q)",
- "<i>The base shear is the coefficient times the weight of the steel, the roof dead load and this part of the roof live load, shared between the joints by weight and height. Each direction has its own coefficient, from the plateau of the spectrum or from the spectrum at its period. Accidental torsion is not included.</i>": "<i>El cortante basal es el coeficiente por el peso del acero, la carga muerta de techo y esta parte de la carga viva de techo, repartido entre los nudos según peso y altura. Cada dirección tiene su propio coeficiente, de la meseta del espectro o del espectro en su período. No se incluye la torsión accidental.</i>"
+ "<i>The base shear is the coefficient times the weight of the steel, the roof dead load and this part of the roof live load, shared between the joints by weight and height. Each direction has its own coefficient, from the plateau of the spectrum or from the spectrum at its period. Accidental torsion is not included.</i>": "<i>El cortante basal es el coeficiente por el peso del acero, la carga muerta de techo y esta parte de la carga viva de techo, repartido entre los nudos según peso y altura. Cada dirección tiene su propio coeficiente, de la meseta del espectro o del espectro en su período. No se incluye la torsión accidental.</i>",
+ "The factor of {case} in {name} is not a number: {text}": "El factor de {case} en {name} no es un número: {text}",
+ "Load combinations": "Combinaciones de carga",
+ "<i>An envelope is made over the ticked combinations of each set. With the braces in tension only each combination is analysed as a case of its own. When the load cases change the table starts again from the code's combinations.</i>": "<i>Se hace una envolvente sobre las combinaciones marcadas de cada conjunto. Con los arriostres solo a tensión, cada combinación se analiza como un caso propio. Cuando cambian los casos de carga, la tabla vuelve a empezar desde las combinaciones de la norma.</i>",
+ "No combinations are made: Generate the load combinations of the code is off.": "No se crean combinaciones: Generar las combinaciones de carga de la norma está desactivado.",
+ "Every combination needs a name.": "Cada combinación necesita un nombre.",
+ "Two combinations have the same name.": "Dos combinaciones tienen el mismo nombre.",
+ "A ticked combination has no load case with a factor.": "Una combinación marcada no tiene ningún caso de carga con factor.",
+ "<b>{n}</b> combinations will be created.": "Se crearán <b>{n}</b> combinaciones.",
+ "They differ from the code's.": "Difieren de las de la norma.",
+ "One row per combination, one column per load case: the factor of that case (empty is 0). Untick a combination to leave it out; double-click a name or a factor to change it.": "Una fila por combinación y una columna por caso de carga: el factor de ese caso (vacío es 0). Desmarque una combinación para dejarla fuera; haga doble clic en un nombre o un factor para cambiarlo.",
+ "Add Combination": "Agregar combinación",
+ "Restore the Code's Combinations": "Restaurar las combinaciones de la norma",
+ "Set": "Conjunto",
+ "The combinations of the code on these load cases: change a factor, untick a combination or add one.": "Las combinaciones de la norma con estos casos de carga: cambie un factor, desmarque una combinación o agregue una."
 }

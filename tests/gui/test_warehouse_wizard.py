@@ -15,6 +15,7 @@ import pytest
 pytest.importorskip("PySide6")
 pytest.importorskip("pyvistaqt")
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QDialog, QMessageBox
 
 from opensees_studio.commands.warehouse import insert_warehouse_plan, plan_problems
@@ -772,3 +773,51 @@ def test_the_stiffeners_and_the_wall_bracing_type_reach_the_spec(qtbot) -> None:
         assert not wizard._sections_form.isRowVisible(combos[key]), key
     bracing.stiffeners.setCurrentIndex(1)  # beams: no depth
     assert wizard.spec().stiffener_depth == 0.0
+
+
+@pytest.mark.gui
+def test_the_combinations_page_shows_and_edits_the_code_combinations(qtbot) -> None:  # type: ignore[no-untyped-def]
+    wizard = WarehouseWizard([])
+    qtbot.addWidget(wizard)
+    page = wizard._page_combinations
+    editor = page.editor
+    assert wizard.loads().edited_combinations is None  # never shown: the code's
+    wizard._roof_live.setValue(400.0)
+    wizard._wind_on.setChecked(False)
+    wizard.setStartId(wizard.pageIds()[-1])
+    wizard.restart()  # shows the last page, which plans the warehouse
+    assert editor.table.rowCount() == 2
+    headers = [
+        editor.table.horizontalHeaderItem(c).text() for c in range(editor.table.columnCount())
+    ]
+    assert headers == ["Combination", "Set", "DEAD", "LIVE"]
+    assert editor.table.item(1, 0).text() == "1.2CM+1.6CV"
+    assert editor.table.item(1, 3).text() == "1.6"
+    assert page.isComplete() and wizard.loads().edited_combinations is None
+
+    editor.table.item(1, 3).setText("1.5")
+    edited = wizard.loads().edited_combinations
+    assert edited is not None and [c.name for c in edited] == ["1.4CM", "1.2CM+1.6CV"]
+    assert edited[1].factors == (("DEAD", 1.2), ("LIVE", 1.5))
+    assert "differ" in page.summary.text()
+    editor.table.item(0, 0).setCheckState(Qt.CheckState.Unchecked)
+    editor.table.selectRow(1)
+    editor.add.click()
+    assert editor.table.item(2, 0).text() == "COMB1" and not page.isComplete()  # no factor
+    editor.table.item(2, 2).setText("1")
+    editor.table.item(2, 3).setText("abc")
+    assert not page.isComplete() and "not a number" in page.summary.text()
+    editor.table.item(2, 3).setText("1")
+    assert page.isComplete()
+    edited = wizard.loads().edited_combinations
+    assert edited is not None and [c.name for c in edited] == ["1.2CM+1.6CV", "COMB1"]
+    assert edited[1].group == edited[0].group
+
+    # Another code changes the load cases' combinations: the table starts again.
+    wizard._code.setCurrentIndex(wizard._code.findData("asce7_lrfd"))
+    page.refresh()
+    assert wizard.loads().edited_combinations is None
+    editor.reset.click()
+    wizard._combinations.setChecked(False)
+    page.refresh()
+    assert not editor.isEnabled() and wizard.loads().edited_combinations is None

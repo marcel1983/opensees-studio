@@ -120,6 +120,11 @@ from opensees_studio.core.snow import (
 )
 from opensees_studio.core.trusses import TrussType
 from opensees_studio.core.units import UnitSystem, force_scale, length_scale
+from opensees_studio.core.warehouse_combinations import (
+    PlannedCombination,
+    generated_combinations,
+    planned_combinations,
+)
 from opensees_studio.core.warehouse_loads import (
     midspan_point_loads,
     roof_pressure_loads,
@@ -1701,6 +1706,9 @@ class WarehouseLoads:
     """Earthquake cases to create, one per direction; None for no earthquake."""
     snow: WarehouseSnow | None = None
     """Snow or ash cases to create; None for neither."""
+    edited_combinations: tuple[PlannedCombination, ...] | None = None
+    """The combinations to make instead of the code's (the wizard's
+    Combinations page); None makes the code's."""
 
     def __post_init__(self) -> None:
         if self.code not in CODE_PRESETS:
@@ -1790,6 +1798,8 @@ class WarehousePlan:
     design: Any = None
     """The project's design settings with the unbraced lengths, or None to leave them."""
     notes: list[str] = field(default_factory=list)
+    code_combinations: list[PlannedCombination] = field(default_factory=list)
+    """The code's combinations on the cases of the plan, before any edit."""
 
     def apply(self, project: Project) -> None:
         """Write the plan into ``project`` (headless: scripts and tests, no undo)."""
@@ -2149,6 +2159,13 @@ def _plan_loads(
             peak_cases=wind_case_ids,
             options=options or None,
         )
+        plan.code_combinations = planned_combinations(generated, case_names)
+        if loads.edited_combinations is not None:
+            generated = generated_combinations(
+                loads.edited_combinations,
+                case_names,
+                generated[0].group if generated else CODES[loads.code].label,
+            )
         used = {c.name for c in project.combinations}
         fresh = [g for g in generated if g.name not in used]
         if len(fresh) < len(generated):
@@ -2232,6 +2249,7 @@ __all__ = [
     "WIND_METHODS",
     "CodePreset",
     "EndWall",
+    "PlannedCombination",
     "RoofStation",
     "Warehouse",
     "WarehouseError",
