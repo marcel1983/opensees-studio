@@ -34,6 +34,13 @@ refused instead of silently downgraded).
   and the roof takes the number of X panels per slope (automatic: about as long
   as the bay). `WarehouseSpec` gains `wall_braced_bays`, `roof_bracing_panels`,
   `roof_tension_only` and `wall_tension_only`.
+- **Eave overhangs (aleros) in the warehouse wizard.** Eave overhang and
+  Overhang on (both side walls or one) on the Geometry page: a cantilever at each
+  frame along the slope of the roof, with its own section (W8X18 by default)
+  and group, and purlins on it up to the tip. The roof loads, snow, ash and the
+  roof's mass reach it; under wind it takes the roof's pressure on top and the
+  wall's underneath. `WarehouseSpec` gains `overhang` and `overhang_sides`; a
+  warehouse without overhangs keeps its ids.
 - **The warehouse and building wizards group the members by kind and section**
   ("Columns W14X48", "Purlins C150X50X15X2.38"); a kind with two sections gets
   two groups. The examples' groups are renamed so; results do not change.

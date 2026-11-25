@@ -2489,5 +2489,13 @@
  "Same bays as the roof": "Los mismos vanos que el techo",
  "Bay numbers with roof bracing, separated by commas (bay 1 is between the first two frames). Leave empty for the first and the last bay.": "Números de los vanos con arriostre de techo, separados por comas (el vano 1 está entre los dos primeros pórticos). Dejalo vacío para el primero y el último.",
  "Bay numbers with wall bracing, separated by commas. Leave empty for the bays the roof has.": "Números de los vanos con arriostre de pared, separados por comas. Dejalo vacío para usar los vanos del techo.",
- "How many X each slope of roof has across the building, in each braced bay: the slope is cut on purlin lines, so there are at most as many as purlin spaces. Automatic makes each panel about as long as the bay, so the diagonals stay near 45 degrees.": "Cuántas X tiene cada faldón de techo a lo ancho de la nave, en cada vano arriostrado: el faldón se divide en líneas de correas, así que hay como máximo tantas como espacios entre correas. Automático hace cada panel tan largo como el vano, para que las diagonales queden cerca de 45 grados."
+ "How many X each slope of roof has across the building, in each braced bay: the slope is cut on purlin lines, so there are at most as many as purlin spaces. Automatic makes each panel about as long as the bay, so the diagonals stay near 45 degrees.": "Cuántas X tiene cada faldón de techo a lo ancho de la nave, en cada vano arriostrado: el faldón se divide en líneas de correas, así que hay como máximo tantas como espacios entre correas. Automático hace cada panel tan largo como el vano, para que las diagonales queden cerca de 45 grados.",
+ "Eave overhang": "Alero",
+ "Overhang on": "Alero en",
+ "Both side walls": "Ambas paredes laterales",
+ "Left side wall (X = 0)": "Pared lateral izquierda (X = 0)",
+ "Right side wall": "Pared lateral derecha",
+ "Overhangs": "Aleros",
+ "The overhang cannot be negative.": "El alero no puede ser negativo.",
+ "Eave overhang (alero): a cantilever at each frame that carries the roof past the side wall, on the slope of the roof, with purlins on it at the purlin spacing. Measured in plan from the wall; 0 builds none. It has its own section on the Sections page.": "Alero: un voladizo en cada pórtico que lleva el techo más allá de la pared lateral, con la pendiente del techo y correas a la separación de correas. Se mide en planta desde la pared; 0 no crea ninguno. Tiene su propia sección en la página Secciones."
 }
